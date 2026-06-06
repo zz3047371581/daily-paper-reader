@@ -6,130 +6,91 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-28 ~ 2026-06-06
-- 运行时间：2026-06-06 14:54:22 UTC
+- 最新运行日期：2026-06-06
+- 运行时间：2026-06-06 21:31:48 UTC
 - 运行状态：成功
-- 本次总论文数：36
-- 精读区：25
+- 本次总论文数：23
+- 精读区：12
 - 速读区：11
 
 ### 今日简报（AI）
-过去两周从36篇前沿论文中精选精读25篇，聚焦于多模态情感分析与社交智能评估。
-满分研究揭示了用“状态锚定蒸馏”提升对话情感识别鲁棒性，以及用“因果解耦”学习动态交互的新范式。
-想跟上社交AI浪潮，建议立刻关注人机情感纽带测量（HAABI量表）与大模型社交智能诊断（NICE基准）这两个新兴赛道。
-- 详情：[/20260528-20260606/README](/20260528-20260606/README)
+今日精读聚焦跨模态对齐新范式，速读覆盖情感三元组提取与AI动态评估。  
+最值得关注：用变分适配器学习统一跨模态相似度，以及自适应多模态对齐实现跨领域情绪识别。  
+建议普通读者从《UF-AMA》的框架图入手，理解多模态情感识别如何在不同场景间迁移。
+- 详情：[/202606/06/README](/202606/06/README)
 
 ### 精读区论文标签
-1. [State-Anchored Complete-View Distillation for Robust Conversational Multimodal Emotion Recognition](/20260528-20260606/2605.29590v1-state-anchored-complete-view-distillation-for-robust-conversational-multimodal-emotion-recognition)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：针对缺失模态的鲁棒对话多模态情感识别，使用完整视图知识蒸馏
-2. [Dynamic Interaction-Aware and Causality-Disentangled Framework for Multimodal Sentiment Analysis](/20260528-20260606/2605.30994v1-dynamic-interaction-aware-and-causality-disentangled-framework-for-multimodal-sentiment-analysis)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：面向多模态情感分析的动态因果解耦框架，使用语言、视觉、声音模态
-3. [A Shared Valence Axis Across Modern LLMs and Human EEG: The Saturation Regularity](/20260528-20260606/2606.00129v1-a-shared-valence-axis-across-modern-llms-and-human-eeg-the-saturation-regularity)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：在大语言模型与人类脑电图之间建立共享效价轴，用于情绪处理
-4. [From Empathy to Personalized Empathy: Adapting Empathetic Strategies to Individual Users](/20260528-20260606/2606.00728v1-from-empathy-to-personalized-empathy-adapting-empathetic-strategies-to-individual-users)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：在LLMs中引入个性化共情概念，根据用户人格调整共情策略，直接为对话代理集成情感智能。
-5. [Bayesian Spectral Emotion Transition Discovery from Multi-Annotator Disagreement](/20260528-20260606/2606.01906v1-bayesian-spectral-emotion-transition-discovery-from-multi-annotator-disagreement)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：从多标注者软标签中贝叶斯谱发现情感转移结构
-6. [Beyond Semantics: Modeling Factual and Affective Perceptual Experiences from Vision-Language Data](/20260528-20260606/2606.03345v1-beyond-semantics-modeling-factual-and-affective-perceptual-experiences-from-vision-language-data)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：利用无监督主题Transformer从图文对中建模情感感知体验，属于跨模态对齐技术
-7. [Speech Emotion Recognition using Attention-based LSTM-Network with Residual Connection](/20260528-20260606/2606.03359v1-speech-emotion-recognition-using-attention-based-lstm-network-with-residual-connection)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：提出轻量级注意力LSTM加残差连接用于语音情感识别，是情感计算核心任务
-8. [Task-Vector Arithmetic for Emotional Expressivity Control in Language-Model-Based Text-to-Speech](/20260528-20260606/2606.05367v1-task-vector-arithmetic-for-emotional-expressivity-control-in-language-model-based-text-to-speech)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：通过x-向量质心运算控制语言模型TTS的情绪表达力
-9. [GRAMformer: Any-Order Modality Interactions via Volumetric Multimodal Cross-Attention](/20260528-20260606/2606.06249v1-gramformer-any-order-modality-interactions-via-volumetric-multimodal-cross-attention)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：提出体积多模态交叉注意力机制，可建模任意阶模态交互，是新颖的跨模态融合技术。
-10. [User-Aware Active Knowledge Acquisition for Emotional Support Dialogue](/20260528-20260606/2605.29715v1-user-aware-active-knowledge-acquisition-for-emotional-support-dialogue)  
+1. [Variational Adapter for Cross-modal Similarity Representation](/202606/06/2605.30968v1-variational-adapter-for-cross-modal-similarity-representation)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：面向情感支持对话的用户主动知识获取，利用大语言模型
-11. [HEART-Bench: Do LLM Agents Exhibit Human-like Psychology?](/20260528-20260606/2605.30058v1-heart-bench-do-llm-agents-exhibit-human-like-psychology)  
+   evidence：变分适配器处理视觉-语言跨模态相似度学习中的标注噪声
+2. [UF-AMA: A unified framework for cross-domain emotion recognition via adaptive multimodal alignment](/202606/06/2606.00170v1-uf-ama-a-unified-framework-for-cross-domain-emotion-recognition-via-adaptive-multimodal-alignment)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：评估LLM代理在类人心理学（包括人格和情感维度）上的基准
-12. [Appropriateness of Empathy in AI: A Signal-Cost Perspective](/20260528-20260606/2605.31340v1-appropriateness-of-empathy-in-ai-a-signal-cost-perspective)  
+   evidence：基于EEG的自适应多模态对齐跨域情绪识别
+3. [MindZero: Learning Online Mental Reasoning With Zero Annotations](/202606/06/2606.00240v1-mindzero-learning-online-mental-reasoning-with-zero-annotations)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：从信号成本角度评估AI同理心适宜性的框架，提出代理指标
-13. [Sympatheia: Emotionally Adaptive Voice Assistant with Continuous Affect Conditioning](/20260528-20260606/2606.00851v1-sympatheia-emotionally-adaptive-voice-assistant-with-continuous-affect-conditioning)  
+   evidence：自监督强化学习训练多模态大语言模型进行在线心理推理
+4. [Hyperbolic and Evidence-Prioritized Experts for Large Vision-Language Models](/202606/06/2606.00275v1-hyperbolic-and-evidence-prioritized-experts-for-large-vision-language-models)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：通过语音进行连续情感调节的情感自适应口语对话系统
-14. [Dive into Waves: Morlet Spectral Transformer for Cross-Subject Emotion Decoding from EEG](/20260528-20260606/2606.00884v1-dive-into-waves-morlet-spectral-transformer-for-cross-subject-emotion-decoding-from-eeg)  
+   evidence：用于非对称视觉-语言对齐的双曲混合专家模型
+5. [A Multiscale Network with Supervised Contrastive Learning for Real-Time Facial Emotion Recognition](/202606/06/2606.01069v1-a-multiscale-network-with-supervised-contrastive-learning-for-real-time-facial-emotion-recognition)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：使用频谱Transformer进行跨被试EEG情绪识别
-15. [Sparse Autoencoders for Interpretable Emotion Control in Text-to-Speech](/20260528-20260606/2606.01479v1-sparse-autoencoders-for-interpretable-emotion-control-in-text-to-speech)  
+   evidence：使用多尺度网络和监督对比学习进行实时面部情绪识别。
+6. [Feature Alignment Determines Fusion Strategy: A Comparative Study of Cross-Attention and Concatenation in Multimodal Learning](/202606/06/2606.01207v1-feature-alignment-determines-fusion-strategy-a-comparative-study-of-cross-attention-and-concatenation-in-multimodal-learning)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：基于LLM的TTS中，利用稀疏自动编码器识别并干预情感特征，实现可解释情感控制
-16. [InsightVQA: High-Dimensional Emotion-Cognitive Visual Question Answering Benchmark](/20260528-20260606/2606.02171v1-insightvqa-high-dimensional-emotion-cognitive-visual-question-answering-benchmark)  
+   evidence：特征对齐质量决定最优融合策略（交叉注意力或拼接）
+7. [HOLA: Holistic Multi-Modal Alignment for Open-Set 3D Recognition](/202606/06/2606.01334v1-hola-holistic-multi-modal-alignment-for-open-set-3d-recognition)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：提出大规模分层视觉情感理解基准，直接贡献于情感计算中的情感检测。
-17. [KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models](/20260528-20260606/2606.04180v1-koda-contrastive-representation-comparison-and-alignment-for-vision-language-foundation-models)  
+   evidence：点云与多视图图像和多文本的整体多模态对齐
+8. [Turing Patterns for Multimedia: Reaction-Diffusion Multi-Modal Fusion for Language-Guided Video Moment Retrieval](/202606/06/2606.01615v1-turing-patterns-for-multimedia-reaction-diffusion-multi-modal-fusion-for-language-guided-video-moment-retrieval)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：提出用于对齐和比较视觉‑语言模型跨模态表示的框架
-18. [SHALA-LLM: Smartly Handling Ambiguous Labels in Aligning LLMs](/20260528-20260606/2606.05376v1-shala-llm-smartly-handling-ambiguous-labels-in-aligning-llms)  
+   evidence：反应扩散过程建模动态视频-文本交互实现对齐
+9. [Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals](/202606/06/2606.02679v1-before-fusion-ask-what-to-keep-contextual-calibration-of-multimodal-signals)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：建模情感识别中标注者分歧以改进大语言模型对齐，提升情感任务性能
-19. [Beyond Generative Decoding: Discriminative Hidden-State Readout from a Native Omni-Modal LLM for Multimodal Sentiment Analysis](/20260528-20260606/2606.05713v1-beyond-generative-decoding-discriminative-hidden-state-readout-from-a-native-omni-modal-llm-for-multimodal-sentiment-analysis)  
+   evidence：提出多模态信号上下文校准模块，通过支持与冲突线索调整表示，改进跨模态融合
+10. [Intra-Modal Neighbors Never Lie: Rectifying Inter-Modal Noisy Correspondence via Graph-Based Intra-Modal Reasoning](/202606/06/2606.04061v1-intra-modal-neighbors-never-lie-rectifying-inter-modal-noisy-correspondence-via-graph-based-intra-modal-reasoning)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：利用原生全模态LLM从语言、声学和视觉信号进行多模态情感分析
-20. [When AI Says It Feels](/20260528-20260606/2606.05734v1-when-ai-says-it-feels)  
+   evidence：基于图内模态推理校正跨模态噪声对应
+11. [Geometry-Preserving Unsupervised Alignment for Heterogeneous Foundation Models](/202606/06/2606.04385v1-geometry-preserving-unsupervised-alignment-for-heterogeneous-foundation-models)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：通过自我奖励强化学习增强LLM的情感表达，直接开发情感能力与情感智能。
-21. [EEGDancer: Dynamic Emotion Latent Space Masked Modeling with Reinforcement Learning for EEG Continuous Emotion Prediction](/20260528-20260606/2606.05855v1-eegdancer-dynamic-emotion-latent-space-masked-modeling-with-reinforcement-learning-for-eeg-continuous-emotion-prediction)  
+   evidence：无监督地对齐视觉-语言与纯视觉模型，保持几何结构
+12. [LifeSide: Benchmarking Agents as Lifelong Digital Companions](/202606/06/2606.04660v1-lifeside-benchmarking-agents-as-lifelong-digital-companions)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：利用动态情绪潜空间学习进行连续EEG情绪预测
-22. [Resonant Minds: Closed-Loop Social Avatars with Theory of Mind](/20260528-20260606/2606.05896v1-resonant-minds-closed-loop-social-avatars-with-theory-of-mind)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：将感知、心理理论推理与多模态表达集成到闭环框架中，打造情感智能对话代理。
-23. [Empathy on Demand: How Empathic AI Can Scale Emotional Support for Verbal Harassment](/20260528-20260606/2606.05995v1-empathy-on-demand-how-empathic-ai-can-scale-emotional-support-for-verbal-harassment)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：研究对话AI是否能对言语骚扰受害者提供共情情感支持
-24. [ProSarc: Prosody-Aware Sarcasm Recognition Framework via Temporal Prosodic Incongruity](/20260528-20260606/2606.06168v1-prosarc-prosody-aware-sarcasm-recognition-framework-via-temporal-prosodic-incongruity)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：一种仅用音频的讽刺检测方法，通过建模韵律不一致性取得跨域和跨语言的优异结果
-25. [Learning Emotion-discriminative Representations for Zero-Shot Cross-lingual Speech Emotion Recognition](/20260528-20260606/2606.06200v1-learning-emotion-discriminative-representations-for-zero-shot-cross-lingual-speech-emotion-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：提出用于跨语言语音情感识别的情感判别表示学习方法
+   evidence：基准测试终身数字伴侣中的情感陪伴能力
 
 ### 速读区论文标签
-1. [Understanding the Rising Human-AI Affective Bonding: Conceptualization and HAABI Scale Development](/20260528-20260606/2605.29484v1-understanding-the-rising-human-ai-affective-bonding-conceptualization-and-haabi-scale-development)  
+1. [EUDAIMONIA: Evaluating Undesirable Dynamics in AI](/202606/06/2605.30654v1-eudaimonia-evaluating-undesirable-dynamics-in-ai)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：开发并验证用于测量人‑AI情感纽带的量表，是情感计算的关键构念
-2. [NICE: A Theory-Grounded Diagnostic Benchmark for Social Intelligence of LLMs](/20260528-20260606/2605.29685v1-nice-a-theory-grounded-diagnostic-benchmark-for-social-intelligence-of-llms)  
+   evidence：评估LLM在情感陪伴和社交动态中的表现，与情感对话代理相关
+2. [Fine-grained Verification via Diagnostic Reasoning Supervision for Aspect Sentiment Triplet Extraction](/202606/06/2605.31446v1-fine-grained-verification-via-diagnostic-reasoning-supervision-for-aspect-sentiment-triplet-extraction)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：构建基于社会理论的LLM社交智能整体诊断基准，直接评估情感智能与陪伴能力。
-3. [Evaluation of Conversational Agents: Understanding Culture, Context and Environment in Emotion Detection](/20260528-20260606/2605.30099v1-evaluation-of-conversational-agents-understanding-culture-context-and-environment-in-emotion-detection)  
+   evidence：细粒度验证提升方面情感三元组抽取的可靠性，用于情感分析
+3. [Zamba2-VL Technical Report](/202606/06/2606.00390v1-zamba2-vl-technical-report)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：评估对话代理在不同文化下的情感检测
-4. [LoMo: Local Modality Substitution for Deeper Vision-Language Fusion](/20260528-20260606/2605.30265v1-lomo-local-modality-substitution-for-deeper-vision-language-fusion)  
+   evidence：混合Mamba2状态空间层和Transformer块的视觉语言模型，与领先的Transformer VLM竞争
+4. [Density-Aware Translation of Spurious Correlations in Zero-Shot VLMs](/202606/06/2606.01710v1-density-aware-translation-of-spurious-correlations-in-zero-shot-vlms)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：解决视觉语言融合中的模态替换偏差以提升跨模态理解
-5. [PARCEL: Pool-Anchored Resampling with Conditioned Elastic Queries for Efficient Vision-Language Understanding](/20260528-20260606/2605.30126v1-parcel-pool-anchored-resampling-with-conditioned-elastic-queries-for-efficient-vision-language-understanding)  
+   evidence：密度感知翻译修正视觉-语言模型中的虚假线索
+5. [SOCO: Benchmarking Semantic Object Correspondence in Vision Foundation Models](/202606/06/2605.31597v1-soco-benchmarking-semantic-object-correspondence-in-vision-foundation-models)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：针对视觉语言模型的高效视觉令牌压缩，支持跨模态表示学习
-6. [Beyond Classification: Dynamic Adapter Routing for Continual Multimodal Retrieval](/20260528-20260606/2605.31229v1-beyond-classification-dynamic-adapter-routing-for-continual-multimodal-retrieval)  
+   evidence：评估视觉基础模型中语义物体对应关系的基准，包含语言描述
+6. [Beyond the Mouth: Upper-Face Affective Cues in Audiovisual Sentence Recognition under Acoustic Uncertainty](/202606/06/2606.00670v1-beyond-the-mouth-upper-face-affective-cues-in-audiovisual-sentence-recognition-under-acoustic-uncertainty)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：提出面向视觉语言模型持续多模态检索的动态适配器路由方法，直接推进跨模态对齐与融合技术。
-7. [Personalized to Persuade: The Effects of Contextualization and Warmth on Trust and Reliance in Conversational AI](/20260528-20260606/2605.31275v1-personalized-to-persuade-the-effects-of-contextualization-and-warmth-on-trust-and-reliance-in-conversational-ai)  
+   evidence：上脸部情感线索在听觉不确定条件下辅助视听句子识别
+7. [Towards Understanding Modality Interaction in Multimodal Language Models via Partial Information Decomposition](/202606/06/2606.00959v1-towards-understanding-modality-interaction-in-multimodal-language-models-via-partial-information-decomposition)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：研究对话温暖感（情商）和个性化如何影响对AI代理的信任
-8. [Positional Encodings Anchor Spatial Structure in Vision Transformers: A Geometric Perspective on Robustness](/20260528-20260606/2606.00124v1-positional-encodings-anchor-spatial-structure-in-vision-transformers-a-geometric-perspective-on-robustness)  
+   evidence：用部分信息分解量化MLLM中模态的独特、冗余和协同贡献，指导跨模态融合设计
+8. [DiffuSent: Towards a Unified Diffusion Framework for Aspect-Based Sentiment Analysis](/202606/06/2606.01323v1-diffusent-towards-a-unified-diffusion-framework-for-aspect-based-sentiment-analysis)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：研究位置编码如何塑造视觉Transformer中的空间表征与鲁棒性
-9. [COMET: Concept Space Dissection of the Modality Gap in Audio-Text Multimodal Contrastive Embeddings](/20260528-20260606/2605.29628v1-comet-concept-space-dissection-of-the-modality-gap-in-audio-text-multimodal-contrastive-embeddings)  
+   evidence：统一的扩散框架用于方面级情感检测
+9. [T-CLIP: Enabling Thermal Perception for Contrastive Language-Image Pretraining](/202606/06/2606.00673v1-t-clip-enabling-thermal-perception-for-contrastive-language-image-pretraining)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：通过概念空间解剖分析音频-文本嵌入的模态鸿沟以实现跨模态对齐
-10. [Data filtering methods for training language models](/20260528-20260606/2605.29807v1-data-filtering-methods-for-training-language-models)  
+   evidence：通过改进CLIP对齐热图像与文本，实现跨模态感知
+10. [ACAT: A Collaborative Platform for Efficient Aspect-Based Sentiment Dataset Annotation](/202606/06/2606.04189v1-acat-a-collaborative-platform-for-efficient-aspect-based-sentiment-dataset-annotation)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：在情感分类数据集上评估标签错误检测方法
-11. [VLA-Trace: Diagnosing Vision-Language-Action Models through Representation and Behavior Tracing](/20260528-20260606/2605.30117v1-vla-trace-diagnosing-vision-language-action-models-through-representation-and-behavior-tracing)  
+   evidence：方面级情感标注平台
+11. [Video2LoRA: Parametric Video Internalization for Vision-Language Models](/202606/06/2606.04351v1-video2lora-parametric-video-internalization-for-vision-language-models)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：追踪视觉-语言-动作模型中跨模态对齐与融合的诊断框架，提供多模态交互的见解。
+   evidence：通过预测LoRA适配器实现视觉语言模型的视频内化
 
 
 <div class="dpr-home-promo-card">

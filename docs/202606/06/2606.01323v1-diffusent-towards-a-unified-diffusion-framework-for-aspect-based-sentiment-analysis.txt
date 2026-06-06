@@ -1,0 +1,370 @@
+Title: DiffuSent: Towards a Unified Diffusion Framework for Aspect-Based Sentiment Analysis
+
+URL Source: https://arxiv.org/pdf/2606.01323v1
+
+Published Time: Tue, 02 Jun 2026 01:37:44 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# DiffuSent: Towards a Unified Diffusion Framework for Aspect-Based Sentiment Analysis 
+
+Shu Long 1,2, Yanglei Gan 1⋆, and Xuchuan Zhou 3 
+
+> 1
+
+University of Electronic Science and Technology of China 
+
+yangleigan@std.uestc.edu.cn  
+
+> 2
+
+Southwest Petroleum University 202199010018@swpu.edu.cn  
+
+> 3
+
+Southwest Minzu University xczhou@swun.edu.cn 
+
+Abstract. Aspect-Based Sentiment Analysis (ABSA) encompasses seven distinct subtasks, each focusing on different extracted elements. Despite the proven success of generative models in unified aspect sentiment analy-sis, existing approaches often rely on auto-regressive token-by-token gen-eration without grasping the whole information of the aspect and opin-ion terms, resulting in boundary insensitivity, particularly in context of multi-word aspect and opinion terms. To address these issues, we present DiffuSent, a non-auto-regressive diffusion framework that systematically formulates all ABSA subtasks as boundary denoising diffusion processes, progressively refining boundaries over noisy states. Furthermore, we in-troduce a contrastive denoising training strategy which effectively ad-dress duplicate predictions with subtle variations introduced by diffu-sion process. Extensive experiments across 28 settings (7 subtasks ×
+
+4 datasets) demonstrate that DiffuSent achieves delivers consistent im-provements over the strongest generative and span-based systems. Dif-fuSent exhibits notable gains on multi-word triplets, achieving an average improvement of +2.48 F1, and maintains robust extraction accuracy in sentences containing multiple sentiment triplets. Moreover, the non-auto-regressive decoding enables substantial efficiency benefits, reaching up to 181 × faster inference than auto-regressive generative baselines 4.
+
+Keywords: Aspect-based Sentiment Analysis · Diffusion Model · Con-trastive Learning. 
+
+1 Introduction 
+
+Aspect-based Sentiment Analysis (ABSA) stands as a fine-grained branch of sentiment analysis that shifts the focus from coarse document- or sentence-level sentiment to sentiment expressed toward specific entities [28]. An ABSA instance is typically composed of three essential elements: an aspect term ( a), an opinion term ( o), and a sentiment polarity ( s). To illustrate, consider the review sentence from Res 15 shown in Figure 1, " New hamburger with special sauce is ok at least  
+
+> ⋆
+
+Equal contribution.  
+
+> 4
+
+The source code is anonymous online at: https://anonymous.4open.science/r/DiffuSent  
+
+> arXiv:2606.01323v1 [cs.CL] 31 May 2026 2Shu Long, Yanglei Gan, and Xuchuan Zhou
+
+Fig. 1: Illustration of seven ABSA subtasks 
+
+better than big mac ". The phrases " New hamburger with special sauce " and " big mac " function as aspect terms, while " ok " and " better than " act as opinions linked to positive/negative sentiment polarities, respectively. Conventional approaches to ABSA have focused on distinct components such as aspect/opinion term extraction [23, 43], sentiment classification for a given as-pect [32, 20], or aspect sentiment triplet extraction [25, 42, 44]. While these devel-opments have led to successes in individual subtasks, a unified ABSA framework remains an elusive goal. To bridge this gap, recent research has been shifting towards unified approaches within a pipeline framework [24, 6]. However, such paradigms often suffer from error accumulation due to their modular approaches [7]. Addressing these drawbacks, there is a growing inclination towards employ-ing generative models in ABSA. This shift signifies a move to an end-to-end autoregressive formulation, broadening the scope to include techniques such as word index generation [38], label augmented text generation [41], and template filling [9, 10]. Despite their effectiveness, auto-regressive generative models suffer from two critical drawbacks: 
+
+– Boundary Ambiguity and Integrity Failure in Multi-Word Extrac-tion. The step-wise, token-focused mechanism of auto-regressive decoding fundamentally compromises the integrity of multi-word aspect and opinion terms. Since the model generates output sequentially, conditioning each to-ken primarily on immediate history [1, 44], it restricts the capacity to capture the holistic context necessary for complete multi-word expressions. This of-ten results in boundary ambiguity, where the decoder prematurely truncates a descriptive phrase, such as truncating " new hamburger with special sauce "to just " hamburger ". This limitation is especially acute for long, syntactically complex, or highly descriptive aspect terms. 
+
+– Computational Bottleneck Due to Sequential Decoding. The inherent requirement for strictly sequential token generation in auto-regressive models Title Suppressed Due to Excessive Length 3
+
+imposes a significant computational inefficiency. The decoding process en-forces strict temporal dependencies, which fundamentally precludes parallel computation across the sequence length. Consequently, the inference latency scales linearly with the length of the target structured output [7, 35]. This computational cost becomes prohibitive when generating lengthy, structured outputs like multiple aspectopinion pairs. Ultimately, this bottleneck limits the scalability of generative ABSA systems in real-world applications. To bridge this gap, we propose DiffuSent, a novel unified generative diffusion framework tailored for ABSA. Distinct from traditional token-by-token genera-tion paradigm, DiffuSent is designed to explicitly model boundary indices, and dynamically refines its interpretations based on comprehensive contextual infor-mation. Through a non-auto-regressive boundary denoising diffusion process, it delivers predictions for boundary indices in a single step. Specifically, we sys-tematically infuse uncertainty via Gaussian noise into the aspect/opinion term boundaries using a forward diffusion process. The subsequent reverse diffusion process then meticulously refines these term boundaries from their initially in-determinate states. Additionally, we introduce a contrastive denoising training strategy designed to differentiate between accurate and inaccurate boundary predictions. It adeptly manages the duplicate predictions with subtle variations in boundary detection, particularly in distinguishing semantically similar terms such as " hamburger ", " new hamburger ", and " new hamburger with special sauce ". We validate DiffuSent on four benchmarks for seven subtasks and DiffuSent yields state-of-the-art performance. Our contributions are three-fold: 
+
+– We propose DiffuSent, a unified diffusion-based framework that formulate all ABSA subtasks as boundary denoising diffusion process. 
+
+– A novel contrastive denoising training strategy is introduced. This strategy is designed to address duplicate predictions with subtle variations in predicted boundary indices introduced by diffusion process. 
+
+– Extensive experiments are conducted on 28 subtasks (7 × 4 datasets) to eval-uate the effectiveness of our approach. Experimental results demonstrate that our model outperforms the state-of-the-art methods. 
+
+2 Related Work 
+
+Aspect-Based Sentiment Analysis (ABSA) encompasses a suite of interrelated subtasks, each focusing on specific components or their combinations within a text as illustrated in Figure 1. Previous studies mainly focus on individual sub-tasks [31, 34], including Aspect Term Extraction (AE), Opinion Term Extrac-tion (OE), Aspect-level Sentiment Classification (ALSC). Subsequent research shifted towards integrated models that simultaneously extract aspects, opinions, and their corresponding sentiments [5, 8, 12], such as Aspect-oriented Opinion Extraction (AOE), Aspect-Opinion Pair Extraction (AOPE) and Aspect Ex-traction and Sentiment Classification (AESC). Marking a significant shift in the field, Peng et al. [26] introduced the Aspect Sentiment Triplet Extraction 4 Shu Long, Yanglei Gan, and Xuchuan Zhou 
+
+(ASTE) task, pioneering a unified approach for extracting aspect, opinion, and sentiment triplets. This approach led to the development of advanced techniques in ABSA, such as table filling [13, 42], sequence tagging [37, 44], and span-based methods [2, 19]. However, these methods only focus on individual tasks. Recent trends in Aspect-Based Sentiment Analysis (ABSA) have seen the emergence of unified methods, such as two-step MRC approach [24]. However, this method suffers from error accumulation due to isolated processing. In re-sponse, a shift towards end-to-end generative methods has occurred, addressing all ABSA subtasks more effectively. These include approaches like word index generation [38], label augmented text generation [41], and template filling [9, 10, 44]. However, a notable limitation of these generative models is their reliance on auto-regressive, token-by-token decoding. This approach, while effective, does not fully capitalize on the semantics available in multi-word terms and can be in-efficient time-wise. In our work, we utilize a diffusion model to facilitate progres-sive refinements of term boundaries and output all predictions simultaneously in non-auto-regressive manner, effectively addressing complex linguistic structures. For a thorough treatment of Diffusion Model, refer to Appendix. 
+
+3 Methodology 
+
+3.1 Problem Definition 
+
+Given a sentence S = {w1, w 2, ..., w M }, the objective of ASTE is to extract the boundary indices of all conceivable aspect terms, associated opinion ex-pression terms, and their corresponding sentiment polarity labels, denoted as 
+
+T = {(asi , a ei , o si , o ei , s i)}Ni=1 . The superscripts s and e denote the start and end indices of aspect or opinion terms within the input text. The sentiment polarity label si takes values from {POS , NEU , NEG }, and N signifies the count of target triples. We define boundary sequences as Tb = {(asi , a ei , o si , o ei )}Ni=1 to facilitate the subsequent presentation. 
+
+3.2 Boundary Denoising Diffusion Process 
+
+As shown in Figure 2, in our boundary denoising diffusion process, the boundary sequences Tb are considered as data samples. During the forward diffusion phase, Gaussian noise is incrementally added to indices in these sequences. Conversely, the reverse diffusion process aims to restore the original boundary indices. 
+
+Boundary Indices Forward Diffusion. In this phase, we progressively introduce Gaussian noise to the boundary sequences Tb ∈ RN ×4, simulating the uncertainty inherent in identifying term boundaries. To facilitate parallel training, we normalize the count N of Tb to Ntrain by duplicating, with normal-ized sequences represented as x0 ∈ RNtrain ×4. The noisy sequences at any given timestep t are calculated using a one-step Markov transition as:         
+
+> xt=√¯αtx0+√1−¯αtϵ(1) Title Suppressed Due to Excessive Length 5
+
+Fig. 2: Overview of DiffuSent. " Boundary LookUp " denotes get corresponding word embedding with boundary as index. The stream identified with " ↑" only occurs in the last reverse process in training stage and does not exist in inference stage. Noise E ∼ N (0, I).where ϵ ∼ N (0, I) denotes the noise sampled from Gaussian distribution. 
+
+Boundary Indices Reverse Diffusion. Starting from a noise-perturbed state, the reverse diffusion process employs the non-Markovian denoising strat-egy DDIM [29, ?]. DDIM is for precise reconstruction of term boundaries. The process involves selecting a subsequence τ from the full timestep sequence [1 , . . . , T ],with a length of γ. We iteratively refining the boundary sequences xτi using the information from the preceding timestep. The iterative refinement process, uti-lizing a trainable denoising network fθ conditioned on S at τi, as follows:            
+
+> ˆx0=fθ(xτi, S, τ i) ; ˆϵτi=xτi− √ατiˆx0
+> √1−ατi
+> (2)
+
+where ˆx0 denotes the predicted boundary at timestep τi, and ˆϵτi denotes the estimated noise. This noise is determined as the normalized difference between the perturbed boundary sequences xτi and the predicted boundary sequences ˆx0.The refined predictions are then combined with the estimated noise, adjusted by their respective standard deviations. This process is iteratively repeated, as encapsulated in the expression, xτi−1 = √ατi−1 ˆx0 + √1 − ατi−1 ˆϵτi . Following 
+
+γ iterations of the DDIM, the perturbed boundary indices undergo a gradual refinement, converging towards accurate boundary indices. 
+
+3.3 Network Architecture 
+
+Our denoising network fθ (xt, S, t i) is designed to take perturbed boundary se-quences xt and the sentence S as input, and subsequently predict the corre-sponding term boundary ˆx0 along with the sentiment polarity. The architecture 6 Shu Long, Yanglei Gan, and Xuchuan Zhou 
+
+of this network, illustrated in Figure 2, comprises two key components: a sentence encoder and a boundary indices decoder. 
+
+Sentence Encoder. The Sentence Encoder transforms the input context 
+
+S = {w1, w 2, ..., w M }, with a length of M , into a h-dimensional sentence repre-sentation HS = {h1, h 2, ..., h M } ∈ RM ×h. Our implementation involves leverag-ing pre-trained language models (PLMs) [3] with a bi-directional LSTM: 
+
+HS = Encoder( S) (3) 
+
+Boundary Indices Decoder. The boundary indices decoder processes the sentence representation HS to derive semantic representations for the corrupted sequence of boundary indices xt, which denote aspect and opinion terms. Ini-tially, the noisy sequences are discretized into word indices through rescaling. The sequence representation HX = {hXi }Ntrain  
+
+> i=1
+
+∈ RNtrain ×h is then computed by mean-pooling over the tokens at the designated start and end indices of as-pect and opinion terms. Each hXi represents the pooled representation of the 
+
+i-th sequence within boundary sequences, calculated as follows: 
+
+hXi = P ooling (hasi , h aei , h osi , h oei ) (4) 
+
+To further refine sequence representations, we utilize a transformer decoder [33] integrated with self-attention and cross-attention layers. The self-attention module enhances interactions among sequences by utilizing query, key, and values derived from the sequence representations HX :
+
+Hsa = SelfAttention( HX ) (5) 
+
+where Hsa ∈ RNtrain ×h. In tandem, the cross-attention mechanism further refines the sequence representation by incorporating the broader semantic con-text of the sentence. This is achieved by utilizing the output of the self-attention module Hsa as a query, with the key and value derived from the sentence rep-resentation HS :
+
+Hca = CrossAttention( Hsa , HS ) (6) 
+
+where Hca ∈ RNtrain ×h. To accommodate the iterative nature of the dif-fusion process, sinusoidal embeddings Et corresponding to each timestep t are integrated into the sequence representations. The final noisy sequence represen-tations HX are calculated as follows: 
+
+HX = Hca + Et (7) 
+
+Moreover, we employ 4 index pointers to predict boundary indices of aspect and opinion terms, respectively. For each index δ ∈ { as, a e, o s, o e}, we create a fused representation HδSX ∈ RNtrain ×M ×h, which combines the noisy sequence representation with the sentence representation. The likelihood Pδ ∈ RNtrain ×M
+
+of each index being a boundary of term is as follows: 
+
+HδSX = WδS HS + WδX HX ; Pδ = F F N 
+
+(
+
+HδSX + Eδp
+
+)
+
+(8) Title Suppressed Due to Excessive Length 7
+
+where WδS , WδX ∈ Rh×h are learnable matrices, and FFN (·) denotes a feed-forward network (FFN). Eδp ∈ RNtrain ×M ×h represents type embeddings that distinguish between aspect and opinion boundaries. 
+
+Sentiment Classifier. The sentiment classifier processes the sequence rep-resentations HX through a FFN to output a probability distribution: 
+
+Pc = F F N (HX
+
+) (9) 
+
+Where, Pc ∈ RNtrain ×C , and C represents the total number of sentiment polarity categories. 
+
+Contrastive Denoising Training. In DiffuSent, the diffusion process in-troduces uncertainty, which can lead to duplicate predictions around the ground-truth boundary indices [14, 4]. This uncertainty allows the model to explore mul-tiple plausible start and end positions, which is beneficial for multi-word terms, but it can also cause inaccurate boundary predictions under subtle variations. To improve boundary localization and reduce false triplet generation in sentiment classification, we introduce a contrastive denoising training strategy. As shown in Figure 2, we construct positive and negative samples by adding two noise scales, 
+
+λ1 and λ2, to the Ntrain gold boundary sequences, where λ1 < λ 2. During reverse diffusion, the decoder takes both types of samples as additional inputs. Positive samples, corrupted with noise smaller than λ1, are expected to reconstruct the corresponding ground truth. Negative samples, corrupted with noise larger than 
+
+λ1 but smaller than λ2, are expected to be classified as “ Invalid ”, denoted by 
+
+ε. For each ground-truth boundary sequence, we generate one positive and one negative sample, yielding 2 × Ntrain samples per sentence. This process pro-duces the boundary probabilities Pδ for positive samples, and the classification probabilities Pc and ˜Pc for positive and negative samples, respectively. 
+
+3.4 Training Loss Matching Loss. To optimally align the Ntrain predictions and their correspond-ing Ntrain expanded ground-truth values, we employ the Hungarian algorithm [15] to establish an optimal matching ˆψ between the two sets. In this context, 
+
+ˆψ(i) denotes the ground-truth corresponding to the i-th noisy sequence. The reverse process is trained by maximizing the likelihood of the prediction: 
+
+Lm = −
+
+> Ntrain
+
+∑
+
+> i=1
+
+[ ∑
+
+> δ∈{ as,a e,o s,o e}
+
+log Pδi
+
+( ˆψδ (i)
+
+)
+
++ log Pci
+
+( ˆψc(i)
+
+) ]
+
+(10) 
+
+Contrastive Denoising Loss. The contrastive loss consists of boundary loss and sentiment classification loss. Specifically, the boundary loss is only cal-culated according to boundary probabilities Pδ of positive samples. The classi-fication loss is calculated according to classification probabilities Pc and ˜Pc for positive and negative samples, respectively.The contrastive loss is computed as: 
+
+Lc = −
+
+> Ntrain
+
+∑
+
+> i=1
+
+( ∑
+
+> δ∈{ as,a e,o s,o e}
+
+log Pδi
+
+( ˆY δi
+
+)
+
++ log Pci
+
+( ˆY ci
+
+)
+
++ log ˜Pci (ε)) (11) 8 Shu Long, Yanglei Gan, and Xuchuan Zhou 
+
+We jointly optimize matching loss Lm and contrastive denoising loss Lc. The overall training loss is denoted as:      
+
+> L=Lm+Lc(12)
+
+4 Experiment 
+
+4.1 Experimental Setup Datasets. We evaluate our methods across seven subtasks using four datasets from SemEval Challenges. The D17 dataset, annotated by [34], comprises un-paired opinion terms, while the D19 dataset, annotated by [5], pairs opinion terms with corresponding aspects. Annotated by [26], the D20 a dataset includes aspect labels, corresponding opinion labels, and sentiment polarities. Additionally, the 
+
+D20 b dataset, refined by [37], eliminates triples with inaccurate sentiments and labels missing triples. We present their statistics in Appendix. 
+
+Baselines. The baselines for evaluating DiffuSent across various datasets are categorized into three groups: 
+
+– For AE, OE and ALSC subtasks on D17 , and AOE subtasks on D19 , the models include: BART-GEN [38], SyMux [6], SK2 [17], MvP [10]. 
+
+– For AESC, AOPE, ASTE subtasks on D20 a, the models are Peng-two-stage [26], Dual-MRC [24], BART-GEN [38], LEGO-ABSA [9], SyMux [6], SK2 [17], MvP [10], PT-GCN [27], SAAG [30], LLaMA3-8B 5, GPT-4o 6.
+
+– For ASTE subtask on D20 b, the baselines are BART-GEN [38], Span-ASTE [36], UIE [22], SK2 [17], SBN [2], STAGE [19], SimSTAR [16], SLGM [44], MvP [10], SATPC [18], SSGCN [40], QAIE [21], DiffuSyn [39]. 
+
+4.2 Main Results 
+
+We adopt F1-score as the evaluation metric for all experiments. A predicted ABSA tuple is regarded as correct only under exact match with the gold tuple in all its elements. We make the following observations. 
+
+– DiffuSent delivers consistent improvements across AESC, AOPE, and ASTE subtasks on D20 a. As shown in Table 1, DiffuSent achieves state-of-the-art performance in all twelve settings. Relative to the strongest unified baselines per column, DiffuSent achieves improvements between 0.07 
+
+and 1.21 F1-scores, with an average gain of roughly 0.6. All reported improve-ments are statistically significant under a paired bootstrap test at p < 0.01 .These results highlight that progressive boundary denoising effectively sharp-ens aspectopinion span localization under the exact-match criterion.   
+
+> 5https://huggingface.co/meta-llama/Meta-Llama-3-8B
+> 6https://openai.com/index/hello-gpt-4o/
+
+Title Suppressed Due to Excessive Length 9
+
+Table 1: Comparison F1-scores(%) for AESC, AOPE and ASTE on D20 a dataset. The best and the second best F1-scores are in bold and underlined, respectively. 
+
+† denotes the reproduced result using the released code. Results marked with ♠
+
+results are retrieved from [11]. Results marked with "*" indicate a statistically significant improvement with p < 0.01 under the bootstrap paired t-test.                                                                                                                                                                             
+
+> Model PLM Lap14 Res14 Res15 Res16 AESC AOPE ASTE AESC AOPE ASTE AESC AOPE ASTE AESC AOPE ASTE Dual-MRC Bert-base 64.59 63.37 55.58 76.57 74.93 70.32 65.14 64.97 57.21 70.84 75.71 67.40 SyMux Roberta 70.32 67.64 60.11 78.68 79.42 74.84 69.08 69.82 63.13 77.95 78.82 72.76 SK2 Bert-large 69.42 68.12 60.14 78.72 78.19 73.32 73.30 72.05 64.32 77.78 79.89 72.03 PT-GCN T5-base --62.80 --74.22 --67.04 --74.68 SAAG Bert-base --59.58 --73.76 --63.48 --71.01 BART-GEN Bart-base 68.17 66.11 57.59 78.47 77.68 72.46 69.95 67.98 60.11 75.69 77.38 69.98 LEGO-ABSA T5-base 72.30 71.30 62.20 80.60 78.10 73.70 74.20 72.90 64.40 76.10 77.60 71.50 MvP †T5-base 70.55 71.38 62.42 78.06 77.95 74.60 74.84 74.06 65.25 77.63 80.46 73.28 ChatGPT-4 ♠-52.70 42.80 -65.93 59.70 -65.71 55.52 -63.38 57.93 -ChatGPT-4o ♠---44.63 --63.57 --56.53 --64.68 LLaMA3-8B ♠---36.40 --53.49 --46.73 --56.01 DiffuSent Bert-base 73.74 ∗71.67 ∗63.31 ∗81.13 ∗79.86 ∗74.91 ∗75.85 ∗74.19 ∗67.58 ∗79.16 ∗80.90 ∗75.09 ∗
+
+– Superior ASTE Performance on D20 b Across Most Domains. In com-parison to the latest ASTE benchmarks, as shown in Table 2, DiffuSent demonstrates superior performance. Even when compared against auto-regressive generative systems including UIE, MvP, and SLGM, all of which employ the substantially larger T5-base backbone, DiffuSent still delivers improvements of +0.94, +0.67, and +0.81 F1 on Res14 , Res15 , and Res16 , respectively. These findings confirm that our performance gains originate from the diffusion-based boundary refinement rather than from scaling pre-trained backbones. 
+
+– Large Language Models Exhibit Systematic Weaknesses in ABSA tasks. As reflected in Tables 1 and 2, ChatGPT-4 and ChatGPT-4o fall signif-icantly short on all ABSA subtasks, often trailing even earlier BERT-based ar-chitectures by a considerable margin. The gap becomes especially pronounced in extraction-heavy settings such as AOPE and ASTE, where precise bound-ary identification and strict tuple consistency are required. 
+
+– Consistent Advantages Across Extraction and Classification Tasks on D17 and D19 . Figure 3 shows that DiffuSent consistently forms the outer envelope relative to representative unified baselines across AE, OE, and ALSC on D17 and AOE on D19 . This uniform dominance across both extraction-oriented tasks (AE, OE, AOE) and opinion classification (ALSC) illustrates that the underlying diffusion mechanism enhances not only boundary precision but also downstream semantic consistency. 
+
+4.3 Ablation Study 
+
+To further investigate the impact of each component and hyper-parameter in DiffuSent, we conduct comprehensive ablation studies on ASTE task on Res15 
+
+and Res16 from D20 b in Table 3. 10 Shu Long, Yanglei Gan, and Xuchuan Zhou DiffuSent OE(Res15) ALSC(Lap14) ALSC(Res14) ALSC(Res15) AOE(Lap14) AOE(Res14) AOE(Res15) AOE(Res16) 
+
+Fig. 3: Comparison F1-scores for AE, OE, ALSC on the D17 dataset, and AOE on the D19 dataset. 
+
+Contrastive Denoising. Removing the contrastive denoising (CD) objec-tive leads to clear degradation on both datasets, with F1-score drops of 2.23 and 2.78 points on Res15 and Res16 , respectively. The decline reflects the challenge posed by subtle boundary variations introduced during the diffusion process. without CD, the model more frequently produces near-duplicate spans or spu-rious triplets. The contrastive objective effectively suppresses these ambiguous alternatives by enforcing discriminability between clean and corrupted represen-tations, thereby stabilizing boundary localization. 
+
+Diffusion Timestep. The diffusion timestep determines the magnitude of perturbation applied in the forward process. Table 3 shows that deviating from the default setting of 1000 timesteps in either direction harms performance. Smaller timesteps (700900) fail to introduce sufficient variation for effective de-noising refinement, while larger values (15002000) inject excessive noise that obscures true boundary cues. This finding underscores that DiffuSent benefits from a moderate level of perturbation, where the injected noise is large enough to encourage robust boundary reconstruction but not so large that it overwhelms useful semantic structure. 
+
+Number of Noisy Sequence. We also vary the number of noisy sequences used during training and inference. The best performance is achieved with 60 sequences, whereas both smaller (30) and larger (90) values lead to a reduc-tion in F1. Using too few sequences limits the model’s exposure to uncertainty, reducing its ability to generalize across boundary perturbations. Conversely, us-ing too many sequences increases the tendency to generate redundant or varied predictions, complicating the identification of correct triplets. Title Suppressed Due to Excessive Length 11 
+
+Table 2: Comparison F1-scores(%) for ASTE on D20 b dataset. Symbols have the same meanings as in Table 1.                                                                                 
+
+> Model PLM Lap14 Res14 Res15 Res16 Span-ASTE Bert-base 59.38 71.85 63.27 70.26 SK2 Bert-large 60.56 73.27 65.00 72.19 SBN Bert-base 62.65 74.34 64.82 72.08 SimSTAR †Bert-base 59.98 70.15 63.5 70.25 STAGE †Bert-base 59.58 72.58 63.49 71.06 SATPC Bert-base 62.59 74.79 65.03 71.17 SSGCN Bert-base 59.74 73.05 61.74 68.57 BART-GEN Bart-base 58.69 65.25 59.26 67.62 UIE-base T5-base 62.94 72.55 64.41 72.86 ChatGPT-4 ♠-39.01 54.89 47.88 56.55 MvP †T5-base 61.51 73.48 64.65 73.38 SLGM †T5-base 63.28 73.39 65.72 73.41 QAIE T5-base 38.58 -43.82 51.41 DiffuSyn Bert-large 61.41 73.74 64.55 72.48 DiffuSent Bert-base 63.03 ∗74.97 ∗66.39 ∗74.22 ∗
+
+Table 3: Ablation (F1-score,%) on Res15 and Res16 on ASTE subtasks. The best results are marked in bold .
+
+Settings Res15 Res16 Contrastive Denoising 
+
+7 64.16 71.44 
+
+3 66.39 74.22 
+
+Duffusion Timestep 700 63.55 70.18 800 64.03 72.51 900 65.41 72.88 1000 66.39 74.22 
+
+1500 64.42 71.40 2000 65.57 71.22 Number of Noisy Sequence 30 63.53 72.23 60 66.39 74.22 
+
+90 64.61 72.26 
+
+4.4 Performance on Multi-word Triplets 
+
+According to statistic data [44], multi-word triplets account for roughly one-third of all triplets. To assess DiffuSent’s capability with multi-word terms, we focus on triplets containing at least one multi-word aspect or opinion term, contrasting it with single-word triplets. Our evaluation includes comparisons with the latest span-based approach, STAGE [19], and a generative method, SLGM [44], on the 
+
+Res15 and Res16 datasets from D20 b. As shown in Figure 4, our model consis-tently outperforms others across various metrics. Notably, DiffuSent exhibits a more substantial improvement, achieving an average F1-score increase of 2.48% for multi-word triplets compared to a 0.52% increase for single-word triplets. These results underscore DiffuSent’s effectiveness in identifying the boundaries of multi-word terms, consequently enhancing the overall performance. 12 Shu Long, Yanglei Gan, and Xuchuan Zhou 71.72 78.25 71.37 77.57 69.81 75.26  
+
+> 15Res 16Res 60 70 80
+> F1-score  (%)
+> Ours
+> SLGM
+> STAGE
+
+(a) single-word triplets 59.52 66.28 56.09 64.76 52.7 62.39   
+
+> 15Res 16Res 50 60 70
+> F1-score  (%)
+> Ours
+> SLGM
+> STAGE
+
+(b) multi-word triplets 
+
+Fig. 4: F1-scores of DiffuSent on multi-word and single-word triplets compared with SLGM and STAGE. 
+
+4.5 Effective of Contrastive Denoising Scheme 
+
+Table 4 provides qualitative comparisons on Res15 , illustrating how DiffuSent behaves with and without the contrastive denoising component. Across all ex-amples, the model trained without this scheme exhibits two recurring failure modes. (i) Boundary drift induced by diffusion noise, leading to subtle but se-mantically consequential deviations such as predicting "bathroom" instead of the correct span "mens bathroom"; (ii) the absence of CD increases the likelihood of generating spurious triplets that do not correspond to any sentiment expression in the input sentence, thereby harming overall precision. In contrast, the full Dif-fuSent model reliably suppresses these erroneous alternatives and consistently recovers the correct <aspect, opinion, polarity> structure. The improvement suggests that the CD objective effectively sharpens the decision boundary be-tween plausible and implausible span candidates by encouraging the model to contrast clean and corrupted boundary representations. 
+
+4.6 Computational Efficiency 
+
+To comprehensively evaluate the computational efficiency of DiffuSent, we com-pare its parameter footprint, training speed, and inference latency against state-of-the-art generative models, namely MvP and SLGM. As detailed in Table 5, DiffuSent operates with approximately half the parameters (112M) of the baselines while consistently delivering superior predictive performance. During training, DiffuSent accelerates processing by 7.77Œ compared to MvP. More no-tably, during inference, DiffuSent achieves a higher F1-score across all denoising timesteps ( γ) while maintaining substantially higher throughput. Even under the most computationally demanding setting ( γ = 10), DiffuSent achieves an F1-score of 74.3 and remains 71.5Œ and 2.5Œ faster than MvP and SLGM, respectively. This significant efficiency gain is primarily attributed to our non-autoregressive framework, which generates all triplets in parallel and effectively bypasses the bottleneck of step-by-step linearized sequence generation. Title Suppressed Due to Excessive Length 13 
+
+Table 4: Qualitative Comparison of DiffuSent with and without Contrastive De-noising (CD) on Noise and Boundary Resolution. 3 indicates a correct triplet prediction, while 7 denotes a wrong prediction. Note that spurious or extra triplet predictions are counted as incorrect, negatively impacting the overall F1-score.            
+
+> Test Sentence: Oh Speaking of bathroom, the mens bathroom was disgusting.
+> Gold Triplet : <mens bathroom, disgusting, negative>
+> Diffusent : <mens bathroom, disgusting, negative> 3
+> Diffusent w/o CD : <bathroom, disgusting, negative> 3, <mens bathroom, disgusting, negative> 7
+> Test Sentence: Paul, the mairew d’, was totally professional and always on top of things.
+> Gold Triplet: <Paul, professional, positive>
+> DiffuSent: <Paul, professional, positive> 3
+> DiffuSent w/o CD : <Paul, professional, positive> 3, <maitre d’, professional, positive> 7
+> Test Sentence: The service is amazing, I’ve had different waiters and they were all nice, which is a rare thing in NYC.
+> Gold Triplet: <service, amazing, positive>, <waiters, nice, positive>
+> DiffuSent: <service, amazing, positive> 3, <waiters, nice, positive> 3
+> DiffuSent w/o CD: <service, amazing, positive> 3, <waiters, nice, positive> 3, <waiters, rare, positive> 7
+> Test Sentence: Shame on this place for the horrible rude staff and non-existent customer service.
+> Gold Triplet: <stuff, rude, negative>, <customer service, non-existent, negative>
+> DiffuSent: <stuff, rude, negative> 3, <customer service, non-existent, negative> 3
+> DiffuSent w/o CD: <stuff, rude, negative> 3, <customer service, non-existent, negative> 3, <stuff, shame, negative> 7
+> Test Sentence: Food was amazing - I love Indian food and eay it quite regularly, but I can say this is one of the best I’ve had.
+> Gold Triplet: <Food, amazing, positive>
+> DiffuSent: <Food, amazing, positive> 3, <Indian food, best, positive> 7
+> DiffuSent w/o CD: <Food, amazing, positive> 3, <Indian food, best, positive> 7, <Indian food, love, positive> 7, <Food, love, positive> 7
+
+5 Conclusion 
+
+In this paper, we propose DiffuSent, a novel generative framework for unified aspect-based sentiment analysis (ABSA) that formulate all ABSA subtasks as boundary denoising diffusion process. Different from autoregressive token-by-token generation, DiffuSent explicitly models boundary indices and allows for dynamically refinements in interpreting complex linguistic structures like multi-word terms. In addition, to address duplicate predictions with subtle variations arising from diffusion process uncertainties, we design a contrastive denoising training that further refine aspect and opinion term boundaries. Experimental results demonstrate that DiffuSent yields a new state-of-the-art performance, showcasing superior performance in processing complex linguistic structures. 
+
+References 
+
+1. Cao, C., Hong, Y., Li, X., Wang, C., Xu, C., Fu, Y., Xue, X.: The image local autoregressive transformer. Advances in Neural Information Processing Systems 
+
+34 , 18433–18445 (2021) 2. Chen, Y., Keming, C., Sun, X., Zhang, Z.: A span-level bidirectional network for aspect sentiment triplet extraction. In: Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing. pp. 4300–4309 (2022) 3. Devlin, J., Chang, M.W., Lee, K., Toutanova, K.: BERT: Pre-training of deep bidirectional transformers for language understanding. In: Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics. pp. 4171–4186. Association for Computational Linguistics (2019) 14 Shu Long, Yanglei Gan, and Xuchuan Zhou 
+
+Table 5: Computational efficiency with generative methods on Res16 from D20 b.All experiments are conducted on the same setting.                                     
+
+> Model Params. (Mb) F1-score Sents/s SpeedUp Training  MvP 223M -9.24 1.00Œ SLGM 225M -41.36 4.48Œ DiffuSent 112M -71.8 7.77Œ
+> Inference  MvP 223M 73.38 0.86 1.00Œ SLGM 225M 73.41 24.41 28.38Œ DiffuSent [γ=1] 112M 73.9 155.98 181.37Œ
+> DiffuSent [γ=5] 112M 74.22 92.61 106.98Œ DiffuSent [γ=10] 112M 74.3 61.51 71.52Œ
+
+4. Du, Z., Li, J.: Diffusion-based probabilistic uncertainty estimation for active do-main adaptation. Advances in Neural Information Processing Systems 36 (2024) 5. Fan, Z., Wu, Z., Dai, X.Y., Huang, S., Chen, J.: Target-oriented opinion words extraction with target-fused neural sequence labeling. In: Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics. pp. 2509–2518. Association for Computational Linguistics (2019) 6. Fei, H., Li, F., Li, C., Wu, S., Li, J., Ji, D.: Inheriting the wisdom of predeces-sors: A multiplex cascade framework for unified aspect-based sentiment analysis. In: Proceedings of the Thirty-First International Joint Conference on Artificial Intelligence, IJCAI. pp. 4096–4103 (2022) 7. Fei, H., Ren, Y., Zhang, Y., Ji, D.: Nonautoregressive encoderdecoder neural frame-work for end-to-end aspect-based sentiment triplet extraction. IEEE Transactions on Neural Networks and Learning Systems 34 (9), 5544–5556 (2023) 8. Gao, L., Wang, Y., Liu, T., Wang, J., Zhang, L., Liao, J.: Question-driven span labeling model for aspect–opinion pair extraction. In: Proceedings of the AAAI conference on artificial intelligence. vol. 35, pp. 12875–12883 (2021) 9. Gao, T., Fang, J., Liu, H., Liu, Z., Liu, C., Liu, P., Bao, Y., Yan, W.: Lego-absa: A prompt-based task assemblable unified generative framework for multi-task aspect-based sentiment analysis. In: Proceedings of the 29th international conference on computational linguistics. pp. 7002–7012 (2022) 10. Gou, Z., Guo, Q., Yang, Y.: MvP: Multi-view prompting improves aspect sentiment tuple prediction. In: Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics. pp. 4380–4397. Association for Computational Lin-guistics, Toronto, Canada (2023) 11. Han, R., Peng, T., Yang, C., Wang, B., Liu, L., Wan, X.: Is information extraction solved by chatgpt? an analysis of performance, evaluation criteria, robustness and errors. arXiv preprint arXiv:2305.14450 (2023) 12. Hu, M., Peng, Y., Huang, Z., Li, D., Lv, Y.: Open-domain targeted sentiment analysis via span-based extraction and classification. In: Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics. pp. 537–546. Association for Computational Linguistics, Florence, Italy (2019) 13. Jing, H., Li, Z., Zhao, H., Jiang, S.: Seeking common but distinguishing differ-ence, a joint aspect-based sentiment analysis model. In: Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing. pp. 3910–3922. Association for Computational Linguistics (2021) Title Suppressed Due to Excessive Length 15 14. Kou, S., Gan, L., Wang, D., Li, C., Deng, Z.: Bayesdiff: Estimating pixel-wise uncer-tainty in diffusion via bayesian inference. In: The Twelfth International Conference on Learning Representations (2023) 15. Kuhn, H.W.: The hungarian method for the assignment problem. Naval research logistics quarterly 2(1-2), 83–97 (1955) 16. Li, D., Yang, Z., Lan, Y., Zhang, Y., Zhao, H., Zhao, G.: Simple approach for aspect sentiment triplet extraction using span-based segment tagging and dual extractors. In: Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval. pp. 2374–2378 (2023) 17. Li, J., Zhao, Y., Jin, Z., Li, G., Shen, T., Tao, Z., Tao, C.: Sk2: Integrating implicit sentiment knowledge and explicit syntax knowledge for aspect-based sentiment analysis. In: Proceedings of the 31st ACM International Conference on Information & Knowledge Management. pp. 1114–1123 (2022) 18. Li, Q., Wen, W., Qin, J.: Improving span-based aspect sentiment triplet extraction with part-of-speech filtering and contrastive learning. Neural Networks 177 , 106381 (2024) 19. Liang, S., Wei, W., Mao, X.L., Fu, Y., Fang, R., Chen, D.: Stage: span tagging and greedy inference scheme for aspect sentiment triplet extraction. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 37, pp. 13174–13182 (2023) 20. Liu, X., Hou, R., Gan, Y., Luo, D., Li, C., Shi, X., Liu, Q.: Aspect-oriented opinion alignment network for aspect-based sentiment classification. In: Proceedings of the 26th European Conference on Artificial Intelligence. pp. 1552–1559 (2023) 21. Lu, H.y., Liu, T.c., Cong, R., Yang, J., Gan, Q., Fang, W., Wu, X.j.: Qaie: Llm-based quantity augmentation and information enhancement for few-shot aspect-based sentiment analysis. Information Processing&Management 62 (1), 103917 (2025) 22. Lu, Y., Liu, Q., Dai, D., Xiao, X., Lin, H., Han, X., Sun, L., Wu, H.: Unified structure generation for universal information extraction. In: Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics. pp. 5755– 5772. Association for Computational Linguistics, Dublin, Ireland (2022) 23. Ma, D., Li, S., Wu, F., Xie, X., Wang, H.: Exploring sequence-to-sequence learn-ing in aspect term extraction. In: Proceedings of the 57th annual meeting of the association for computational linguistics. pp. 3538–3547 (2019) 24. Mao, Y., Shen, Y., Yu, C., Cai, L.: A joint training dual-mrc framework for aspect based sentiment analysis. In: Proceedings of the AAAI conference on artificial intelligence. vol. 35, pp. 13543–13551 (2021) 25. Mukherjee, R., Nayak, T., Butala, Y., Bhattacharya, S., Goyal, P.: Paste: A tagging-free decoding framework using pointer networks for aspect sentiment triplet extraction. In: Proceedings of the Conference on Empirical Methods in Natural Language Processing. pp. 9279–9291 (2021) 26. Peng, H., Xu, L., Bing, L., Huang, F., Lu, W., Si, L.: Knowing what, how and why: A near complete solution for aspect-based sentiment analysis. In: Proceedings of the AAAI conference on artificial intelligence. vol. 34, pp. 8600–8607 (2020) 27. Peng, K., Jiang, L., Peng, H., Liu, R., Yu, Z., Ren, J., Hao, Z., Yu, P.S.: Prompt based tri-channel graph convolution neural network for aspect sentiment triplet extraction. In: Proceedings of the 2024 SIAM International Conference on data mining (SDM). pp. 145–153. SIAM (2024) 28. Pontiki, M., Galanis, D., Papageorgiou, H., Androutsopoulos, I., Manandhar, S., Mohammad, A.S., Al-Ayyoub, M., Zhao, Y., Qin, B., De Clercq, O., et al.: Semeval-2016 task 5: Aspect based sentiment analysis. In: Proceedings of the 10th Interna-tional Workshop on Semantic Evaluation (SemEval-2016). pp. 19–30 (2016) 16 Shu Long, Yanglei Gan, and Xuchuan Zhou 29. Song, J., Meng, C., Ermon, S.: Denoising diffusion implicit models. In: International Conference on Learning Representations (2021) 30. Sun, X., Qi, J., Zhu, Z., Li, M., Meng, J.: Senticnet and abstract meaning rep-resentation driven attention-gate semantic framework for aspect sentiment triplet extraction. Engineering Applications of Artificial Intelligence 139 , 109625 (2025) 31. Tang, D., Qin, B., Feng, X., Liu, T.: Effective lstms for target-dependent sentiment classification. In: Proceedings of the 26th International Conference on Computa-tional Linguistics. pp. 3298–3307 (2016) 32. Tang, D., Qin, B., Liu, T.: Document modeling with gated recurrent neural network for sentiment classification. In: Proceedings of the 2015 conference on empirical methods in natural language processing. pp. 1422–1432 (2015) 33. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł., Polosukhin, I.: Attention is all you need. Advances in neural information pro-cessing systems 30 (2017) 34. Wang, W., Pan, S.J., Dahlmeier, D., Xiao, X.: Coupled multi-layer attentions for co-extraction of aspect and opinion terms. In: Proceedings of the AAAI conference on artificial intelligence. vol. 31 (2017) 35. Xiao, Y., Wu, L., Guo, J., Li, J., Zhang, M., Qin, T., Liu, T.y.: A survey on non-autoregressive generation for neural machine translation and beyond. IEEE Transactions on Pattern Analysis and Machine Intelligence (2023) 36. Xu, L., Chia, Y.K., Bing, L.: Learning span-level interactions for aspect sentiment triplet extraction. In: Proceedings of the 59th Annual Meeting of the Associa-tion for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing. pp. 4755–4766 (2021) 37. Xu, L., Li, H., Lu, W., Bing, L.: Position-aware tagging for aspect sentiment triplet extraction. In: Proceedings of the 2020 Conference on Empirical Methods in Nat-ural Language Processing. pp. 2339–2349 (2020) 38. Yan, H., Dai, J., Ji, T., Qiu, X., Zhang, Z.: A unified generative framework for aspect-based sentiment analysis. In: Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics. pp. 2416–2429 (2021) 39. Yi, Q., Kong, X., Zhu, L., Zhang, C., Shen, G.: Diffusyn: A diffusion-driven frame-work with syntactic dependency for aspect sentiment triplet extraction. IEEE Transactions on Audio, Speech and Language Processing (2025) 40. Zhang, J., Xu, S., Gao, X., Tang, Z.: Aspect sentiment triplet extraction with syntax-semantics graph convolutional network. International Journal of Computa-tional Intelligence Systems 18 (1), 167 (2025) 41. Zhang, W., Li, X., Deng, Y., Bing, L., Lam, W.: Towards generative aspect-based sentiment analysis. In: Proceedings of the 59th Annual Meeting of the Associa-tion for Computational Linguistics). pp. 504–510. Association for Computational Linguistics, Online (2021) 42. Zhang, Y., Yang, Y., Li, Y., Liang, B., Chen, S., Dang, Y., Yang, M., Xu, R.: Boundary-driven table-filling for aspect sentiment triplet extraction. In: Proceed-ings of the 2022 Conference on Empirical Methods in Natural Language Processing. pp. 6485–6498 (2022) 43. Zhao, H., Huang, L., Zhang, R., Lu, Q., Xue, H.: Spanmlt: A span-based multi-task learning framework for pair-wise aspect and opinion terms extraction. In: Proceed-ings of the 58th annual meeting of the association for computational linguistics. pp. 3239–3248 (2020) 44. Zhou, S., Qian, T.: On the strength of sequence labeling and generative models for aspect sentiment triplet extraction. In: Findings of the Association for Compu-Title Suppressed Due to Excessive Length 17 tational Linguistics. pp. 12038–12050. Association for Computational Linguistics, Toronto, Canada (2023)

@@ -1,0 +1,445 @@
+Title: Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals
+
+URL Source: https://arxiv.org/pdf/2606.02679v1
+
+Published Time: Wed, 03 Jun 2026 00:03:45 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals 
+
+# Jiyuan Liu ∗
+
+jiyuan.liu@student.adelaide.edu.au Adelaide University Adelaide, Australia 
+
+# Liangwei Nathan Zheng 
+
+liangwei.zheng@adelaide.edu.au Adelaide University Adelaide, Australia 
+
+# Wei Emma Zhang 
+
+wei.e.zhang@adelaide.edu.au Adelaide University Adelaide, Australia 
+
+# Xinpei Wang 
+
+wangxinpei@sdu.edu.cn Shandong University Jinan, China 
+
+# Weitong Chen ∗
+
+T.Chen@Adelaide.edu.au Adelaide University Adelaide, Australia 
+
+## Abstract 
+
+Multimodal systems often benefit from combining information across language, sound, and visual streams, but this benefit is not guaranteed. A modality that is useful for one input may become distracting for another, and local feature responses within the same modality can disagree with evidence from other sources. This work investigates how to adjust multimodal representations before they are merged by a downstream predictor. We develop a compact calibration module that compares each modality with the others at the summary level, extracts cues of cross-source support and conflict, and converts these cues into instance-wise and dimension-wise modulation signals. The calibration is applied to the original modality features rather than to already fused representations, en-abling the model to suppress misleading components, preserve weak but useful evidence, and emphasize responses that are bet-ter supported by the current multimodal context. The module is designed as a plug-in component and can be attached to different fu-sion backbones without changing their prediction heads. Across five benchmarks covering sentiment understanding, action recognition, audio-visual event detection, and audio-visual emotion classifica-tion, the proposed pre-combination calibration strategy improves performance under both sequence-based and convolutional fusion settings. Additional analyses under modality removal, synthetic corruption, training dynamics, and feature-level visualization show that calibrating signals before fusion can reduce interference from unreliable modalities and produce more stable multimodal opti-mization. 
+
+## 1 Introduction 
+
+Multimodal learning aims to improve prediction by integrating heterogeneous signals from different modalities, such as text, vi-sion, knowledge graph, and domain-specific signals [ 12 –14 , 25 ]. In principle, different modalities provide complementary views of the same event, and multimodal fusion has been widely used to model intra-modal and inter-modal dynamics [ 16 , 25 ]. However, adding more modalities does not always improve performance. Prior work shows that multimodal networks may underperform unimodal mod-els because different modalities overfit and generalize at different rates [ 19 ]. Modality imbalance can also cause dominant modalities to suppress weaker ones, leaving some unimodal representations 
+
+> ∗Corresponding authors.
+
+under-optimized [ 9]. This problem becomes more challenging when weak or less reliable modalities may introduce noisy, redundant, or conflicting information into multimodal learning [ 32 ]. Therefore, less reliable modalities may still provide useful complementary cues, but they may also contain harmful or conflicting components that interfere with full-modality prediction when directly fused into the backbone. Existing studies mainly address this issue from an optimization-level modality imbalance perspective. Methods such as Grad-Blending, OGM-GE, PMR, MMPareto, and ARL improve multimodal learning by adjusting losses, gradients, modality contributions, or represen-tation learning dynamics [ 2 , 9, 19 –21 , 28 ]. Although effective, these methods mostly intervene after modality features have entered joint optimization. They therefore do not fully answer an earlier question: before multimodal fusion, how can a model identify contextually influential but potentially unreliable modality components and decide whether they should be enhanced, retained, or suppressed? 
+
+This question is important because direct fusion can mix useful evidence with unreliable signals before the model has an explicit chance to distinguish them. This motivates value estimation as a mechanism for guiding modality refinement at the pre-fusion stage. 
+
+Table 1: Preliminary comparison between naive fusion, optimization-level balancing, and enhanced pre-fusion trans-formation on MOSEI. 
+
+Method Acc Macro-F1 Concat 0.8255 0.7810 MMPareto 0.8279 0.7812 
+
+Concat + MLP 0.8298 0.7803 As shown in Table 1, simple concatenation performs poorly, while Concat+MLP reaches a performance range comparable to MMPareto. This suggests that lightweight pre-fusion transforma-tion can partially mitigate modality interference before joint opti-mization. However, Concat+MLP still performs a generic feature transformation and does not explicitly estimate which modality components are contextually influential under cross-modal agree-ment or discrepancy. This motivates our value-aware pre-fusion refinement design. 
+
+> arXiv:2606.02679v1 [cs.LG] 1 Jun 2026 Jiyuan Liu, Liangwei Nathan Zheng, Wei Emma Zhang, Xinpei Wang, and Weitong Chen
+
+In this paper, we define modality value as context-conditioned impact evidence for multimodal prediction. Rather than serving as a direct retention probability, value indicates where stronger context-aware modulation may be needed, while the final gate learns whether each component should be enhanced, retained, or reduced. Attention-based methods mainly model token-level or cross-modal relevance [ 16 , 17 ], while generic gating mechanisms usually learn adaptive feature or modality weights [ 6 , 8]. Recent multi-modal gating methods further explore confidence-guided gating for flexible or incomplete modality inputs [ 31 ]. However, relevance, confidence, or importance does not necessarily indicate value in our setting, because a salient or confident modality can still be harmful when it conflicts with the current cross-modal context. Based on this definition, we propose Value-Gated Modality Re-finer (VGMR), a pre-fusion refinement module for robust multi-modal learning. VGMR first models summary-level cross-modal interactions by capturing both agreement and discrepancy between the target modality and the remaining modalities. It then estimates value signals at both the global and channel levels, and uses these signals as contextual guidance for a fine-grained gate generator that refines the original modality features before they enter the back-bone. By doing so, VGMR allows the model to preserve, enhance, or reduce modality components according to both cross-modal value evidence and feature-level context before fusion. We conduct extensive experiments and analyses to examine whether VGMR improves multimodal learning beyond simple fea-ture aggregation, generic gating, or training-stage rebalancing. The results show that pre-fusion value-conditioned refinement can im-prove multimodal performance, enhance robustness under cor-rupted inputs, and support more stable optimization behaviour. The main contributions of this paper are summarized as follows: 
+
+• We revisit multimodal imbalance from a pre-fusion perspec-tive, highlighting that weak modalities may contain both complementary cues and noisy or harmful responses. 
+
+• We propose VGMR, a value-conditioned modality refiner that estimates global-level and channel-level impact evi-dence and uses it to guide fine-grained gating over original modality features before fusion. 
+
+• We conduct extensive experiments and diagnostic analyses to show that VGMR improves multimodal performance, enhances robustness under noisy inputs, and supports more stable optimization behaviour. 
+
+## 2 Related Work 2.1 Modality Imbalance and Optimization Balancing 
+
+Modality imbalance is a common challenge in multimodal learn-ing, where different modalities contribute unequally during joint training. A dominant modality may suppress weaker modalities, and adding more modalities does not always improve prediction. Existing methods mainly address this issue by adjusting modality contributions during training, including loss balancing, gradient modulation, modality reweighting, and representation re-learning. Grad-Blending addresses multimodal imbalance from the per-spective of overfitting and generalization differences across modal-ities [ 19 ]. OGM-GE dynamically measures contribution discrep-ancy between modalities and modulates gradients to give more optimization effort to under-optimized modalities [ 9]. PMR intro-duces modality prototypes to stimulate slow-learning modalities and rebalance their learning progress [ 2], while AGM adaptively adjusts modality gradients according to estimated modality con-tribution [ 7]. MMPareto formulates multimodal and unimodal ob-jectives from a Pareto optimization perspective to reduce gradient conflict [ 21 ]. D&R diagnoses the learning state of each modality and re-learns modality encoders to avoid over-emphasizing scarcely informative modalities [ 22 ]. MLA reformulates joint multimodal training as alternating unimodal adaptation, reducing interference while maintaining shared prediction [ 30 ]. ARL further argues that perfectly balanced modality learning is not always optimal, and uses asymmetric representation learning according to modality variance and bias [20]. Overall, these methods show that multimodal imbalance is closely related to unequal learning dynamics among modalities. However, they mainly intervene during joint training by adjusting losses, gradients, modality weights, or representation learning strategies. In contrast, this work studies whether noisy or unreliable modality response components can be refined before they enter fusion or joint optimization. 
+
+## 2.2 Multimodal Fusion and Cross-Modal Interaction 
+
+Multimodal fusion aims to combine heterogeneous modality fea-tures and exploit complementary information across modalities. Early fusion methods aggregate modality representations through summation, concatenation, or MLP-based fusion, while more ex-pressive methods model higher-order cross-modal interactions. For example, Tensor Fusion Network explicitly captures unimodal, bi-modal, and trimodal interactions [ 25 ], and Transformer-based multi-modal models use attention mechanisms to capture long-range and cross-modal dependencies [ 16 , 17 ]. Multimodal fusion has also been widely studied in domain-specific applications, including medical multimodal learning [12]. Recent studies further show that effective fusion requires more than direct aggregation. MISA learns modality-invariant and modality-specific subspaces to reduce modality gaps while preserving pri-vate modality characteristics [ 5]. MAG introduces a multimodal adaptation gate to inject acoustic and visual information into pre-trained language models [ 10 ]. MMIM improves fusion by maxi-mizing mutual information at both the inter-modality level and the fusion-output level [ 3 ]. Self-MM learns modality-specific repre-sentations through self-supervised unimodal label generation [ 24 ]. TETFN enhances non-linguistic modalities with text-based atten-tion and learns both consistency and differentiated information across modalities [ 18 ]. PCAG introduces pre-gating and contextual attention gates to filter non-informative cross-modal interactions and reduce uncertainty introduced by cross-attention [29]. These studies show that multimodal fusion has evolved from simple aggregation to expressive alignment, interaction, informa-tion preservation, and gating-based mechanisms. However, most Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals 
+
+fusion-oriented methods focus on how to combine, align, or interact modality representations. Even when attention or gating is used, the learned weights usually reflect relevance, salience, confidence, or feature importance. They do not explicitly estimate context-conditioned value evidence for refining original modality features before fusion. 
+
+## 2.3 Information Decomposition Perspective 
+
+This issue is also related to the information-decomposition per-spective. Partial Information Decomposition (PID) provides an information-theoretic view for understanding how multiple sources contribute to a target variable by separating redundant, unique, and synergistic information [ 23 ]. This perspective is useful for multi-modal learning because the contribution of a modality cannot be fully described by a single importance score. A modality may con-tain redundant information shared with other modalities, unique information from itself, or synergistic information that becomes useful only when combined with other modalities. Our method is conceptually inspired by this view, but it does not aim to explicitly estimate PID quantities. Instead, PID motivates us to consider that modality components may have different contex-tual effects under cross-modal agreement and discrepancy. VGMR operationalizes this intuition through learnable global-level and channel-level value estimation, allowing useful modality-specific or complementary information to be preserved while noisy or harmful components are reduced before fusion. 
+
+## 2.4 Position of This Work 
+
+VGMR complements both optimization-level balancing methods and fusion-oriented interaction methods. Optimization-level ap-proaches adjust losses, gradients, or modality weights during joint training, while fusion methods mainly focus on how to aggregate, align, or exchange information after modality representations have entered the fusion stage. In contrast, VGMR acts before fusion by refining original modality features with context-conditioned value evidence. Different from attention, confidence estimation, reliability weight-ing, or generic gating, VGMR does not treat value as a direct preser-vation score or as standalone modality reliability. Instead, it es-timates global-level and channel-level value signals as context-conditioned impact evidence under cross-modal agreement and discrepancy. A high value indicates that a modality or channel may strongly affect the final prediction under the current context, but it does not by itself determine whether the corresponding fea-ture should be preserved or suppressed. The final gate combines value evidence with raw and projected feature evidence to learn the modulation direction through end-to-end task supervision. This design separates where contextual impact may exist from how each feature should be modulated. By doing so, VGMR provides a pre-fusion value-conditioned refinement mechanism that can help preserve task-relevant complementary cues while reducing noisy or conflicting responses before multimodal fusion. 
+
+## 3 Proposed Method 3.1 Problem Definition 
+
+The overall architecture of VGMR is shown in Figure 1. Given a multimodal sample with modality set M, each modality is indexed by 𝑚 ∈ M . For text-audio-vision tasks, M = {𝑡, 𝑎, 𝑣 }; for bimodal tasks, M contains the two available modalities, such as {𝑎, 𝑣 }.For each modality 𝑚 , the input feature sequence is denoted as 
+
+X𝑚 ∈ R𝑇 𝑚 ×𝑑 𝑚 , (1) where 𝑇 𝑚 and 𝑑 𝑚 are the modality-specific sequence length and feature dimension, respectively. VGMR aims to refine each modality before fusion by estimating context-conditioned value signals and using them to guide gate generation. It takes {X𝑚 }𝑚 ∈ M as input and outputs refined features { ˜X𝑚 }𝑚 ∈ M , which are then fed into the multimodal backbone. 
+
+## 3.2 Modality Projection and Summary Construction 
+
+Since different modalities have different feature dimensions, each modality is first projected into a shared latent space: 
+
+H𝑚 = 𝑃 𝑚 (X𝑚 ), H𝑚 ∈ R𝑇 𝑚 ×𝑑 𝑝 , (2) where 𝑃 𝑚 (·) is a modality-specific projection function and 𝑑 𝑝 is the shared latent dimension. The projected feature H𝑚 is used for value estimation, while the original feature X𝑚 is preserved for final refinement. We then construct a summary representation for each modality by combining average and max pooling: 
+
+s𝑚 = 𝜙 𝑚 ([ Avg (H𝑚 ); Max (H𝑚 )]) , s𝑚 ∈ R𝑑 𝑝 , (3) where [· ; ·] denotes concatenation and 𝜙 𝑚 (·) is a modality-specific summary encoder. The summary vector s𝑚 captures the global state of modality 𝑚 and is used for summary-level cross-modal interaction. Since interaction is performed at the summary level, VGMR does not require strict time-step alignment across modalities. 
+
+## 3.3 Cross-Modal Interaction Modeling 
+
+To estimate the value of a target modality, VGMR considers not only the modality itself but also its relationship with the remaining modalities. For each target modality 𝑚 ∈ M , we define the set of non-target modalities as 
+
+N𝑚 = M \ { 𝑚 }. (4) Here, N𝑚 contains all modalities except the current target modality. For example, in a text-audio-vision setting, when 𝑚 = 𝑡 , the non-target set is N𝑡 = {𝑎, 𝑣 }.We first aggregate the summaries of non-target modalities to obtain a cross-modal context: 
+
+u𝑚 = 1card (N 𝑚 )∑︁ 𝑜 ∈ N 𝑚 
+
+s𝑜 . (5) Here, card (N 𝑚 ) denotes the number of non-target modalities, and 
+
+u𝑚 ∈ R𝑑 𝑝 represents the average contextual reference provided by the remaining modalities. In a bimodal setting, u𝑚 is simply the summary of the other modality; in a trimodal setting, it is the average summary of the two non-target modalities. Jiyuan Liu, Liangwei Nathan Zheng, Wei Emma Zhang, Xinpei Wang, and Weitong Chen 
+
+Figure 1: Overview of the proposed Value-Gated Modality Refiner (VGMR). For each modality, VGMR first projects raw features into a shared latent space and builds a summary representation (Section 3.2). It then constructs summary-level cross-modal interactions by modelling agreement and discrepancy between the target modality and non-target modalities (Section 3.3). Based on these interactions, VGMR estimates global-level and channel-level value signals as impact evidence (Section 3.4), combines them with feature evidence to generate fine-grained gates (Section 3.5), and applies gate amplification with residual retention (Section 3.6). The final effective gate refines the original modality feature before multimodal fusion (Section 3.7). 
+
+For each non-target modality 𝑜 ∈ N 𝑚 , we compute pairwise agreement and discrepancy: 
+
+a𝑚,𝑜 = s𝑚 ⊙ s𝑜 , 𝜹 𝑚,𝑜 = |s𝑚 − s𝑜 |. (6) We denote the collections of pairwise agreement and discrepancy terms as 
+
+A𝑚 = {a𝑚,𝑜 | 𝑜 ∈ N 𝑚 }, D𝑚 = {𝜹 𝑚,𝑜 | 𝑜 ∈ N 𝑚 }. (7) The interaction input is then constructed by concatenating the target summary, non-target summaries, pairwise agreement terms, pairwise discrepancy terms, and the averaged context: 
+
+r𝑚 = 𝜓 𝑚 
+
+ [s𝑚 ; {s𝑜 }𝑜 ∈ N 𝑚 ; {a𝑚,𝑜 }𝑜 ∈ N 𝑚 ; {𝜹 𝑚,𝑜 }𝑜 ∈ N 𝑚 ; u𝑚 ] . (8) The agreement terms provide feature-wise co-activation evidence between the target modality and each non-target modality, while the discrepancy terms provide pairwise mismatch evidence. It cap-tures feature-wise co-activation and indicates which latent dimen-sions are supported by both the target modality and the remaining modalities. The discrepancy term 𝜹 𝑚 ∈ R𝑑 𝑝 is computed by the absolute difference between summaries. It captures cross-modal mismatch, which may reflect complementary information, modality conflict, or potential noise. Thus, the pairwise agreement terms provide consistency evidence, while the pairwise discrepancy terms provide mismatch evidence. 
+
+## 3.4 Modality Value Estimation 
+
+Given the modality summary s𝑚 and the cross-modal interaction representation r𝑚 , VGMR first learns a hidden value representation: 
+
+z𝑚 = 𝜂 𝑚 ([ s𝑚 ; r𝑚 ]) , z𝑚 ∈ R𝑑 𝑝 . (9) Here, 𝜂 𝑚 (·) is a learnable modality-specific value encoder, and z𝑚 
+
+is the latent representation used for value estimation. The input 
+
+[s𝑚 ; r𝑚 ] combines modality-specific information with cross-modal context, agreement, and discrepancy. Therefore, z𝑚 should be un-derstood as context-conditioned impact evidence, rather than as a direct useful/useless classifier. Based on z𝑚 , VGMR estimates a global value signal and a channel-level value signal: 
+
+𝑔 𝑚 = 𝜎 (( w𝑔 𝑚 )⊤z𝑚 + 𝑏 𝑔 𝑚 ), p𝑚 = 𝜎 (W𝑝 𝑚 z𝑚 + b𝑝 𝑚 ), (10) where 𝑔 𝑚 ∈ R and p𝑚 ∈ R𝑑 𝑝 . The sigmoid function 𝜎 (·) maps the estimated value signals into a bounded range. The vector w𝑔 𝑚 ∈ R𝑑 𝑝 
+
+and scalar bias 𝑏 𝑔 𝑚 ∈ R are modality-specific parameters used to produce the global value 𝑔 𝑚 . This scalar captures sample-level impact evidence for the whole modality under the current cross-modal context. The matrix W𝑝 𝑚 ∈ R𝑑 𝑝 ×𝑑 𝑝 and bias vector b𝑝 𝑚 ∈ R𝑑 𝑝 are used to produce the channel-level value p𝑚 . Unlike 𝑔 𝑚 , which gives an overall value estimate for modality 𝑚 , p𝑚 provides dimension-wise value evidence in the shared latent space. This allows VGMR to identify which latent channels may require stronger modulation. The global value and channel-level value play different roles. The global value 𝑔 𝑚 provides coarse modality-level context, while the channel value p𝑚 provides finer dimension-level evidence. Both are used to condition gate generation, but neither of them is a direct retention mask. A larger value means that the corresponding modality or channel has stronger contextual impact, which may lead to enhancement or suppression depending on the final gate generator. 
+
+## 3.5 Fine-Grained Gate Generation 
+
+Before being mapped into gate logits, the bounded value signals are centered: 
+
+𝑔 ′ 
+
+> 𝑚
+
+= 2𝑔 𝑚 − 1, p′ 
+
+> 𝑚
+
+= 2p𝑚 − 1.Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals 
+
+G𝑚 = 𝜎  𝜌 𝑥 𝑚 (X𝑚 ) ⊕ 𝜌 ℎ𝑚 (H𝑚 ) ⊕ 𝜌 𝑔 𝑚 (𝑔 ′ 
+
+> 𝑚
+
+) ⊕ 𝜌 𝑝 𝑚 (p′ 
+
+> 𝑚
+
+). (11) Here, ⊕ denotes element-wise addition after shape alignment. Each mapping function 𝜌 (·) transforms or broadcasts its input to the same shape as the original feature, namely R𝑇 𝑚 ×𝑑 𝑚 .Specifically, 𝜌 𝑥 𝑚 (·) is a dimension-preserving affine layer applied to the original feature X𝑚 . It provides raw feature evidence and allows the gate to depend directly on the original modality repre-sentation. 𝜌 ℎ𝑚 (·) maps the projected feature H𝑚 from the shared latent dimension 𝑑 𝑝 back to the original feature dimension 𝑑 𝑚 . It in-troduces latent-space information learned during value estimation into gate generation. The mapping 𝜌 𝑔 𝑚 (·) transforms the centered global value 𝑔 ′
+
+> 𝑚
+
+into a 𝑑 𝑚 -dimensional vector and broadcasts it along the temporal dimension 𝑇 𝑚 . This provides sample-level modality context to every time step and feature dimension of the gate. The mapping 𝜌 𝑝 𝑚 (·) 
+
+transforms the centered channel-level value p′ 
+
+> 𝑚
+
+from 𝑑 𝑝 to 𝑑 𝑚 and also broadcasts it along 𝑇 𝑚 . This provides dimension-level value evidence for fine-grained feature modulation. The encoders 𝜙 𝑚 , 𝜓 𝑚 , and 𝜂 𝑚 are implemented as lightweight two-layer MLPs with nonlinear activation and output dimension 𝑑 𝑝 .The functions 𝜙 𝑚 , 𝜓 𝑚 , 𝜌 𝑥 𝑚 , 𝜌 ℎ𝑚 , 𝜌 𝑔 𝑚 , and 𝜌 𝑝 𝑚 are modality-specific be-cause different modalities may have different feature distributions and dimensions. The value encoders follow the same architecture across modalities, while their parameters are modality-specific to account for heterogeneous feature distributions. Thus, the hidden value representations share a consistent functional definition with-out forcing parameter sharing across different modalities. The resulting gate G𝑚 has the same shape as X𝑚 , enabling time-step-level and feature-dimension-level modulation. Unlike a generic feature gate, G𝑚 is conditioned on both feature evidence and cross-modal value evidence. Therefore, VGMR does not assume that high value means preservation or that low value means suppression. Instead, value signals indicate where contextual impact may exist, while the final gate learns whether each component should be enhanced, retained, or reduced. 
+
+## 3.6 Gate Amplification and Residual Retention 
+
+Since the sigmoid gate G𝑚 is limited to [0, 1], directly using it may lead to conservative modulation. We therefore transform it into an amplification gate centered around 1:
+
+ˆG𝑚 = 1 + 𝛼 (2G𝑚 − 1), (12) where 𝛼 ∈ [ 0, 1] controls the amplification strength. When 𝛼 = 0,the gate becomes neutral and does not change the feature scale. A larger 𝛼 allows stronger enhancement when G𝑚 > 0.5 and stronger suppression when G𝑚 < 0.5.To avoid over-suppression, we introduce residual retention: 
+
+¯G𝑚 = 𝛽 + ( 1 − 𝛽 ) ˆG𝑚 , (13) where 𝛽 ∈ [ 0, 1] controls the retention strength. A larger 𝛽 pre-serves more original information and reduces the risk of discarding weak but useful modality cues. A smaller 𝛽 allows stronger adap-tive refinement. This design allows the final effective gate ¯G𝑚 to balance adaptive refinement and information preservation .
+
+## 3.7 Modality Refinement 
+
+Finally, the effective gate ¯G𝑚 is applied to the original modality feature: 
+
+˜X𝑚 = Post 𝑚 (X𝑚 ⊙ ¯G𝑚 ), ˜X𝑚 ∈ R𝑇 𝑚 ×𝑑 𝑚 .
+
+Here, Post 𝑚 (·) is a lightweight dimension-preserving layer im-plemented as LayerNorm followed by Dropout. The refined feature 
+
+˜X𝑚 keeps the same shape as X𝑚 , while its components are mod-ulated using both value evidence and feature-level information before being fed into the multimodal backbone. 
+
+## 3.8 Training Objective 
+
+The refined modality features are fed into a multimodal backbone to produce the final prediction: 
+
+ˆ𝑦 = 𝑓 ({ ˜X𝑚 }𝑚 ∈ M ).
+
+The whole model is trained end-to-end with: 
+
+L = L𝑡𝑎𝑠𝑘 ( ˆ𝑦, 𝑦 ) + 𝜆 𝑣 L𝑣𝑎𝑙𝑢𝑒 + 𝜆 𝑟 L𝑟𝑒𝑔 .
+
+Here, L𝑡𝑎𝑠𝑘 is the standard prediction loss, which provides the main supervision for both the backbone and the gate generator. The value supervision term L𝑣𝑎𝑙𝑢𝑒 encourages the estimated value signals to reflect empirical modality contribution. For each modality, we estimate this contribution by the loss increase after removing it: 
+
+Δ𝑚 = ℓ (𝑓 ({ ˜X𝑜 }𝑜 ∈ M\{ 𝑚 } ), 𝑦 ) − ℓ (𝑓 ({ ˜X𝑜 }𝑜 ∈ M ), 𝑦 ).
+
+We align the global value 𝑔 𝑚 and the average channel value Avg (p𝑚 )
+
+with Δ𝑚 , so that value scores serve as context-conditioned impact evidence rather than arbitrary gate-internal activations. The reg-ularization term L𝑟𝑒𝑔 stabilizes the value/gate distributions and prevents value scores from collapsing to constants. The value terms do not directly decide whether a feature should be preserved or suppressed. Instead, they provide contextual im-pact evidence, while the final gate learns the modulation direction through end-to-end task supervision. 
+
+## 4 Experiments 4.1 Experimental Setup 
+
+We evaluate VGMR on five multimodal datasets covering senti-ment analysis, action recognition, and audio-visual recognition. MOSI [ 27 ] and MOSEI [ 26 ] are text-audio-visual sentiment anal-ysis benchmarks. MOSI contains 2,199 utterance-level video clips from 93 opinion videos, with sentiment scores ranging from -3 to 3, while MOSEI is a larger-scale benchmark for utterance-level multimodal sentiment prediction. For both datasets, we use the binary positive/negative classification setting. UCF101 [ 11 ] is used for human action recognition and contains 101 action classes, with 9,537 videos for training and 3,783 videos for testing under the standard protocol. Each UCF101 video is rep-resented using RGB frames and optical flow sequences, where RGB captures appearance information and optical flow captures motion information. AVE [ 15 ] is an audio-visual event dataset with 4,143 10-second videos across 28 event categories. We extract visual frames and corresponding audio clips from event-localized segments and follow the original split. CREMA-D [ 1 ] is an audio-visual emotion recognition dataset with 7,442 clips from six emotion categories, split into 6,698 training samples and 744 testing samples. Jiyuan Liu, Liangwei Nathan Zheng, Wei Emma Zhang, Xinpei Wang, and Weitong Chen 
+
+Table 2: Performance comparison of different methods under concatenation and Transformer backbone settings across multiple multimodal datasets.                                                                                                                                                                    
+
+> Backbone Concatenation Transformer Dataset MOSI MOSEI UCF101 AVE CREMA-D MOSI MOSEI Method Acc F1 Acc F1 Acc F1 Acc F1 Acc F1 Acc F1 Acc F1 Baseline 0.7507 0.7507 0.8154 0.7850 0.7864 0.7811 0.6169 0.5816 0.5054 0.5030 0.7741 0.7732 0.8255 0.7810 MLA 0.7726 0.7712 0.8304 0.7893 0.7803 0.7747 0.6318 0.5892 0.5108 0.5081 0.7813 0.7801 0.8184 0.7737 D&R 0.7828 0.7820 0.8221 0.7904 0.7906 0.7834 0.5995 0.5614 0.4852 0.4678 0.8017 0.7990 0.8311 0.7848 OGM-GE 0.7930 0.7926 0.8234 0.7707 0.7906 0.7849 0.6468 0.6133 0.5148 0.5096 0.7843 0.7790 0.8264 0.7724 ARL 0.7886 0.7869 0.8225 0.7881 0.7917 0.7832 0.6567 0.6224 0.5753 0.5794 0.7843 0.7819 0.8268 0.7856 Grad-Blending 0.7857 0.7804 0.8251 0.7679 0.7930 0.7859 0.6567 0.6109 0.5175 0.5165 0.7886 0.7818 0.8337 0.7921 MMPareto 0.7843 0.7839 0.8281 0.7760 0.7909 0.7836 0.6443 0.6030 0.4973 0.4963 0.7901 0.7839 0.8279 0.7812 PMR 0.7843 0.7831 0.8229 0.7696 0.7975 0.7896 0.6418 0.5990 0.5175 0.5155 0.7901 0.7884 0.8332 0.7820 AGM 0.7828 0.7804 0.8300 0.7899 0.8020 0.7941 0.6294 0.5955 0.4960 0.4934 0.8003 0.7907 0.8302 0.7940
+> VGMR 0.7945 0.7911 0.8356 0.7894 0.8126 0.8059 0.6592 0.6199 0.5780 0.5782 0.8076 0.8019 0.8446 0.8029
+
+All methods follow the same data splits and are evaluated us-ing Accuracy and Macro-F1. Unless otherwise stated, we set the gate amplification coefficient 𝛼 to 0.5 and the residual retention coefficient 𝛽 to 0.2 across all experiments. For reproducibility, all compared methods use the same preprocessing, backbone, opti-mizer, batch size, stopping criterion, and random seeds, with the best validation checkpoint used for test evaluation. For AVE and CREMA-D, the ResNet+Concat setting uses fixed lightweight audio-visual features and a shallow fusion head rather than a large pretrained video or audio foundation backbone. There-fore, the absolute CREMA-D numbers should be interpreted as results under this controlled low-capacity protocol, whose purpose is to test whether VGMR improves the same backbone, rather than as state-of-the-art CREMA-D performance. 
+
+## 4.2 Overall Performance 
+
+Table 2 reports the overall performance across five datasets and two backbone settings. We report Accuracy and Macro-F1 for all methods. As shown in Table 2, VGMR achieves the best Accuracy in most settings and obtains strong or competitive Macro-F1 across sen-timent analysis, action recognition, and audio-visual recognition tasks. Under the ResNet+Concat backbone, VGMR consistently im-proves over the plain baseline on MOSI, MOSEI, UCF101, AVE, and CREMA-D, showing that the proposed refiner is not limited to text-audio-visual sentiment datasets. Under the Transformer backbone, VGMR achieves the best results on both MOSI and MOSEI, reaching 0.8446 Accuracy and 0.8029 Macro-F1 on MOSEI. Although ARL obtains slightly higher Macro-F1 on AVE and CREMA-D, VGMR achieves the best Accuracy and remains competitive in Macro-F1. Overall, these results suggest that VGMR can serve as a general pre-fusion refinement module across different backbones and tasks. 
+
+## 4.3 Component Ablation 
+
+We conduct two groups of ablation studies on MOSEI. The first group studies the value signals used for gate conditioning, including the global value 𝑔 𝑚 and the channel-level value p𝑚 .The global value 𝑔 𝑚 provides sample-level modality impact ev-idence, while the channel value p𝑚 provides dimension-level evi-dence for fine-grained feature modulation. The second group stud-ies the cross-modal evidence used for value estimation, including the agreement term a𝑚 and the discrepancy term 𝜹 𝑚 . Here, a𝑚 cap-tures cross-modal consistency through feature-wise co-activation, while 𝜹 𝑚 captures cross-modal mismatch or potential conflict. 
+
+Table 3: Component ablation of VGMR on MOSEI.                           
+
+> Condition Acc Macro-F1 Full VGMR 0.8446 0.8029
+> Value signal ablation
+> w/o channel-signal p𝑚 0.8324 0.7831 w/o global-signal 𝑔 𝑚 0.8390 0.8011 w/o 𝑔 𝑚 and p𝑚 0.8287 0.7917
+> Agreement–discrepancy ablation
+> w/o agreement A𝑚 0.8347 0.7965 w/o discrepancy D𝑚 0.8330 0.7908 w/o both A𝑚 and D𝑚 0.8257 0.7812
+
+Table 3 shows that each component contributes to the final performance of VGMR. Removing both global and channel-level value signals leads to a clear performance drop, indicating that explicit value evidence is important for gate generation. Using only 
+
+𝑔 𝑚 gives limited improvement, suggesting that a single sample-level value signal is too coarse for fine-grained modality refinement. Using only p𝑚 performs better, especially on Macro-F1, which shows that channel-level value evidence is more directly useful for selective feature modulation. However, the full model still achieves the best result, indicating that 𝑔 𝑚 and p𝑚 provide complementary conditioning: the former supplies overall modality-level context, while the latter supports finer channel-level refinement. The agreement–discrepancy ablation further shows that value estimation benefits from both consistency and conflict evidence. Re-moving either a𝑚 or 𝜹 𝑚 weakens performance, and removing both causes the largest drop. This suggests that agreement helps identify modality components supported by other modalities, while discrep-ancy helps detect unreliable or conflicting responses. The larger decrease caused by removing 𝜹 𝑚 indicates that conflict evidence is particularly important for weak-modality refinement. Overall, the best performance is obtained only when global value, channel Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals 
+
+value, agreement, and discrepancy are used together, confirming that VGMR relies on multi-level value evidence rather than a single scalar score or a generic feature gate. 
+
+## 4.4 Value-Guided Gate Behavior Analysis 
+
+We conduct a text-corruption analysis on MOSI with the Concat backbone. In the corrupted condition, 30% of text timesteps are replaced with Gaussian noise. We focus on the text modality and report four statistics: global value, channel value, channel-value standard deviation, and average initial gate response. The global value reflects sample-level contextual impact, while the channel value reflects dimension-level impact evidence. The channel-value standard deviation measures how unevenly the value evidence is distributed across channels. The gate response indicates the average initial modulation strength assigned to the corrupted or clean text features. For Global Value, Channel Value, and Gate, results are reported as mean ± sample standard deviation across test samples. For Channel Std, we first compute the standard deviation across channels within each sample, and then report its mean and standard deviation across the test set. 
+
+Table 4: Value and gate response under text corruption on MOSI.                                 
+
+> Condition Global Value Channel Value Channel Std Gate Clean Text 0.598 ±0.119 0.554 ±0.092 0.102 ±0.120 0.481 ±0.039 Noisy Text 0.788 ±0.062 0.707 ±0.030 0.301 ±0.053 0.417 ±0.009
+> Δ+0.190 +0.153 +0.199 -0.064
+
+As shown in Table 4, text corruption increases the global value, channel value, and channel-value standard deviation, but decreases the average gate response. This pattern suggests that the corrupted text produces stronger contextual impact and more uneven channel-level evidence, indicating that the model detects it as a high-impact input requiring modulation. However, the lower gate response shows that higher value does not directly mean stronger preser-vation. Instead, value signals provide impact evidence, and the gate generator combines this evidence with feature information to suppress unreliable high-impact responses before fusion. 
+
+## 4.5 Controlled Comparison and Efficiency Analysis 
+
+Table 5: Fusion strategy comparison on MOSEI with the Transformer backbone.           
+
+> Method Acc Macro-F1 Summation 0.8219 0.7785 Tensor Fusion 0.8289 0.7871 Concat+MLP 0.8298 0.7803
+> VGMR 0.8446 0.8029
+
+To examine whether the improvement of VGMR mainly comes from stronger feature aggregation, generic gating, or simply a larger parameter budget, we compare it with early-fusion strategies and pre-fusion interaction/gating mechanisms on MOSEI with the Transformer backbone. All controlled baselines use the same input features, data split, Transformer backbone, and training protocol. 
+
+Table 6: Comparison with generic interaction and gating mechanisms on MOSEI with the Transformer backbone.           
+
+> Method Acc Macro-F1 Concat 0.8255 0.7810 Cross-Attention 0.8317 0.7941 Sigmoid+Tanh Gate 0.8326 0.7924
+> VGMR 0.8446 0.8029
+
+Table 7: Efficiency comparison on MOSEI with the Trans-former backbone.                                 
+
+> Method Params Extra Params Train/Epoch Infer./Batch Concat 0.72M 0.00M 4.26s 1.17ms Grad-Blending 0.77M 0.05M 13.24s 1.20ms AGM 0.77M 0.05M 17.71s 1.18ms Concat+MLP 3.04M 2.32M 4.82s 1.33ms Cross-Attention 3.06M 2.33M 7.32s 2.86ms Sigmoid+Tanh Gate 3.07M 2.35M 5.25s 1.46ms
+> VGMR 3.04M 2.32M 10.01s 3.87ms
+
+For Concat+MLP and Sigmoid+Tanh Gate, we adjust the hidden-dimensional settings to make their parameter counts close to VGMR. As shown in Tables 5 and 6, VGMR outperforms early-fusion strategies, Cross-Attention, and generic learnable gating. Compared with the best early-fusion baselines on each metric, VGMR improves Accuracy and Macro-F1 by 1.48 and 1.58 percentage points, respec-tively. It also improves over Cross-Attention and Sigmoid+Tanh Gate under the same backbone setting. These results suggest that the gain cannot be fully attributed to stronger feature aggrega-tion, generic cross-modal relevance modelling, or simply a larger learnable module. Instead, they indicate that using cross-modal agreement and discrepancy as value evidence for gate generation provides additional benefits before multimodal fusion. Table 7 reports total parameters, extra parameters, training time per epoch, and inference latency per batch. VGMR increases the parameter count from 0.72M to 3.04M and inference latency from 1.17ms to 3.87ms per batch compared with the vanilla Transformer. Therefore, VGMR introduces an acceptable but non-negligible com-putational overhead over the simplest backbone. However, the performance gain is unlikely to be explained solely by the increased parameter count. After adjusting the hidden di-mensions, Concat+MLP has almost the same number of parameters as VGMR, while Sigmoid+Tanh Gate has a slightly larger parameter count than VGMR. Nevertheless, VGMR achieves higher Accuracy and Macro-F1 than these parameter-comparable alternatives in Ta-bles 5 and 6. This suggests that the advantage of VGMR comes not only from adding more parameters, but from how these parame-ters are used to estimate modality value and refine features before fusion. In terms of computational cost, VGMR is more expensive than lightweight pre-fusion alternatives, especially in inference latency. However, its training time remains lower than optimization-level Jiyuan Liu, Liangwei Nathan Zheng, Wei Emma Zhang, Xinpei Wang, and Weitong Chen 
+
+balancing methods such as Grad-Blending and AGM, and its abso-lute inference latency is still within a small millisecond range in this setting. Overall, VGMR provides a reasonable but not cost-free performance–robustness trade-off when parameter-comparable gains and stronger noise robustness are desired. 
+
+## 4.6 Compatibility with Optimization-Level Balancing 
+
+Table 8: Plug-in analysis of VGMR on MOSEI with the Trans-former backbone.             
+
+> Method VG Acc VG F1 Plain Acc F1 OGM-GE 0.8367 (+0.0103) 0.7914 (+0.0190) 0.8264 0.7724 ARL 0.8343 (+0.0075) 0.7870 (+0.0014) 0.8268 0.7856
+
+We apply VGMR to OGM-GE and ARL under the MOSEI Trans-former setting. As shown in Table 8, adding VGMR consistently improves both methods. OGM-GE gains 1.01 percentage points in Accuracy and 1.90 percentage points in F1, while ARL gains 0.75 and 0.14 percentage points, respectively. These results suggest that VGMR can work together with training-stage balancing methods, since it refines modality features before fusion rather than only adjusting optimization after fusion. 
+
+## 4.7 Weak-Modality Interference Analysis 
+
+Table 9: Modality removal analysis on MOSEI with the Trans-former backbone.                                                
+
+> Method Full Acc w/o Text w/o Audio w/o Vision Concat 0.8255 0.7053 (-0.1202) 0.8092 (-0.0163) 0.8253 (-0.0002) Grad-Blending 0.8337 0.7096 (-0.1241) 0.8317 (-0.0020) 0.8343 (+0.0006) OGM-GE 0.8264 0.7094 (-0.1170) 0.8255 (-0.0009) 0.8244 (-0.0020) PMR 0.8332 0.7102 (-0.1230) 0.8324 (-0.0008) 0.8332 (+0.0000) ARL 0.8268 0.7102 (-0.1166) 0.8246 (-0.0022) 0.8270 (+0.0002) MMPareto 0.8279 0.7102 (-0.1177) 0.8289 (+0.0010) 0.8291 (+0.0012) D&R 0.8311 0.7092 (-0.1219) 0.8302 (-0.0009) 0.8330 (+0.0019) MLA 0.8184 0.7062 (-0.1122) 0.8161 (-0.0023) 0.8184 (+0.0000) AGM 0.8302 0.7105 (-0.1197) 0.8283 (-0.0019) 0.8296 (-0.0006)
+> VGMR 0.8446 0.7102 (-0.1344) 0.8410 (-0.0036) 0.8371 (-0.0075)
+
+We conduct modality removal analysis on MOSEI to examine weak-modality interference. Here, w/o Text , w/o Audio , and w/o Vision denote removing one modality and using the remaining two. As shown in Table 9, removing text causes a large performance drop for all methods, confirming that text is the dominant modality. However, several balancing methods achieve higher accuracy after removing audio or vision, indicating that audio and visual modali-ties can introduce noisy or low-value components when directly used in joint optimization. In contrast, VGMR’s performance decreases when either audio or vision is removed. This suggests that VGMR does not simply increase the weight of weak modalities. Instead, it uses context-conditioned value signals to guide gate generation, allowing the model to learn which weak-modality responses should be retained or reduced before fusion. Overall, the results are consistent with our motivation that the key challenge is not whether weak modalities should be used, but how to identify and retain their task-relevant parts when such parts are useful. 
+
+## 4.8 Multimodal Noise Robustness Analysis 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 
+
+> Noise Ratio
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> Acc
+> Grad-Blending Transformer
+> Pure Transformer
+> VGMR Transformer
+
+Figure 2: Noise robustness on MOSI under different noise ratios. 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.2 2.4 2.6 2.8 3.0 
+
+> Noise Weight
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> Acc
+> Grad-Blending Transformer
+> Pure Transformer
+> VGMR Transformer
+
+Figure 3: Noise intensity robustness on MOSI under different noise weights. 
+
+To examine robustness to corrupted modality inputs, we conduct noise experiments on MOSI by injecting Gaussian noise into all raw aligned modality features before they enter the model. Masked entries are replaced with noise sampled using the per-feature mean and standard deviation computed from the training split. We eval-uate two settings: varying the noise ratio with fixed granularity, and varying the noise weight with fixed ratio. Each setting is run with three random seeds, and we report the average accuracy with variation bands. As shown in Figures 2 and 3, all methods degrade as the noise ratio or noise weight increases, but VGMR consistently maintains higher accuracy than the Pure Transformer and Grad-Blending Transformer. The advantage becomes more visible under heavier corruption, suggesting that pre-fusion value refinement helps when multimodal inputs contain noisy components. Compared with Grad-Blending, which balances modality learning during optimization, VGMR can reduce the influence of corrupted features before fu-sion, leading to more stable performance under noisy multimodal conditions. Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals 
+
+## 4.9 Optimization Stability Analysis 
+
+We first compare the training and validation loss curves on MOSEI. As shown in Figure 4, VGMR decreases quickly at the beginning of training and maintains a smoother validation trend in later epochs. This suggests that VGMR can provide cleaner inputs to the back-bone and is associated with more stable multimodal optimization. 5 10 15 20 25 
+
+> Epoch
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> 1.1
+> 1.2
+> Loss
+> VGMR Train
+> VGMR Val
+> Grad-Blending Train
+> Grad-Blending Val
+> PMR Train
+> PMR Val
+
+Figure 4: Training and validation loss curves on MOSEI. 
+
+We further examine the gradient-direction relationship between audio-only and audio-video learning, inspired by recent gradient-based analyses of modality conflict [ 4]. For each checkpoint, we compute an audio-only gradient 𝑔 audio and an audio-video gradient 
+
+𝑔 audio+video on the validation split. To make them comparable, both gradients are computed with respect to the same shared parameters, including the shared Transformer backbone and final prediction head, while modality-specific input projection layers and inactive branches are excluded. The gradients are flattened and concatenated before computing: 
+
+cos (𝑔 audio , 𝑔 audio+video ) = 𝑔 ⊤
+
+> audio
+
+𝑔 audio+video 
+
+∥𝑔 audio ∥2 ∥𝑔 audio+video ∥2
+
+. (14) This metric is used as a diagnostic signal for cross-modal optimiza-tion coupling. A large positive value indicates that the audio-video gradient is highly aligned with the audio-only gradient, suggest-ing strong coupling or potential dominance of audio-related opti-mization directions. A negative value indicates directional conflict, where the joint audio-video update moves against the audio-only optimization direction. Following UniX-style gradient diagnostics, a smoother curve around zero is preferred, as it suggests weaker cross-modal dominance and less severe directional conflict, while allowing relatively independent modality contributions. As shown in Figure 5, the plain Transformer shows larger fluctu-ations between positive and negative cosine values. This suggests unstable cross-modal coupling: the joint audio-video optimization direction sometimes becomes strongly aligned with the audio-only direction, but at other times moves against it. Such oscillations indicate that adding visual information may introduce unstable dominance or interference in the shared optimization space. In contrast, VGMR produces a smoother curve closer to zero. Following the UniX-style interpretation, this does not mean that the audio modality is ignored. Rather, it suggests that the joint audio-video update is less dominated by a single modality-specific direction and avoids strong negative conflict. This provides diagnos-tic evidence consistent with our motivation that value-conditioned 5 10 15 20 25 30 
+
+> Epoch
+> −0.6
+> −0.4
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> Gradient cosine on valid split
+> Transformer smoothed (window=2)
+> VGMR smoothed (window=2)
+
+Figure 5: Gradient conflict analysis on MOSEI. 
+
+gate refinement can reduce unstable cross-modal coupling and encourage more balanced complementary optimization before mul-timodal features enter the shared backbone. 
+
+## 4.10 Qualitative Case Study 0 9 19 29 39 49     
+
+> Timestep
+> Text
+> Audio
+> Vision
+> 01234
+> Mean max(0, Raw - Refined)
+> Text
+> Audio
+> Vision
+> 0.128
+> 3.281
+> 2.340
+> 4
+> 2
+> 0
+> 2
+> 4
+> Change
+
+Figure 6: Sample-level visualization of VGMR feature refine-ment on a MOSEI test case. Negative changes indicate sup-pressed feature responses. 
+
+To further understand how VGMR refines modality features, we present a qualitative case study on a MOSEI test sample where the baseline model gives an incorrect prediction, while VGMR pro-duces a more accurate result. The ground-truth label is -2.3333. The baseline predicts 0.1091, whereas VGMR predicts -2.0747, which is closer to the ground truth. As shown in Figure 6, the heatmap visualizes the refinement difference ΔX = ˜X − X, where negative values indicate suppressed feature responses. The bar plot reports the average suppression mag-nitude, computed from the positive part of X − ˜X. For this sample, VGMR suppresses audio and visual responses more strongly, while the text modality is only slightly changed. This case is consistent with the view that VGMR performs instance-level and modality-aware refinement rather than applying a fixed modality-level weight. Jiyuan Liu, Liangwei Nathan Zheng, Wei Emma Zhang, Xinpei Wang, and Weitong Chen 0 9 19 29 39 49        
+
+> Timestep
+> Text
+> Audio
+> Vision
+> 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+> Mean max(0, Raw - Refined)
+> Text
+> Audio
+> Vision
+> 0.091
+> 2.965
+> 1.448
+> 2
+> 0
+> 2
+> Change
+
+Figure 7: Global visualization of average VGMR feature re-finement on MOSEI. VGMR shows stronger suppression in audio and visual modalities than in text. 
+
+Figure 7 further shows the average refinement pattern on MOSEI. The global trend is consistent with the sample-level observation: VGMR tends to apply stronger suppression to audio and visual modalities while keeping text relatively stable. 
+
+## 4.11 Summary of Ablation and Diagnostic Analyses 
+
+Overall, the ablation and diagnostic results support the main de-sign choices of VGMR. The component ablation shows that both global-level and channel-level value signals contribute to gate gen-eration. The global value provides sample-level contextual evidence, while the channel value provides finer feature-level evidence for selective refinement. The agreement–discrepancy ablation further shows that value estimation benefits from both cross-modal consis-tency and conflict evidence, with discrepancy playing a particularly important role in identifying unreliable or conflicting modality responses. The corruption and modality-removal analyses further clarify the role of the proposed value signal. Under text corruption, the estimated value scores increase while the average gate response decreases, suggesting that VGMR does not treat value as a direct preservation probability. Instead, value represents contextual im-pact for gate conditioning, and the gate generator combines this ev-idence with feature information to suppress unreliable high-impact responses. The modality-removal results also show that VGMR does not simply preserve or amplify weak modalities, but selectively retains task-relevant weak-modality information while reducing noisy or conflicting responses. Finally, the controlled comparisons, plug-in analysis, robustness tests, gradient diagnostics, and qualitative visualizations indicate that VGMR is not merely an early-fusion transformation, a generic gating module, or a larger parameterized model. Its advantage comes from using multi-level value evidence before fusion, which can complement optimization-level balancing methods and improve robustness under noisy multimodal conditions. 
+
+## 5 Future Work 
+
+Although VGMR achieves strong or competitive performance across multiple datasets, several directions remain for future work. First, VGMR should be further evaluated in terms of scalability and efficiency. As shown in Table 7, it introduces acceptable but non-negligible overhead, especially in inference latency. Future work could test larger backbones, longer sequences, and higher-dimensional features, while exploring parameter sharing, low-rank projections, or sparse gating. Second, value estimation can be extended from summary-level modelling to finer temporal or spatial modelling. The current pooled-summary design is simple and avoids strict alignment, but it may miss localized conflicts such as occlusions, frame drops, or short audio-text mismatches. Window-level or time-resolved value esti-mation may provide more detailed evidence for gate generation. Third, the relationship between VGMR and multimodal infor-mation decomposition deserves further study. Although VGMR is motivated by redundancy, uniqueness, and complementarity, it does not explicitly estimate these information-theoretic quantities. Future work may introduce diagnostic measures or auxiliary objec-tives to better connect value estimation with redundancy reduction and complementary information preservation. Finally, robustness and interpretability analysis should be ex-panded. Beyond Gaussian feature corruption and controlled text corruption, VGMR should be tested under missing modalities, tem-poral masking, occlusion, sensor dropouts, modality asynchrony, and distribution shifts. A more systematic analysis of global val-ues, channel values, gate magnitudes, and suppression strength across modalities, classes, and noise conditions would also help characterize the learned behaviour. 
+
+## 6 Conclusion 
+
+In this paper, we revisited multimodal imbalance from a pre-fusion value estimation perspective. Instead of treating weak modalities as entirely useful or useless, we argued that they may contain both complementary information and harmful responses. Based on this motivation, we proposed Value-Gated Modality Refiner (VGMR), which estimates global-level and channel-level value evidence un-der cross-modal context and uses it to guide fine-grained feature refinement before fusion. Extensive experiments and analyses show that VGMR improves multimodal learning beyond simple feature aggregation, generic gating, or training-stage rebalancing. The results further suggest that value-conditioned refinement can reduce unreliable modality responses before fusion, enhance robustness under noisy multi-modal inputs, and support more stable optimization behaviour. Overall, VGMR provides a pre-fusion refinement mechanism for mitigating multimodal imbalance. Future work will examine its scalability to larger multimodal backbones and extend the analysis to broader incomplete-modality, retrieval, recommendation, and real-world multimodal scenarios. 
+
+## 7 GenAI Usage Disclosure 
+
+Large Language Models (LLMs) were used only as writing support during the preparation of this manuscript. Their use was limited to improving grammar, wording, clarity, and overall readability. Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals 
+
+They did not contribute to the conceptual development of the work, the design of the proposed method, the experimental setup, or the interpretation of results. All research ideas, methodological decisions, analyses, and reported findings are the authors’ own original work. 
+
+## References 
+
+[1] Houwei Cao, David G. Cooper, Michael K. Keutmann, Ruben C. Gur, Ani Nenkova, and Ragini Verma. 2014. CREMA-D: Crowd-Sourced Emotional Multimodal Actors Dataset. IEEE Transactions on Affective Computing 5, 4 (2014), 377–390. doi:10.1109/TAFFC.2014.2336244 [2] Yunfeng Fan, Wenchao Xu, Haozhao Wang, Junxiao Wang, and Song Guo. 2023. PMR: Prototypical Modal Rebalance for Multimodal Learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 20029– 20038. [3] Wei Han, Hui Chen, and Soujanya Poria. 2021. Improving Multimodal Fusion with Hierarchical Mutual Information Maximization for Multimodal Sentiment Analysis. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing . 9180–9192. [4] Jitai Hao, Hao Liu, Xinyan Xiao, Qiang Huang, and Jun Yu. 2025. Uni-X: Mit-igating Modality Conflict with a Two-End-Separated Architecture for Unified Multimodal Models. CoRR abs/2509.24365 (2025). [5] Devamanyu Hazarika, Roger Zimmermann, and Soujanya Poria. 2020. MISA: Modality-Invariant and -Specific Representations for Multimodal Sentiment Analysis. In Proceedings of the 28th ACM International Conference on Multimedia .1122–1131. [6] Jie Hu, Li Shen, and Gang Sun. 2018. Squeeze-and-Excitation Networks. In 
+
+Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition .7132–7141. [7] Hong Li, Xingyu Li, Pengbo Hu, Yinuo Lei, Chunxiao Li, and Yi Zhou. 2023. Boosting Multi-Modal Model Performance with Adaptive Gradient Modulation. In Proceedings of the IEEE/CVF International Conference on Computer Vision .22157–22167. [8] John Edison Arevalo Ovalle, Thamar Solorio, Manuel Montes y Gómez, and Fabio A. González. 2017. Gated Multimodal Units for Information Fusion. In Pro-ceedings of the 5th International Conference on Learning Representations, Workshop Track .[9] Xiaokang Peng, Yake Wei, Andong Deng, Dong Wang, and Di Hu. 2022. Balanced Multimodal Learning via On-the-fly Gradient Modulation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 8228–8237. [10] Wasifur Rahman, Md. Kamrul Hasan, Sangwu Lee, AmirAli Bagher Zadeh, Chengfeng Mao, Louis-Philippe Morency, and Mohammed E. Hoque. 2020. Inte-grating Multimodal Information in Large Pretrained Transformers. In Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics . 2359– 2369. [11] Khurram Soomro, Amir Roshan Zamir, and Mubarak Shah. 2012. UCF101: A Dataset of 101 Human Actions Classes From Videos in the Wild. CoRR 
+
+abs/1212.0402 (2012). arXiv:1212.0402 [12] Yibo Sun, Weitong Chen, and Zhe Sun. 2025. Multi-modal Learning Methods in Medical Imaging Area: A Survey. Digital Signal Processing 167 (2025), 105441. [13] Xingyu Tan, Xiaoyang Wang, Qing Liu, Xiwei Xu, Xin Yuan, Liming Zhu, and Wenjie Zhang. 2026. MemoTime: Memory-Augmented Temporal Knowledge Graph Enhanced Large Language Model Reasoning. In Proceedings of the ACM Web Conference 2026 . 4220–4231. [14] Xingyu Tan, Xiaoyang Wang, Qing Liu, Xiwei Xu, Xin Yuan, Liming Zhu, and Wenjie Zhang. 2026. PrivGemo: Privacy-Preserving Dual-Tower Graph Re-trieval for Empowering LLM Reasoning with Memory Augmentation. CoRR 
+
+abs/2601.08739 (2026). [15] Yapeng Tian, Jing Shi, Bochen Li, Zhiyao Duan, and Chenliang Xu. 2018. Audio-Visual Event Localization in Unconstrained Videos. In Proceedings of the European Conference on Computer Vision . 252–268. [16] Yao-Hung Hubert Tsai, Shaojie Bai, Paul Pu Liang, J. Zico Kolter, Louis-Philippe Morency, and Ruslan Salakhutdinov. 2019. Multimodal Transformer for Un-aligned Multimodal Language Sequences. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics . 6558–6569. [17] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is All you Need. In Advances in Neural Information Processing Systems 30 . 5998–6008. [18] Di Wang, Xutong Guo, Yumin Tian, Jinhui Liu, Lihuo He, and Xuemei Luo. 2023. TETFN: A Text Enhanced Transformer Fusion Network for Multimodal Sentiment Analysis. Pattern Recognition 136 (2023), 109259. [19] Weiyao Wang, Du Tran, and Matt Feiszli. 2020. What Makes Training Multi-Modal Classification Networks Hard?. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 12692–12702. [20] Shicai Wei, Chunbo Luo, and Yang Luo. 2025. Improving Multimodal Learning via Imbalanced Learning. CoRR abs/2507.10203 (2025). [21] Yake Wei and Di Hu. 2024. MMPareto: Boosting Multimodal Learning with Innocent Unimodal Assistance. In Proceedings of the 41st International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 235) . PMLR, 52559–52572. [22] Yake Wei, Siwei Li, Ruoxuan Feng, and Di Hu. 2024. Diagnosing and Re-learning for Balanced Multimodal Learning. In Proceedings of the European Conference on Computer Vision . Springer Nature Switzerland, 71–86. [23] Paul L. Williams and Randall D. Beer. 2010. Nonnegative Decomposition of Multivariate Information. CoRR abs/1004.2515 (2010). [24] Wenmeng Yu, Hua Xu, Ziqi Yuan, and Jiele Wu. 2021. Learning Modality-Specific Representations with Self-Supervised Multi-Task Learning for Multimodal Senti-ment Analysis. In Proceedings of the AAAI Conference on Artificial Intelligence ,Vol. 35. 10790–10797. [25] Amir Zadeh, Minghai Chen, Soujanya Poria, Erik Cambria, and Louis-Philippe Morency. 2017. Tensor Fusion Network for Multimodal Sentiment Analysis. In 
+
+Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing . 1103–1114. [26] Amir Zadeh, Paul Pu Liang, Soujanya Poria, Erik Cambria, and Louis-Philippe Morency. 2018. Multimodal Language Analysis in the Wild: CMU-MOSEI Dataset and Interpretable Dynamic Fusion Graph. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics . 2236–2246. [27] Amir Zadeh, Rowan Zellers, Eli Pincus, and Louis-Philippe Morency. 2016. MOSI: Multimodal Corpus of Sentiment Intensity and Subjectivity Analysis in Online Opinion Videos. CoRR abs/1606.06259 (2016). arXiv:1606.06259 [28] Zian Zhai, Fan Li, Xingyu Tan, Xiaoyang Wang, and Wenjie Zhang. 2025. Graph is a Natural Regularization: Revisiting Vector Quantization for Graph Represen-tation Learning. CoRR abs/2508.06588 (2025). [29] Duoyi Zhang, Richi Nayak, and Md. Abul Bashar. 2024. Pre-gating and Contextual Attention Gate: A New Fusion Method for Multi-modal Data Tasks. Neural Networks 179 (2024), 106553. [30] Xiaohui Zhang, Jaehong Yoon, Mohit Bansal, and Huaxiu Yao. 2024. Multimodal Representation Learning by Alternating Unimodal Adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 27446– 27456. [31] Liangwei Nathan Zheng, Wei Emma Zhang, Mingyu Guo, Miao Xu, Olaf Maennel, and Weitong Chen. 2025. Rethinking Gating Mechanism in Sparse MoE: Handling Arbitrary Modality Inputs with Confidence-Guided Gate. CoRR abs/2505.19525 (2025). [32] Heqing Zou, Meng Shen, Chen Chen, Yuchen Hu, Deepu Rajan, and Eng Siong Chng. 2023. UniS-MMC: Multimodal Classification via Unimodality-Supervised Multimodal Contrastive Learning. In Findings of the Association for Computational Linguistics: ACL 2023 . 659–672.
