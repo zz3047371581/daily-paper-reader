@@ -1,0 +1,2225 @@
+Title: KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models
+
+URL Source: https://arxiv.org/pdf/2606.04180v1
+
+Published Time: Thu, 04 Jun 2026 00:15:42 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+Youqi Wu 1 Mohammad Jalali 1 Farzan Farnia 1
+
+Abstract 
+
+Vision-language foundation models such as CLIP and SigLIP provide widely used representations for multimodal learning systems. While these models are typically compared through down-stream performance, such evaluations often do not explain how their representations differ struc-turally. In this work, we study this problem through the task of Contrastive Embedding Clus-tering : identifying sample subsets that are weakly clustered under one representation but strongly clustered under another. We propose Kernel Optimization for Discrepancy Analysis (KODA) ,a kernel-based framework for contrastive rep-resentation comparison and alignment. KODA constructs unified multimodal kernels through modality-wise kernel composition and formulates discrepancy discovery as a constrained optimiza-tion problem that searches for coherent structures in one representation while suppressing coherence in a reference representation. This yields inter-pretable discrepancy directions associated with specific sample subsets and modality interactions. To scale KODA to large vision-language datasets, we develop randomized low-dimensional approx-imations of joint kernels using random projec-tions, including Random Fourier Features for shift-invariant kernels. Empirically, KODA iden-tifies consistent and interpretable discrepancy structures across vision-language representations and provides sample subsets for representation alignment. The code is available at https: //github.com/yokiwuuu/KODA .
+
+> 1
+
+Department of Computer Science and Engineering, The Chinese University of Hong Kong. Correspondence to: Youqi Wu <yqwu24@cse.cuhk.edu.hk >, Mohammad Jalali <mjalali24@cse.cuhk.edu.hk >, Farzan Farnia <far-nia@cse.cuhk.edu.hk >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+1. Introduction 
+
+Multi-modal embedding models have become a central com-ponent of modern machine learning systems, enabling joint representation of images, text, and other modalities within a shared semantic space. Contrastive vision–language em-beddings such as CLIP (Radford et al., 2021) and related paradigms including ALIGN (Jia et al., 2021), BLIP (Li et al., 2022), and BLIP-2 (Li et al., 2023) have demonstrated strong performance in cross-modal retrieval and transfer, and they are now widely used as fixed representation inter-faces in larger pipelines. As a result, many vision–language foundation models and public variants coexist, differing in architecture, training objectives, and data sources (Cherti et al., 2023). This diversity motivates principled methods for comparing representations and characterizing how they differ in the structure they induce on data, beyond reporting aggregate downstream metrics. Most existing comparisons of multi-modal representations rely on downstream task performance, such as retrieval ac-curacy or zero-shot classification on benchmark datasets. While effective for ranking models, such evaluations pro-vide limited insight into how representations organize data. In vision–language settings, two models may achieve sim-ilar overall accuracy yet induce different groupings of image–text pairs, for example by emphasizing different semantic attributes, compositional patterns, or rare con-cepts. Identifying such fine-grained differences can support interpretability-oriented workflows, including targeted data curation, model selection, and representation alignment. A recent line of work on interpretable embedding compar-ison has begun to study sample groups that are organized differently by two representations. In particular, the SPEC framework by Jalali et al. (2025a) compares two embed-dings by constructing kernel similarity matrices on a shared reference dataset and analyzing the eigendecomposition of their kernel-difference matrix. This setting motivates the task we call Contrastive Embedding Clustering : identifying sample subsets that are weakly clustered under one repre-sentation but strongly clustered under another. However, the kernel-difference construction in SPEC does not explicitly enforce this asymmetric objective; its eigendirections may reflect structure present in both embeddings or aggregate 1
+
+> arXiv:2606.04180v1 [cs.LG] 2 Jun 2026
+
+KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models Multimodal                               
+
+> Modal B
+> Multimodal
+> Modal A
+> Model B
+> Representation
+> Image
+> text
+> Model A
+> Representation
+> Abaseball player sliding towards a base on a base ball field..
+> Abaseball player sliding into a base on a baseball field.
+> Abaseball player bends down and a ball rolls behind him.
+> Abaseball player swinging a bat at a ball.
+> Atennis player is on a blue and green court.
+> The man in a blue shirt is serving a tennis ball.
+> A male tennis player at the baseline of the court.
+> A man hits a tennis ball during a tennis game.
+> A tall giraffe is walking among the trees.
+> Agiraffe standing in a forest filled with trees.
+> agiraffe is posing for a photo next to a tree.
+> giraffe standing on top of a grass covered field.
+> A couple of zebra standing on top of a dirt field.
+> Two zebras grazing inside a fenced off area.
+> Zebras inside of a fenced in field eating grass
+> Azebra standing on a dry grass covered field.
+
+Overview of KODA Embedding Comparison: 
+
+Kernel  Optimization for 
+
+Discrepancy  Analysis 
+
+(KODA )
+
+to Compare Embeddings: 
+
+> Kernel Similarity
+> Matrix A Kernel Similarity
+> Matrix B
+> t-SNE Visualization: model A
+> t-SNE Visualization: model B
+> ...
+> ...
+> ...
+> ...
+> Image
+> text
+
+KODA Identified differently-embedded multi-modal clusters: 
+
+Figure 1. Overview of KODA for Contrastive Embedding Clustering , which aims to discover sample clusters that are represented differently by two embeddings. We show KODA-identified contrastive clusters for BLIP and CLIP embeddings on the MS-COCO dataset. 
+
+several effects, rather than isolating subsets that are weakly grouped with respect to a specified reference embedding. In this work, we formulate Contrastive Embedding Cluster-ing as a constrained optimization problem. Given kernel similarity matrices KA and KB induced by two representa-tions, KODA seeks components that are strongly grouped under one representation while explicitly constrained to be weakly grouped under the other. We introduce Kernel Opti-mization for Discrepancy Analysis (KODA), which solves 
+
+max 
+
+x∈Rn x⊤KA x
+
+subject to x⊤KB x ≤ ϵ, (1) 
+
+x 2 = 1 .
+
+To identify multiple discrepancy modes, we solve a se-quence of such problems with orthogonality constraints between the current and previous solutions. Although this optimization problem is non-convex, we show that it admits an efficient solution via structured spectral computations. We further extend KODA to the comparison of multi-modal representations by constructing unified kernels through modality-wise kernel multiplication. This product-kernel formulation enables direct comparison of representations over paired data, such as image–text samples, within the same constrained framework. However, exact covariance-operator implementations become infeasible in multi-modal settings because effective feature dimensions can scale mul-tiplicatively across modalities. To enable scalable computation, we develop approxima-tions based on random projections and Random Fourier Fea-tures (Rahimi & Recht, 2007), which reduce the effective dimensionality of the joint kernel feature map while pre-serving approximation guarantees. We evaluate KODA on widely used vision–language representation models, includ-ing CLIP (Radford et al., 2021), ALIGN (Jia et al., 2021), and BLIP-style models (Li et al., 2022; 2023), using stan-dard benchmarks such as MS-COCO (Lin et al., 2014). Our experiments show that KODA identifies consistent discrep-ancy structures, improves over kernel-difference baselines in finding multiple discrepancy modes, and provides sample subsets that can be used for representation alignment. 
+
+2. Related Work 
+
+Multi-modal embedding models. Vision–language embed-ding models are now a standard component in cross-modal 2KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+retrieval, zero-shot recognition, and multi-modal generative AI pipelines. Representative approaches include CLIP (Rad-ford et al., 2021), ALIGN (Jia et al., 2021), and BLIP / BLIP-2 (Li et al., 2022; 2023), alongside scaling studies and public training efforts that broaden the space of available variants (Cherti et al., 2023). SigLIP (Zhai et al., 2023) and SigLip 2 (Tschannen et al., 2025) propose an alternative pre-training objective based on a sigmoid loss. While these models are commonly compared via downstream bench-marks, such evaluations often provide limited insight into how two embeddings organize the same paired data. 
+
+Explainability in representation learning. A broad line of research develops tools to interpret learned representa-tions directly, often by linking internal directions or units to human-understandable concepts. Network Dissection (Bau et al., 2017) quantifies interpretability of visual represen-tations by measuring alignment between hidden units and semantic concepts. Concept-based explanation methods use examples of a concept to define directions in representation space: TCAV (Kim et al., 2018) measures concept sensitiv-ity via directional derivatives, while ACE (Ghorbani et al., 2019) automatically extracts concepts and evaluates their im-portance, reducing reliance on manually specified concept sets. Concept Bottleneck Models (Koh et al., 2020) further emphasize interpretability by explicitly structuring repre-sentations around a set of supervised concepts and enabling interventions on that representation. More recently, Gong et al. (2025b) improve the visual interpretability of CLIP through unsupervised adversarial fine-tuning with norm reg-ularization, showing gains through feature-attribution and network-dissection analyses. These works motivate anal-yses that identify which parts of a dataset correspond to salient representational structure, but they do not directly target the embeddings’ discrepancy discovery. 
+
+Kernel-based methods for feature representations. Ker-nel methods provide a flexible way to compare, align, fuse, and evaluate learned feature representations through pair-wise similarity structure rather than only downstream task accuracy. Recent work has used kernel matrices to explain differences between embedding spaces and align their in-duced cluster structures (Jalali et al., 2025a), and to improve vision-language representations by aligning CLIP visual embeddings with stronger vision-centric embeddings such as DINOv2 (Gong et al., 2025a). Complementarily, kernel product feature maps and maximum kernel entropy meth-ods have been used to fuse and recover embeddings while preserving pairwise similarity information (Wu et al., 2025; Wu & Farnia, 2026). Kernel-based scores have also be-come central to generative-model evaluation, beginning with MMD-based comparison (Gretton et al., 2012) and the Ker-nel Inception Distance (Bi ´nkowski et al., 2018; Wang et al., 2025), and extending to entropy- and spectrum-based mea-sures for diversity, novelty, and prompt-aware evaluation, including RKE (Jalali et al., 2023), Vendi (Friedman & Di-eng, 2023; Ospanov et al., 2024), KEN (Zhang et al., 2024; 2025), and conditional kernel entropy (Jalali et al., 2025b; Ospanov et al., 2025; Jalali et al., 2026). Kernel-based uses of embeddings have also been explored for model evalua-tion, selection, and mixture construction (Stein et al., 2023; Hu et al., 2025b; Rezaei et al., 2025; Hu et al., 2025a; Jafari & Farnia, 2026). These methods motivate viewing embed-dings and foundation models not only as feature vectors for prediction, but also as kernel-induced representations whose geometry can be systematically compared and evaluated. 
+
+3. Preliminaries 
+
+3.1. Embedding maps & comparison setting 
+
+Let X denote an input space and let ψ : X → S be an embedding map into a representation space S (typically Euclidean). We consider two embedding maps 
+
+ψ1 : X → S 1, ψ2 : X → S 2,
+
+which may have different output dimensions and thus in-duce different similarity structures on the same inputs. We assume access to a reference dataset {xi}ni=1 ⊂ X sampled from an underlying distribution. Our goal is to compare ψ1
+
+and ψ2 through the geometry they induce on this reference set, without relying on labeled downstream tasks. 
+
+3.2. Kernel functions & kernel-induced quadratic forms 
+
+A kernel function k : X × X → R assigns a similarity score and admits a feature map ϕ : X → H into a (possibly infinite-dimensional) Hilbert space H such that 
+
+k(x, x ′) = ⟨ϕ(x), ϕ (x′)⟩H.
+
+Given samples x1, . . . , x n, the associated kernel matrix 
+
+K ∈ Rn×n is 
+
+Kij = k(xi, x j ), (2) and is positive semidefinite. Common normalized exam-ples include the cosine kernel kcos (u, v ) = u⊤v 
+
+> ∥u∥2∥v∥2
+
+(for nonzero u, v ) and the Gaussian (RBF) kernel krbf (u, v ) = exp   − ∥ u − v∥22/(2 σ2), both satisfying k(x, x ) = 1 .For any v ∈ Rn with ∥v∥2 = 1 , the quadratic form 
+
+v⊤Kv (3) is the Rayleigh quotient of K at v, and hence lies in 
+
+[λmin (K), λ max (K)] and is maximized by a top eigenvec-tor of K. Moreover, when ϕ is finite-dimensional and 
+
+K = ΦΦ ⊤ with Φi: = ϕ(xi)⊤, we have the identity 
+
+v⊤Kv = ∥Φ⊤v∥22 =
+
+> n
+
+X
+
+> i=1
+
+vi ϕ(xi) 22
+
+, (4) which will be useful when interpreting and optimizing kernel-based criteria on the reference set. When ϕ(x) ∈ Rd,3KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+the empirical covariance matrix (operator) is 
+
+CX := 1
+
+n Φ⊤Φ = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ϕ(xi)ϕ(xi)⊤ ∈ Rd×d. (5) The matrices K/n and CX share the same non-zero eigen-values (including multiplicities), since they are products of 
+
+Φ and Φ⊤ in opposite orders. 
+
+3.3. Shift-invariant kernels & random Fourier features 
+
+To scale kernel computations, we use random Fourier fea-tures (RFF) (Rahimi & Recht, 2007; Sutherland & Schnei-der, 2015) for shift-invariant kernels on Rd. Consider ker-nels of the form k(x, x ′) = κ(x−x′), where κ is continuous and positive definite. By Bochner’s theorem, there exists a non-negative finite measure (taking non-negative values) bκ,which is the Fourier transform of κ, such that 
+
+κ(δ) = 
+
+Z
+
+> Rd
+
+exp  iω⊤δbκ(ω)d ω. (6) For a normalized kernel with κ(0) = 1 , bκ will be a probabil-ity measure. We then sample ω1, . . . , ω m
+
+> i.i.d.
+
+∼ bκ and define the RFF proxy feature map φr : X → R2r as 
+
+φr (x) = 1
+
+√r
+
+cos( ω⊤ 
+
+> 1
+
+x), sin( ω⊤ 
+
+> 1
+
+x), ., cos( ω⊤ 
+
+> r
+
+x), sin( ω⊤ 
+
+> r
+
+x).
+
+(7) A direct calculation yields E[⟨φr (x), φ r (x′)⟩] = k(x, x ′),where the expectation is over the sampled frequency vectors. Given {xi}ni=1 , we form the approximate kernel matrix eK
+
+by eKij = ⟨φr (xi), φ r (xj )⟩, enabling computation of kernel quadratic forms and spectral quantities using an explicit feature representation. 
+
+4. KODA: Optimization-based discrepancy identification in kernel matrices 
+
+We formalize the comparison problem as a Contrastive Em-bedding Clustering task. Given two embeddings A and B
+
+evaluated on the same reference set {x1, . . . , x n}, the goal is to identify subsets or signed directions over the reference samples that form a coherent cluster under one embedding but not under the other. In this sense, the task is not merely to measure a global discrepancy between embeddings, but to localize it by extracting directions in the reference set where the two kernel similarity geometries disagree. For two embeddings A and B, we are given their normalized kernel similarity matrices KA, K B ∈ Rn×n constructed on the same reference set {x1, . . . , x n}, where 1 
+
+> n
+
+KA ⪰ 0 and  
+
+> 1
+> n
+
+KB ⪰ 0 are PSD and unit-trace. We develop an opti-mization formulation for Contrastive Embedding Clustering: extracting directions on the reference set along which the structure induced by one embedding is strongly clustered while the structure by the other is weakly clustered. 
+
+4.1. Constrained quadratic programming for kernel-based embedding comparison 
+
+For a target level ϵ > 0, we consider the following quadrati-cally constrained program for Contrastive Embedding Clus-tering. The constraint enforces weak clusterability under 
+
+KB , while the objective searches for a direction that is max-imally clustered under KA:
+
+max  
+
+> x∈Rn
+
+x⊤KA x
+
+s.t. x⊤KB x ≤ ϵ, 
+
+x 22 = 1 .
+
+(8) Let x⋆ denote an optimizer. The constraint x⊤KB , x ≤ ϵ
+
+enforces that the discrepancy direction has limited energy under the second embedding, while the objective selects the direction with the strongest similarity concentration under the first embedding. Thus, x⋆ identifies a contrastive cluster direction: a set-level pattern that is salient in embedding A
+
+but suppressed, diffuse, or absent in embedding B.Although the optimization problem (8) is a non-convex op-timization task (maximizing a convex objective function), its optimizers admit an eigenvector-based characterization as revealed by KKT conditions. 
+
+Proposition 4.1 (Eigenvector form of an optimizer) . As-sume (8) is feasible and there exists ¯x with ∥¯x∥2 = 1 and 
+
+¯x⊤KB ¯x < ϵ . Then, there exist scalars λ⋆ ≥ 0 and ν⋆ ∈ R
+
+such that any optimizer x⋆ with unit-norm ( ∥x⋆∥2 = 1 )satisfies 
+
+(KA − λ⋆KB ) x⋆ = ν⋆x⋆, (9) 
+
+λ⋆ x⋆⊤KB x⋆ − ϵ = 0 . (10) 
+
+Proof. We present the proof in the Appendix. 
+
+Searching over λ. Proposition 4.1 motivates a one-dimensional search over λ ≥ 0: for each λ, compute a leading eigenvector xλ of KA − λK B (normalized to 
+
+∥xλ∥2 = 1 ) and evaluate g(λ) := x⊤ 
+
+> λ
+
+KB xλ. We then select a λ that yields g(λ) ≤ ϵ and maximizes x⊤ 
+
+> λ
+
+KA xλ
+
+among such candidates (up to numerical tolerance). 
+
+4.2. Iterative extraction of discrepancy directions via KODA 
+
+A single solution of (8) yields one contrastive cluster direc-tion. KODA solves the Contrastive Embedding Clustering task by extracting such directions, iteratively solving (8) while enforcing orthogonality to the found directions. Let x1, . . . , x t−1 be previously extracted unit vectors, and let Ut−1 ∈ Rn×(t−1) have orthonormal columns spanning 
+
+span {x1, . . . , x t−1}. Define the orthogonal projector 
+
+Pt−1 := I − Ut−1U ⊤
+
+> t−1
+
+. (11) 4KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+At iteration t, we solve 
+
+max  
+
+> x∈Rn
+
+x⊤KA x
+
+s.t. x⊤KB x ≤ ϵ, 
+
+∥x∥2 = 1 ,U ⊤
+
+> t−1
+
+x = 0 .
+
+(12) 
+
+Proposition 4.2. The optimization problem (12) is equiva-lent to 
+
+max  
+
+> x∈Rn
+
+x⊤(Pt−1KA Pt−1)x
+
+s.t. x⊤(Pt−1KB Pt−1)x ≤ ϵ, 
+
+∥x∥2 = 1 ,
+
+(13) 
+
+and every optimizer of (13) satisfies U ⊤
+
+> t−1
+
+x = 0 .Proof. We present the proof in the Appendix. Algorithm 1 summarizes the steps in KODA. At each itera-tion, we work with the projected matrices A = P K A P and 
+
+B = P K B P from (13) and perform a 1D search over λ via repeated leading-eigenvector computations. 
+
+4.3. Scalable principal-eigenvector computation via covariance blocks 
+
+KODA requires repeated computation of a principal eigen-vector of matrices of the form KA − λK B ∈ Rn×n. For large reference sets (e.g., n ⪆ 20000), this step can be a computational bottleneck in the dense-kernel regime: even iterative eigensolvers (Lanczos/power iteration) rely on re-peated matrix–vector products, each costing Θ( n2) time (and Θ( n2) memory if KA , K B are explicitly formed). When the kernels admit explicit feature representations with feature dimensions d1, d 2 ≪ n (e.g., via random features), the same principal-eigenvector computation can be reduced to an eigenproblem of dimension d1 + d2.Assume the kernel matrices factor as 
+
+KA = Φ AΦ⊤ 
+
+> A
+
+, KB = Φ B Φ⊤ 
+
+> B
+
+, (14) with ΦA ∈ Rn×d1 and ΦB ∈ Rn×d2 . Let Φ := [Φ A ΦB ] ∈ Rn×(d1+d2) and define the covariance blocks 
+
+CAA := Φ ⊤ 
+
+> A
+
+ΦA, CAB := Φ ⊤ 
+
+> A
+
+ΦB ,CBA := Φ ⊤ 
+
+> B
+
+ΦA, CBB := Φ ⊤ 
+
+> B
+
+ΦB , (15) so that G := Φ ⊤Φ = 
+
+"CAA CAB 
+
+CBA CBB 
+
+#
+
+.
+
+Proposition 4.3. For coefficient λ ≥ 0, define block matri-ces Sλ := diag( Id1 , −λI d2 ) and 
+
+Mλ := SλG =
+
+" CAA CAB 
+
+−λC BA −λC BB 
+
+#
+
+. (16) 
+
+Let ηλ := λmax (KA − λK B ) and let uλ be a (right) eigenvector of Mλ associated with eigenvalue ηλ. Then, 
+
+xλ := Φ uλ is a principal eigenvector of KA − λK B (after normalization). Proof. We present the proof in the Appendix. 
+
+Discussion and computational implications. Proposi-tion 4.3 reduces the principal-eigenvector computation of the n × n matrix KA − λK B to an eigenproblem of size 
+
+(d1 + d2) × (d1 + d2), which is independent of n. This is particularly beneficial when d1, d 2 ≪ n, as is typical with explicit feature maps or random features. In practice, we form the covariance blocks in (15) in O(n(d1 + d2)2) time (or O(n(d1 + d2)) time if Cij are accumulated online with a single pass) and then compute a dominant eigenvector of 
+
+Mλ. The lifted vector xλ = Φ uλ can be obtained with-out forming any n × n matrix, and can be normalized to satisfy ∥xλ∥2 = 1 before evaluating the constraint quan-tity x⊤ 
+
+> λ
+
+KB xλ (which can likewise be computed via ΦB as 
+
+x⊤ 
+
+> λ
+
+KB xλ = ∥Φ⊤ 
+
+> B
+
+xλ∥22). 
+
+Sample complexity of the covariance-block eigendirec-tions. To state a population sample-complexity guarantee, we use the normalized covariance blocks bCij := 1 
+
+> n
+
+Φ⊤ 
+
+> i
+
+Φj
+
+and bG := 1 
+
+> n
+
+Φ⊤Φ. Let z(x) := [Φ A(x); Φ B (x)] ∈ Rd1+d2
+
+denote the per-sample feature vector (the ith row of Φ is 
+
+z(xi)⊤). Assume ∥ΦA(x)∥2 ≤ 1 and ∥ΦB (x)∥2 ≤ 1
+
+for all x (equivalently, ∥z(x)∥22 ≤ 2). Define the popu-lation block covariance G := E[z(X)z(X)⊤] and Sλ := diag( Id1 , −λI d2 ). Finally, define the symmetric matrices 
+
+Bλ := G1/2SλG1/2 and bBλ := bG1/2Sλ bG1/2.
+
+Theorem 4.4. Consider the setting described above. Then, for every λ ≥ 0 and δ ∈ (0 , 1) , the following holds with probability at least 1 − δ,
+
+bBλ − Bλ 2 ≤ 12 ∥Sλ∥2 4
+
+r d1 + d2
+
+n
+
+
+
+1 + plog(1 /δ )
+
+
+
+.
+
+Moreover, if Bλ has eigengap γλ := λ1(Bλ)−λ2(Bλ) > 0,and v1, bv1 are unit top eigenvectors of Bλ, bBλ, then 
+
+sin ∠(bv1, v 1) ≤ ∥ bBλ − Bλ∥2
+
+γλ
+
+. (17) 
+
+Proof. We present the proof in the Appendix. 
+
+5. KODA for Multi-modal embeddings via product kernels and random features 
+
+We extend KODA to the comparison of multi-modal em-beddings, where each reference item consists of paired ob-servations from different modalities. We first introduce a 5KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+Algorithm 1 KODA: Kernel Optimization for Discrepancy Analysis 
+
+Require: PSD kernels KA , K B ∈ Rn×n, threshold ϵ > 0,number of directions T , tolerance τ
+
+Ensure: Directions x1, . . . , x T ∈ Rn 
+
+> 1:
+
+U ← [ ] (null matrix)  
+
+> 2:
+
+for t = 1 , . . . , T do  
+
+> 3:
+
+P ← I − U U ⊤ 
+
+> 4:
+
+A ← P K A P , B ← P K B P 
+
+> 5:
+
+Choose λt ≥ 0 by a 1D search using: compute a leading eigenvector xλ of A − λB with ∥xλ∥2 = 1 ,and evaluate g(λ) = x⊤ 
+
+> λ
+
+Bx λ 
+
+> 6:
+
+Stop when g(λt) ≤ ϵ + τ and set xt ← xλt 
+
+> 7:
+
+Orthonormalize: U ← orth([ U xt])  
+
+> 8:
+
+end for  
+
+> 9:
+
+Return {xt}Tt=1 
+
+product-kernel formulation that induces a joint similarity matrix on paired samples. We then address the computa-tional challenge posed by the tensor-product feature space of product kernels by proposing a joint random Fourier feature approximation, and establish a guarantee on the stability of the leading eigenspaces used by KODA. 
+
+5.1. Product-kernel formulation and tensor-product bottleneck 
+
+For each reference sample that paired is zi = ( xi, t i), let 
+
+ui = ψx(xi) ∈ Rdx , vi = ψt(ti) ∈ Rdt .
+
+We consider normalized shift-invariant kernels for each modality as follows where κx(0) = κt(0) = 1 :
+
+kx(u, u ′) = κx(u − u′), kt(v, v ′) = κt(v − v′) (18) Then, we define the multi-modal product kernel as: 
+
+k (u, v ), (u′, v ′) = kx(u, u ′) kt(v, v ′)= κx(u − u′) κt(v − v′). (19) For a reference set {(ui, v i)}ni=1 , the corresponding kernel matrix satisfies K = Kx ⊙ Kt where 
+
+(Kx)ij = kx(ui, u j ), (Kt)ij = kt(vi, v j ), (20) with ⊙ denoting the Hadamard product. At the kernel level, KODA applies directly by replacing unimodal kernels in Section 4 with K.The challenge arises in covariance-based implementations: the feature map associated with (19) is the tensor product 
+
+ϕ(u, v ) = ϕx(u) ⊗ ϕt(v),
+
+whose ambient dimension scales as dxdt. This renders covariance-space eigen-computations infeasible for standard multi-modal embeddings, motivating a low-dimensional kernel approximation. 
+
+5.2. Joint random Fourier features 
+
+Since κx and κt are continuous, real-valued, and shift-invariant, Bochner’s theorem yields probability measures 
+
+bκx and bκt such that 
+
+κx(δ) = 
+
+Z
+
+> Rdx
+
+bκx(ωx) cos( ω⊤ 
+
+> x
+
+δ) d ωx,κt(ζ) = 
+
+Z
+
+> Rdt
+
+bκt(ωt) cos( ω⊤ 
+
+> t
+
+ζ) d ωt. (21) We sample r frequency vectors independently for each modality: 
+
+ωx, 1, . . . , ω x,r 
+
+> iid
+
+∼ bκx, ωt, 1, . . . , ω t,r 
+
+> iid
+
+∼ bκt,
+
+and define the joint random Fourier feature map 
+
+φ(u, v ) = 1
+
+√r
+
+h
+
+cos( ω⊤
+
+> x, 1
+
+u + ω⊤
+
+> t, 1
+
+v), sin( ω⊤
+
+> x, 1
+
+u + ω⊤
+
+> t, 1
+
+v),. . . , cos( ω⊤ 
+
+> x,r
+
+u+ω⊤ 
+
+> t,r
+
+v), sin( ω⊤ 
+
+> x,r
+
+u + ω⊤ 
+
+> t,r
+
+v)
+
+i
+
+∈ R2r . (22) Let Φ ∈ Rn×2r contain rows Φi: = φ(ui, v i)⊤. The ap-proximate kernel matrix is 
+
+eK = ΦΦ ⊤ where eKij = ⟨φ(ui, v i), φ (uj , v j )⟩. (23) Next, we show a theoretical guarantee supporting scalable multi-modal KODA via the joint random Fourier feature implementation: 
+
+Theorem 5.1. Let K be defined in (20) and eK in (23) .Assume |Kij | ≤ 1 for all i, j . Then for any δ ∈ (0 , 1) , with probability at least 1 − δ,
+
+1
+
+n eK − 1
+
+n K F ≤ 2 + p8 log(1 /δ )
+
+√r (24) 
+
+Moreover, for any q with eigengap ∆q (K) = λq (K) −
+
+λq+1 (K) > 0, letting U and eU denote the top-q
+
+eigenspaces of K and eK respectively, 
+
+sin Θ( eU , U ) F ≤ ∥ eK − K∥F
+
+∆q (K) . (25) 
+
+Proof. We present the proof in the Appendix. Theorem 5.1 provides justification for using eK = ΦΦ ⊤
+
+as a proxy for the true product kernel matrix K in multi-modal KODA. In particular, eK concentrates around K at rate r−1/2 in Frobenius norm, and the leading eigenspaces are stable whenever ∆q (K) is non-negligible. This enables covariance/feature-space implementations whose complex-ity depends on the joint random-feature dimension 2r, avoid-ing explicit tensor-product feature maps of size dxdt.6KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models Top 6 DINOv2 -dominant directions relative to CLIP identified by KODA            
+
+> DINOv2
+> CLIP
+> Clustering score AMI:0.83 NMI: 0.84
+> t-SNE visualization of directions
+> Direction 1 Direction 2 Direction 3
+> Direction 4 Direction 5 Direction 6
+> Clustering score AMI:0.37 NMI:0.39
+> Figure 2. Left: Visualization of the top-6 discrepancy directions that are strongly grouped under DINOv2 while being weakly clustered under CLIP on the FFHQ dataset, discovered by KODA. Right: t-SNE visualization of Top-10 directions together with clustering scores.
+
+6. Numerical Results 
+
+In this section, we evaluate KODA through two complemen-tary tasks. The first task, contrastive embedding clustering ,asks whether KODA can identify sample groups that are coherently clustered under one embedding but weakly clus-tered under another. The second task, contrastive embedding alignment , asks whether the discovered contrastive clusters can be used as actionable slices for targeted alignment be-tween embeddings. Finally, we provide ablation studies on key design choices in KODA. 
+
+Datasets. We evaluate our method on a diverse collection of image-only and image–text datasets to assess discrepancy discovery under both unimodal and multimodal settings. For image-only experiments, we use AFHQ (Choi et al., 2020), FFHQ (Karras et al., 2019), and ImageNet (Deng et al., 2009). For multimodal experiments, we adopt standard image-caption datasets MSCOCO (Lin et al., 2014). 
+
+Models. For unimodal discrepancy analysis, we consider two widely adopted visual encoders, DINOv2 (Oquab et al., 2023) and CLIP (Radford et al., 2021). For multimodal experiments, we evaluate a diverse set of vision-language models, including BLIP (Li et al., 2022), CLIP (Radford et al., 2021), OpenCLIP (Ilharco et al., 2021), SigLIP (Zhai et al., 2023), and SigLIP2 (Tschannen et al., 2025). 
+
+Implementation details. All experiments are conducted using the covariance-operator formulation of KODA, with spectral computations solved via Cholesky decomposition. We adopt Gaussian (RBF) kernels and kernel bandwidths are selected following prior work (Zhang et al., 2024) (Jalali et al., 2025a) to ensure comparable scaling across embed-dings. Further implementation details are provided in C.1. 
+
+Contrastive embedding clustering in unimodal encoders. 
+
+We begin with the contrastive embedding clustering task for two image encoders, DINOv2 and CLIP, on the AFHQ and FFHQ datasets. Figure 2 illustrates the dominant dis-crepancy directions identified by KODA that are strongly grouped under DINOv2 while being weakly clustered un-der CLIP. For visualization, we select 50 representative samples per direction and project their embeddings using t-SNE (Van der Maaten & Hinton, 2008) under each model. To quantify the identified directions, we run k-means on the corresponding embeddings with 10 times and report the averaged Adjusted Mutual Information (Vinh et al., 2009) (AMI) and Normalized Mutual Information (McDaid et al., 2013) (NMI) between the k-means labels and the KODA-discovered labels. The results on AFHQ datasets are pro-vided in Figure 7 and Figure 8. 
+
+Consistency with reference discrepancy structures. We further examine whether the discrepancy directions iden-tified by KODA align with semantic mismatches derived from representation similarity statistics. We use the Ima-geNet dog breeds dataset since it provides category labels that enable explicit verification. We derive ground-truth discrepancy labels based on aggregated similarity statistics. Without using any label information, KODA recovers domi-7KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models BLIP OpenCLIP SigLIP                  
+
+> 1. A baseball player sliding
+> into a base on a baseball field.
+> 2. A baseball player bends
+> down and a ball rolls behind
+> him.
+> 3. Some players in action on
+> the baseball field.
+> 4. A baseball player sliding
+> into a base on a baseball field.
+> 1. a man on a skate board
+> does a trick in the air
+> 2. A man flying through
+> the air riding a skateboard .
+> 3. A person on a
+> skateboard up in the air.
+> 4. A young man riding a
+> skateboard up the side of a
+> ramp.
+> 1. A man stands on his
+> surfboard while surfing a
+> small wave.
+> 2. A male surfer on a surf
+> board rides on top of a wave.
+> 3. A man rides a wave on a
+> surfboard .
+> 4. a man on a surf board
+> rides on top of a wave
+
+Top -1 BLIP dominant 
+
+direction relative to CLIP 
+
+Top -1 OpenCLIP dominant 
+
+direction relative to CLIP 
+
+Top -1 SigLIP dominant 
+
+direction relative to CLIP   
+
+> (CLIP) (CLIP) (CLIP)
+
+Figure 3. Multimodal discrepancy analysis on the MSCOCO dataset. Top: Representative image–caption pairs corresponding to the Top-1 discrepancy direction identified by KODA for different vision–language models relative to CLIP. Bottom: Generalized Rayleigh quotient of the identified discrepancy directions under varying constraint quantiles defined on the CLIP kernel. 
+
+nant discrepancy directions that closely correspond to these mismatched categories as shown in Figure 6. Additional results and visualizations are provided in Appendix C.2. 
+
+Contrastive embedding clustering in vision–language models. We next evaluate KODA on contrastive embed-ding clustering for paired image–text data. All multimodal experiments are conducted on MSCOCO using the joint image–text representation described in Section 5.2. We consider a set of widely used vision–language models, in-cluding BLIP, CLIP, OpenCLIP, SigLIP, and SigLIP2, and perform pairwise discrepancy analysis. As shown in Fig-ure 3 (top), the resulting samples exhibit distinct multimodal patterns across different models by fixing CLIP as the refer-ence model. Additional comparing results and visualization across different models are provided in Appendix C.4. 
+
+Quantifying Directional Asymmetry via the General-ized Rayleigh Quotient. We further quantify the strength of multimodal discrepancy directions using the generalized Rayleigh quotient x⊤K1xx⊤K2x , where K1 and K2 are normalized RBF kernel matrices induced by the two embeddings. Since 
+
+x⊤Kx measures how strongly direction x is expressed un-der kernel K, larger quotient values indicate stronger di-rectional asymmetry, i.e., directions emphasized by K1 but suppressed by K2. Following Eq. (7), the constraint param-eter ϵ is set implicitly via a quantile q ∈ { 0.1, 0.2, . . . , 1.0}
+
+of the eigenvalue distribution of K2, where ϵ corresponds to the q-quantile of K2’s eigenvalues. Figure 3 (bottom) re-ports the quotient values for the Top-1 discrepancy direction as well as the averages over the Top-3 and Top-5 directions. 
+
+Contrastive embedding alignment using KODA-identified samples. To examine whether the discovered discrepancy slices are useful beyond visualization, we use them for targeted embedding alignment. In the unimodal setting, KODA identifies slices that are weakly grouped by CLIP but strongly grouped by DINOv2 on FFHQ dataset. We fine-tune CLIP on these selected samples to align its local geometry with DINOv2, following a kernel-based embedding-alignment objective of (Gong et al., 2025a). Table 2 shows that the aligned CLIP substantially improves its agreement with the KODA-discovered grouping and approaches the DINOv2 geometry on these slices. We observe a similar trend in the multimodal setting. On MSCOCO, KODA identifies image–caption pairs for which BLIP forms a clearer joint structure than CLIP. The corresponding t-SNE visualization in Figure 4 further shows that the aligned embedding forms a geometry closer to the target embedding on the same selected slice. 
+
+Multimodal discrepancy reflects cross-modal alignment differences. We further examine whether the multimodal discrepancies found by KODA mainly arise from cross-modal alignment differences or from general inter-model mismatch. Comparing image-only and joint image–text KODA directions, we find that image-only embeddings pro-8KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models t-SNE visualization - CLIP t-SNE visualization - BLIP t-SNE visualization - Aligned CLIP        
+
+> t-SNE visualization -CLIP t-SNE visualization -DINOv2 t-SNE visualization -Aligned CLIP
+> Figure 4. t-SNE visualization of KODA-selected samples before and after contrastive embedding alignment.
+> Table 1. Cross-modal retrieval on the full MSCOCO set and the KODA-selected subset. The KODA-selected subset amplifies the performance gap between CLIP and SigLIP.
+
+Model Evaluation set I2T R@1 I2T R@5 I2T R@10 T2I R@1 T2I R@5 T2I R@10 Avg. drop CLIP Full 32.64 57.88 68.10 28.60 53.04 64.46 0.00 CLIP KODA-selected 18.00 44.00 55.00 19.00 46.00 56.00 11 .12 
+
+SigLIP Full 42.64 68.32 77.98 41.86 66.42 76.22 0.00 SigLIP KODA-selected 34.00 68.00 78.00 35.00 62.00 73.00 3.91  
+
+> Table 2. Contrastive embedding alignment on KODA-selected slices. AMI/NMI/ARI measure agreement between the embedding-induced clusters and the KODA-discovered grouping.
+
+Target Model AMI NMI ARI DINOv2 CLIP 0.25 ±.002 0.26 ±.002 0.19 ±.001 
+
+Aligned 0.78 ±.004 0.78 ±.004 0.70 ±.012 
+
+Target 0.83 ±.006 0.84 ±.006 0.77 ±.017 
+
+BLIP CLIP 0.52 ±.003 0.53 ±.009 0.37 ±.004 
+
+Aligned 0.91 ±.006 0.91 ±.008 0.90 ±.003 
+
+Target 0.96 ±.008 0.96 ±.005 0.96 ±.006 
+
+duce noisier directions with weaker semantic separation, while joint image-text embeddings yield more coherent and concentrated clusters. Visual comparisons are in Figures 10 and 11. We also evaluate image-to-text and text-to-image retrieval on MSCOCO, comparing the KODA-selected sub-set with the full dataset. As in Table 1, the KODA-selected slice amplifies the retrieval gap between SigLIP and CLIP. 
+
+Ablation Study. To examine the sensitivity of KODA to major design parameters, we conduct ablation studies on the number of random Fourier features, the reference sample size, and the kernel function, discussed in Appendix C.5. 
+
+7. Conclusion and Limitations 
+
+In this work, we introduced Contrastive Embedding Clus-tering as a task for identifying sample-level structures that are organized differently across two embedding representa-tions, and proposed KODA as a constrained kernel-based framework for solving this task. By formulating embed-ding comparison as a quadratic optimization problem with an explicit constraint on weak clusterability under a ref-erence embedding, KODA directly localizes discrepancy directions that are strongly clustered in one embedding but diffuse or suppressed in the other, going beyond global kernel-difference spectral comparisons. We showed that the resulting non-convex problem admits efficient eigenvector-based characterization and developed scalable implementa-tions through covariance-block reductions and random fea-ture approximations. Across experiments, KODA identified fine-grained and interpretable contrastive clusters across multi-modal and uni-modal embeddings. As limitations, KODA requires a shared reference dataset and focuses on unsupervised discrepancy discovery through kernel-induced geometry; extending the framework to unmatched datasets, supervised or task-conditioned discrepancy notions, and stronger statistical guarantees for cluster interpretation are relevant directions for future work. 9KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+Acknowledgments 
+
+This work is supported by a grant from the Research Grants Council of the Hong Kong Special Administrative Re-gion, China, Project 14210725, and is also supported by CUHK Direct Research Grant with CUHK Project No. 4055164. The work is partially supported by a grant un-der 1+1+1 CUHK-CUHK(SZ)-GDSTC Joint Collaboration Fund. Also, the authors acknowledge the support from the Hong Kong Research Grants Council (RGC) and the Hong Kong PhD Fellowship Scheme (HKPFS) award supporting Youqi Wu’s research. Finally, the authors sincerely thank the anonymous reviewers and meta-reviewer for their insightful suggestions and constructive feedback. 
+
+Impact Statement 
+
+This work develops methods for comparing multi-modal embedding representations by identifying dataset-level dis-crepancy patterns between models. A positive impact is to support transparency and interpretability in the evalua-tion of widely used embedding interfaces, enabling more informed model selection, debugging, and analysis beyond aggregate benchmark metrics. As with other representa-tion analysis tools, such methods could also be misused to exploit model-specific weaknesses or to support undesir-able downstream applications if applied without appropriate safeguards. We therefore emphasize that KODA is intended for controlled evaluation and auditing purposes on shared reference datasets, and we encourage careful consideration of dataset provenance, privacy, and downstream use when applying embedding comparison techniques in practice. 
+
+References 
+
+Bau, D., Zhou, B., Khosla, A., Oliva, A., and Torralba, A. Network dissection: Quantifying interpretability of deep visual representations. In 2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) ,pp. 3319–3327. IEEE Computer Society, 2017. doi: 10. 1109/CVPR.2017.354. URL https://doi.org/10. 1109/CVPR.2017.354 .Bi ´nkowski, M., Sutherland, D. J., Arbel, M., and Gretton, A. Demystifying MMD GANs. In International Conference on Learning Representations , 2018. Cherti, M., Beaumont, R., Wightman, R., Wortsman, M., Ilharco, G., Gordon, C., Schuhmann, C., Schmidt, L., and Jitsev, J. Reproducible scaling laws for con-trastive language-image learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 2818–2829, June 2023. Chitta, R., Jin, R., and Jain, A. K. Efficient kernel cluster-ing using random fourier features. In 2012 IEEE 12th International Conference on Data Mining , pp. 161–170. IEEE, 2012. Choi, Y., Uh, Y., Yoo, J., and Ha, J.-W. Stargan v2: Diverse image synthesis for multiple domains. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 8188–8197, 2020. Darrin, M., Formont, P., Ayed, I., Cheung, J. C., and Pi-antanida, P. When is an embedding model more promis-ing than another? Advances in Neural Information Pro-cessing Systems , 37:68330–68379, 2024. Deng, J., Dong, W., Socher, R., Li, L.-J., Li, K., and Fei-Fei, L. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition , pp. 248–255. Ieee, 2009. Friedman, D. and Dieng, A. B. The Vendi score: A diversity evaluation metric for machine learning. Transactions on Machine Learning Research , 2023. Gedon, D., Ribeiro, A. H., Wahlstr ¨om, N., and Sch ¨on, T. B. Invertible kernel PCA with random fourier features. IEEE Signal Processing Letters , 30:563–567, 2023. Ghashami, M., Perry, D. J., and Phillips, J. Streaming kernel principal component analysis. In Artificial intelligence and statistics , pp. 1365–1374. PMLR, 2016. Ghorbani, A., Wexler, J., Zou, J. Y., and Kim, B. Towards automatic concept-based explanations. In Advances in Neural Information Processing Systems (NeurIPS) , vol-ume 32, pp. 9277–9286. Curran Associates, Inc., 2019. Gong, S., Jiang, Y., Dou, Q., and Farnia, F. Kernel-based un-supervised embedding alignment for enhanced visual rep-resentation in vision-language models. In International Conference on Machine Learning , pp. 19912–19931. PMLR, 2025a. Gong, S., Lei, H., Dou, Q., and Farnia, F. Boosting the visual interpretability of CLIP via adversarial fine-tuning. In The Thirteenth International Conference on Learning Representations , 2025b. URL https: //openreview.net/forum?id=khuIvzxPRp .Gretton, A., Borgwardt, K. M., Rasch, M. J., Sch ¨olkopf, B., and Smola, A. A kernel two-sample test. Journal of Machine Learning Research , 13(25):723–773, 2012. Hu, X., Leung, H.-f., and Farnia, F. PAK-UCB contex-tual bandit: An online learning approach to prompt-aware selection of generative models and LLMs. In 
+
+Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , pp. 24447–24481. PMLR, 2025a. URL https://proceedings.mlr. press/v267/hu25m.html .10 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+Hu, X., Leung, H.-f., and Farnia, F. A multi-armed bandit approach to online selection and evaluation of generative models. In Proceedings of The 28th International Con-ference on Artificial Intelligence and Statistics , volume 258 of Proceedings of Machine Learning Research , pp. 1864–1872. PMLR, 2025b. Huh, M., Cheung, B., Wang, T., and Isola, P. Posi-tion: The platonic representation hypothesis. In Pro-ceedings of the 41st International Conference on Ma-chine Learning , volume 235 of Proceedings of Machine Learning Research , pp. 20617–20642. PMLR, 21–27 Jul 2024. URL https://proceedings.mlr.press/ v235/huh24a.html .Ilharco, G., Wortsman, M., Wightman, R., Gordon, C., Car-lini, N., Taori, R., Dave, A., Shankar, V., Namkoong, H., Miller, J., Hajishirzi, H., Farhadi, A., and Schmidt, L. Openclip, July 2021. URL https://doi.org/10. 5281/zenodo.5143773 . If you use this software, please cite it as below. Jafari, D. and Farnia, F. DAK-UCB: Diversity-aware prompt routing for LLMs and generative models. In The Four-teenth International Conference on Learning Represen-tations (ICLR) , 2026. URL https://openreview. net/forum?id=nnN2TKlS5C .Jalali, M., Li, C. T., and Farnia, F. An information-theoretic evaluation of generative models in learning multi-modal distributions. In Advances in Neural Information Process-ing Systems , volume 36, 2023. Jalali, M., Dibaei Nia, B., and Farnia, F. Towards an explain-able comparison and alignment of feature embeddings. In 
+
+Proceedings of the 42nd International Conference on Ma-chine Learning , volume 267 of Proceedings of Machine Learning Research , pp. 26757–26796. PMLR, 2025a. Jalali, M., Lei, H., Gohari, A., and Farnia, F. SPARKE: Scalable prompt-aware diversity and novelty guidance in diffusion models via RKE score. In Advances in Neural Information Processing Systems , 2025b. Jalali, M., Ospanov, A., Gohari, A., and Farnia, F. Condi-tional vendi score: Prompt-aware diversity evaluation for generative ai models and llms. In Proceedings of The 29th International Conference on Artificial Intelligence and Statistics , Proceedings of Machine Learning Research. PMLR, 2026. Jia, C., Yang, Y., Xia, Y., Chen, Y.-T., Parekh, Z., Pham, H., Le, Q., Sung, Y.-H., Li, Z., and Duerig, T. Scaling up visual and vision-language represen-tation learning with noisy text supervision. In Pro-ceedings of the 38th International Conference on Ma-chine Learning , volume 139 of Proceedings of Machine Learning Research , pp. 4904–4916. PMLR, 18–24 Jul 2021. URL https://proceedings.mlr.press/ v139/jia21b.html .Karras, T., Laine, S., and Aila, T. A style-based generator architecture for generative adversarial networks. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 4401–4410, 2019. Kim, B., Wattenberg, M., Gilmer, J., Cai, C., Wexler, J., Viegas, F., and Sayres, R. Interpretability beyond feature attribution: Quantitative testing with concept activation vectors (TCAV). In Proceedings of the 35th International Conference on Machine Learning (ICML) , volume 80 of 
+
+Proceedings of Machine Learning Research , pp. 2668– 2677. PMLR, 2018. URL https://proceedings. mlr.press/v80/kim18d.html .Koh, P. W., Nguyen, T., Tang, Y. S., Mussmann, S., Pierson, E., Kim, B., and Liang, P. Concept bottleneck models. In Proceedings of the 37th International Conference on Machine Learning (ICML) , volume 119 of Proceedings of Machine Learning Research , pp. 5338–5348. PMLR, 2020. URL https://proceedings.mlr.press/ v119/koh20a.html .Li, J., Li, D., Xiong, C., and Hoi, S. BLIP: Bootstrapping language-image pre-training for unified vision-language understanding and generation. In Proceedings of the 39th International Conference on Machine Learning , volume 162 of Proceedings of Machine Learning Research , pp. 12888–12900. PMLR, 2022. Li, J., Li, D., Savarese, S., and Hoi, S. BLIP-2: Boot-strapping language-image pre-training with frozen image encoders and large language models. In Proceedings of the 40th International Conference on Machine Learn-ing , volume 202 of Proceedings of Machine Learning Research , pp. 19730–19742. PMLR, 2023. Lin, T., Maire, M., Belongie, S. J., Hays, J., Perona, P., Ramanan, D., Doll ´ar, P., and Zitfnick, C. L. Microsoft coco: Common objects in context. In Computer Vision – ECCV 2014 , pp. 740–755, 2014. McDaid, A. F., Greene, D., and Hurley, N. Normalized mutual information to evaluate overlapping community finding algorithms, 2013. Ng, A. Y., Jordan, M. I., and Weiss, Y. On spectral cluster-ing: Analysis and an algorithm. In Advances in Neural Information Processing Systems , 2001. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al. Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 ,2023. 11 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+Ospanov, A., Zhang, J., Jalali, M., Cao, X., Bogdanov, A., and Farnia, F. Towards a scalable reference-free evaluation of generative models. In Advances in Neural Information Processing Systems , volume 37, 2024. Ospanov, A., Jalali, M., and Farnia, F. Scendi score: Prompt-aware diversity evaluation via schur complement of clip embeddings. In Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision (ICCV) , pp. 16927– 16937, October 2025. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., and Sutskever, I. Learning transferable visual models from natural language supervision. In 
+
+Proceedings of the 38th International Conference on Ma-chine Learning , volume 139 of Proceedings of Machine Learning Research , pp. 8748–8763. PMLR, 2021. Rahimi, A. and Recht, B. Random features for large-scale kernel machines. In Advances in Neural Information Processing Systems , pp. 1177–1184, 2007. Rezaei, P., Farnia, F., and Li, C. T. Be more diverse than the most diverse: Optimal mixtures of generative models. In The Thirteenth International Conference on Learning Representations (ICLR) , 2025. URL https: //openreview.net/forum?id=2Chkk5Ye2s .Sch ¨olkopf, B., Smola, A. J., and M ¨uller, K.-R. Nonlin-ear component analysis as a kernel eigenvalue problem. 
+
+Neural Computation , 10(5):1299–1319, 1998. Sriperumbudur, B. K. and Sterge, N. Approximate kernel PCA: Computational versus statistical trade-off. The Annals of Statistics , 50(5):2713–2736, 2022. Stein, G., Cresswell, J. C., Hosseinzadeh, R., Sui, Y., Ross, B. L., Villecroze, V., Liu, Z., Caterini, A. L., Taylor, J. E. T., and Loaiza-Ganem, G. Exposing flaws of genera-tive model evaluation metrics and their unfair treatment of diffusion models. In Advances in Neural Information Processing Systems , volume 36, pp. 3732–3784, 2023. Sutherland, D. J. and Schneider, J. On the error of random fourier features. arXiv preprint arXiv:1506.02785 , 2015. Sutherland, D. J., Strathmann, H., Arbel, M., and Gret-ton, A. Efficient and principled score estimation with nystr ¨om kernel exponential families. In International Conference on Artificial Intelligence and Statistics , pp. 652–660. PMLR, 2018. Tschannen, M., Gritsenko, A., Wang, X., Naeem, M. F., Alabdulmohsin, I., Parthasarathy, N., Evans, T., Beyer, L., Xia, Y., Mustafa, B., et al. Siglip 2: Multilingual vision-language encoders with improved semantic under-standing, localization, and dense features. arXiv preprint arXiv:2502.14786 , 2025. Ullah, E., Mianjy, P., Marinov, T. V., and Arora, R. Stream-ing kernel PCA with o(√n) random features. Advances in Neural Information Processing Systems , 31, 2018. Van der Maaten, L. and Hinton, G. Visualizing data using t-sne. Journal of machine learning research , 9(11), 2008. Vinh, N. X., Epps, J., and Bailey, J. Information theoretic measures for clusterings comparison: is a correction for chance necessary? In Proceedings of the 26th annual international conference on machine learning , pp. 1073– 1080, 2009. Wang, Z., Farzan, F., Lin, Z., Shen, Y., and Yu, B. On the distributed evaluation of generative models. In Pro-ceedings of the IEEE/CVF International Conference on Computer Vision Workshops , pp. 7644–7653, 2025. Wu, Y. and Farnia, F. The maximum von neumann entropy principle: Theory and applications in machine learning. In IEEE International Symposium on Information Theory (ISIT) , 2026. Wu, Y., Zhang, J., and Farnia, F. When kernels multiply, clusters unify: Fusing embeddings with the kronecker product. In Advances in Neural Information Processing Systems , 2025. Zhai, X., Mustafa, B., Kolesnikov, A., and Beyer, L. Sig-moid loss for language image pre-training. In Proceed-ings of the IEEE/CVF international conference on com-puter vision , pp. 11975–11986, 2023. Zhang, J., Li, C. T., and Farnia, F. An interpretable evalu-ation of entropy-based novelty of generative models. In 
+
+Proceedings of the 41st International Conference on Ma-chine Learning , volume 235 of Proceedings of Machine Learning Research , pp. 59148–59172. PMLR, 2024. Zhang, J., Jalali, M., Li, C. T., and Farnia, F. Unveiling differences in generative models: A scalable differential clustering approach. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 8269–8278, June 2025. 12 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+A. Additional Related Works 
+
+Beyond downstream benchmarks: representation-level comparison. Recent work has explored task-agnostic viewpoints on embedding comparison that deviate from pure downstream evaluation. Darrin et al. (2024) propose an information-theoretic approach to comparing embedding models based on notions of sufficiency/informativeness, enabling comparison without labeled tasks. The Platonic Representation Hypothesis (Huh et al., 2024) studies the extent to which independently trained models share representational structure, offering a complementary lens on when embeddings may share geometric organization. 
+
+Kernel and spectral tools. Kernel spectral methods provide classical machinery for studying grouping structure through eigensystems Chitta et al. (2012); Ghashami et al. (2016); Ullah et al. (2018); Sriperumbudur & Sterge (2022); Gedon et al. (2023). Kernel PCA (Sch ¨olkopf et al., 1998) and spectral clustering (Ng et al., 2001) relate eigenstructure of similarity matrices to latent clusters, while Random Fourier Features (Rahimi & Recht, 2007) enable scalable approximations for shift-invariant kernels. Building on these tools, spectral kernel-based embedding comparison methods have been proposed, including analyzing kernel differences constructed from a shared reference dataset (Jalali et al., 2025a). Our work follows this kernel-based, reference-set comparison paradigm but adopts an optimization-based formulation that explicitly enforces weak grouping under one embedding while maximizing grouping strength under another. 
+
+B. Proofs 
+
+B.1. Proof of Proposition 4.1 
+
+Consider Lagrangian multipliers λ ≥ 0 for x⊤KB x ≤ ϵ and ν ∈ R for ∥x∥22 = 1 , and consider 
+
+L(x, λ, ν ) = x⊤KA x − λ(x⊤KB x − ϵ) − ν(x⊤x − 1) .
+
+At a KKT point (x⋆, λ ⋆, ν ⋆), stationarity gives 2( KA − λ⋆KB − ν⋆I)x⋆ = 0 , yielding (9) ; complementary slackness yields (10) . The strict feasibility assumption is a standard constraint qualification for the inequality constraint on the sphere. 
+
+B.2. Proof of Proposition 4.2 
+
+First, note that U ⊤
+
+> t−1
+
+x = 0 is equivalent to x = Pt−1x, which directly follows from the definition of Pt−1. For such x
+
+and any symmetric D, we have x⊤Dx = x⊤(Pt−1DP t−1)x since Pt−1 = P ⊤ 
+
+> t−1
+
+= P 2
+
+> t−1
+
+. Applying this to D = KA , K B
+
+yields the equivalence. 
+
+B.3. Proof of Proposition 4.3 
+
+First note that 
+
+KA − λK B = Φ AΦ⊤ 
+
+> A
+
+− λΦB Φ⊤ 
+
+> B
+
+= Φ SλΦ⊤.
+
+For any u ∈ Rd1+d2 ,
+
+(KA − λK B )(Φ u) = Φ SλΦ⊤Φu = Φ Sλ(Φ ⊤Φ) u = Φ Mλu. 
+
+Hence, if Mλuλ = ηλuλ, then with xλ = Φ uλ we have 
+
+(KA − λK B )xλ = ηλxλ,
+
+thus xλ is an eigenvector of KA − λK B with eigenvalue ηλ. Moreover, ηλ̸ = 0 implies xλ̸ = 0 : if Φuλ = 0 then 
+
+Gu λ = Φ ⊤Φuλ = 0 and thus Mλuλ = SλGu λ = 0 , forcing ηλ = 0 .It remains to show that ηλ is also an eigenvalue of Mλ. This follows from the fact that for every matrix pair A ∈ Rm×n
+
+and B ∈ Rn×m (for any integers m, n ), AB and BA share the same non-zero eigenvalues (including multiplicities). Applying this to the case A = Φ and B = SλΦ⊤ shows that ΦSλΦ⊤ = KA − λK B and SλΦ⊤Φ = Mλ share the same non-zero eigenvalues. Since KA − λK B is symmetric, its eigenvalues are real, and particularly its largest eigenvalue 
+
+ηλ = λmax (KA − λK B ) is among the eigenvalues of Mλ. Therefore, uλ can be chosen as an eigenvector of Mλ associated with ηλ, and the lifted vector xλ = Φ uλ is a principal eigenvector of KA − λK B .13 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+B.4. Proof of Theorem 4.4 
+
+Let D := d1 + d2. Define z(X) := [ ϕ1(X); ϕ2(X)] ∈ RD and assume z(X) 22 = ϕ1(X) 22 + ϕ2(X) 22 ≤ 2 almost surely. Let 
+
+G := E[z(X)z(X)⊤] ⪰ 0, bG := 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+z(Xi)z(Xi)⊤ ⪰ 0,
+
+and for λ ≥ 0 define Sλ := diag( Id1 , −λI d2 ),
+
+Bλ := G1/2SλG1/2, bBλ := bG1/2Sλ bG1/2.
+
+Note Bλ and bBλ are symmetric. First, we prove a Frobenius concentration result for bG using the Hilbert-space Hoeffding’s inequality. Let Wi := 
+
+z(Xi)z(Xi)⊤ and Zi := Wi − G, and therefore we have E[Zi] = 0 and bG − G = 1
+
+> n
+
+Pni=1 Zi. We bound Zi F
+
+almost surely. First, for any vector a, aa ⊤ 
+
+> F
+
+= a 22: indeed, aa ⊤ 2 
+
+> F
+
+= Tr(( aa ⊤)⊤(aa ⊤)) = Tr( aa ⊤aa ⊤) = a 42. Thus, 
+
+Wi F = z(Xi)z(Xi)⊤ 
+
+> F
+
+= z(Xi) 22 ≤ 2 a.s. Also, by Jensen’s inequality and the triangle inequality for the Frobenius norm, 
+
+G F = E[Wi] F ≤ E Wi F ≤ 2.
+
+Therefore, 
+
+Zi F = Wi − G F ≤ Wi F + G F ≤ 4 a.s. We now apply the Hoeffding-type inequality for random vectors in Hilbert spaces (Sutherland et al., 2018) to the i.i.d. Hilbert-space-valued variables Zi in the Hilbert space of D × D matrices equipped with Frobenius norm. With L = 4 , we obtain: for any δ ∈ (0 , 1) , with probability at least 1 − δ,
+
+bG − G F = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+Zi F
+
+≤ 4
+
+√n
+
+
+
+1 + 
+
+q
+
+2 log 1
+
+> δ
+
+
+
+=: ηn(δ). (26) Subsequently, we apply the Powers–Størmer inequality showing that for PSD matrices A, B ⪰ 0 we have 
+
+∥A1/2 − B1/2∥2 
+
+> F
+
+≤ ∥ A − B∥∗, (27) where ∥ · ∥ ∗ is the nuclear (trace) norm. Applying (27) to A = bG and B = G yields 
+
+∥ bG1/2 − G1/2∥F ≤ ∥ bG − G∥1/2 
+
+> ∗
+
+.
+
+For any D × D matrix X, ∥X∥∗ ≤ prank( X) ∥X∥F ≤ √D ∥X∥F . Therefore, 
+
+∥ bG1/2 − G1/2∥F ≤ D1/4 ∥ bG − G∥1/2 
+
+> F
+
+. (28) Then, we bound the norm difference ∥ bBλ − Bλ∥F using ∥G∥2 ≤ 2. To do so, we expand 
+
+bBλ − Bλ = ( bG1/2 − G1/2)Sλ bG1/2 + G1/2Sλ( bG1/2 − G1/2).
+
+Taking the Frobenius norm and using submultiplicativity inequalities ∥AX ∥F ≤ ∥ A∥2∥X∥F and ∥XB ∥F ≤ ∥ B∥2∥X∥F
+
+result in the following inequality: 
+
+∥ bBλ − Bλ∥F ≤ ∥ Sλ∥2
+
+ ∥ bG1/2∥2 + ∥G1/2∥2
+
+ ∥ bG1/2 − G1/2∥F . (29) We now show that ∥ bG1/2∥2 ≤ √2 and ∥G1/2∥2 ≤ √2.14 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+Since G ⪰ 0, ∥G∥2 = λmax (G) ≤ Tr( G). Moreover, 
+
+Tr( G) = E Tr( z(X)z(X)⊤) = E∥z(X)∥22 ≤ 2
+
+As a result, ∥G∥2 ≤ 2 and thus ∥G1/2∥2 = p∥G∥2 ≤ √2. Similarly, we have bG ⪰ 0 and ∥ bG∥2 ≤ Tr( bG). However, note that 
+
+Tr( bG) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+Tr( z(Xi)z(Xi)⊤) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥z(Xi)∥22 ≤ 2
+
+which holds deterministically because each ∥z(Xi)∥22 ≤ 2. Therefore, ∥ bG∥2 ≤ 2 and ∥ bG1/2∥2 ≤ √2. Consequently, the following holds 
+
+∥ bG1/2∥2 + ∥G1/2∥2 ≤ 2√2. (30) Then, we substitute (28) and (30) into (29): 
+
+∥ bBλ − Bλ∥F ≤ 2√2 ∥Sλ∥2 D1/4 ∥ bG − G∥1/2 
+
+> F
+
+.
+
+On the event (26), we have ∥ bG − G∥F ≤ ηn(δ) and hence 
+
+∥ bBλ − Bλ∥F ≤ 2√2 ∥Sλ∥2 D1/4 ηn(δ)1/2.
+
+Plugging in ηn(δ) from (26) leads to 
+
+∥ bBλ − Bλ∥F ≤ 2√2 ∥Sλ∥2 D1/4 4
+
+√n
+
+
+
+1 + 
+
+q
+
+2 log 1
+
+> δ
+
+ 1/2
+
+= 8 √2 ∥Sλ∥2 D1/4 n−1/4
+
+1 + 
+
+q
+
+2 log 1
+
+> δ
+
+1/2
+
+.
+
+Finally, note that the norm inequality ∥ · ∥ 2 ≤ ∥ · ∥ F implies that 
+
+∥ bBλ − Bλ∥2 ≤ ∥ bBλ − Bλ∥F ≤ 8√2 ∥Sλ∥2 D1/4 n−1/4
+
+1 + 
+
+q
+
+2 log 1
+
+> δ
+
+1/2
+
+.
+
+Knowing that 8√2 < 12 , the proof for the matrix concentration is complete. Finally, because Bλ and bBλ are symmetric matrices, the rank-one Davis–Kahan sin Θ bound applies as follows: Given that γλ := λ1(Bλ) − λ2(Bλ) > 0 and v1, bv1
+
+are unit-norm top eigenvectors, then the following inequality holds 
+
+sin ∠(bv1, v 1) ≤ ∥ bBλ − Bλ∥2
+
+γλ
+
+.
+
+The proof is hence complete. 
+
+B.5. Proof of Theorem 5.1 
+
+We first prove the Frobenius concentration bound (24) by applying a Hilbert-space Hoeffding inequality directly to the random matrices (viewed as vectors under the Frobenius norm). We then derive the eigenspace bound (25) via Davis–Kahan. Note that, by assumption, eK = 1
+
+> r
+
+Prℓ=1 K(ℓ), where the matrices K(ℓ) are i.i.d., E[K(ℓ)] = K, and |K(ℓ) 
+
+> ij
+
+| ≤ 1 almost surely for all i, j . Define the normalized matrices 
+
+A(ℓ) := 1
+
+n K(ℓ), A := 1
+
+n K, eA := 1
+
+n eK = 1
+
+r
+
+> r
+
+X
+
+> ℓ=1
+
+A(ℓ).
+
+Then E[A(ℓ)] = A, and 
+
+eA − A = 1
+
+r
+
+> r
+
+X
+
+> ℓ=1
+
+ A(ℓ) − A.
+
+15 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+We work in the Hilbert space (Rn×n, ⟨· , ·⟩ F ) where ∥M ∥ = ∥M ∥F . We let Xℓ := A(ℓ) − A. Then, {Xℓ}rℓ=1 are i.i.d. random elements of this Hilbert space with E[Xℓ] = 0 . Next, we derive applicable upper-bounds on ∥Xℓ∥F that hold with provable probability. Since |K(ℓ) 
+
+> ij
+
+| ≤ 1 holds deterministically, we have the following for every index ℓ,
+
+∥A(ℓ)∥2 
+
+> F
+
+=
+
+> n
+
+X
+
+> i=1
+> n
+
+X
+
+> j=1
+
+ K(ℓ)
+
+> ij
+
+n
+
+2
+
+≤
+
+> n
+
+X
+
+> i=1
+> n
+
+X
+
+> j=1
+
+1
+
+n2 = 1 ,
+
+and hence ∥A(ℓ)∥F ≤ 1 almost surely. Similarly, using |Kij | ≤ 1 for all i, j ,
+
+∥A∥2 
+
+> F
+
+=
+
+> n
+
+X
+
+> i=1
+> n
+
+X
+
+> j=1
+
+ Kij 
+
+n
+
+2
+
+≤
+
+> n
+
+X
+
+> i=1
+> n
+
+X
+
+> j=1
+
+1
+
+n2 = 1 ,
+
+Therefore, ∥A∥F ≤ 1 holds. Hence, using the triangle inequality, we can show 
+
+∥Xℓ∥F = ∥A(ℓ) − A∥F ≤ ∥ A(ℓ)∥F + ∥A∥F ≤ 2
+
+Thus, the centered summands are uniformly bounded in norm by L = 2 .We now apply the Hoeffding inequality for random vectors (Sutherland et al., 2018) to the i.i.d. sequence {Xℓ}rℓ=1 , with 
+
+ℓ2-norm upper-bound L = 2 . This shows that for every δ > 0, the following holds with probability at least 1 − δ:
+
+1
+
+r
+
+> r
+
+X
+
+> ℓ=1
+
+Xℓ F
+
+≤ 2
+
+√r
+
+
+
+1 + 
+
+q
+
+2 log 1
+
+> δ
+
+
+
+.
+
+Recalling that 1
+
+> r
+
+Prℓ=1 Xℓ = eA − A = 1 
+
+> n
+
+( eK − K), we obtain 
+
+1
+
+n ∥ eK − K∥F = ∥ eA − A∥F ≤ 2
+
+√r
+
+
+
+1 + 
+
+q
+
+2 log 1
+
+> δ
+
+
+
+.
+
+Multiplying both sides by n yields the claimed Frobenius bound (24). Subsequently, note that both K and eK are symmetric matrices. Let U and eU be the top-q eigenspaces of K and eK
+
+(represented by n × q matrices with orthonormal columns), and assume the eigengap ∆q (K) = λq (K) − λq+1 (K) > 0. A standard Davis–Kahan sin Θ bound gives 
+
+sin Θ( eU , U ) F ≤
+
+eK − K 2
+
+∆q (K) .
+
+Finally, for any matrix E, E 2 ≤ E F . Applying this with E = eK − K yields 
+
+sin Θ( eU , U ) F ≤
+
+eK − K F
+
+∆q (K) .
+
+The above inequality completes the proof. 
+
+C. Additional Numerical Results 
+
+C.1. Experiment Details 
+
+All experiments are conducted in the covariance-operator formulation of KODA. To ensure numerical stability and efficiency, the associated generalized eigenvalue problems are solved via Cholesky decomposition of the constrained covariance operator, following standard practice in kernel-based spectral methods. Throughout all experiments, we adopt a Gaussian (RBF) kernel without other specifications. To enable scalable computation for both unimodal and multi-modal settings, kernel features are approximated using Random Fourier Features (RFF). Unless otherwise specified, we use 3,000 random Fourier features to approximate each Gaussian kernel. The kernel bandwidth σ is selected following common practice in the representation comparison literature. We adopt the same bandwidth selection strategy as in prior work (Zhang et al., 16 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+2024) (Jalali et al., 2025a). Specifically, for each pair of embeddings under comparison, we tune the kernel bandwidths such that the leading eigenvalues of the resulting kernel matrices are of comparable magnitude across models, ensuring that neither embedding dominates the optimization due to scale differences. For the quadratic constraint in KODA, the threshold 
+
+ϵ controls the degree of weak clustering enforced under the constrained embedding. Unless otherwise stated, we set ϵ to the 
+
+0.5 quantile of the eigenvalues of the constrained model. All experiments are performed on two NVIDIA RTX 4090 GPUs. 
+
+C.2. Sanity Check of Unimodal Comparison Visualizing Pairwise Discrepancies via Kernel Difference Heatmaps. Figure 5 shows normalized RBF kernel similarities induced by CLIP and DINOv2 on ImageWoof (ImageNet-1k dog breeds), together with their difference matrix. The difference heatmap exhibits structured, high-magnitude regions, where darker values indicate stronger mismatch between the two embeddings under the same similarity metric. These mismatches concentrate on specific breed-level relationships, suggesting that the discrepancies arise along meaningful semantic directions rather than random fluctuations. CLIP Kernel Similarity Matrix DINOv2 Kernel Similarity Matrix DINOv2 – CLIP Difference Matrix  
+
+> Figure 5. Kernel similarity heatmaps induced by CLIP and DINOv2 on the ImageNet-1k dog breeds, together with their difference. (scaled by 100 for better visualization.)
+
+Identified Discrepancy Directions Consistent with Kernel Difference Structures. Based on the above normalized RBF kernel difference between the two embeddings, we identify the dog-breed categories associated with the largest aggregated pairwise mismatches as a ground-truth reference of semantic discrepancy. We then apply KODA to the same dataset without using any label information to discover discrepancy directions between the two embeddings. For each discovered direction, we select the top-6 images for visualization. As shown in Figure 6, the top discrepancy directions recovered by KODA correspond closely to the most mismatched dog-breed categories identified from the kernel difference matrix. 
+
+C.3. Additional Results on Unimodal Comparison 
+
+We provide additional qualitative results for unimodal embedding comparison to complement the main experiments. In particular, we analyze the dominant discrepancy directions discovered by KODA between DINOv2 and CLIP embeddings on AFHQ (Choi et al., 2020) dataset. We consider both asymmetric comparison settings: (i) directions that are weakly clustered under CLIP while being strongly grouped under DINOv2, and (ii) directions that are weakly clustered under DINOv2 while being strongly grouped under CLIP. For each setting, we visualize the top discrepancy components obtained from KODA by inspecting the samples associated with the leading directions, as shown in the Figure 7 and Figure 8. Also, we compare directions identified by KODA with those from the SPEC (Jalali et al., 2025a) baseline, using the same settings. We quantify the strength of a discrepancy direction x using the generalized Rayleigh quotient x⊤K1xx⊤K2x , where K1 and K2 are normalized RBF kernel matrices induced by the two embeddings. Since x⊤Kx measures how strongly direction x is expressed under kernel K, larger quotient values indicate stronger directional asymmetry, i.e., directions emphasized by K1 but suppressed by K2. Figure 9 reports the quotient values of KODA’s Top-1 direction and the averages over Top-3 and Top-5 directions across different quantiles, together with SPEC’s Top-1 direction. Across all constraint levels, KODA consistently achieves substantially larger quotient values; notably, at q = 0 .1, KODA’s Top-1 direction is about 20 × stronger than SPEC, and even the Top-5 average remains clearly above SPEC throughout. These additional results further demonstrate the ability of KODA to disentangle directional discrepancies that depend on the choice of reference embedding, even in unimodal settings. 17 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models DINOv2 – CLIP Difference Matrix Top -3 Directions Identified by KODA Top -3 Directions (Ground Truth )      
+
+> Score| Label | Image
+> Border terrier
+> Samoyed
+> Old English sheepdog
+> Reference dataset
+> (ImageNet dog breeds )
+> Top 1
+> Top 2
+> Top 3
+
+Figure 6. Consistency between dominant kernel mismatches (ground truth) and discrepancy directions identified by KODA on ImageNet dog breeds. Left: the kernel difference matrix between DINOv2 and CLIP computed using normalized RBF kernels. Middle: the top-3 ground-truth dog breeds associated with the largest aggregated mismatch scores in the difference matrix, together with representative images. Right: representative samples from the top-3 discrepancy directions identified by KODA without using label information. 
+
+18 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models Top -10 mismatch directions discovered by KODA 
+
+Figure 7. Top-10 DINOv2 dominant directions relative to CLIP on the AFHQ dataset identified by KODA, visualized via representative samples for each direction. 
+
+19 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models Top -10 mismatch directions discovered by KODA 
+
+Figure 8. Top-10 CLIP dominant directions relative to DINOv2 on the AFHQ dataset identified by KODA, visualized via representative samples for each direction. 
+
+20 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models KODA Top 5 Directions SPEC Top 5 Directions         
+
+> DINOv2 CLIP DINOv2 CLIP
+> t_SNE visualization of SPEC
+> AMI: 0.9016 AMI: 0.8079 AMI: 0.8018 AMI: 0.5874
+> t_SNE visualization of KODA
+
+Figure 9. Left: Visualization of the top-5 mismatch directions of DINOv2 and CLIP on the AFHQ dataset discovered by KODA (ours) and SPEC (baseline), respectively. Right: Generalized Rayleigh quotient x⊤K1xx⊤K2x w.r.t. the constraint on K2. (The quotient can be interpreted as a multiplicative measure of how strongly a given direction is represented in DINOv2 relative to CLIP.) 
+
+C.4. Additional Results on Multimodal Comparison 
+
+We further provide additional results for multimodal embedding comparison on the MS-COCO dataset. In this setting, we analyze discrepancy directions discovered by KODA across a diverse set of vision–language models, including CLIP, OpenCLIP, BLIP, SigLIP, and SigLIP2. For each pair of multimodal embeddings, we construct joint image–text kernels and apply KODA to identify dominant discrepancy directions under asymmetric constraints. We visualize the samples associated with the top discrepancy components by inspecting the image–text pairs corresponding to the leading directions, as shown in the Figure 12-18. These visualizations highlight how different multimodal models organize paired image–text data in distinct ways, even when trained on similar objectives or datasets. Across different model combinations, the dominant discrepancy directions correspond to different subsets of samples, reflecting variations in how visual and textual information is jointly encoded. These additional results complement the main experiments by illustrating the generality of KODA across a wide range of multimodal embedding families. 21 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models SigLIP -dominant directions relative to OpenCLIP identified by Image Embedding Only 
+
+SigLIP -dominant directions relative to OpenCLIP identified by Joint Image -Text Embedding     
+
+> Direction 1 Direction 2 Direction 3
+> Direction 1 Direction 2 Direction 3
+
+SigLIP Open CLIP 
+
+SigLIP OpenCLIP 
+
+Figure 10. Multimodal discrepancy analysis of SigLIP dominant directions relative to OpenCLIP on the MSCOCO dataset. 
+
+22 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models Open CLIP -dominant directions relative to SigLIP identified by Image Embedding Only 
+
+Open CLIP -dominant directions relative to SigLIP identified by Joint Image -Text Embedding     
+
+> Direction 1 Direction 2 Direction 3
+> Direction 1 Direction 2 Direction 3
+
+OpenCLIP SigLIP 
+
+OpenCLIP SigLIP 
+
+Figure 11. Multimodal discrepancy analysis of OpenCLIP dominant directions relative to SigLIP on the MSCOCO dataset. 
+
+23 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. A guy with a surf board by a big wave. 
+
+2. A man riding a wave on a white 
+
+surfboard 
+
+3. A surfer rides a wave off the coast of a 
+
+cliff. 
+
+4. A man riding a wave on top of a 
+
+surfboard .
+
+1. A tennis player is on a blue and green court. 
+
+2. The man in a blue shirt is serving a tennis 
+
+ball. 
+
+3. A male tennis player at the baseline of the 
+
+court, serving the ball. 
+
+4. A man hits a tennis ball during a tennis 
+
+game. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+BLIP -dominant directions relative to CLIP 
+
+t-SNE visualization of directions 
+
+BLIP CLIP 
+
+1. A baseball player sliding into a base on a 
+
+baseball field. 
+
+2. A baseball player bends down and a ball 
+
+rolls behind him. 
+
+3. Some players in action on the baseball field. 
+
+4. A baseball player sliding into a base on a 
+
+baseball field. 
+
+Figure 12. Multimodal discrepancy analysis of BLIP dominant directions relative to CLIP on the MSCOCO dataset. Top: Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using BLIP and CLIP embeddings respectively. 
+
+24 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. A bathroom with a white sink sitting next 
+
+to a white bath tub. 
+
+2. A toilet with a wooden seat next to a white 
+
+sink. 
+
+3. A bathroom with a sink, toilet, and a 
+
+cabinet. 
+
+4. a toilet sits inside of a cramped bathroom 
+
+1. Two zebras confronting each other in a 
+
+field with other zebras 
+
+2. Two zebras are standing close in a field. 
+
+3. A pack of zebra standing in a field next 
+
+to an ostrich. 
+
+4. A herd of zebra grazing on a lush green 
+
+field. 
+
+1. A metal plate with two pizzas with 
+
+toppings 
+
+2. A pizza sitting on top of a white plate. 
+
+3. A large sliced pizza on a plate on a table. 
+
+4. Two small whole pizza on a tabletop 
+
+alongside an empty plate 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+CLIP -dominant directions relative to BLIP 
+
+t-SNE visualization of directions 
+
+CLIP BLIP 
+
+Figure 13. Multimodal discrepancy analysis of CLIP dominant directions relative to BLIP on the MSCOCO dataset. Top: Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using CLIP and BLIP embeddings respectively. 
+
+25 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. a man on a skate board does a trick in the 
+
+air 
+
+2. A man flying through the air riding a 
+
+skateboard .
+
+3. A person on a skateboard up in the air. 
+
+4. A young man riding a skateboard up the 
+
+side of a ramp. 
+
+1. A man on a surfboard is riding the 
+
+wave 
+
+2. a surfer riding a small wave in the 
+
+ocean 
+
+3. The man is surfing high up on a wave. 
+
+4. A surfer rides a wave in the ocean. 
+
+1. A small giraffe is walking in his habitat 
+
+2. Two tall giraffe standing next to each 
+
+other in a field. 
+
+3. A couple of giraffes are standing in the 
+
+wild. 
+
+4. A giraffe with its head cocked walking 
+
+about a sandy area. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+OpenCLIP -dominant directions relative to CLIP 
+
+t-SNE visualization of directions 
+
+OpenCLIP CLIP 
+
+Figure 14. Multimodal discrepancy analysis of OpenCLIP dominant directions relative to CLIP on the MSCOCO dataset. Top: 
+
+Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using OpenCLIP and CLIP embeddings respectively. 
+
+26 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. a bathroom with a sink and a toilet in it 
+
+2. A bathroom with a white toilet sitting next 
+
+to a bath tub and a sink. 
+
+3. A bathroom with mirror, sink, toilet and 
+
+bathtub. 
+
+4. A small toilet and tub in a little bathroom .
+
+1. a small kitchen with stainless steel 
+
+appliances and wooden cabinets 
+
+2. A kitchen with a stove, microwave, sink, 
+
+and other kitchen items. 
+
+3. A kitchen complete with a stove, 
+
+refrigerator and countertop. 
+
+4. A kitchen with a white stove and oven. 
+
+1. A person riding a snowboard down a snow 
+
+covered slope .
+
+2. A man riding skis down a snow covered slope .
+
+3. a person riding a snowboard on a snowy slope .
+
+4. A man riding a pair of skis on top of a snow 
+
+covered slope .
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+CLIP -dominant directions relative to OpenCLIP 
+
+t-SNE visualization of directions 
+
+CLIP OpenCLIP 
+
+Figure 15. Multimodal discrepancy analysis of CLIP dominant directions relative to OpenCLIP on the MSCOCO dataset. Top: 
+
+Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using CLIP and OpenCLIP embeddings respectively. 
+
+27 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. a person riding skis on a snowy slope 
+
+2. A man riding a pair of skis on top of a 
+
+snow covered slope. 
+
+3. a person riding skis on a snowy slope 
+
+4. A man riding skis on top of a snow 
+
+covered slope. 
+
+1. A man flying through the air while riding a 
+
+skateboard .
+
+2. A man jumping into the air with a skateboard .
+
+3. A man flying through the air while riding a 
+
+skateboard .
+
+4. A man flying through the air while riding a 
+
+skateboard .
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+SigLIP -dominant directions relative to CLIP 
+
+t-SNE visualization of directions 
+
+Si gLIP CLIP 
+
+1. A man stands on his surfboard while 
+
+surfing a small wave. 
+
+2. A male surfer on a surf board rides on top 
+
+of a wave. 
+
+3. A man rides a wave on a surfboard .
+
+4. a man on a surf board rides on top of a 
+
+wave 
+
+Figure 16. Multimodal discrepancy analysis of SigLIP dominant directions relative to CLIP on the MSCOCO dataset. Top: Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using SigLIP and CLIP embeddings respectively. 
+
+28 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. A man is surfing on the waves on the surf 
+
+board 
+
+2. A man surfing a wave in the ocean 
+
+3. One surfer taking the waves, another 
+
+floating on his board 
+
+4. A group of people surfing on the high 
+
+waves 
+
+1. A baseball player swinging his bat at a 
+
+baseball. 
+
+2. A baseball player hitting a ball with a bat. 
+
+3. A baseball player swinging a bat at a ball. 
+
+4. A player at bat in a baseball game in 
+
+action. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+SigLIP2 -dominant directions relative to CLIP 
+
+t-SNE visualization of directions 
+
+SigLIP2 CLIP 
+
+1. A man holding a tennis racquet on a tennis 
+
+court. 
+
+2. A man standing on a tennis court holding a 
+
+tennis racquet. 
+
+3. A man holding a tennis racquet on a tennis 
+
+court. 
+
+4. A man holding a tennis racquet on a tennis 
+
+court. 
+
+Figure 17. Multimodal discrepancy analysis of SigLIP2 dominant directions relative to CLIP on the MSCOCO dataset. Top: Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using SigLIP2 and CLIP embeddings respectively. 
+
+29 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. A person riding a wave on a surfboard. 
+
+2. A man riding a wave on top of a 
+
+surfboard. 
+
+3. A man riding a wave on top of a 
+
+surfboard. 
+
+4. A man riding a surfboard on top of a 
+
+wave .
+
+1. a person riding skis on a snowy slope 
+
+2. a person riding skis on a snowy slope 
+
+3. A couple of people riding snowboards 
+
+down a snow covered slope. 
+
+4. A man riding skis down a snow covered 
+
+slope. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+SigLIP -dominant directions relative to Ope nCLIP 
+
+t-SNE visualization of directions 
+
+Si gLIP OpenCLIP 
+
+1. A baseball player at bat swinging at a pitch in a 
+
+baseball game. 
+
+2. A baseball batter is swinging a bat at an 
+
+incoming pitch. 
+
+3. A baseball player taking a swing at an 
+
+incoming ball. 
+
+4. A baseball player swinging at a pitch at a game 
+
+Figure 18. Multimodal discrepancy analysis of SigLIP dominant directions relative to OpenCLIP on the MSCOCO dataset. Top: 
+
+Representative image–caption pairs corresponding to the Top-3 discrepancy directions identified by KODA. Bottom: t-SNE visualization of Top-10 discrepancy directions using SigLIP and OpenCLIP embeddings respectively. 
+
+30 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 
+
+C.5. Ablation Study 
+
+We conduct a set of ablation studies to examine the sensitivity of KODA to key design choices, including the number of random Fourier features, the size of the reference sample set, and the choice of kernel function. All ablation experiments are conducted using the same experimental protocol as in the main results, with only the specified factor varied while keeping other settings fixed. 
+
+Number of Random Fourier Features. We examine the effect of the number of random Fourier features used to approximate the Gaussian kernel by varying the feature dimensionality r ∈ { 500 , 1000 , 2000 , 3000 }. For each setting, we visualize the dominant discrepancy directions discovered by KODA in Figure 19. As the number of random features increases, the discovered discrepancy directions become progressively more coherent and visually well-separated. In particular, higher-dimensional approximations lead to cleaner and more stable grouping patterns, while lower-dimensional approximations exhibit increased noise in the dominant directions. These results indicate that sufficiently rich random feature approximations are beneficial for stable discrepancy discovery, and motivate our choice of r = 3000 in the main experiments. 
+
+Kernel Function. We investigate the effect of the kernel function by comparing Gaussian (RBF) kernels with cosine similarity kernels. For each kernel choice, we apply KODA using the same constraint setting and visualize the dominant discrepancy directions. As Figure 20 shows, different kernel functions lead to different discrepancy patterns, reflecting the distinct geometric properties emphasized by each kernel. In particular, Gaussian kernels capture local neighborhood structure based on Euclidean distance, whereas cosine similarity kernels emphasize angular relationships between representations. As a result, the dominant discrepancy directions discovered under different kernels correspond to different groupings of samples. 
+
+Reference Sample Size. We study the effect of the reference sample size by varying the number of samples n ∈{2000 , 4000 , 8000 , 16000 } while keeping all other settings fixed. For each choice of n, we apply KODA and visualize the dominant discrepancy directions in Figure 21. As the sample size increases, the discovered discrepancy directions become increasingly stable and consistent. In particular, when n = 16 ,000 , the resulting discrepancy components exhibit highly stable grouping patterns, indicating that sufficient reference coverage is important for reliable discrepancy discovery. At smaller sample sizes, the overall structure of the discrepancy directions is preserved, albeit with increased variability in the visualizations. Notably, performing spectral decomposition directly on kernel matrices of size exceeding 10 ,000 × 10 ,000 is often impractical on modern GPUs due to memory and computational constraints. By operating in the covariance space induced by random feature representations, KODA reduces the effective dimensionality of the spectral problem to the feature dimension (e.g., 6,000 in our experiments), making eigen-decomposition feasible even when the number of reference samples is large. This formulation enables stable discrepancy analysis at larger sample sizes without requiring explicit construction or decomposition of full kernel matrices. 31 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. A person riding a wave on a surfboard. 
+
+2. A man riding a wave on top of a 
+
+surfboard. 
+
+3. A man riding a wave on top of a 
+
+surfboard. 
+
+4. A man riding a surfboard on top of a 
+
+wave .
+
+1. a person riding skis on a snowy slope 
+
+2. a person riding skis on a snowy slope 
+
+3. A couple of people riding snowboards 
+
+down a snow covered slope. 
+
+4. A man riding skis down a snow covered 
+
+slope. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. A baseball player at bat swinging at a pitch in a 
+
+baseball game. 
+
+2. A baseball batter is swinging a bat at an 
+
+incoming pitch. 
+
+3. A baseball player taking a swing at an 
+
+incoming ball. 
+
+4. A baseball player swinging at a pitch at a game 
+
+> Dimension r = 3000
+
+1. A man riding a surfboard on a wave in the 
+
+ocean. 
+
+2. A man riding a surfboard on a wave in the 
+
+ocean. 
+
+3. A man riding a wave on top of a surfboard. 
+
+4. A man riding a wave on top of a surfboard. 
+
+1. A man on a surf board rides a wave. 
+
+2. A man riding a snowboard down a snow 
+
+covered slope. 
+
+3. A person skiing down a snow covered 
+
+mountain slope. 
+
+4. Someone riding waves on their surf board in 
+
+the ocean. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. A baseball player at bat swinging at a pitch 
+
+in a baseball game. 
+
+2. A baseball player taking a swing at an 
+
+incoming ball. 
+
+3. A baseball player about to swing at a pitch 
+
+during a game. 
+
+4. a baseball player getting ready to swing a bat 
+
+> Dimension r = 2000
+
+1. A person on a surfboard rides a wave. 
+
+2. A male surfer on a surf board rides on top 
+
+of a wave. 
+
+3. a man rides a surfboard on a wave 
+
+4. A man is on his surfboard in the ocean 
+
+water 
+
+1. A herd of zebras is grazing in a grassy field. 
+
+2. A zebra eats grass with another zebra beside 
+
+them and a third zebra nearby. 
+
+3. A man riding a snowboard down a snow 
+
+covered slope. 
+
+4. A number of giraffes mill about on the 
+
+savanna. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. A baseball player getting ready to swing a bat. 
+
+2. A baseball player swinging a bat towards a ball. 
+
+3. A baseball batter is swinging a bat at an 
+
+incoming pitch. 
+
+4. a baseball player swinging a bat at a ball 
+
+> Dimension r = 1000
+
+1. A man sitting on a surfboard looking at the 
+
+ocean. 
+
+2. The cat is behind the laptop screen on the 
+
+desk. 
+
+3. a bath room with a toilet and towel racks 
+
+4. Twp females walking on a tennis court 
+
+carrying tennis racquets. 
+
+1. Woman walking in restroom area with 
+
+television picture on mirror. 
+
+2. A snow boarder going down a snowy slope. 
+
+3. a young couple having fun by a stop sign 
+
+4. A woman staying dry from the rain and 
+
+holding an umbrella. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. People are gathering at a table for a seminar 
+
+2. A man sitting in front of a laptop computer on 
+
+a table. 
+
+3. A baseball player swinging a bat at a ball in a 
+
+field. 
+
+4. We are looking at a tennis player ready to 
+
+return the ball. 
+
+> Dimension r = 500
+
+Figure 19. Multimodal discrepancy analysis of SigLIP dominant directions relative to OpenCLIP on the MSCOCO dataset under different number of joint random fourier features. 
+
+32 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. a man on a skate board does a 
+
+trick in the air 
+
+2. A man flying through the air 
+
+riding a skateboard .
+
+3. A person on a skateboard up in 
+
+the air. 
+
+4. A young man riding a 
+
+skateboard up the side of a ramp. 
+
+1. A man on a surfboard is riding 
+
+the wave 
+
+2. a surfer riding a small wave in 
+
+the ocean 
+
+3. The man is surfing high up on 
+
+a wave. 
+
+4. A surfer rides a wave in the 
+
+ocean. 
+
+1. A small giraffe is walking in his 
+
+habitat 
+
+2. Two tall giraffe standing next 
+
+to each other in a field. 
+
+3. A couple of giraffes are 
+
+standing in the wild. 
+
+4. A giraffe with its head cocked 
+
+walking about a sandy area. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+OpenCLIP 
+
+CLIP 
+
+OpenCLIP -dominant directions relative to CLIP 
+
+1. A picture of a very nice kitchen 
+
+that is white. 
+
+2. A dark picture of a very clean 
+
+dark colored kitchen .
+
+3. A very clean kitchen that is in a 
+
+house. 
+
+4. A kitchen is in need of being 
+
+demolished because of its condition. 
+
+1. A minivan is in an intersection 
+
+with the traffic lights showing red. 
+
+2. A bus driving down a city street 
+
+during the day. 
+
+3. A highway filled with lots of 
+
+traffic with a train traveling over a 
+
+bridge. 
+
+4. A blue train traveling over a red 
+
+rail bridge over cars. 
+
+1. A baseball glove with a 
+
+baseball inside and a bat on a 
+
+table 
+
+2. A baseball mitt and glove are 
+
+laying in a field. 
+
+3. A baseball bat, ball and glove 
+
+laying on a playing field 
+
+4. A man swinging a baseball bat 
+
+at a ball during a game. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+OpenCLIP 
+
+CLIP 
+
+> Cosine Kernel  Gaussian Kernel
+
+Figure 20. Multimodal discrepancy analysis of OpenCLIP dominant directions relative to CLIP on the MSCOCO dataset under gaussian kernel function or cosine kernel function. 
+
+33 KODA: Contrastive Representation Comparison and Alignment for Vision-Language Foundation Models 1. A person riding a wave on a surfboard. 
+
+2. A man riding a wave on top of a 
+
+surfboard. 
+
+3. A man riding a wave on top of a 
+
+surfboard. 
+
+4. A man riding a surfboard on top of a 
+
+wave .
+
+1. a person riding skis on a snowy slope 
+
+2. a person riding skis on a snowy slope 
+
+3. A couple of people riding snowboards 
+
+down a snow covered slope. 
+
+4. A man riding skis down a snow covered 
+
+slope. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. A baseball player at bat swinging at a pitch in a 
+
+baseball game. 
+
+2. A baseball batter is swinging a bat at an 
+
+incoming pitch. 
+
+3. A baseball player taking a swing at an 
+
+incoming ball. 
+
+4. A baseball player swinging at a pitch at a game 
+
+> Sample size = 16000
+
+1. A surfer is riding a wave in the ocean. 
+
+2. A surfer riding a wave in the ocean 
+
+3. A surfer is on his board in the middle of 
+
+an ocean spraying wave. 
+
+4. A man surfing waves on his surf board in 
+
+the ocean. 
+
+1. A baseball player swinging a bat on top of a 
+
+field. 
+
+2. A bathroom with a white toilet next to a sink. 
+
+3. A baseball player swinging a bat on top of a 
+
+baseball field. 
+
+4. A white toilet sitting next to a white sink in a 
+
+bathroom. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. A baseball player hits a ball during a game. 
+
+2. a batter swinging a bat at a ball at a 
+
+baseball game 
+
+3. A baseball player is hitting the ball with his 
+
+bat. 
+
+4. A baseball player is getting ready to hit the 
+
+ball. 
+
+> Sample size = 8000
+
+1. there is a man on a skate board doing a 
+
+trick 
+
+2. Guy doing a flip trick with his skateboard 
+
+at the park 
+
+3. A surfer riding a wave in the ocean 
+
+4. A surfer carrying his surf board out of the 
+
+ocean. 
+
+1. A man riding a surfboard on a wave in 
+
+the ocean. 
+
+2. A tennis player goes to hit the ball 
+
+3. a tennis player rushing to the net to hit the 
+
+ball 
+
+4. A man riding a wave on a surfboard. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. a batter swinging a bat at a ball at a baseball 
+
+game 
+
+2. A baseball player ready to swing at a baseball 
+
+game. 
+
+3. A baseball player is up to bat in a game 
+
+4. A man gets ready to hit a ball during a baseball 
+
+game. 
+
+> Sample size = 4000
+
+1. A red train parked in front of a loading 
+
+platform next to passengers. 
+
+2. A large giraffe eating leaves in an enclosure 
+
+3. a very cluttered bathroom with a cat in the 
+
+sink 
+
+4. A giraffe eating food from the top of the tree. 
+
+1. A toilet, sink, mirror, and tub in a bathroom. 
+
+2. A couple of guys wearing skis and a 
+
+snowboard. 
+
+3. A bathroom area of plane with a sink and 
+
+toilet. 
+
+4. A clean sink is in the middle of the counter. 
+
+Direction 1 Direction 2 Direction 3 
+
+> images captions
+
+1. A man that is on a curb with a skateboard. 
+
+2. A very large city sitting along side of a large 
+
+body of water. 
+
+3. A baseball player prepares to swing at the ball. 
+
+4. a person that is doing a trick on their skate 
+
+board. 
+
+> Sample size = 2000
+
+Figure 21. Multimodal discrepancy analysis of SigLIP dominant directions relative to OpenCLIP on the MSCOCO dataset under different number of sample size. 
+
+34

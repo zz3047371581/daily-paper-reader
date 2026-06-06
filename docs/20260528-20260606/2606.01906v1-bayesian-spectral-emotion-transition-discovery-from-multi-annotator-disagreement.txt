@@ -1,0 +1,660 @@
+Title: Bayesian Spectral Emotion Transition Discovery from Multi-Annotator Disagreement
+
+URL Source: https://arxiv.org/pdf/2606.01906v1
+
+Published Time: Tue, 02 Jun 2026 02:20:35 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Bayesian Spectral Emotion Transition Discovery from Multi-Annotator Disagreement 
+
+Keito Inoshita 1,2,* Takato Ueno 3
+
+> 1
+
+Faculty of Business and Commerce, Kansai University, Suita, Japan 
+
+> 2
+
+Data Science and AI Innovation Research Promotion Center, Shiga University, Hikone, Japan 
+
+> 3
+
+Graduate School of Data Science, Shiga University, Hikone, Japan inosita.2865@gmail.com s7025101@st.shiga-u.ac.jp 
+
+Abstract —Emotions evolve through the dynamics of conversa-tion, and understanding their transition structure is foundational to applications ranging from mental-health screening to dialogue systems. However, existing studies typically compress multi-rater judgments into a single hard label by majority voting, discarding the uncertainty signal needed to understand turn-to-turn transitions. In this article, we propose Bayesian Spectral Emotion Transition Discovery (BSETD), a two-stage framework that discovers emotion-transition structure from multi-rater soft labels. In the first stage, a hierarchical Dirichlet–Multinomial posterior is constructed through the outer product of soft labels, equipping each cell of the K × K transition matrix with a credible interval and Benjamini–Hochberg (BH) false discovery rate (FDR)-controlled significance. In the second stage, the symmetrized graph Laplacian is spectrally decomposed to separate a low-frequency (inertia) component from a high-frequency (contagion) component. On EmotionLines, BSETD simultaneously recovers the signatures of two distinct affective spaces: the Plutchik-adjacent transitions disgust →anger ( log 2 lift 
+
++0 .94 ) and anger →disgust ( +0 .86 ) are over-represented, while the Russell-valence-reversed transitions joy →anger ( −0.90 ) and anger →joy ( −0.89 ) are under-represented. A five-source cross-corpus validation yields pairwise Pearson correlations in 0.91 –
+
+0.98 within English, 0.79 –0.85 against Chinese M3ED, and 0.979 
+
+between the human hard labels and the LLM virtual soft labels on the same utterance set, demonstrating that a pipeline pre-serving annotator uncertainty bridges the computational study of emotion dynamics with established psychological theory. 
+
+Index Terms —Affective Computing, Annotator Disagreement, Bayesian Inference, Emotion Dynamics, Graph Signal Processing. 
+
+I. I NTRODUCTION 
+
+Emotions are not static attributes of utterances but rather evolve through the dynamics of human conversation. Aspeaker who begins a dialogue in a neutral mood may shift to joy in response to encouragement from another party, sustain that joy for several turns, and abruptly transition to surprise upon receiving unexpected news. Such tempo-ral patterns describe the structure of emotional dynamics in conversation: how one emotion follows another, how an emotion persists within a single speaker, and how it propagates between dialogue partners [1]. Understanding this structure is foundational to applications ranging from mental-health screening to socially intelligent human–machine dialogue [2]. Despite the importance of emotion dynamics, prior studies have systematically discarded a critical source of information, namely, annotator disagreement. The standard practice in an-notating conversational emotion corpora is to compress multi-rater judgments into a single hard label by majority voting. In EmotionLines [3], 72.6% of utterances exhibit disagreement among the five raters and 14.3% fail to receive a majority vote, figures that reflect genuine perceptual ambiguity rather than annotator error. Forcing such utterances into a single category irreversibly destroys the uncertainty signal embedded in the vote distribution. Recent work has shown that large language models (LLM) cannot reproduce the shape of human uncertainty distributions [4], and the perspectivist paradigm argues that disagreement should be treated as meaningful signal rather than removable noise [5]. A method that exploits the full multi-rater vote distribution – that is, soft labels – thus has the potential to recover richer and more reliable transition patterns than any existing approach. Existing studies on Emotion Recognition in Conversation (ERC) have demonstrated substantial progress in predicting next-turn emotion labels [6]–[9]. However, these methods share two fundamental limitations. First, they treat emotion labels as deterministic targets to be predicted rather than as distributions to be understood, leaving the structural question of how emotions transition unaddressed. Second, uncertainty is only implicitly quantified through prediction confidence, and per-annotator disagreement is never explicitly modeled. Parallel work on relational discovery in dialogue targets intent drift [10] or emotion-grounded utterance generation [11] rather than structural discovery. As a result, no existing method jointly addresses (i) estimating a probabilistic transition ma-trix from soft multi-rater labels, (ii) decomposing it into interpretable frequency-domain components, and (iii) cross-validating the discovered patterns against psychological theory across multiple corpora. In this study, we propose Bayesian Spectral Emotion Tran-sition Discovery (BSETD), a two-stage framework for the discovery of statistically significant emotion transition patterns in multi-annotator dialogue corpora. In the first stage, a hier-archical Dirichlet–Multinomial (DM) model is constructed, in which the uncertainty of each utterance pair is encoded into the transition count matrix via the outer product of soft labels; the posterior is obtained in closed form through DM conjugacy, and the Benjamini–Hochberg (BH) procedure [12] controls the false discovery rate (FDR) at level q∗ over the j → k
+
+> arXiv:2606.01906v1 [cs.AI] 1 Jun 2026
+
+entries. In the second stage, the estimated transition matrix is treated as a weighted graph adjacency matrix, and a spectral decomposition based on the symmetrized graph Laplacian [13] is applied. As empirically verified in Section IV-E, low-eigenvalue components align with the emotional inertia of Kuppens & Verduyn [1], whereas high-eigenvalue components align with the emotional contagion of Hatfield et al. [14], providing a mathematically principled bridge between the Bayesian posterior and these psychological constructs. The main contributions of this article are summarized as follows. i) A hierarchical DM posterior estimator based on soft-label outer products is newly designed, in which annotator uncertainty is propagated to transition-probability estima-tion with 95% credible intervals and BH-FDR-controlled significance. ii) An inertia–contagion spectral decomposition based on the symmetrized graph Laplacian is constructed, in which the estimated transition matrix is separated into low-frequency and high-frequency components corresponding to the constructs of Kuppens [1] and Hatfield [14]. iii) A five-source cross-corpus evaluation is developed over EmotionLines, MELD, DailyDialog, the Chinese M3ED, and a GPT-5.4-mini virtual-annotator variant, achieving pairwise Pearson correlations in [0 .79 , 0.98] and com-putationally verifying Plutchik adjacency, the Gottman cascade, and Hatfield contagion. The rest of this paper is organized as follows. Section II reviews related work, and Section III elaborates the proposed BSETD framework. Section IV presents the experimental results and ablation studies, while Section V discusses the main findings and limitations. Finally, Section VI concludes this article and outlines directions for future research. II. R ELATED WORK 
+
+A. Emotion Dynamics and Recognition in Conversation 
+
+ERC has evolved along two axes: recurrent architectures that model the temporal flow of emotional states, and graph-based architectures that capture relational dependencies. Di-alogueRNN [6] incorporates dedicated modules for global context, speaker state, and emotion state into a gated recurrent architecture as a widely adopted baseline. EmotionIC [7] extends this line by decomposing emotional influence into an inertia component (speaker’s history) and a contagion component (influence from interlocutors). EmotionIC is terminologically the closest to BSETD and merits a precise comparison along three axes. In represen-tation, EmotionIC encodes inertia and contagion as implicit internal states of a recurrent classifier, whereas the BSETD counterparts are the diagonal and off-diagonal blocks of a 
+
+K ×K posterior with closed-form credible intervals. In objec-tive, EmotionIC is trained with cross-entropy against majority-vote labels and reports only classification accuracy, whereas BSETD is an unsupervised Bayesian estimator whose output is the transition structure itself with BH-FDR-controlled signif-icance. In task, EmotionIC targets next-turn label prediction, whereas BSETD targets corpus-level structural discovery. GraphSmile [8] and DGODE [9] represent the graph-based line, constructing a dynamic interaction graph over dialogue turns and using graph neural propagation to capture cross-speaker influence. While achieving strong performance on IEMOCAP [15] and MELD [16], they share the same stance as the rest of the prior literature – next-label prediction rather than statistical-structure discovery – and none model annotator uncertainty or produce credible intervals. Differing from all of the above, BSETD is designed not as a predictive system but as a discovery framework: it estimates the posterior over the full K × K transition matrix and identifies which j → k pairs are statistically distinguishable from a uniform baseline. 
+
+B. Soft Labels and Annotator-Disagreement Modeling 
+
+A growing line of research argues that annotator disagree-ment in subjective natural language processing tasks should be preserved and modeled rather than resolved into a single ground-truth label. Cowen and Keltner [17] demonstrated that human emotion experience is best described by a high-dimensional continuous space rather than by discrete cat-egories, implying that forced-choice categorical labels nec-essarily discard perceptual information. The Learning-with-Disagreements (LeWiDi) shared task [18] institutionalized this view in NLP by evaluating systems on their ability to reproduce the full annotator distribution rather than the majority vote. The perspectivist paradigm [5] further argues that aggregating diverse annotator perspectives into a single label actively suppresses the information needed to understand subjective phenomena. Within this general trend, constraints specific to the af-fective domain have also been identified. Inoshita et al. [4] systematically compared human and LLM annotations across multiple emotion corpora and showed that LLMs reliably capture the modal label yet fail to reproduce the shape of human uncertainty distributions. This finding implies that human disagreement signals cannot be substituted by LLM annotations, and that pipelines exploiting genuine multi-rater soft labels are needed. Stage 1 of BSETD addresses this requirement: through the soft-label outer-product formulation, the annotator distribution is propagated from the utterance level to the transition-probability level in a statistically con-sistent manner. 
+
+C. Relational Discovery and Graph-Spectral Methods in Di-alogue 
+
+Recent work that seeks to discover relational structure in dialogue data beyond emotion classification has been pro-posed, but all of these target a different objective than the present study. Wang et al. [10] apply temporal transition accumulation to change-point inference of intent drift within a single conversation; MECoT [11] addresses the generative quality of role-playing through a Markov emotional chain-of-thought; and the Knowledge-Bridged Causal Interaction TABLE I COMPARISON OF CLOSELY RELATED METHODS AND BSETD ACROSS FIVE AXES : SOFT -LABEL INPUT , UNCERTAINTY QUANTIFICATION , DISCOVERY OBJECTIVE , SPECTRAL DECOMPOSITION , AND CONNECTION TO PSYCHOLOGICAL THEORY . ✓ = SATISFIED , “ PARTIAL ” = IMPLICIT OR LIMITED , BLANK = ABSENT .Method Soft Uncert. Discovery Spectral Psych. DialogueRNN [6] EmotionIC [7] partial GraphSmile [8] DGODE [9] partial GS-MCC [21] ✓          
+
+> KBCIN [19] LeWiDi-2025 [18] ✓partial AIM [20] partial ✓✓
+> BSETD (ours) ✓✓✓✓✓
+
+Network (KBCIN) [19] pursues predictive causal emotion entailment under hard-label inputs. Differing from these, BSETD infers, at the corpus level and under BH-FDR control, which pairwise transitions exist directly from soft labels. The Affective Ising Model (AIM) of Loossens et al. [20] is the closest theoretical precedent: inspired by statistical mechanics, it models the moment-to-moment fluctuation of affect as a stochastic process on a free-energy landscape, capturing inertia as a tendency toward a local minimum and instability as a reversal between homebases. However, AIM is formulated in a two-dimensional positive–negative valence space, and extending it to the seven Ekman categories (42 directed pairs) requires the multi-category Bayesian posterior of Stage 1. As a methodological foundation, graph-spectral methods have also seen increasing application to affective computing. GS-MCC [21] applies spectral filtering to the inter-utterance graph in ERC and separates speaker-level signals (low fre-quency) from cross-speaker signals (high frequency). BSETD adopts the same spectral-decomposition idea but applies it to a graph over emotion categories rather than over utter-ances – a K × K graph whose edge weights are Bayesian posterior transition probabilities. As a result, the output is directly interpretable as the psychological constructs of inertia and contagion rather than as latent speaker embeddings. The theoretical basis of the Stage 2 decomposition follows Chung’s graph-Laplacian framework [13]. In summary, as shown in Table I, existing relational-discovery methods are constrained to intent, generation, binary affect, or hard labels, and existing spectral methods remain at the utterance-level graph. BSETD jointly addresses soft-label multi-category transition estimation, category-level spectral decomposition, and multi-corpus validation within a single framework. III. BSETD F RAMEWORK FOR EMOTION TRANSITION 
+
+DISCOVERY 
+
+A. Problem Definition 
+
+BSETD consists of two sequential stages, illustrated in Fig. 1: Stage 1 estimates the posterior of a K × K
+
+emotion-transition matrix under a hierarchical DM model with empirical-Bayes (EB) concentration estimation, and Stage 2 symmetrizes that matrix following Chung [13] and applies the spectral decomposition of the normalized Laplacian to separate a low-frequency (inertia) and a high-frequency (contagion) component. A conversational corpus D = {d1, . . . , d N } con-sists of N dialogues, where each dialogue d is a temporally ordered sequence of utterances ud, 1, u d, 2, . . . . Each utterance 
+
+ud,t is associated with a soft label pd,t ∈ ∆K−1, a probability vector over K emotion categories, constructed either directly from the votes of R independent raters or, in the absence of human votes, from a downstream surrogate distribution. In this article, we adopt the K = 7 Ekman category set (neutral, joy, sadness, fear, anger, surprise, disgust). Each utterance is also annotated with a speaker identifier sd,t , enabling the separation of intra-speaker and inter-speaker dynamics. The structural question targeted by BSETD is formulated as follows. Let T denote a latent corpus-level K × K transition matrix whose entry Tjk is the conditional probability that an utterance labeled with emotion j is followed within the same dialogue by an utterance labeled with emotion k. Owing to the soft labels and the finite-sample regime, T is a posterior quantity rather than a point estimate. We seek (i) a calibrated posterior p(T | D ) that respects annotator uncertainty, (ii) tests of which j → k entries deviate significantly from the marginal-independence baseline, and (iii) a structural decom-position that aligns with the psychological constructs of inertia and contagion. 
+
+B. Stage 1: Hierarchical DM Posterior a) Soft-label transition counts.: For an adjacent utterance pair ud,t , u d,t +1 with soft labels pd,t , pd,t +1 , the soft transition contribution is defined as the outer product pd,t ⊗ pd,t +1 . The 
+
+(j, k ) entry pd,t (j) · pd,t +1 (k) represents the probability mass that this utterance pair contributes to the j → k transition. Summing over all adjacent pairs within all dialogues yields 
+
+Njk =
+
+> N
+
+X
+
+> d=1
+> |d|− 1
+
+X
+
+> t=1
+
+pd,t (j) pd,t +1 (k). (1) This construction reduces to the standard hard-label transition counts when each pd,t is one-hot. Splitting the inner sum by the speaker-identity indicator 1{sd,t = sd,t +1 } yields the inertia matrix N in  
+
+> jk
+
+(same speaker) and the contagion matrix 
+
+N co  
+
+> jk
+
+(different speakers), with N = N in + N co .
+
+b) Dirichlet–Multinomial generative model.: The j-th row of N is regarded as a soft-count realization of a Multino-mial distribution parameterized by the row-conditional proba-bility vector Tj over K targets. A Dirichlet prior with a shared concentration vector α ∈ RK>0 is placed on each row: 
+
+Tj ∼ Dir( α), Nj, · | Tj ∼ Multinomial( Nj, ·, Tj ). (2) Sharing α across all rows is crucial for tying the posterior estimates of different source emotion categories together, so that the posteriors of low-mass rows are not dominated by the prior. Fig. 1. Overview of the BSETD Pipeline. Stage 1 constructs the hierarchical DM posterior over the K × K transition matrix from multi-rater soft labels via outer-product accumulation, and splits the counts into intra-speaker (inertia) and inter-speaker (contagion) sub-matrices. Stage 2 symmetrizes the posterior-mean transition matrix and applies graph Laplacian spectral decomposition, yielding inertia indices Ij from the low-frequency band and contagion indices Cj from the high-frequency band. 
+
+Algorithm 1 Stage 1: Hierarchical DM Posterior. 
+
+Require: Dialogue corpus D, BH-FDR level q, EB conver-gence tolerance ϵ. 
+
+> 1:
+
+N, Nin , Nco ← 0 
+
+> 2:
+
+for each adjacent pair (pd,t , pd,t +1 ) do  
+
+> 3:
+
+N += pd,t p⊤ 
+
+> d,t +1
+> 4:
+
+if sd,t = sd,t +1 then  
+
+> 5:
+
+Nin += pd,t p⊤ 
+
+> d,t +1
+> 6:
+
+else  
+
+> 7:
+
+Nco += pd,t p⊤ 
+
+> d,t +1
+> 8:
+
+end if  
+
+> 9:
+
+end for  
+
+> 10:
+
+Initialize αk ← P 
+
+> j
+
+Njk / P 
+
+> j,k
+
+Njk  
+
+> 11:
+
+repeat  
+
+> 12:
+
+Update αk via Eq. (3)  
+
+> 13:
+
+until max k |∆αk| < ϵ  
+
+> 14:
+
+Compute ¯Tjk , HDI , lift jk from Dir( α⋆ + Nj, ·) 
+
+> 15:
+
+Apply BH-FDR at level q to off-diagonal cells  
+
+> 16:
+
+return ¯T, HDI, lift , BH-FDR mask, inertia/contagion sub-fits 
+
+c) EB concentration estimation.: The shared α is ob-tained by Minka’s fixed-point iteration [22], which maximizes the DM marginal likelihood in closed form. With Sj =P 
+
+> k
+
+Njk and s = P 
+
+> k
+
+αk, the update rule is 
+
+αk ← αk ·
+
+P 
+
+> j
+
+ψ(Njk + αk) − ψ(αk)
+
+P 
+
+> j
+
+ψ(Sj + s) − ψ(s) , (3) where ψ denotes the digamma function. Convergence is de-clared when max k |∆αk| < 10 −5. The complete Stage 1 procedure is summarized in Algorithm 1. 
+
+d) Posterior summary.: Given the converged α⋆, the row-wise posterior is Tj | D ∼ Dir( α⋆ + Nj, ·). We report the posterior mean ¯Tjk , the 95% Highest Density Interval (HDI) of each cell from its marginal Beta distribution, and the lift relative to the marginal distribution of the next utterance ¯Pk:
+
+lift jk = ¯Tjk 
+
+¯Pk
+
+, ¯Pk =
+
+P 
+
+> j
+
+(Njk + α⋆k)
+
+P
+
+> j,k
+
+(Njk + α⋆k) . (4) The lift quantifies the multiplicative effect of conditioning on the source emotion j relative to the source-independent base-line. We further report the two-sided posterior tail probability for the null Tjk = ¯Pk and the BH-FDR correction [12] over the 42 off-diagonal cells. On the corpora considered in this article, the total soft-count mass is sufficiently large that the significance tests reject at any reasonable level for essentially all cells; we therefore use log 2(lift jk ) as the primary effect-size measure for ranking and reporting transitions. 
+
+C. Stage 2: Symmetrized Spectral Decomposition a) Adjacency matrix and Laplacian.: The posterior-mean transition matrix ¯T is interpreted as a weighted directed graph over the K emotion categories. Following Chung’s directed-graph Laplacian framework [13], the symmetrization 
+
+A = 12
+
+  ¯T + ¯T⊤ (5) is adopted, and the normalized Laplacian is defined as 
+
+L = I − D−1/2A D −1/2, Djj = X
+
+> k
+
+Ajk . (6) Symmetrization discards the directional component of the transition matrix while preserving the structural mass. The directional information is partially recovered by separately decomposing the inertia and contagion sub-matrices, which represent intra-speaker and inter-speaker dynamics. Algorithm 2 Stage 2: Symmetrized Spectral Decomposition. 
+
+Require: Posterior-mean transition matrix ¯T. 
+
+> 1:
+
+A ← 12 ( ¯T + ¯T⊤) 
+
+> 2:
+
+Djj ← P 
+
+> k
+
+Ajk  
+
+> 3:
+
+L ← I − D−1/2AD −1/2 
+
+> 4:
+
+(Λ, U) ← eigh( L) 
+
+> 5:
+
+λ⋆ ← median( Λ) 
+
+> 6:
+
+Split modes into low- and high-frequency bands at λ⋆ 
+
+> 7:
+
+Plo ← Ulo U⊤
+
+> lo
+
+, Phi ← Uhi U⊤ 
+
+> hi
+> 8:
+
+Alo ← Plo AP lo , Ahi ← Phi AP hi  
+
+> 9:
+
+Ij ← Alo  
+
+> jj
+
+, Cj ← P  
+
+> k̸=j
+
+|Ahi 
+
+> jk
+
+| 
+
+> 10:
+
+return Alo , Ahi , I, C, (Λ, U)
+
+b) Spectral decomposition and band-limited reconstruc-tion.: L is symmetric positive semi-definite and admits the eigen-decomposition L = UΛU ⊤, with eigenvalues satisfying 
+
+0 = λ1 ≤ λ2 ≤ · · · ≤ λK ≤ 2. Eigenvectors ui associated with small λi correspond to smooth graph signals [23], while eigenvectors with large λi correspond to oscillatory signals. Splitting the spectrum at its median and letting Plo = Ulo U⊤
+
+> lo
+
+and Phi = Uhi U⊤ 
+
+> hi
+
+denote the orthogonal projectors onto the corresponding eigen-subspaces, the standard band-limited reconstructions on graphs [23] are defined as 
+
+Alo = Plo AP lo , Ahi = Phi AP hi , (7) which are themselves symmetric by construction. The Stage 2 procedure is summarized in Algorithm 2. 
+
+c) Inertia–contagion correspondence.: The inertia index of emotion j is defined as the diagonal component of the low-frequency reconstruction Ij = Alo  
+
+> jj
+
+, that is, the smooth self-loop mass after low-pass filtering. The contagion index of emotion j is defined as the sum of off-diagonal components in the high-frequency reconstruction Cj = P  
+
+> k̸=j
+
+|Ahi 
+
+> jk
+
+|, that is, the oscillatory inter-emotion mass. 
+
+Ij is the j-th diagonal entry of Alo = Plo AP lo , that is, the self-loop mass of the symmetric band-limited reconstruc-tion; P  
+
+> k̸=j
+
+|Ahi 
+
+> jk
+
+| analogously captures the off-diagonal mass of the complementary high-frequency reconstruction Ahi =
+
+Phi AP hi . The empirical correspondence with the Kuppens-style emotional inertia coefficient (lag-1 autocorrelation within single-speaker subsequences [1]) is not derived analytically but is verified through the Kuppens-correspondence analysis in Appendix C. The first-order Markov assumption underlying Stage 1 is examined in Appendix C. 
+
+D. Extensions and Scalability a) Structural extensions.: Two extensions are introduced. First, the dialog-level hierarchical posterior replaces ¯T with a per-dialog matrix Td under Td,j, · | ¯T, τ ∼ Dir( τ ¯Tj, ·), where 
+
+τ > 0 controls the per-dialog shrinkage strength ( τ → ∞ 
+
+yields complete pooling, τ → 0 asymptotes to the per-dialog MLE), and the deviation KL( Td ∥ ¯T) identifies individual dialogues that deviate from the corpus norm. Second, the directed spectral decomposition adopts Chung’s random-walk Laplacian Ldir = I − 12 (P + Π−1P⊤Π) [13], where P = ¯T
+
+is row-stochastic and Π is the diagonal Perron stationary dis-tribution. The empirical comparison in Appendix C confirms that the symmetrized version captures most of the structural information. 
+
+b) Computational cost.: Stage 1 dominates the runtime. The soft-count construction is O(P 
+
+> d
+
+|d|), each EB iteration is 
+
+O(K2) and converges within 50 iterations, and Stage 2 is the 
+
+O(K3) eigen-decomposition of a K = 7 matrix (effectively instantaneous). End-to-end runtime on a single CPU core is ap-proximately one minute on EmotionLines ( 29 ,245 utterances), 30 seconds on MELD ( 13 ,708 ), and within three minutes on DailyDialog ( 102 ,979 ). The dialog-level cluster bootstrap (B = 1 ,000 ) is the most intensive stage but completes within 20 minutes on a single CPU core. The framework thus requires no GPU and is two to three orders of magnitude faster than Bayesian point-process models. IV. E XPERIMENTS AND EVALUATION 
+
+A. Datasets 
+
+BSETD is evaluated on five soft-label sources with seven-category Ekman annotations. Two are derived from real raters – EmotionLines (5 raters) and M3ED (3 raters) – and three are derivative sources: MELD (Dirichlet smoothing), DailyDialog (one-hot degeneration), and DailyDialog-LLM (GPT virtual annotators). EmotionLines [3] provides 29 ,245 utterances over 
+
+2,000 dialogues (Friends TV and EmotionPush Messenger), each annotated by five independent MTurk raters; the vote distribution is preserved as a soft label. With 72.6% of utter-ances exhibiting disagreement and 14.3% lacking a majority vote, EmotionLines provides genuine human disagreement and serves as the primary evaluation target. MELD [16] provides 13 ,708 utterances over 1,433 Friends dialogues with a single hard label per utterance, from which soft labels are derived via Dirichlet smoothing (concentration 3.0); it probes structural reproducibility under pseudo-soft labels. DailyDialog [24] provides 102 ,979 utterances over 13 ,118 
+
+dialogues of manually written everyday conversations with hard labels, and BSETD is applied with one-hot soft labels to test structural preservation at scale. DailyDialog-LLM re-labels the same utterances with a recent large language model (GPT-5.4-mini [25]) at temperature 1.0 and N =5 independent samples under an AnnoLLM-style protocol [4]; the inter-rater disagreement rate of 12.5% is an order of magnitude lower than the 72.6% of EmotionLines, providing a controlled probe of LLM-vs.-human disagreement. M3ED [26] provides 
+
+23 ,893 utterances over 990 scenario dialogues from 10 Chi-nese television dramas, each annotated by three independent raters under the same Ekman scheme, supporting cross-lingual validation. All sources are mapped to the canonical order 
+
+(neutral , joy , sadness , fear , anger , surprise , disgust ).
+
+B. Evaluation on Emotion-Transition Pairs 
+
+Stage 1 of BSETD is executed on EmotionLines with EB estimation of the shared Dirichlet concentration. The posterior-mean transition matrix and the 95% HDI of each cell are presented in Table II, ranked by | log 2 lift |. All off-diagonal TABLE II TOP -10 T RANSITION PAIRS ON EMOTION LINES , O RDERED BY | log 2 lift |.THE DIRECTION COLUMN DENOTES OVER -REPRESENTATION (↑, LIFT > 1)    
+
+> AND UNDER -REPRESENTATION (↓,LIFT <1).
+
+Source Target Direction ¯Tjk lift log 2 lift disgust anger ↑ 0.101 1.92 +0 .94 
+
+joy anger ↓ 0.028 0.54 −0.90 
+
+anger joy ↓ 0.083 0.54 −0.89 
+
+anger disgust ↑ 0.080 1.81 +0 .86 
+
+disgust joy ↓ 0.098 0.64 −0.65 
+
+sadness joy ↓ 0.103 0.67 −0.59 
+
+fear joy ↓ 0.105 0.68 −0.56 
+
+joy sadness ↓ 0.042 0.69 −0.54 
+
+fear anger ↑ 0.074 1.41 +0 .49 
+
+neutral anger ↓ 0.037 0.71 −0.50        
+
+> TABLE III SELF -L OOP POSTERIOR MEANS ON THE INTRA -S PEAKER (I NERTIA )AND
+> INTER -S PEAKER (C ONTAGION ) S PLITS OF EMOTION LINES .
+
+Emotion Inertia ¯Tjj Contagion ¯Tjj Difference anger 0.297 0.151 +0 .146 
+
+sadness 0.255 0.139 +0 .116 
+
+neutral 0.687 0.577 +0 .111 
+
+fear 0.165 0.059 +0 .106 
+
+disgust 0.158 0.085 +0 .073 
+
+surprise 0.195 0.155 +0 .039 
+
+joy 0.320 0.298 +0 .022 
+
+entries in the BH-FDR list reject the independence null at 
+
+q = 0 .10 , which reflects the large total soft-count mass ( 27 ,245 
+
+utterance pairs). Nonetheless, the effect-size ranking reveals a sharply structured pattern. The discovered structure aligns with three independent lines of psychological prediction. The pair with the largest over-representation effect, disgust ↔ anger ( log 2 lift +0 .94 ,
+
++0 .86 ), corresponds to a pair of adjacent petals on the Plutchik wheel. The pair with the largest under-representation effect, joy ↔ anger ( −0.90 , −0.89 ), corresponds to a reversal along the valence axis of Russell’s valence–arousal circumplex; that is, transitions between positively valenced and negatively valenced emotions are suppressed. Note that both emotions have high arousal, so the arousal axis alone cannot explain this pattern. The over-represented fear → anger transition (+0 .49 ) is consistent with the appraisal-theoretic account that fear motivates aggressive defensive responses. 
+
+C. Evaluation on Inertia and Contagion Separation 
+
+Stage 1 is fit separately on the intra-speaker (inertia) and inter-speaker (contagion) sub-matrices to test whether the same effects emerge within single-speaker turns and across speakers. Table III reports the self-loop posterior means ¯Tjj on each split together with the inertia–contagion difference. Anger and sadness exhibit the largest differences, indicating that these emotions are particularly likely to persist when the same speaker holds the floor and to dissipate when the floor passes to another interlocutor. Joy and surprise exhibit the smallest differences, indicating that their probability of being taken up by a new speaker is roughly equal to that                           
+
+> TABLE IV PAIRWISE OFF -D IAGONAL PEARSON CORRELATIONS ACROSS THE FIVE
+> SOURCES (n= 42 CELLS ). EL =EMOTION LINES , MD =MELD, DD =DAILY DIALOG , M3 =M3ED, LLM =DAILY DIALOG -LLM. EL MD DD M3 LLM EL —0.910 0.944 0.854 0.976
+> MD —0.916 0.814 0.952
+> DD —0.795 0.979
+> M3 —0.847
+> LLM —
+
+of persisting in the original speaker, which is consistent with the high social transmissibility documented in the contagion literature of Hatfield et al. [14]. A more detailed effect-size analysis in Appendix C shows that the over-represented disgust → anger and anger →
+
+disgust transitions are stronger on the inertia split ( log 2 lift 
+
++1 .28 , +1 .14 ) than on the contagion split ( +0 .72 , +0 .66 ), supporting the hypothesis that these Plutchik-adjacent escala-tion patterns operate primarily within the affective state of a single speaker. 
+
+D. Cross-Corpus and Cross-Lingual Evaluation 
+
+To assess whether the discovered structure is an artifact of a single corpus, a single language, or a single annotation source, Stage 1 is executed on all five soft-label sources under identical preprocessing, and the off-diagonal posterior means are compared pairwise. The pairwise Pearson correlations across all 42 off-diagonal cells are reported in Table IV. All six pairwise Pearson correlations are accompanied by narrow 95% confidence intervals from the dialog-level clus-ter bootstrap (width 0.02 within English and width 0.05 
+
+across languages). The EmotionLines–MELD correlation ρ =0.910 with CI [0 .899 , 0.917] shows that structural patterns are preserved between real soft labels and pseudo-soft la-bels. The EmotionLines–DailyDialog correlation 0.944 ex-tends this preservation to a much larger corpus from a different source (manually written daily conversation), and the MELD– DailyDialog correlation 0.916 confirms that the structure sur-vives the transition from Dirichlet-smoothed labels to one-hot label representations. The Chinese M3ED correlates with each of the three English corpora at 0.79 –0.85 , supporting the view that the transition structure discovered by BSETD carries a cross-lingual signal consistent with the predictions of universal emotion theory, while leaving room for language-specific and culture-specific deviations. The diagonal self-loops, in con-trast, vary substantially across corpora: DailyDialog exhibits the largest neutral self-loop, and M3ED exhibits the largest negative-emotion self-loops (anger 0.65 , sadness 0.54 ); see Section V-C. 
+
+E. Evaluation on Spectral Inertia–Contagion Decomposition 
+
+Stage 2 is applied to the posterior-mean transition matrix on EmotionLines as the symmetrized-Laplacian spectral de-composition. The seven eigenvalues are split at the median 
+
+λ⋆ ≈ 0.88 , yielding four low-frequency modes and three high-frequency modes. Low-frequency modes correspond to TABLE V STAGE 2 I NERTIA INDEX (Alo                          
+
+> jj )AND CONTAGION INDEX (P
+> k̸=j|Ahi
+> jk |)
+> ON EMOTION LINES .
+> Emotion Inertia index Contagion index neutral 0.378 0.025 joy 0.338 0.011 sadness 0.227 0.010 fear 0.162 0.046 anger 0.206 0.028 surprise 0.177 0.031 disgust 0.123 0.052
+
+smooth graph signals – eigenvectors that vary little between adjacent nodes – and encode near-steady-state structure, that is, the self-loop-dominated inertia component. High-frequency modes correspond to oscillatory signals that flip sign fre-quently between nodes, and encode the off-diagonal compo-nent, that is, the rapid cross-speaker contagion component. A three-panel display is provided in Fig. 2. In the heatmap (a), disgust → anger and anger → disgust appear as the deepest red and joy ↔ anger as the deepest blue, directly corresponding to the Plutchik adjacency and Russell valence-axis reversal identified in main result 1. In the chord diagram (b), neutral and joy dominate in node size, visually showing that these emotions carry strong inertia in the low-frequency band. In the Sankey diagram (c), thick ribbons emanate from disgust and fear toward other emotions, showing that these emotions behave contagiously in the high-frequency band. Table V reports the inertia and contagion indices for each emotion. Neutral and joy dominate the inertia ranking (inertia 
+
+0.378 , 0.338 ), while disgust and fear dominate the contagion ranking (contagion 0.052 , 0.046 ). This contrast is consistent with two psychological interpretations. First, it agrees with Hatfield’s emotional contagion theory, which holds that high-arousal negative emotions (disgust, fear, anger) are readily transmitted across speakers. Second, it agrees with Kuppens’ emotion-dynamics theory, which holds that neutral and posi-tively valenced joy persist inertially within a single speaker. More importantly, the inertia–contagion correspondence is not assumed but arises naturally from the data-driven Laplacian spectral decomposition: a single operation, median splitting at λ⋆, automatically achieves the separation of components corresponding to these two psychological constructs. 
+
+F. Evaluation on Robustness 
+
+The robustness of the BSETD claims is verified along five aspects (uncertainty, null distribution, subpopulation, model selection, downstream prediction) in Table VI. The 95% confidence intervals of the inertia–contagion differences, con-structed by dialog-level cluster bootstrap ( B = 1 ,000 ), do not contain zero for any of the seven emotions (e.g., joy 
+
+[+0 .003 , +0 .042] , anger [+0 .112 , +0 .177] ). Furthermore, the within-dialog permutation null test ( B = 50 ) shows that the empirical max | log 2 lift | = 0.94 exceeds all permutations (p < 0.02 ), demonstrating that the directional structure does not arise from the marginal distribution alone. Across six subpopulations of EmotionLines partitioned by dialog attributes, pairwise Pearson correlations range over 
+
+[0 .873 , 0.978] ; under rater subsampling with R ∈ { 2, 3, 4},the Pearson correlation to the R = 5 baseline is 0.991 –
+
+0.999 ; and the cross-domain correlation between Friends and EmotionPush is ρ = 0 .962 . The structure is thus robust to dialog length, disagreement level, number of speakers, rater budget, and media type. On the model-selection axis, the lift ranking is unchanged under hard-labelization, under the fixed prior α = 1, and under equal-width spectral splitting; and replacing the symmetrized Laplacian with the Chung directed Laplacian (Appendix C) yields Pearson correlations of 0.91 /0.80 for the inertia and contagion indices. On the downstream-prediction axis, adding BSETD lift features yields macro-F1 of 0.265 (unchanged) for a linear logistic regression (lag-5), 0.191 → 0.205 (+0 .015 ) for a 2-stream GRU, and 
+
+0.434 → 0.440 (+0 .007 ) for a frozen DistilBERT (lag-5). The contribution shrinks as the encoder capacity grows, which supports the positioning of BSETD as a framework whose primary value lies in structural discovery rather than utterance-level prediction. V. D ISCUSSION 
+
+A. Psychological Meaning of the Discovered Edges 
+
+The empirical structure recovered by BSETD on Emotion-Lines aligns with three independent lines of affective science. 
+
+a) Plutchik adjacency and Russell valence-axis rever-sal.: The pair with the largest over-representation effect, disgust → anger ( log 2 lift +0 .94 ) and anger → disgust (+0 .86 ), corresponds directly to a pair of adjacent petals on the Plutchik wheel; the symmetric shape of both directions being over-represented at nearly the same magnitude is exactly what would be expected from transitions between two points close in affective space. The pair with the largest under-representation effect, joy → anger ( −0.90 ) and anger → joy (−0.89 ), does not lie opposite on the Plutchik wheel (an-ticipation is interposed between them) but corresponds to a reversal along the valence axis in Russell’s valence–arousal model; since both emotions are high-arousal, the pattern is explicable only through valence. Thus, without any distance supervision, the signatures of two distinct affective spaces are simultaneously recovered from the transition statistics alone. 
+
+b) Gottman’s escalation cascade.: Gottman’s longi-tudinal studies on dyadic conflict identified anger →
+
+contempt/disgust as a robust escalation pattern that predicts relationship rupture. Our inertia-split analysis shows that this same anger → disgust transition concentrates in intra-speaker turns (inertia log 2 lift +1 .14 ) more strongly than in inter-speaker turns (contagion log 2 lift +0 .66 ), which is consistent with the clinical interpretation that the escalation is driven by the deepening of a speaker’s own appraisal rather than by a cycle initiated by the partner. neutral                                   
+
+> joy
+> sadness
+> fear
+> anger
+> surprise
+> disgust
+> target k
+> neutral
+> joy
+> sadness
+> fear
+> anger
+> surprise
+> disgust
+> source  j
+> ******
+> *****
+> **
+> ****
+> ****
+> ****
+> *****
+> (a) log 2lift, BH-FDR-significant marked (b) low-frequency (inertia)
+> joy
+> surprise
+> fear
+> sadness disgust
+> anger
+> neutral
+> joy joy
+> surprise surprise
+> fear fear
+> sadness sadness
+> disgust disgust
+> anger anger
+> neutral neutral
+> (c) high-frequency (contagion / shift)
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> log 2 lift
+
+Fig. 2. BSETD Results on EmotionLines. (a) log 2 lift heatmap, where ∗ marks BH-FDR-significant cells. (b) Low-frequency chord diagram, with node size 
+
+= inertia index Ij and edge thickness = |Alo  
+
+> jk
+
+|j̸ =k . (c) High-frequency Sankey diagram, with ribbon width = |Ahi  
+
+> jk
+
+|j̸ =k .TABLE VI ROBUSTNESS -A BLATION SUMMARY ON EMOTION LINES .Ablation Metric Result Dialog cluster bootstrap Lower bound of I − C 95% CI joy +0 .003 , anger +0 .112 
+
+Within-dialog permutation p-value ( B = 50 ) < 0.02 
+
+Subpopulation (6 splits) Pairwise Pearson range [0 .873 , 0.978] 
+
+Rater R = 2 subsample Pearson vs. R = 5 0.991 
+
+Rater R = 3 subsample Pearson vs. R = 5 0.997 
+
+Rater R = 4 subsample Pearson vs. R = 5 0.999 
+
+Friends vs. EmotionPush Pairwise Pearson 0.962 
+
+Hard-label substitution Posterior-mean MAD (top-disagreement decile) 0.014 
+
+Fixed prior α = 1 Lift-ranking change none Directed Laplacian (Chung) Inertia/contagion Pearson 0.91 /0.80 
+
+LogReg + lag-5 BSETD-lift macro-F1 0.265 (no gain) GRU 2-stream BSETD-lift macro-F1 0.191 → 0.205 
+
+DistilBERT (frozen) + lag-5 BSETD-lift macro-F1 0.434 → 0.440 
+
+c) Hatfield’s emotional contagion.: The over-represented fear → anger transition ( log 2 lift +0 .49 ) is the only inter-emotion pair for which the lift on the contagion split exceeds that on the inertia split. It shows that fear is more likely to evoke anger in another speaker than to persist as anger in the same speaker – precisely the asymmetric pattern that Hat-field’s contagion framework predicts for high-arousal negative emotions in dyadic interaction. 
+
+B. Why Both Stages Are Necessary 
+
+Stage 1 alone yields the posterior over the transition matrix and an effect-size ranking, but it cannot separate the two qualitatively distinct sources of structure: smooth self-loop-dominated mass and oscillatory off-diagonal mass. Stage 2 makes this distinction explicit by projecting onto a frequency-ordered basis derived from the graph itself. The empirical result on EmotionLines is that neutral and joy dominate the low-frequency band (inertia indices 0.378 , 0.338 ), while disgust and fear dominate the high-frequency band (contagion indices 0.052 , 0.046 ). This separation is not assumed but emerges naturally from the spectral decomposition of the data-driven Laplacian. 
+
+C. Real vs. Pseudo Soft Labels 
+
+For six of the seven emotions, the diagonal self-loops on EmotionLines exceed those on MELD, with a mean differ-ence of +0 .079 . The most natural explanation is that the Dirichlet-smoothed pseudo-soft labels on MELD homogenize the within-utterance distribution and pull mass away from the modal category, thereby weakening the apparent diagonal of the transition matrix. The real five-rater soft labels of Emo-tionLines preserve a bimodal disagreement structure (either a single rater wins decisively or the votes split into two clusters), and this translates into sharp self-loop posteriors at the corpus level. The single emotion that bucks this trend, fear ( −0.072 ), is the rarest emotion in EmotionLines ( P (fear ) = 0.029 
+
+marginally) and appears at a substantially higher base rate in the Friends sample of MELD. While the MELD posterior is supported by more soft counts, the EmotionLines posterior shrinks toward the EB prior; the fear gap is therefore attributed to a power-related artifact rather than a structural reversal. The off-diagonal pattern is nonetheless preserved at Pearson 0.91 
+
+(Section IV-D), implying that the qualitative structure – which transitions exist – is robust to the soft-label generation process, while the magnitude of inertia for high-base-rate categories is sensitive to it. D. Cross-Lingual Robustness and Downstream Utility 
+
+The cross-lingual correlation with M3ED ( 0.79 –0.85 ) lies below the within-English range ( 0.91 –0.98 ), but it remains consistent with a universal pattern of basic-category emotion dynamics and is difficult to explain by purely language-specific artifacts. M3ED exhibits larger anger and sadness self-loops than any of the English sources, which is thought to reflect the cultural conventions of emotional expression in scripted Chinese television. The DailyDialog-LLM com-parison is informative in a different direction: replacing the one-hot hard labels on the same utterance set with GPT-5.4-mini N =5 virtual votes yields a Pearson correlation of 
+
+0.979 on the BSETD off-diagonal structure, indicating that structural discovery is essentially invariant to the source of the soft labels. At the same time, the inter-rater disagreement rate of the LLM-soft labels is 12.5%, an order of magnitude lower than the 72.6% of the real five raters in EmotionLines, which is consistent with the AnnoLLM-style observation [4] that LLMs reproduce modal-label structure while strongly compressing human uncertainty distributions. The recovered structural agreement should therefore be interpreted as agree-ment on modal-transition patterns, not as a substitute for genuine multi-rater human signal. In downstream prediction, the contribution of BSETD lift features shrinks with the repre-sentational capacity of the downstream encoder (Section IV-F), reinforcing the positioning of the framework as one whose primary value lies in structural discovery rather than utterance-level prediction. 
+
+E. Limitations 
+
+Three limitations remain. (i) Because the analysis aggre-gates transitions over the entire corpus, intra-dialog hetero-geneity – such as a dialogue whose first half is dominated by joy–trust transitions while its second half is dominated by anger–disgust transitions – appears as a mixed signal. The dialog-level hierarchical extension in Section III-D is the natu-ral remedy. (ii) The symmetrized decomposition of Stage 2 dis-cards directional information; while the speaker-conditioned sub-matrices and the Chung directed Laplacian (Appendix C) partially compensate for this loss, a fully directional analysis is left for future work. (iii) The outer-product formulation assumes conditional independence between adjacent labels, which may be violated under strongly correlated annotator behavior. VI. C ONCLUSION 
+
+In this article, we have introduced BSETD, a two-stage framework that combines hierarchical DM posterior estimation with the spectral decomposition of a symmetrized graph Lapla-cian. The Bayesian stage propagates annotator uncertainty through a closed-form outer-product formulation, and the spec-tral stage separates low-frequency inertia from high-frequency contagion, providing a principled bridge to Kuppens-style inertia and Hatfield-style contagion. On EmotionLines, the Plutchik-adjacent pair disgust →anger and anger →disgust is over-represented at log 2 lift +0 .94 and +0 .86 , the Russell-valence-reversed pair joy →anger and anger →joy is under-represented at −0.90 and −0.89 , and the inertia–contagion difference is positive for all seven emotions, with the largest values observed for anger ( +0 .146 ) and sadness ( +0 .116 ). A five-source validation yields pairwise Pearson correlations of 
+
+0.91 –0.98 within English, 0.79 –0.85 against Chinese M3ED, and 0.979 between human hard labels and LLM virtual soft labels on the same utterances. In future studies, we will investigate per-dialog hierarchi-cal posteriors that expose intra-dialog heterogeneity, a fully directional spectral analysis, and the extent to which virtual-annotator LLM pipelines can partially substitute for human raters, in light of the known modal-vs.-uncertainty gap. REFERENCES [1] P. Kuppens and P. Verduyn, “Emotion dynamics,” Current Opinion in Psychology , vol. 17, pp. 22–26, 2017. [2] R. W. Picard, Affective Computing . MIT Press, 1997. [3] C.-C. Hsu, S.-Y. Chen, C.-C. Kuo, T.-H. Huang, and L.-W. Ku, “Emotionlines: An emotion corpus of multi-party conversations,” in                                                        
+
+> Proceedings of the Eleventh International Conference on Language Resources and Evaluation , 2018. [4] K. Inoshita, X. Zhou, A. Kawai, and K. Yada, “Llms capture emotion labels, not emotion uncertainty: Distributional analysis and calibration of human-llm judgment gaps,” 2026. [5] F. Cabitza, A. Campagner, and V. Basile, “Toward a perspectivist turn in ground truthing for predictive computing,” in Proceedings of the Thirty-Seventh AAAI Conference on Artificial Intelligence and Thirty-Fifth Conference on Innovative Applications of Artificial Intelligence and Thirteenth Symposium on Educational Advances in Artificial Intel-ligence , no. 771, 2023, pp. 6860–6868. [6] N. Majumder, S. Poria, D. Hazarika, R. Mihalcea, A. Gelbukh, and E. Cambria, “Dialoguernn: An attentive rnn for emotion detection in conversations,” in Proceedings of the AAAI Conference on Artificial Intelligence , no. 837, 2019, pp. 6818–6825. [7] Y. Liu, J. Li, X. Wang, and Z. Zeng, “EmotionIC: Emotional inertia and contagion-driven dependency modeling for emotion recognition in conversation,” Science China Information Sciences , vol. 67, no. 182103, 2024. [8] J. Li, X. Wang, and Z. Zeng, “Tracing intricate cues in dialogue: Joint graph structure and sentiment dynamics for multimodal emotion recogni-tion,” IEEE Transactions on Pattern Analysis and Machine Intelligence ,pp. 8786–8803, 2025. [9] Y. Shou, T. Meng, W. Ai, and K. Li, “Dynamic graph neural ode network for multi-modal emotion recognition in conversation,” in Proceedings of the International Conference on Computational Linguistics , 2025, pp. 256–268. [10] Y. Wang, D. Fu, J. Tan, J. Han, Y. Wan, L. Cui, L. Bai, and P. S. Yu, “Detecting intent drift in continuous conversation via temporal transition accumulation,” in Proceedings of the IEEE International Conference on Data Mining , 2025, pp. 773–782. [11] Y. Wei, Z. Huang, F. Zhao, Q. Feng, and W. W. Xing, “MECoT: Markov emotional chain-of-thought for personality-consistent role-playing,” in
+> Findings of the Association for Computational Linguistics: ACL , 2025, pp. 8297–8314, 10.18653/v1/2025.findings-acl.435. [12] Y. Benjamini and Y. Hochberg, “Controlling the false discovery rate: A practical and powerful approach to multiple testing,” Journal of the Royal Statistical Society, Series B , vol. 57, no. 1, pp. 289–300, 1995. [13] F. Chung, “Laplacians and the cheeger inequality for directed graphs,”
+> Annals of Combinatorics , vol. 9, pp. 1–19, 2005. [14] E. Hatfield, J. T. Cacioppo, and R. L. Rapson, “Emotional contagion,”
+> Current Directions in Psychological Science , vol. 2, no. 3, pp. 96–99, 1993. [15] C. Busso, M. Bulut, C.-C. Lee, A. Kazemzadeh, E. Mower, S. Kim, S. L. Jeannette N. Chang, and S. S. Narayanan, “Iemocap: interactive emotional dyadic motion capture database,” Language Resources and Evaluation , vol. 42, pp. 335–359, 2008. [16] S. Poria, D. Hazarika, N. Majumder, G. Naik, E. Cambria, and R. Mihalcea, “MELD: A multimodal multi-party dataset for emotion recognition in conversations,” in Proceedings of the Annual Meeting of the Association for Computational Linguistics , 2019, pp. 527–536. [17] A. S. Cowen and D. Keltner, “Self-report captures 27 distinct categories of emotion bridged by continuous gradients,” Proceedings of the Na-tional Academy of Sciences , vol. 114, no. 38, pp. E7900–E7909, 2017. [18] E. Leonardelli, S. Casola, S. Peng, G. Rizzi, V. Basile, E. Fersini, D. Frassinelli, H. Jang, M. Pavlovic, B. Plank, and M. Poesio, “Lewidi-2025 at nlperspectives: Third edition of the learning with disagreements shared task,” in Proceedings of the The 4th Workshop on Perspectivist Approaches to NLP , 2025, pp. 182–195. [19] W. Zhao, Y. Zhao, Z. Li, and B. Qin, “Knowledge-bridged causal interaction network for causal emotion entailment,” in Proceedings of the Thirty-Seventh AAAI Conference on Artificial Intelligence and Thirty-Fifth Conference on Innovative Applications of Artificial Intelligence and Thirteenth Symposium on Educational Advances in Artificial Intel-ligence , no. 1572, 2023, pp. 14 020–14 028. [20] T. Loossens, M. Mestdagh, E. Dejonckheere, P. Kuppens, F. Tuerlinckx, and S. Verdonck, “The affective ising model: A computational account of human affect dynamics,” PLOS Computational Biology , vol. 16, no. 5, p. e1007860, 2020. [21] W. Ai, F. Zhang, Y. Shou, T. Meng, H. Chen, and K. Li, “Revisiting multimodal emotion recognition in conversation from the perspective of graph spectrum,” in Proceedings of the Thirty-Ninth AAAI Conference on Artificial Intelligence and Thirty-Seventh Conference on Innovative Applications of Artificial Intelligence and Fifteenth Symposium on Edu-cational Advances in Artificial Intelligence , no. 1269, 2025, pp. 11 418– 11 426. [22] T. P. Minka, “Estimating a Dirichlet distribution,” Microsoft, Tech. Rep., 2000. [23] D. I. Shuman, S. K. Narang, P. Frossard, A. Ortega, and P. Van-dergheynst, “The emerging field of signal processing on graphs: Ex-tending high-dimensional data analysis to networks and other irregular domains,” IEEE Signal Processing Magazine , vol. 30, no. 3, pp. 83–98, 2013. [24] Y. Li, H. Su, X. Shen, W. Li, Z. Cao, and S. Niu, “DailyDialog: A manually labelled multi-turn dialogue dataset,” in Proceedings of the International Joint Conference on Natural Language Processing , 2017, pp. 986–995. [25] OpenAI, “Gpt-5.4 mini,” in OpenAI Developers ,2026, https://developers.openai.com/api/docs/models/gpt-5.4-mini. [26] J. Zhao, T. Zhang, J. Hu, Y. Liu, Q. Jin, X. Wang, and H. Li, “M3ED: Multi-modal multi-scene multi-label emotional dialogue database,” in
+> Proceedings of the Annual Meeting of the Association for Computational Linguistics , 2022, pp. 5699–5710.
+
+APPENDIX 
+
+A. Identifiability of T
+
+The soft-label outer product of Eq. (1) is identifiable for 
+
+T under two assumptions: (i) pd,t is an unbiased estimator of the utterance-level posterior, E[pd,t (j)] = Pr( ed,t =
+
+j | ud,t ); and (ii) {ed,t } is a Markov chain with transition 
+
+T conditionally independent of the soft-label noise. Under these assumptions, E[Njk ] = P 
+
+> d,t
+
+Pr( ed,t = j) Tjk . Letting 
+
+Sj = P 
+
+> d,t
+
+Pr( ed,t = j), the relation Tjk = E[Njk ]/S j holds, and T is identifiable from finite-sample N whenever Sj > 0
+
+for all j. When (i) is violated, the estimate corresponds to the soft-label-conditional transition; even then, the lift remains a valid indicator of association. 
+
+B. Sample Complexity of Lift Recovery 
+
+Standard DM sample-complexity arguments give Var[ Tjk |
+
+N] ≤ ¯Tjk (1 − ¯Tjk )/(Sj + P 
+
+> k
+
+α⋆k + 1) . To detect a true lift 
+
+r = Tjk / ¯Pk with relative error ϵ under 95% coverage, the source row requires Sj ≳ ( ¯Pk · r)/(ϵ2 ¯Tjk ). For Sjoy = 4 ,193 
+
+on EmotionLines and ϵ = 0 .10 , this is comfortably satisfied above the empirical noise floor. 
+
+C. Granger-Causal Interpretation 
+
+A j → k edge asserts a corpus-level conditional association 
+
+Pr( et+1 = k | et = j) > Pr( et+1 = k), that is, the population analogue of discrete-state Granger predictability. BSETD does not test interventional causality and cannot distinguish actively transmitted emotion from a co-occurring common cause. Stage 1 relies on first-order Markov conditional indepen-dence. On EmotionLines, the empirical two-step transition matrix P2, estimated from second-neighbor pairs via the outer-product formulation, is compared with the Markov pre-diction T 2 = ¯T ¯T. The mean per-source KL divergence 
+
+KL( P2,j ∥ T 2 
+
+> j
+
+) is 0.039 (max 0.093 for anger), versus an independence baseline of 0.067 , giving a 42% improvement. The Markov assumption is therefore a defensible first-order approximation, and the largest deviation concentrating on anger is consistent with persistent anger in dyadic conflict, suggesting that higher-order extensions are a natural direction for future work. Two spectral decompositions are compared on the BSETD posterior-mean transition matrix on EmotionLines. The first is the symmetrized normalized Laplacian used in the main text. The second is the Chung directed random-walk Laplacian (Section III-D), with the Perron stationary distribution π used as the diagonal weights. The Pearson correlations between the inertia and contagion indices recovered by the two decomposi-tions are 0.91 and 0.80 , respectively. The symmetrized version captures most of the structural information, while the directed refinement adds modest additional signal to the contagion component. The inertia captured by BSETD is empirically validated on EmotionLines against the Kuppens emotional-inertia co-efficient [1] (lag-1 autocorrelation within single-speaker sub-sequences). For each emotion j, the lag-1 Pearson autocor-relation ρKup  
+
+> j
+
+of the soft probability pd,t (j) within adjacent same-speaker turns is computed, yielding anger +0 .58 , neutral 
+
++0 .48 , sadness +0 .44 , fear +0 .43 , joy +0 .41 , disgust +0 .39 ,surprise +0 .36 (all p < 10 −3). The correspondence with the Stage 1 inertia–contagion difference ¯T in  
+
+> jj
+
+− ¯T co  
+
+> jj
+
+is strong (Pearson +0 .80 , p = 0 .029 ; Spearman +0 .86 , p = 0 .014 ), because both quantities measure within-speaker persistence. The weaker correspondence with Ij alone (Pearson +0 .25 ) re-flects that Ij is obtained through graph-spectral low-frequency reconstruction rather than speaker conditioning; the two should be interpreted as complementary. Stage 1 recovery is evaluated on a synthetic dialogue corpus generated from four ground-truth topologies (chain, fork, star, cycle) over a grid of 144 settings: number of dialogues N ∈ { 200 , 500 }, average length L ∈ { 10 , 20 }, rater accuracy pacc ∈ { 0.55 , 0.75 , 0.95 }, and three random seeds. Lift-ranking recovery is consistently stronger than BH-FDR-based recovery: the top-|E| lift recall is 1.0 for chain and cycle, 
+
+0.83 –1.0 for star, and 0.33 –0.55 for fork. The fork topology, in which a single source distributes mass to many targets, is the most difficult regime for corpus-level structural recovery, and is reported honestly as a known failure mode.

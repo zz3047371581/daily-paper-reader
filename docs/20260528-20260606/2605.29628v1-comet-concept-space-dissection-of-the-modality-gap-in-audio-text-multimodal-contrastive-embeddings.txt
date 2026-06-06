@@ -1,0 +1,717 @@
+Title: COMET: Concept Space Dissection of the Modality Gap in Audio-Text Multimodal Contrastive Embeddings
+
+URL Source: https://arxiv.org/pdf/2605.29628v1
+
+Published Time: Fri, 29 May 2026 01:09:43 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> 1
+
+# COMET: Concept Space Dissection of the Modality Gap in Audio-Text Multimodal Contrastive Embeddings 
+
+Yonggang Zhu , Liting Gao Student Member, IEEE , Aidong Men , Wenwu Wang Fellow, IEEE 
+
+Abstract —Contrastive Language-Audio Pretraining (CLAP) models are widely used for audio understanding and support modality-agnostic condition swapping in many zero-shot applications. However, their performance is heavily affected by the modality gap between audio and text embeddings. Existing explanations mainly attribute this gap to the cone effect, treating it as a shift between mean embeddings, yet correcting the mean alone yields only limited improvements. Alternative hypotheses, such as information imbalance and dimensionality collapse, have also been proposed, but they remain insufficiently verified and have not been thoroughly studied in the audio domain. Meanwhile, several works attempt to decompose multimodal contrastive embeddings into interpretable concepts, but none explicitly analyze the modality gap from the perspective of concept decomposition. In this work, we introduce COMET (Concept space Organization and Modality gap Explanation with PLS-SVD Transformation), a novel partial least squares singular value decomposition (PLS-SVD) framework for CLAP that unveils a broader perspective of the modality gap. Our framework reveals that only a small, interpretable subset of axes, which captures shared concepts, contributes substantially to similarity computation, and that the mean component represents only partially the modality gap. Building on this insight, we propose a simple spectral truncation method that mitigates the modality gap in a training-free manner. The method enables zero-shot audio captioning with condition swapping to approach fully supervised performance, without requiring large auxiliary memory banks or expensive computation. At the same time, it achieves substantial embedding dimensionality reduction while preserving strong performance on retrieval and audio captioning tasks. 
+
+Index Terms —Multi-modal Contrastive Learning, Modality Gap, Audio Captioning, Audio Retrieval, Concept Decomposition. 
+
+I. I NTRODUCTION 
+
+# MULTIMODAL contrastive learning (MMCL) has achieved considerable success in recent years. These models can produce rich, transferable semantic representations that align complex data from different modalities into a shared embedding space [1], [2]. Among them, a prominent area that has attracted increasing attention is contrastive language-audio pretraining (CLAP) [2]–[6], where text and audio are aligned in a joint latent space. The CLAP models play a significant role in many audio understanding and generation tasks, including audio-text retrieval [7], [8], audio captioning [9]–[11], and text-guided audio generation [12], [13]. They significantly reduce training costs and annotation efforts for these tasks 
+
+> Y. Zhu, and A. Men are with School of Artificial Intelligence, Beijing University of Posts and Telecommunications, Beijing 100876, China. E-mail:
+> {zhuyonggang, menad }@bupt.edu.cn. L. Gao and W. Wang are with the Centre for Vision, Speech, and Signal Processing (CVSSP), University of Surrey, GU2 7XH Guildford, U.K. E-mail:
+> {l.gao, w.wang }@surrey.ac.uk. This work was supported by China Scholarship Council (202506470003) and conducted during Y. Zhu’s academic visit at CVSSP. (Corresponding Author: Wenwu Wang)
+
+through encoder reusing [4], [9], [10] and modality-agnostic condition swapping [12], [14]. The encoder reusing refers to the paradigm that after the encoders are pretrained on large-scale, noisy web data, they can be reused as a key component in many different audio understanding and generation models and attain strong performance without re-training. The modality-agnostic condition swapping, on the other hand, is a unique feature enabled by MMCL models like CLAP, which is of particular interest to us. This is based on the assumption that the audio and text encoders in CLAP map audio and text inputs into a shared embedding space. Consequently, when a model uses one of these embeddings as a conditioning input, it cannot distinguish whether the condition originates from the au-dio encoder or the text encoder. To illustrate, we briefly describe text-conditioned training for zero-shot audio captioning [11], [14]–[17], where the goal is to build a system that generates a caption, i.e. text description, for an audio clip. In fully supervised training [9], [10], audio serves as the conditioning input while the caption acts as the supervisory signal. For text-conditioned training, the caption can instead be passed through the CLAP text encoder to obtain a text embedding, which is then used to condition the generation model, while the same cap-tion remains the supervision target. Under this setup, training re-lies solely on text data. During inference, the conditioning input is replaced with audio embeddings, and the model is expected to treat them equivalently. This approach has been widely adopted in audio understanding and generation tasks, including audio captioning [11], [14]–[17] and text-based audio generation [12]. By leveraging shared embedding spaces, the method enables efficient learning of cross-modal tasks from unimodal data, improving both data efficiency and adaptability across domains. Recent research has observed that, although the text and audio embeddings produced by CLAP models are expected to lie in a shared embedding space due to contrastive pretraining, substantial discrepancies remain between the two modalities. Such discrepancies are commonly referred to as the “modality gap” in contrastive embeddings [18], which severely degrades the performance of systems relying on condition swapping [11], [14]–[17]. The modality gap is often attributed to the “cone effect” [18], whereby text and audio embeddings occupy two narrow yet distinct cones within the embedding space. In prior work, the offset between the cone centroids (i.e., the mean embeddings) has typically been regarded as the primary and controllable source of the gap [18]. However, our findings suggest that centroid mismatch captures only part of the overall phenomenon. Alternative explanations, including information imbalance [19] and dimensionality collapse [20], have also emerged to understand the modality gap in contrastive language image pretraining (CLIP) [1]. Nevertheless, these explanations 
+
+> arXiv:2605.29628v1 [cs.SD] 28 May 2026 2
+
+remain fragmented and sometimes lack comprehensive experi-mental validation. Existing approaches for bridging the gap in audio under-standing and generation can broadly be divided into training-free and training-based methods. Representative training-free approaches include embedding shift (ES) [14], [18], Gaussian noise injection (NI) [11], [14]–[16], and projection decoding (PD) [14], [17], [21]. These methods operate directly on off-the-shelf CLAP models and map source-modality embeddings into the target-modality space without training additional mapping networks, making them computationally efficient and broadly applicable. Training-based approaches, on the contrary, typically introduce additional learnable modules [22], [23] or re-train a CLAP model [24]. For example, the methods in [22], [23] employ diffusion models trained on paired audio-text em-beddings to learn the cross-modal mapping in a fully supervised manner, while the method [24] trains new MMCL models with auxiliary objectives to explicitly reduce the modality gap. Com-pared with training-based methods, training-free techniques are simpler and substantially more computationally efficient, and are therefore the primary focus of this work. We propose a new training-free method with improved memory usage and competitive performance, which is introduced later in this part. Moreover, several studies attempt to interpret MMCL em-beddings by decomposing them into combinations of human-interpretable concepts [25]–[27]. However, these approaches do not explicitly examine the structure of the embedding space from a multimodal perspective, nor do they investigate how the modality gap can be bridged within their frameworks. In con-trast, we propose a new, efficient concept decomposition frame-work for CLAP that addresses these issues in a unified manner. In this work, we present COMET (Concept space Organi-zation and Modality gap Explanation with PLS-SVD Trans-formation), which is a unified framework for understanding CLAP. It reveals the connections among concept decomposition, multimodal similarity computation, and the various sources of the modality gap. Specifically, we introduce a concept-aware, bottom-up decomposition of the CLAP latent space based on Partial Least Squares Singular Value Decomposition (PLS-SVD), which naturally captures both multimodal alignment and concept saliency. The resulting decomposition reveals a comet-like latent structure: a compact, luminous head of shared cross-modal semantics, and a long, diffuse, modality-private tail .This framework enables a detailed examination of the intrinsic “native language” of CLAP without relying on external bases, nonlinear transformations, or black-box models. Using this per-spective, we derive a theoretically and empirically grounded in-terpretation of projection decoding, which is a well-performing method for reducing modality gap [14], [17], [21] that has not been well understood, providing new insights into the underly-ing causes of the modality gap. Building on these findings, we further propose a fast, training-free correction method for CLAP embeddings that offers several advantages. First, it effectively mitigates the modality gap, enabling competitive zero-shot audio captioning performance comparable to fully supervised approaches, while eliminating the need for the large memory banks required by projection decoding [14]. Second, the pro-posed method substantially reduces embedding dimension while maintaining, and in some cases improving, performance on retrieval and audio captioning tasks. Our main contributions are:  
+
+> •
+
+We propose a PLS-SVD framework to analyse the CLAP embeddings, and identify a rank-structured nature of the CLAP latent space that consists of a mean component ,a compact shared semantic head , and a long modality-private tail . While the “cone effect” focuses on the mean component, we find that each part acts as different sources of the modality gap. This allows the reduction of the gap in a principled way.  
+
+> •
+
+We find that projection decoding is a concept space truncation and imputation filter on top of mean shifting.  
+
+> •
+
+We propose PLSHead, a fast, versatile, memory-efficient spectral truncation method that strongly compresses the embeddings, closes the modality gap, and achieves comparable or even better performance on downstream tasks such as audio-text retrieval and audio captioning. II. R ELATED WORK 
+
+A. Audio-Text Contrastive Learning 
+
+Audio-text contrastive learning aims to map audio and text into a joint embedding space, utilizing loss functions like InfoNCE [28] to pull matched representations together while pushing unmatched pairs apart. Inspired by CLIP [1], the scale of paired audio-text data for contrastive training expands over time [2]–[6], leading to the development of CLAP models. They usually use a pipeline to automatically expand data. Typical techniques include web scraping [3], generating captions from metadata with large language models (LLM) [4], or combining detection models and LLMs to extract contents and expand them into captions altogether [5], [6]. They show strong performance across a range of downstream tasks, such as audio-text retrieval [4]–[6], audio captioning [4]–[6], and zero-shot audio classification [4]–[6]. They function widely as retrieval models [8], [9], [17], general-purpose audio encoders [12], [29], and evaluators of generation quality [30]. In addition, they enable modality-agnostic condition swapping, which facilitates many zero-shot applications [11], [12], [14]–[17]. 
+
+B. Post-Hoc Concept Decomposition for MMCL 
+
+Post-hoc concept decomposition methods are widely used for interpreting neural networks by expressing internal representations as combinations of human-understandable concepts [31]. Representative approaches such as TCAV [32], CRAFT [33], and MCD [34] focus primarily on single-modality activations. Another line of work builds on concept bottleneck models (CBMs) [35]–[37], which learn intermediate concepts and map them to target classes. However, these methods typically require manually curated concepts or externally constructed vocabularies, and mainly target supervised image classification rather than multimodal contrastive spaces. For multimodal embedding spaces, SpLiCE [25] sparsely projects image embeddings onto a massive dictionary of text-derived concepts, an approach later extended to CLAP [38]. Similarly, the method [39] constructs concept vocabularies using LLM-generated phrases. While intuitive, these top-down approaches 3
+
+rely on predefined external vocabularies and may discard substantial embedding information [26]. More recently, the method in [26] applies singular value decomposition (SVD) and Varimax rotation to identify unimodal concepts, but does not explicitly model cross-modal interactions or the alignment objective. The method in [27] combines canonical-correlation analysis (CCA), Hungarian matching, and iterative optimization to interpret CLIP embeddings, but this method is computationally expensive and depends on whitening operations that remove raw signal strength, an important indicator of semantic saliency. In contrast, our method provides a unified and efficient analysis of the CLAP embedding space. Rather than relying on predefined vocabularies or complex optimization pipelines, we adopt a bottom-up decomposition that automatically discovers semantic axes directly from audio-text alignment. Our framework jointly captures alignment and signal strength, identifies the components contributing most to multimodal similarity, visualizes the modality gap, explains projection decoding, and enables effective gap mitigation while preserving downstream performance with only a compact set of bases. 
+
+C. Modality Gap in MMCL 
+
+The modality gap in MMCL embeddings was first identified by Liang et al. [18], who attributed it to the “cone effect”: image and text embeddings occupy different cones after random encoder initialization, and these cones persist throughout contrastive training. The gap is usually quantified by the distance between cone centroids (mean embeddings). This perspective naturally suggests that manipulating these centroids, such as by subtracting the image mean and adding the text mean for image embeddings, can force the cones to overlap, serving as the core intuition for general embedding-shift methods. Building on this cone-effect interpretation, many subsequent studies have further analyzed the modality gap [40]–[45]. For example, Shi et al. [41] and Yaras et al. [44] study how the contrastive temperature parameter affects the persistence of the gap. Zhang et al. [42] further model the discrepancy between paired image and text embeddings as a constant mean-offset term plus a white Gaussian noise component representing random alignment noise. In contrast, our findings indicate that this residual component contains meaningful structure beyond simple Gaussian noise, suggesting a broader interpretation than the conventional cone-effect view. Other works propose alternative explanations for the modality gap. Schrodi et al. [19] attribute it to information imbalance, arguing that one modality (e.g., images) often contains substan-tially richer information than the other (e.g., short captions), making perfect alignment inherently difficult. However, their analysis is performed in the raw embedding space, where semantic structure and noise remain entangled. In contrast, our approach explicitly separates shared semantic components from unaligned noise, allowing us to identify where alignment breaks down. Ramasinghe et al. [46] regard the gap as inevitable due to intrinsic modality differences, whereas our results show that the gap is structured and can be systematically reduced. Yi et al. [20] explain the gap through dimension collapse, though their theory relies on idealized assumptions and still charac-terizes the gap primarily through centroid distances. Fahim et al. [47] argue that the gap is largely induced by contrastive loss and can be mitigated using additional uniformity and alignment objectives [48], but this requires retraining the model. Existing methods for reducing the modality gap can broadly be divided into ad-hoc training approaches and post-hoc meth-ods. Ad-hoc approaches modify the MMCL training process through specialized losses, architectures, or training strategies. Examples include adding uniformity and alignment objec-tives [45], [47], [48], adversarial domain adaptation losses [24], encoder batch normalization [49], shared Transformer architec-tures with projection layers [50], and strategies such as tem-perature scheduling or feature swapping [44]. While effective, these approaches require retraining large-scale MMCL models such as CLIP or CLAP, which is computationally expensive. Post-hoc methods instead operate on off-the-shelf MMCL models without modifying the original training. Some approaches still require training auxiliary models, such as diffusion-based mappings between modalities [22], [23], [51], which remain computationally demanding. Training-free post-hoc methods are therefore more lightweight and portable. Embedding-shift and centering methods [14], [18], [49] align modality centroids through mean shifting and renormalization. Gaussian noise injection [52] blends embeddings across modalities but can obscure semantic information. Projection decoding [21] reconstructs a target-modality embedding as a weighted combination of source-modality embeddings from a memory bank. This approach has shown strong empirical performance in zero-shot captioning systems [14], [17], [21]. However, it depends on a large memory bank, typically constructed from all text embeddings in the training set, and its underlying mechanism remains poorly understood. In this work, we provide a theoretical explanation for projection decoding and remove the need for large memory banks. 
+
+D. Zero-shot Audio Captioning 
+
+Audio captioning aims to generate natural language descriptions of acoustic scenes and events from an input audio clip. Zero-shot audio captioning further requires that the main captioning model be trained without paired audio–text super-vision [11], [14]–[17], [21], [52]–[55]. However, paired audio– text data may still be used in preparatory stages prior to training the captioning model itself. For instance, many systems rely on pretrained CLAP models, which require paired audio–text data during pretraining. Similarly, diffusion-based embedding mapping methods [22], [23] are trained on paired data, while embedding-shift approaches [14] might use paired embeddings to estimate the centroid difference between modalities. Existing zero-shot audio captioning methods can be broadly categorized into decoder-guided [54], [55], encoder-guided [11], [14]–[17], [21], [52], [53], and hybrid approaches [11]. Decoder-guided methods adjust the word probabilities from the decoder using CLAP-based similarity scores, but generally underper-form encoder-guided approaches [11], [16]. Encoder-guided methods instead rely on modality-agnostic condition swapping: during training, the condition is encoded using the CLAP text 4
+
+encoder, while at inference time it is replaced by embeddings from the audio encoder. To improve cross-modal alignment, these methods often incorporate post-hoc modality-gap mitiga-tion techniques discussed in Sec. II-C . Additional enhancements include data augmentation [16], keyword guidance [16], and retrieval of semantically similar captions [17]. We evaluate our method on the two standard audio captioning benchmarks, Clotho [56] and AudioCaps [57]. III. F RAMEWORK : PLS-SVD AND THE SUBSPACE 
+
+STRUCTURE OF CLAP E MBEDDINGS 
+
+A. Notations 
+
+Assume a CLAP model produces N text-audio embedding pairs (ti, ai), i = 1 . . . N , by encoding paired text and audio data through the text and audio encoders, respectively. Here, 
+
+ti, ai ∈ RC , where C is the embedding dimension, such as 1024 in Mei et al. [4] or 768 in Bai et al. [6]. The mean text and audio embeddings are ¯t = 1 /N PNi=1 ti, and ¯a =1/N PNi=1 ai, respectively. The centered embeddings are ˜ti =
+
+ti −¯t and ˜ai = ai − ¯a. We denote a projection axis for the text embedding as u ∈ RC , and the projection value of ti on u
+
+is Proj u(ti). Similarly, the projection of an audio embedding 
+
+ai on an audio axis v is Proj v (ai). In this paper, all vectors are column vectors. Datasets like Clotho [56] or the test set of AudioCaps [57] have 5 captions for each audio. For them, each audio is replicated 5 times so that every 5 consecutive audios are the same, and (ti, ai) still denotes a positive pair. 
+
+B. Mathematical Formulation 
+
+We start by examining how to find axes of key, shared semantics. We note that if, for i = 1 . . . N , the projection values 
+
+Proj u(ti) and Proj v (ai) frequently have large variations of the same sign, this could indicate that u and v are both important directions and encode the same meaning in the text and audio spaces, respectively. In other words, if the covariance PNi=1 Proj u(˜ ti) Proj v (˜ ai) is large, the direction pair (u, v)
+
+encodes core shared semantics. Centered embeddings ˜ti, ˜ai
+
+are used since the variation of the projection can be obtained by mean subtraction before projection. Formally, we find: 
+
+arg max 
+
+> u,v
+
+(T u)T (Av) = arg max 
+
+> u,v
+
+uT (T T A)v. (1) Here, we stack the centered text embeddings row-wise to obtain T ∈ RN ×C and centered audio embeddings to obtain 
+
+A ∈ RN ×C . The i-th row in T and the i-th row in A form a matching pair of centered text-audio embeddings. This problem can be solved efficiently with Partial Least Squares Singular Value Decomposition (PLS-SVD), which performs SVD on the text-audio covariance matrix M = T T A:
+
+M = U ΣV T . (2) Here, the SVD returns a ranked list of paired directions that satisfy the objective in Eq. (1) from strong to weak. The i-th column of U ∈ RC×C , which is ui ∈ RC , and the i-th column of V ∈ RC×C , vi, form the i-th text-audio direction pair. The text directions ui are mutually orthogonal, providing a unique, complete description of a text embedding. The orthogonality             
+
+> Fig. 1. The singular value Σii and its relationship with UV alignment
+> ui·vi.(a) Σii drops drastically to near-zero values within the top 100 indices, revealing a small, shared core semantic head. (b) ui·vibriefly increases, then drops massively within the top 100 indices.
+
+allows each concept to vary freely without interfering with each other. The audio directions vi also have these features. 
+
+Σ ∈ RC×C is a diagonal matrix of singular values. Its element 
+
+Σii is the covariance uTi (T T A)vi, measuring the degree to which the directions ui and vi encode core shared semantics. The first direction pair maximizes Eq. (1), and the second pair is the second largest following orthogonality constraints, etc. In this way, we obtain a decomposition of the embeddings as: 
+
+ti = ¯ t +
+
+> C
+
+X
+
+> j=1
+
+ˆtij uj , ai = ¯ a +
+
+> C
+
+X
+
+> j=1
+
+ˆaij vj . (3) Here, the top directions should encode core shared semantics, and the tail directions could contain modality-specific content or noise. The terms ˆtij and ˆaij are the projection coefficients, which are the i-th elements of T uj and Avj , respectively. The mean term, on the other hand, encodes the static modality gap noted in previous works, which is stable across samples and could arise from the cone effect and contrastive training [18], [40]–[45]. Our full decomposition, as shown later, reveals other sources of the modality gap. Note that the size of M ∈ RC×C
+
+is irrelevant to the total number of samples N , and C is usually relatively stable and much smaller than the ever-increasing 
+
+N . The SVD can be computed efficiently for this size of M ,enabling the method to scale in large-scale analyses. 
+
+C. Dissecting the CLAP Embeddings 
+
+We inspect the decomposition with the Clotho [56] training set and a commonly-used CLAP model, HTSAT-BERT-ZS [4], which is pretrained on WavCaps [4] in a zero-shot manner. 1
+
+The “zero-shot” means all overlapping samples from Clotho [56] and AudioCaps [57] are excluded from pretraining, better demonstrating real generalization abilities of the CLAP models. This model has an embedding dimension of C = 1024 .We perform PLS-SVD on the Clotho training set according to Eq. (2) and show the distribution of the singular values 
+
+Σii in Fig. 1. We also hypothesize that for the top indices, since they encode shared semantics, the text axis ui and audio axis vi should be well-aligned with large inner products. Also, direction pairs in the tail should have smaller inner products.        
+
+> 1The dissection is repeated using CLAP pretrained on other datasets (e.g. AudioSetCaps [6], WavCaps+SoundVECaps [58]), and CLAP having other model structures. Both Clotho [56] and AudioCaps [57] are tried for the dissection. The results are in App. B. They show a similar pattern. Intriguingly, the head sizes are also roughly 100. 5
+> Fig. 2. Decomposition of the covariance Σii /N train .The text and audio self-std ( pVar( Tui)and pVar( Avi)) decay slower than pΣii /N train . The correlation coefficient quickly drops to about 0.23 before index 100, enters a small transition area, and slowly, approximately linearly decays to 0.
+
+We name ui · vi the UV alignments, which are in the second panel of Fig. 1. The results show that the singular values 
+
+Σii drop quickly within the top 100 indices and remain near-zero for the rest of the indices. The UV alignments ui · vi
+
+briefly increase, then sharply drop to low values within the top 100 indices. This indicates the low intrinsic dimensionality of this CLAP embedding space. It reveals a small shared semantic head : only a few components actively have large, shared variations. In addition, only these components have well-aligned (ui, vi) pairs. How can we further explain the singular value Σii ? Recall that it is the covariance of the projections T ui and Avi, which considers both the signal strength in each modality and their correlation. Thus, we decompose it into three parts: 
+
+Cov( T ui, A vi) = Corr( T ui, A vi)pVar( T ui)pVar( Avi),
+
+(4) where normalized covariance Cov( T ui, A vi) = Σ ii /N train =(T ui)T (Avi)/N train , and normalized variance Var( x) =
+
+xT x/N train for a centered vector x ∈ RNtrain . These variances show the energy in the projection values of the text embed-dings T ui and audio embeddings Avi. We plot the square-rooted covariance pΣii /N train together with pVar( T ui)
+
+and pVar( Avi), since they all denote square-rooted energy. 
+
+Corr ∈ [0 , 1] is the correlation coefficient. The plot is in Fig. 2. As shown in Fig. 2, pVar( T ui) and pVar( Avi) decay much more slowly than pΣii /N train . This indicates that a significant portion of the self energy could reside in the less aligned tail subspaces. For a quantitative comparison, we calcu-late the mean norm of 1) the top 100 indices, 2) the remaining indices (101 to C), and 3) the whole centered embedding: norm st :ed t = 1
+
+N
+
+XNi=1 
+
+rXed j=st (ˆ tij )2. (5) The definition is similar for audio embeddings. The result is norm 1:100  
+
+> t
+
+= 0 .770 , norm 101: Ct = 0 .344 , norm 1: Ct = 0 .845 ;and norm 1:100  
+
+> a
+
+= 0.776 , norm 101: Ca = 0.301 , norm 101: Ca =0.834 . We can see that the tail indices (101 to C) indeed contain a significant portion of the total energy .The switch from a quick drop to a slow but approximately linear decay in the correlation coefficient in Fig. 2 could indicate a transition in the nature of the head and tail subspaces. However, how can we further understand these subspaces? Let’s develop our intuition by examining how the decomposition in        
+
+> (a) The full matrix (b) Zoom-in of first 300 ×300 elements Fig. 3. Visualization of the absolute of the UV matrix |UTV|.The origin is at the upper-left corner. The diagonal elements in the upper-left corner have large activations, while all other parts only have very small activations.
+
+Eq. (3) helps to explain the inner product similarity computation. Starting with a positive pair ti · ai, we have: 
+
+ti · ai ≈ (XCj=1 
+
+ˆtij uj )( XCj=1 ˆaij vj )= XCj=1 
+
+ˆtij ˆaij (uj · vj )
+
+| {z }
+
+> direct effect
+
++ X 
+
+> k̸=l
+
+ˆtik ˆail (uk · vl)
+
+| {z }
+
+> cross effect
+
+. (6) We see that the similarity calculation can be divided into a “direct effect” component, where each text direction uj directly acts on its matching audio direction vj , and a “cross effect” component, where each direction uk interacts with a different semantic component vl. We hypothesize that the direct effects could be more important in the similarity calculation. To verify this, we first examine the UV matrix U T V , where each element (U T V )ij = ui · vj . We take the absolute value to see its magnitude. As shown in Fig. 3, the |U T V | is particularly bright only in the upper-left corner of the diagonal , while all other elements only have small values. Since the UV alignments 
+
+ui · vj are the “weights” in the dissected similarity calculation (Eq. (6)), we deduce that the cross effect terms could be less important, and only the head of the direct effect terms is actively contributing to the similarity. Continuing from Eq. (6), we have: 
+
+ti · ai ≈
+
+> C
+
+X
+
+> j=1
+
+ˆtij ˆaij (uj · vj ) ≈
+
+> K
+
+X
+
+> j=1
+
+ˆtij ˆaij (uj · vj ), (7) where K denotes the dimensionality of the shared head. We further verify whether the cross effect terms really contribute less significantly by computing the mean absolute contribution of the direct effect vs. the cross effect. We also compute this metric for the direct effect of the first 100 components. The formulae for positive pairs are as follows. Contrib direct effect = 1
+
+N
+
+XNi=1 
+
+XCj=1 
+
+ˆtij ˆaij (uj · vj ) ,
+
+Contrib cross effect = 1
+
+N
+
+XNi=1 
+
+X 
+
+> k̸=l
+
+ˆtik ˆail (uk · vl) , (8) Contrib direct effect,100 = 1
+
+N
+
+XNi=1 
+
+X100 
+
+> j=1
+
+ˆtij ˆaij (uj · vj ) .
+
+We also compute them for the negative pairs in a similar way. We obtain the mean embeddings and PLS directions on the Clotho training set, then decompose the embeddings and calculate the metrics on the Clotho testing set with these pre-calculated means and directions. In this way, generalizable 6             
+
+> TABLE I THE MEAN ABS CONTRIBUTION OF DIFFERENT PARTS ,FOR POSITIVE (P OS )
+> PAIRS AND NEGATIVE (N EG )PAIRS SEPARATELY .Pair Type Contrib direct effect Contrib direct effect, 100 Contrib cross effect
+> Pos Pairs 0.1937 0.1931 0.0326 Neg Pairs 0.0445 0.0445 0.0226
+
+results can be obtained. The results are shown in Table I. We can see the direct effect is high for positive pairs and low for negative pairs. The cross effect is indeed relatively insignificant, which stays low for both positive pairs and negative pairs. The top 100 indices indeed account for most of the direct effect. Generally speaking, for many CLAP models, the similarity is driven predominantly by the core concepts of the shared semantic head, which are compared on a one-to-one basis without considering much about the cross effects. 
+
+Furthermore, for the positive pairs, the similarity ti · ai
+
+should be as large as possible. If a term in Eq. (6) produces a positive contribution, it is constructive to this target. We then count the net useful contribution produced by these terms over the entire dataset. For the cross-effect terms, we have PNi=1 ˆtik ˆail = uTk M vl = ( uTk U )Σ( V T vl) = 0 . Thus, the net useful contribution is 0. Since we know that the cross effects are not contributing, we measure the net useful contribution of the j-th direction pair as: 
+
+> N
+
+X
+
+> i=1
+
+ˆtij ˆaij (uj · vj ) = ( 
+
+> N
+
+X
+
+> i=1
+
+ˆtij ˆaij )( uj · vj ) = Σ jj × (uj · vj ).
+
+(9) This justifies the use of PLS-SVD, showing why considering both signal strength and alignment is important . It also explains why we can use PLS singular values Σjj and UV alignments to find the shared semantic head: their production corresponds to the net useful contribution to the similarity of the positive pairs of the j-th direction pair .We also visualize some directions in the shared semantic head in Table II. We can see that each direction roughly corresponds to interpretable concepts . Moreover, all 1024 direction pairs can be obtained swiftly in less than 0.16s on the Clotho training set (19195 paired samples) using PyTorch on a CPU-only machine (Intel Xeon E5-2620 v4). IV. PLSH EAD : R ETRIEVAL WITH TRUNCATED 
+
+EMBEDDINGS 
+
+The above insights motivate us to retain only the top 100 components (the shared head) when performing audio-text retrieval. We verify in this section that the performance is indeed comparable to or even better than the original, although the majority of dimensions (90%) are discarded. We obtain the mean embeddings ¯t, ¯a and PLS directions 
+
+U, V beforehand on a training set. These parameters are then used to decompose (according to Eq. (3)) and truncate the embeddings on a test set. Finally, the truncated test embeddings are used for evaluation. In this way, real generalization abilities can be reflected instead of observing possibly overfitted results on the training set.  
+
+> Fig. 4. Retrieval performance vs number of singular values used on Clotho.
+
+We perform experiments with both in-domain and cross-domain scenarios. We examine the in-domain performance on Clotho [56] and AudioCaps [57]. These datasets are standard benchmarks for audio-text retrieval [4], [6]. For the cross domain scenario, the mean and projection parameters are obtained from the Clotho training set, and the evaluation is done on the AudioCaps test set. The metrics adopted are Recall@ {1,2,10,50 }, Mean Rank, Median Rank, and mAP@10, which are consistent with prior works like [4], [8]. The em-beddings are normalized before retrieval. We compare the retrieval performance on these embeddings: 1) Original: the original 1024 dimensional embeddings. 2) PLSHead: the 100 dimensional embeddings made up of the top 100 projection values ˆt1: Ki = [ˆ ti1, ˆti2 . . . ˆtiK ]T
+
+and ˆa1: Ki = [ˆ ai1, ˆai2 . . . ˆaiK ]T , with K = 100 .3) PLSHeadWeighted (PLSHeadW): the truncated text pro-jections ˆt1:100  
+
+> i
+
+, and reweighted audio projections ˆa1:100 ,w 
+
+> i
+
+.For the j-th element, (ˆ a1:100 ,w 
+
+> i
+
+)j = ˆ aij (uj · vj ).4) PCAHead: the 100 dimensional embeddings made up of the top 100 projection values obtained with principal component analysis (PCA). For PCA, the same setting is employed: obtaining the directions on the training set, centering the test samples with the training set means, and obtaining projections with the directions calculated from the training set. As shown in Table III, the PLS-based truncation methods indeed demonstrate comparable or even better performance than the original one. Note that this is achieved when the majority of the dimensions are discarded. The gain is possibly because the interferences from the noisy tail and the cross effects are removed. Our method is effective on both Clotho and AudioCaps. It can also achieve good generalization performance in cross-domain scenarios. We see that UV alignment reweighting is not necessary for the system to work. This is possibly because the covariance of projection values already ensures that the latter dimensions contribute less. We also see that PCA cannot achieve desirable results, possibly because it is a single-modality method. In PCA, the audio and text directions are extracted separately and are not aligned. For a broader picture, we plot mAP@10 across all truncation thresholds K for PLSHead and PLSHeadW in the Clotho in-domain scenario in Fig. 4. The performance soars within the first few indices and remains stagnant thereafter. In practice, to compress the embeddings before transmission or storage, a device just needs a small set of precomputed mean and direction parameters. It can then process each incoming raw 7
+
+TABLE II VISUALIZATION OF THE TOP SENTENCES THAT ACHIEVE HIGH PROJECTION VALUES ˆtij ON EACH TEXT PLS DIRECTION j FROM THE CLOTHO TRAINING SET . S ENTENCES WITH HIGH SIMILARITY ARE DEDUPLICATED BEFORE VISUALIZATION . T HE INDEX HERE BEGINS WITH 0. Idx Top Sentences (projection value) Possible Semantics 0 
+
+> •
+
+Heavy traffic rumbles in the background while a variety of birds are chirping and calling. (0.510)  
+
+> •
+
+The rush of wind, traffic, and closer by birds are tweeting and chirping (0.509)  
+
+> •
+
+A car drives away, birds chirp, followed by traffic sounds. (0.499)  
+
+> •
+
+steady traffic travelling down a road as birds chirp in the background. (0.496) Traffic+Bird 1 
+
+> •
+
+Vehicles are driving while men and women speak in a crowd. (0.585)  
+
+> •
+
+numerous male and female voices in the foreground while mechanical transportation sounds spread in the background (0.574)  
+
+> •
+
+Many men and women talk in the foreground while mechanical transportation runs. (0.553)  
+
+> •
+
+A badly distorted speaker says something while a few customers converse. (0.545) Speech 2 
+
+> •
+
+An engine that is running and rumbling in increasingly steady amounts. (0.439)  
+
+> •
+
+The running of machinery slowly rises in pitch. (0.438)  
+
+> •
+
+An engine runs and rumbles in increasingly steady amounts. (0.436)  
+
+> •
+
+A motor is getting increasingly louder as it constantly runs. (0.430) Machinery 30  
+
+> •
+
+A coin machine was being played while coins fell loudly as time went on. (0.376)  
+
+> •
+
+Coins are falling to the ground, with more falling as time goes on (0.354)  
+
+> •
+
+Coins bounce and rattle as they are dropped on the cement. (0.347)  
+
+> •
+
+Percussion plays with a voluminous reverberating echo attached. (0.341) Coin/ Percussion 40  
+
+> •
+
+A siren blaring and changing in pitch in a rhythmic repeated way. (0.277)  
+
+> •
+
+The whir of a machine escalates and then fades several times. (0.276)  
+
+> •
+
+While a crowd of people were talking, a siren began wailing. (0.272)  
+
+> •
+
+Large explosions intermittently as a siren continuously wails in the distance. (0.267) Siren TABLE III AUDIO -TEXT RETRIEVAL WITH TRUNCATED EMBEDDINGS . T HE METRICS ARE THE LARGER THE BETTER EXCEPT FOR MEAN R/M ED R. Method Text to Audio Audio to Text R1 R5 R10 R50 MeanR MedR mAP10 R1 R5 R10 R50 MeanR MedR mAP10 
+
+In-domain, Clotho train set mean and directions → Clotho test set evaluation 
+
+Original 17.42 39.64 52.19 80.21 42.36 9 27.02 21.91 45.45 58.56 85.26 30.93 7 14.25 PLSHead 17.32 41.21 54.05 82.97 36.30 9 27.56 22.01 44.88 57.13 86.22 28.00 7 14.44 
+
+PLSHeadW 17.30 41.11 54.30 82.99 36.50 8 27.52 21.34 44.21 57.22 86.41 28.42 8 14.27 PCAHead 0.06 0.42 0.82 5.05 504.63 487 0.23 0.00 0.29 0.57 4.31 1519.11 1163 0.02 
+
+In-domain, AudioCaps train set mean and directions → AudioCaps test set evaluation 
+
+Original 28.36 61.13 75.59 94.21 13.67 3 42.25 40.65 68.86 80.15 96.76 12.22 2 26.24 
+
+PLSHead 28.97 62.99 76.66 94.92 12.36 3 43.13 36.89 68.34 80.77 96.76 9.82 3 26.07 PLSHeadW 29.36 63.39 76.97 95.07 12.17 3 43.49 36.99 65.94 79.94 97.28 10.19 3 25.51 PCAHead 0.36 1.34 2.49 12.27 325.93 270 0.84 0.21 0.94 2.51 8.25 939.40 576 0.16 
+
+Cross-domain, Clotho train set mean and directions → AudioCaps test set evaluation 
+
+Original 28.36 61.13 75.59 94.21 13.67 3 42.25 40.65 68.86 80.15 96.76 12.22 2 26.24 
+
+PLSHead 27.63 58.98 73.27 93.90 15.42 4 40.90 35.01 63.01 75.97 95.40 14.18 3 23.29 PLSHeadW 27.84 58.64 73.31 93.79 15.59 4 41.03 34.80 64.05 76.07 95.30 14.21 3 23.17 
+
+embedding on the run with simple operations, without needing the whole dataset or computing SVD. The stored embeddings can be directly used for retrieval, and the inner product similarity only needs to be computed on 100 dimensional embeddings instead of 1024 dimensional embeddings. This may significantly reduce the computational complexity for retrieval. V. T HEORETICAL DECONSTRUCTION OF PROJECTION 
+
+DECODING 
+
+Based on our decomposition framework, we proceed to in-vestigate the modality gap. We hypothesize that, apart from the widely acknowledged mean term [18], the unaligned tail, which retains a significant portion of the energy (Sec. III-C ), could also be a key source of the gap. To validate this hypothesis, we apply our framework to explain Projection Decoding (PD). While PD has emerged as a highly effective post-hoc method for gap reduction [14], [17], [21], its underlying mechanisms have previously lacked theoretical explanation. By analyzing PD through our framework, we provide this missing explanation and confirm our hypothesis, which naturally lays the foundation for our direct approach proposed in the next section. To make the discussion concrete, we focus on the setting of zero-shot audio captioning. To map an audio embedding 
+
+a into the text space, PD [21] uses a large memory of text embeddings X ∈ RN ×C (usually formed by stacking all training set embeddings row-wise [14], [17], [21], here denoted as training text embeddings ti). The new embedding tpd (a) is a linear combination of these memory embeddings ti, weighted by their similarity to the audio embedding ti · a:
+
+tpd (a) =
+
+> N
+
+X
+
+> i=1
+
+exp (ti · a)/τ PNj=1 exp (tj · a)/τ  ti, (10) 8     
+
+> (a) The full matrix (b) Zoom-in of first 250 ×250 elements Fig. 5. Visualization of ˆXTˆX.Note the upper-left diagonal area.
+
+where τ is a small temperature parameter. Here, softmax is employed to normalize the similarity weights, which is a nonlinear operation. To build intuition, we first analyze a simplified linear version of PD. Then, we discuss the behavior of the actual PD and provide experimental verifications. 
+
+A. Linear PD 
+
+To simplify the original PD into a linear version, we directly use the similarities ti ·a without going through the softmax. The scale of the output tpd (a) can be normalized to one afterwards. For simplicity, we assume that the audio embedding a and text memory embeddings ti do not have a mean component here. The linear PD is formulated as: 
+
+tpd (a) =
+
+> N
+
+X
+
+> i=1
+
+(ti · a)ti = XT (Xa). (11) We decompose with X = ˆXU T and a = V ˆa. Here, U, V ∈
+
+RC×C are the (column-wise stacked) text and audio PLS concept directions. ˆa ∈ RC stores the projection coefficients of a on V , while ˆX ∈ RN ×C stores the (row-wise stacked) projection coefficients of all ti on U . We have: 
+
+tpd (a) = XT (Xa ) = ( ˆXU T )T ( ˆXU T V ˆa)= U ( ˆXT ˆX)
+
+| {z }
+
+> Rescaling
+
+(U T V )
+
+| {z }
+
+> Filtering
+
+ˆa. (12) Note that U T V is the UV matrix in Fig. 3. It is near-zero except for the ∼top 100 (shared head) diagonal values. These top di-agonal values are large and positive. ˆXT ˆX is the covariance of the text projection coefficients in the training data. Its diagonals are the self-variances (see Fig. 2). ˆXT ˆX is shown in Fig. 5. We see a similar pattern: near-zero off-diagonal entries, along with quickly decaying diagonal values as the index increases. Eq. (12) reveals that Linear PD is a sequence of three opera-tions applied to the audio projection coefficients ˆa: 1) Filtering out the noisy, unaligned private tail ( ∼last 924 dim) with the alignment gate U T V ; 2) Rescaling the filtered coefficients according to the self-covariance ˆXT ˆX. It further promotes the head and demotes the tail; 3) Synthesizing tpd (a) with the text directions U . This swaps the original audio directions V with the new text directions. 
+
+B. Actual PD 
+
+The linear PD confirms our intuition about the modality gap. The actual PD additionally applies softmax to the similarity scores. We now show that the behavior can still be similar. In fact, the softmax temperature τ used in PD is a tiny value like 0.01 [14], [21], greatly sharpening the similarity scores. Also, we have known in Sec. IV that the retrieval approximately just compares projections in the top PLS directions. Thus, the softmax virtually preserves only a very small number of memory embeddings that share a similar head with the input audio embedding. This indicates that for a preserved text embedding tsel  
+
+> i
+
+from the memory, its projection on the text directions, which is ˆtsel  
+
+> i
+
+, is similar to the projection of a on the audio directions, which is ˆa, for the top projection indices j =1 . . . K . We denote this as (ˆ tsel  
+
+> i
+
+)1: K ≈ (ˆ a)1: K , where (·)1: K ∈
+
+RK means selecting indices from 1 to K to form a sub-vector. The PD, which is a weighted sum of these selected items 
+
+tsel  
+
+> i
+
+, will now produce an output embedding tpd (a) that has a head similar to the original. Since it is averaged from multiple similar heads, noise could be reduced more compared to nearest-neighbor decoding (NND), which uses only one top-similarity sample. Thus, the similarity to the original head (ˆ a)1: K should be higher for the PD head than the NND head. This indicates that the projection of tpd (a) onto the text directions, which is [tpd (a), is similar to the projection of the original embedding a onto the audio directions, which is ˆa,for the top indices 1 to K: ( [tpd (a))1: K ≈ (ˆ a)1: K .For the tail, we can easily see that the original one (ˆ a)K+1: C
+
+is now stripped, and a new tail is now constructed as the weighted sum of the selected memory embeddings. This means that although the new embedding tpd (a) still has a tail, it could be now drastically different from the original one. Moreover, for the mean term, since the new embedding 
+
+tpd (a) is constructed from averaging the text embeddings tsel  
+
+> i
+
+,and each text embedding has a stable mean component ¯t, the averaged embedding should still preserve this item. Thus, it could also be effectively doing the work of “mean shifting”, which is swapping out the original mean term ¯a, and adding the new one ¯t to the output tpd (a).To summarize, the projection decoding can be viewed as effectively performing 2:1) Head preserving. Get the projection values of the original embedding, preserve the head, and discard the tail. 2) Tail imputation. Find embeddings in the memory that share a similar head, and build a new tail as a weighted average of the tails of these selected embeddings. 3) Base changing. Change from V to U when reconstructing the embeddings from projection values. 4) Mean shifting. Strip the original mean term of the source modality (audio mean ¯a), and add the mean term of the target modality (text mean ¯t). We also performed experiments to verify our theory, with the results given in Table IV. We perform PD on all Clotho test set audio embeddings according to Eq. (10), using the Clotho training set text embeddings as the memory bank. These embeddings are further normalized to an l2-norm of 1, which is consistent with previous implementations [14], [21]. The resultant embeddings are tpd (ai), i = 1 . . . N test .
+
+> 2A mathematical derivation is in App. A, which corroborates the view. 9
+
+TABLE IV CHARACTERIZATION OF PROJECTION DECODING BEHAVIORS .Metric Value Metric Value 
+
+sim cos (¯ a(test) , ¯t) 0.598 ∥¯a(test) − ¯t∥ 0.488 
+
+sim cos (tpd (a), ¯t) 0.995 ∥tpd (a) − ¯t∥ 0.112 
+
+sim cos 
+
+ ( \tpd (a))1:100 , (ˆ a)1:100  0.772 sim cos (¯ a(train) , ¯a(test) ) 0.999 
+
+sim cos 
+
+ ( \tpd (a))101: C , (ˆ a)101: C  0.095 ∥¯a(train) − ¯a(test) ∥ 0.028 
+
+sim cos 
+
+ ( \tnnd (a))1:100 , (ˆ a)1:100  0.677 
+
+We first see whether the mean term is shifted from ¯a to 
+
+¯t. We calculate the mean embedding of all PD embeddings 
+
+tpd (a) = ( PNtest  
+
+> i=1
+
+tpd (ai))/N test . Then, its cosine similarity to the target text mean sim cos (tpd (a), ¯t) is calculated, where ¯t is the mean embedding of all the text embeddings in the training set. It is compared with the similarity before PD mapping 
+
+sim cos (¯ a(test) , ¯t), where ¯a(test) is the mean embedding calculated on all audio embeddings in the test set 3. We see that after PD, the mean tpd (a) is now very similar to the text mean ¯t,which is much better than the original one before PD mapping 
+
+sim cos (¯ a(test) , ¯t). We also calculated the distance between the means before and after PD mapping ∥¯a(test) −¯t∥ and ∥tpd (a)−¯t∥.We see that after PD, the distance is significantly reduced. This indicates that mean shifting is indeed performed in PD. Knowing that the mean term in the new PD embedding is basically the text mean ¯t, we proceed to the decomposition analysis of the head and tail using the PLS decomposition in Eq. (3). Here, the decomposition parameters U, V, ¯t, ¯a are de-rived from the training set. The PD-mapped embeddings tpd (ai)
+
+are decomposed with U, ¯t. The raw testing audio embeddings are decomposed with V, ¯a. We see that the average (over all test samples ai,i = 1 . . . N test ) cosine similarity of the head before and after PD-mapping is considerably high (0.772), and is higher than that of nearest-neighbor decoding (denoted as 
+
+tnnd (ai), 0.677). We also see the tail is indeed different before and after PD mapping (0.095). Based on these insights, we deduce that the modality gap may have multiple sources that reside in different parts of the embedding space. We categorize these possible sources according to the subspace as follows: 1) Mean Components. The difference between ¯t and ¯a is the static modality gap in mainstream works [18], [40]–[45]. 
+
+¯t and ¯a are stable across samples. It is usually explained with the cone effect [18] introduced in Sec. II-C . It can be reduced with embedding shift (ES). 2) Shared Head. The PLS directions ui and vi are not perfectly aligned, which could be a source of the gap. Shifting to the same set of directions may be needed to address it (effects shown later in Table V). Also, differences in the estimated semantics in the audio and text projection coefficients could be another source of the gap. 3) Modality-specific Tail. The entire tail can be a gap to be removed. The tails are unaligned and have significant 
+
+> 3
+
+Actually, the mean terms are relatively stable. We can see that audio means from the test set ¯a(test) and training set ¯a(train) are very close. This is consistent with the findings in other works [18], [42].They are not distinguished later. TABLE V RESULTS ON AUDIO CAPTIONING .Method BLEU ↑ 
+
+> 4
+
+MET ↑ R↑ 
+
+> L
+
+CIDEr ↑ SPICE ↑ SPIDEr ↑
+
+Clotho, CLAP: WavCaps HTSAT-BERT-ZS [4] 
+
+t→a AD* 11.1 14.7 33.3 26.6 8.6 17.6 t→a NI* 12.5 15.5 33.5 27.4 10.3 18.8 t→a ES* 11.6 16.3 34.3 30.8 10.6 20.7 t→a NND* 13.1 17.2 35.7 36.0 12.3 24.1 t→a PD* 15.1 17.9 37.5 42.3 13.0 27.7 
+
+t100 →a100 ⋆* 15.4 18.3 37.8 41.8 13.3 27.5 t100rec →a100rec * 14.1 17.4 36.4 36.0 12.1 24.0 WSAC [14] † 12.6 16.9 35.9 35.7 11.8 23.8 SoftHard [16] 15.6 17.3 37.5 40.3 11.9 26.1 a→a* 16.6 18.0 38.0 41.1 12.6 26.8 a100 →a100 ⋆* 16.5 17.9 37.6 42.0 12.4 27.2 
+
+t-924 →t-924 * 7.1 11.4 27.1 12.0 5.7 8.8 a-924 →a-924 * 6.2 11.0 27.2 7.5 5.0 6.3 t-924 →a-924 * 5.9 10.9 26.0 8.8 4.9 6.9 no cond* 3.5 8.5 24.9 5.4 2.3 3.9 
+
+AudioCaps, CLAP: WavCaps HTSAT-BERT-ZS [4] 
+
+t→a AD* 14.6 18.5 36.2 34.4 12.2 23.3 t→a ES* 16.0 20.9 40.8 46.8 13.9 30.4 t→a NND* 21.0 23.8 44.1 57.9 17.1 37.5 t→a PD* 23.0 24.9 47.1 65.1 17.8 41.5 
+
+t100 →a100 ⋆* 21.9 24.2 46.7 64.1 17.1 40.6 t100rec →a100rec * 16.7 21.7 42.1 49.7 14.8 32.2 WSAC [14] † 17.1 23.2 43.5 56.4 16.3 36.3 SoftHard [16] 21.3 22.0 45.7 64.4 15.6 40.0 a→a* 23.7 23.8 47.3 63.0 17.7 40.3 
+
+a100 →a100 ⋆* 21.7 23.7 46.8 60.7 17.1 38.9 
+
+Clotho, CLAP: WavCaps+SoundVECaps as in DRCap [17] 
+
+t→a AD* 9.0 14.6 30.7 24.0 8.6 16.3 t→a ES* 12.3 16.6 34.9 32.5 11.2 21.9 t→a PD* 15.6 18.1 37.9 43.1 13.2 28.2 t100 →a100 ⋆* 15.3 18.5 37.7 41.6 13.3 27.4 DRCap [17] - 18.2 - 43.8 13.3 28.5 
+
+a→a* 16.3 17.7 37.9 41.6 12.4 27.0 
+
+a100 →a100 ⋆* 16.3 17.7 37.5 41.0 12.3 26.7 
+
+AudioCaps, CLAP: WavCaps+SoundVECaps as in DRCap [17] 
+
+t→a AD* 20.4 23.4 43.4 51.1 16.2 33.7 t→a ES* 21.8 22.8 45.8 58.6 16.3 37.5 t→a PD* 25.9 24.9 49.9 70.5 18.5 44.5 
+
+t100 →a100 ⋆* 25.1 24.6 49.7 69.2 17.5 43.3 DRCap [17] - 25.3 - 70.5 18.0 44.2 a→a* 25.3 24.1 48.7 66.6 18.2 42.4 
+
+a100 →a100 ⋆* 23.4 23.7 47.8 62.8 17.7 40.2  
+
+> *
+
+results produced by us based on modified WSAC [14] that uses beam 5.  
+
+> ⋆
+
+100 dim embeddings as opposed to the original 1024 dim ones.  
+
+> †
+
+results provided in Zhang et al. [16] that use the same CLAP model. 
+
+residual energy. To mitigate this, such as mapping an audio embedding into the text space, we can strip the original audio tail and “hallucinate” a text tail based on some similar text embeddings in a memory. Or, we can remove all tails in text and audio embeddings entirely. VI. PLSH EAD II: B RIDGING THE MODALITY GAP FOR 
+
+AUDIO CAPTIONING 
+
+From the observations above, we find that the embedding of top K (K is the head size, which is 100 here) projection values is a promising solution that not only retains most of the useful information but also avoids most of the pitfalls 10 
+
+of the modality gap mentioned above. In this section, we study whether these truncated projection embeddings can both reduce the dimensionality from 1024 to 100, and bridge the modality gap for zero-shot audio captioning. We also look at its performance in fully-supervised audio captioning. We base our experiments on WSAC [14], which is an early method for zero-shot audio captioning. It adopts a simple model (Transformer with 4 layers, 4 heads, and 768 dim hidden size, not pretrained), and a simple pipeline that purely utilizes condi-tion swapping and basic gap mitigation methods (NI, ES, NND, or PD). Later works also add more sophisticated modules, such as extra keyword guidance and advanced data augmentation [16], or extra similar caption guidance based on a massive datastore of 450k captions [17]. They also utilize a larger captioning model, such as pretrained GPT-2 [16], [59], LoRA [60] finetuned Vicuna-7b-v1.5 [61] (Llama 2 [62] finetuned on chat data) [17]. Nevertheless, we show that the performance of this simple method can approach these more sophisticated methods with some simple parameter changes, such as replacing the greedy search (hardly used in newer works) in the original WSAC [14] to beam decoding. Specifically, we use beam decoding with a beam size of 5, repetition penalty of 1.2, n-gram repetition limit of 3, and MBR [63] selection among the 5 beam results (select a caption from the 5 beam results that has the highest BLEU 4 similarity to the other 4 results). The epoch is 30 on Clotho and 5 on AudioCaps, due to different numbers of unique samples in the datasets. Audio clips are cropped or padded to 10 sec when HTSAT [64] encoder is used, like in [16]. Other parameters mainly follow the original WSAC paper [14]. These settings are kept the same for all results produced by us in Table V. We perform experiments on Clotho [56] and AudioCaps [57]. The projection parameters are obtained on the training data. We show results on two CLAP models: 1) HTSAT-BERT-ZS pretrained on WavCaps [4], which is used in SoftHard [16], and 2) the CLAP model used in DRCap [17], which is pretrained on WavCaps [4] and SoundVECaps [58]. In this way, the results can be compared with these reference models. Also, both HTSAT-BERT-ZS [4] and the CLAP in DRCap [17] exclude overlapping samples from Clotho and AudioCaps during pretraining, which better evaluates zero-shot and gen-eralization abilities. The metrics are BLEU 4 [65], METEOR (MET) [66], ROUGE L (R L) [67], CIDEr [68], SPICE [69], and SPIDEr [70], which are standard audio captioning metrics [4], [6], [14], [16], [17], and reflect the correspondence to ground-truth captions. Higher values mean better performance. The results are shown in Table V. We show results of text-only training of our modified WSAC using the original CLAP embeddings as “t →a” (training-time condition →test-time con-dition). “AD” means no additional gap mitigation methods are used. “NI” means Gaussian noise injection with variance 0.013 (recommended value in WSAC [14]), followed by normaliza-tion, is used during training. “ES” means embedding shift that subtracts the static gap vector ¯a−¯t from the audio embeddings, followed by normalization, during inference. “NND” is nearest-neighbor decoding. It selects the text embedding (from a mem-ory of all training text embeddings) that is most similar to the input audio embedding as the condition given to the captioning model. “PD” is projection decoding, which also utilizes a mem-ory of all training text embeddings. We see that the performance is generally AD <NI <ES <NND <PD. The “AD” performs much worse than other methods, indicating the necessity of gap mitigation methods. After the simple changes, the performance of PD now increases sharply over the original greedy-decoding based results, and even generally matches or surpasses that of more sophisticated methods like SoftHard [16] and DRCap [17]. This demonstrates the power of PD. However, it depends on large memory banks, and operates on original embedding dimensions (1024 here). Our PLSHead method, which uses top 100 projection values for text embeddings (t 100 ) at training time, and top 100 audio projection values (a 100 ) at test time, generally has a performance matching the PD results. Also, our method reduces the embedding dimension over 90%, and eliminates the need of a large, non-parametric memory bank. Here, it simply needs 202 embeddings for mean and projection directions. Furthermore, we show results of fully-supervised audio captioning as a →a. We see that the zero-shot PD results, zero-shot t 100 →a100 results, and fully-supervised a 100 →a100 results generally match the performance of a →a. This indicates that both PD and PLSHead can push the performance of zero-shot audio captioning near the boundary of its fully-supervised coun-terpart. Also, compressed audio embeddings with PLSHead has matching performance with the uncompressed ones in audio captioning. These results further corroborate the view that most of the useful semantics can reside within these compact head dimensions, and these semantics are shared between embeddings of different modalities. Moreover, to see whether shifting the projection directions 
+
+U and V in the head to the same set of orthogonal directions is helpful for gap mitigation, we show results of t 100rec →a100rec .It reconstructs the 1024 dim audio embeddings from the top 100 audio projection values ˆa (pad the remaining dimensions 101 to 1024 with 0 for ease of annotation here) and the audio directions V as V ˆa. The text embeddings are reconstructed in a similar way. We see that the performance is indeed lower than t 100 →a100 . This indicates that the not fully aligned U
+
+and V , although might function in retrieval, could serve as a source of the modality gap that makes a captioner difficult to generalize between the embeddings of different modalities. To further understand what can be in the tail dimensions, we perform additional experiments using the last 924 projection coefficients (all coefficients excluding the 100 dim head), denoted as t -924 for text tails, and a -924 for audio tails. We also perform experiments that use no condition at all, which is denoted as “no cond”. We see that training with text tails and testing with audio tails (t -924 →a-924 ) yields a very low performance, which is only a little higher than the “no cond” results. This indicates that there is not much aligned information for caption prediction left in the tail dimensions. The result of a-924 →a-924 is similar to t -924 →a-924 , indicating that there is not much additional information for caption prediction available in the modality-private subspace of the audio embeddings other than the little amount of residual aligned information mentioned in t -924 →a-924 . For t -924 →t-924 , the performance is a little higher, but not substantial. This suggests that the tail of the text modality may contain additional text-specific information that provides slight benefits for caption prediction. 11 
+
+VII. C ONCLUSION 
+
+We have developed a systematic framework for understanding CLAP embeddings with PLS-SVD. We find that the CLAP embedding space can be decomposed into a mean component, which encodes the static modality gap found in other works; a compact head of shared core semantics; and a long, unaligned tail that contains significant residual energy. The modality gap could also reside within the imperfect UV alignments in the head, and importantly, the unaligned tail. The directions in the head roughly correspond to interpretable concepts. We find that only the direct effect of the shared head is actively participating in the similarity calculation. In addition, the singular values of PLS-SVD and the UV alignments can characterize the net useful contribution in aligning the positive pairs. Moreover, we can preserve just the compact head (named PLSHead) to strongly compress embeddings, and yield comparable or better performance on audio-text retrieval and audio captioning. Starting with a linear approximation, we find that projection decoding shifts the mean, preserves the head, and constructs a different tail. We find that PLSHead also effectively mitigates the modality gap in text-only training for audio captioning, and that there is not much caption-related information left in the tails, which corroborates our theory. APPENDIX ATHEORETICAL DERIVATION OF THE ACTUAL PD We also provide a theoretical derivation of the actual PD here. Starting from Eq. (10), we have: 
+
+tpd (a) = XT SoftMax τ (Xa)= XT SoftMax τ
+
+( ˆXU T + 1¯tT )a
+
+= XT SoftMax τ
+
+ ˆXU T V ˆafull + 1¯tT a,
+
+(13) where 1 ∈ RC is a vector of all ones. a = V ˆafull = V (ˆ a+ˆ ¯a) is the decomposition of a including the mean. ˆ¯a is the projection of the audio mean component along the audio directions ¯a =
+
+V ˆ¯a. It can be seen as a prior to help predict the audio-text similarity even before the audio is known: 
+
+t · a = ( Uˆt + Uˆ¯t)T (V ˆa + V ˆ¯a) (14) 
+
+= ˆ tT U T V ˆa + ˆ tT U T V ˆ¯a + ˆ¯tT U T V ˆa + ˆ¯tT U T V ˆ¯a.
+
+Note the fourth is a constant, and the second is this audio prior term. In Eq. (13), 1¯tT a is the same across dimensions and can be removed from softmax. In addition, the temperature τ
+
+is tiny. Thus, we approximate the softmax as a gating function that selects top similarity values and behaves linearly on the selected ones. Continuing from Eq. (13): 
+
+. . . = XT SoftMax τ ( ˆXU T V ˆafull )
+
+≈ XT
+
+> gated
+
+(k ˆXgated U T V ˆafull + C1)= ( U ˆXT 
+
+> gated
+
++ ¯ t1T )( k ˆXgated U T V ˆafull ) + CX T
+
+> gated
+
+1 (15) 
+
+= kU ˆXT 
+
+> gated
+
+ˆXgated U T V ˆafull +k¯t(1T ˆXgated U T V ˆafull )+ C′¯tg
+
+= kU ˆXT 
+
+> gated
+
+ˆXgated U T V ˆafull + k′¯t + C′¯tg.
+
+We see a form similar to linear PD. Here, Xgated ∈ RNgated ×C is the selected text with high head similarity ˆXU T V ˆafull . ˆXgated ∈                                                                                       
+
+> TABLE VI TEXT -TO -A UDIO RETRIEVAL WITH TOP 100 P ROJECTIONS .CLAP (Dataset) Method R1 R5 R10 R50 MeanR MedR mAP ASC (Cl) Raw 10.89 29.51 40.82 73.09 50.02 17.00 18.90 ASC (Cl) PLSHd 13.11 33.32 46.43 77.53 43.53 13.00 22.05
+> ASC (Cl) PLSHdW 13.03 33.34 46.39 77.49 43.58 13.00 22.02 ASC (AC) Raw 32.83 66.54 79.52 95.86 10.07 3.00 47.06 ASC (AC) PLSHd 33.61 68.13 80.67 96.20 9.92 3.00 48.30 ASC (AC) PLSHdW 34.15 68.13 80.92 96.24 9.75 3.00 48.67
+> WCCNN14 (Cl) Raw 21.11 46.22 59.46 85.68 29.69 7.00 31.94 WCCNN14 (Cl) PLSHd 21.72 46.32 59.46 86.85 27.27 7.00 32.25
+> WCCNN14 (Cl) PLSHdW 21.49 46.58 59.50 86.83 27.31 7.00 32.23 WCCNN14 (AC) Raw 34.44 69.09 82.49 97.24 8.59 3.00 49.09
+> WCCNN14 (AC) PLSHd 32.81 67.69 79.54 96.68 9.65 3.00 47.50 WCCNN14 (AC) PLSHdW 33.42 68.07 79.85 96.76 9.56 3.00 47.95 DRCap (Cl) Raw 17.88 41.70 55.04 82.72 37.78 8.00 28.17 DRCap (Cl) PLSHd 18.33 42.37 55.87 84.63 33.69 8.00 28.56
+> DRCap (Cl) PLSHdW 18.18 42.30 55.52 84.59 33.79 8.00 28.41 DRCap (AC) Raw 33.29 65.94 79.50 95.80 10.61 3.00 47.40 DRCap (AC) PLSHd 33.40 67.44 80.44 96.43 9.60 3.00 47.74 DRCap (AC) PLSHdW 33.83 67.80 80.90 96.57 9.48 3.00 48.15
+
+RNgated ×C is the projection. XT 
+
+> gated
+
+= U ˆXT 
+
+> gated
+
++ ¯ t1T is the de-composition. k, C > 0 are softmax approximation coefficients. 
+
+XT
+
+> gated
+
+1 = Ngated ¯tg, where ¯tg is the mean of the selected top-similarity embeddings Xgated . k′ = k(¯˜tT 
+
+> g
+
+a) and C′ = Ngated C.
+
+¯˜tg is ¯tg with text mean stripped. Now, the text mean ¯t and mean of selected embeddings ¯tg are in tpd (a). The rescaling now uses local covariance ˆXT 
+
+> gated
+
+ˆXgated , computed on a small cluster of text neighbors tailored to each input. It rebuilds tails with local covariance instead of erasing them again after the gate U T V .APPENDIX BDECOMPOSITION AND RETRIEVAL FOR OTHER CLAP We show decomposition (in Fig. 6) and text-to-audio re-trieval (in Table VI) results with other CLAP models, which are ASC-HTSAT-RoBERTa 4 pretrained on AudioSetCaps [6], CNN14-BERT-PT pretrained on WavCaps+AudioCaps+Clotho [4], and the CLAP model used in DRCap [17] pretrained on WavCaps+SoundVECaps [58]. In Table VI, “Cl” means Clotho, “AC” means AudioCaps, “ASC” means CLAP pretrained on Au-dioSetCaps, “mAP” means mAP10, “PLSHd” (or “PLSHdW”) means our method PLSHead (or PLSHeadW), using top 100 PLS-SVD concept directions. REFERENCES [1] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal et al. ,“Learning transferable visual models from natural language supervision,” in International conference on machine learning . PMLR, 2021, pp. 8748–8763. [2] B. Elizalde, S. Deshmukh, and H. Wang, “Natural language supervision for general-purpose audio representations,” in ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Processing .IEEE, 2024, pp. 336–340. [3] Y. Wu, K. Chen, T. Zhang, Y. Hui, T. Berg-Kirkpatrick, and S. Dubnov, “Large-scale contrastive language-audio pretraining with feature fusion and keyword-to-caption augmentation,” in ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing .IEEE, 2023, pp. 1–5. 
+
+> 4ATR HTSAT+RoBERTa ASC PT mask25 T2AR1 32.8 A2TR1 44.5.pt 12
+
+(a) ASC-HTSAT-RoBERTa [6] on Clotho. 
+
+(b) ASC-HTSAT-RoBERTa [6] on AudioCaps. 
+
+(c) CNN14-BERT-PT [4] on Clotho. 
+
+(d) CNN14-BERT-PT [4] on AudioCaps. 
+
+(e) CLAP used by DRCap [17] on Clotho. 
+
+(f) CLAP used by DRCap [17] on AudioCaps. Fig. 6. PLS covariance decomposition and UV alignment for other CLAP. [4] X. Mei, C. Meng, H. Liu, Q. Kong, T. Ko, C. Zhao et al. , “Wavcaps: A chatgpt-assisted weakly-labelled audio captioning dataset for audio-language multimodal research,” IEEE/ACM Transactions on Audio, Speech, and Language Processing , 2024. [5] L. Sun, X. Xu, M. Wu, and W. Xie, “Auto-acd: A large-scale dataset for audio-language representation learning,” in Proceedings of the 32nd ACM International Conference on Multimedia , 2024, pp. 5025–5034. [6] J. Bai, H. Liu, M. Wang, D. Shi, W. Wang, M. D. Plumbley et al. ,“Audiosetcaps: An enriched audio-caption dataset using automated gener-ation pipeline with large audio and language models,” IEEE Transactions on Audio, Speech and Language Processing , 2025. [7] P. Primus and G. Widmer, “A knowledge distillation approach to im-proving language-based audio retrieval models,” DCASE2024 Challenge, Tech. Rep., June 2024. [8] H. J. Kim, H. Y. Choi, K. Choi, E. Choi, and C. Lim, “Aistat lab system for dcase 2025 task6: Language-based audio retreival,” DCASE2025 Challenge, Tech. Rep., June 2025. [9] S. Ghosh, S. Kumar, C. K. R. Evuru, R. Duraiswami, and D. Manocha, “Recap: Retrieval-augmented audio captioning,” in ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Pro-cessing . IEEE, 2024, pp. 1161–1165. [10] Y. Zhu, A. Men, and L. Xiao, “Diffusion-based diverse audio captioning with retrieval-guided langevin dynamics,” Information Fusion , vol. 114, p. 102643, 2025. [11] Y. Zhu, Y. Zhang, L. Xiao, W. Wang, and A. Men, “Zero-shot diverse audio captioning with diffusion models,” Knowledge-Based Systems , vol. 335, p. 115205, 2026. [12] H. Liu, Z. Chen, Y. Yuan, X. Mei, X. Liu, D. Mandic et al. , “Audioldm: text-to-audio generation with latent diffusion models,” in Proceedings of the 40th International Conference on Machine Learning , 2023, pp. 21 450–21 474. [13] H. Liu, Y. Yuan, X. Liu, X. Mei, Q. Kong, Q. Tian et al. , “AudioLDM 2: Learning holistic audio generation with self-supervised pretraining,” 
+
+IEEE/ACM Transactions on Audio, Speech, and Language Processing ,2024. [14] T. Kouzelis and V. Katsouros, “Weakly-supervised automated audio captioning via text only training,” in Detection and Classification of Acoustic Scenes and Events (DCASE) Workshop , 2023, pp. 81–85. [15] S. Deshmukh, B. Elizalde, D. Emmanouilidou, B. Raj, R. Singh, and H. Wang, “Training audio captioning models without audio,” in ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2024, pp. 371–375. [16] Y. Zhang, X. Xu, R. Du, H. Liu, Y. Dong, Z.-H. Tan et al. , “Zero-shot audio captioning using soft and hard prompts,” IEEE Transactions on Audio, Speech and Language Processing , 2025. [17] X. Li, W. Chen, Z. Ma, X. Xu, Y. Liang, Z. Zheng et al. , “Drcap: Decoding clap latents with retrieval-augmented generation for zero-shot audio captioning,” in ICASSP 2025-2025 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2025, pp. 1–5. [18] V. W. Liang, Y. Zhang, Y. Kwon, S. Yeung, and J. Y. Zou, “Mind the gap: Understanding the modality gap in multi-modal contrastive representation learning,” Advances in Neural Information Processing Systems , vol. 35, pp. 17 612–17 625, 2022. [19] S. Schrodi, D. T. Hoffmann, M. Argus, V. Fischer, and T. Brox, “Two effects, one trigger: On the modality gap, object bias, and information imbalance in contrastive vision-language models,” in International Con-ference on Learning Representations , 2025. [20] L. Yi, R. Douady, and C. Chen, “Decipher the modality gap in multi-modal contrastive learning: From convergent representations to pairwise alignment,” arXiv preprint arXiv:2510.03268 , 2025. [21] W. Li, L. Zhu, L. Wen, and Y. Yang, “Decap: Decoding CLIP latents for zero-shot captioning via text-only training,” in International Conference on Learning Representations , 2023. [22] S. Mo, Z. Chen, F. Bao, and J. Zhu, “Diffgap: A lightweight diffusion module in contrastive space for bridging cross-model gap,” in ICASSP 2025-2025 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2025, pp. 1–5. [23] K. Nam, J. Choi, H. Lee, J. Heo, and J. S. Chung, “Diffusion-link: Diffusion probabilistic model for bridging the audio-text modality gap,” 
+
+arXiv preprint arXiv:2510.11330 , 2025. [24] A. Sofer, Y. Goldman, and S. E. Chazan, “Pull it together: Reducing the modality gap in contrastive learning,” in Proc. Interspeech 2025 , 2025, pp. 196–200. [25] U. Bhalla, A. Oesterling, S. Srinivas, F. P. Calmon, and H. Lakkaraju, “Interpreting clip with sparse linear concept embeddings (splice),” in 
+
+Advances in Neural Information Processing Systems , A. Globerson, 13 
+
+L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak et al. , Eds., vol. 37. Curran Associates, Inc., 2024, pp. 84 298–84 328. [26] J. Zhao, C. Li, F. Sala, and K. Rohe, “Quantifying structure in clip embeddings: A statistical framework for concept interpretation,” arXiv preprint arXiv:2506.13831 , 2025. [27] E. Gordon, M. Y. Levi, and G. Gilboa, “Scocca: Multi-modal sparse concept decomposition via canonical correlation analysis,” arXiv preprint arXiv:2603.13884 , March 2026. [28] K. He, H. Fan, Y. Wu, S. Xie, and R. Girshick, “Momentum contrast for unsupervised visual representation learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2020, pp. 9729–9738. [29] S. Deshmukh, B. Elizalde, R. Singh, and H. Wang, “Pengi: An audio language model for audio tasks,” Advances in Neural Information Pro-cessing Systems , vol. 36, pp. 18 090–18 108, 2023. [30] L. Gao, Y. Yuan, Y. Chen, Y. Cheng, Z. Li, J. Wen et al. , “Rfm-editing: Rectified flow matching for text-guided audio editing,” arXiv preprint arXiv:2509.14003 , 2025. [31] T. Fel, V. Boutin, L. B ´ethune, R. Cad `ene, M. Moayeri, L. And ´eol et al. ,“A holistic approach to unifying automatic concept extraction and concept importance estimation,” Advances in Neural Information Processing Systems , vol. 36, pp. 54 805–54 818, 2023. [32] B. Kim, M. Wattenberg, J. Gilmer, C. Cai, J. Wexler, F. Viegas et al. ,“Interpretability beyond feature attribution: Quantitative testing with concept activation vectors (tcav),” in International Conference on Machine Learning . PMLR, 2018, pp. 2668–2677. [33] T. Fel, A. Picard, L. Bethune, T. Boissin, D. Vigouroux, J. Colin et al. ,“Craft: Concept recursive activation factorization for explainability,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 2711–2721. [34] J. Vielhaben, S. Bl ¨ucher, and N. Strodthoff, “Multi-dimensional concept discovery (mcd): a unifying framework with completeness guarantees,” 
+
+Transactions on machine learning research , no. 5, pp. 1–25, 2023. [35] P. W. Koh, T. Nguyen, Y. S. Tang, S. Mussmann, E. Pierson, B. Kim 
+
+et al. , “Concept bottleneck models,” in International Conference on Machine Learning . PMLR, 2020, pp. 5338–5348. [36] T. Oikarinen, S. Das, L. M. Nguyen, and T.-W. Weng, “Label-free concept bottleneck models,” in International Conference on Learning Representations , 2023. [37] M. Yuksekgonul, M. Wang, and J. Zou, “Post-hoc concept bottleneck models,” in International Conference on Learning Representations , 2023. [38] A. Zhang, E. Thomaz, and L. Lu, “Transformation of audio embeddings into interpretable, concept-based representations,” in 2025 International Joint Conference on Neural Networks . IEEE, 2025, pp. 1–8. [39] Y. Zang, T. Yun, H. Tan, T. Bui, and C. Sun, “Pre-trained vision-language models learn discoverable visual concepts,” Transactions on Machine Learning Research , 2025. [40] Y. Zhang, J. Z. HaoChen, S.-C. Huang, K.-C. Wang, J. Zou, and S. Yeung, “Diagnosing and rectifying vision models using language,” in International Conference on Learning Representations , 2023. [41] P. Shi, M. C. Welle, M. Bj ¨orkman, and D. Kragic, “Towards understanding the modality gap in clip,” in ICLR 2023 Workshop on Multimodal Representation Learning: Perks and Pitfalls , 2023. [42] Y. Zhang, E. Sui, and S. Yeung, “Connect, collapse, corrupt: Learning cross-modal tasks with uni-modal data,” in International Conference on Learning Representations , 2024. [43] B. Li, Y. Zhang, X. Wang, W. Liang, L. Schmidt, and S. Yeung-Levy, “Closing the modality gap for mixed modality search,” in Socially Responsible and Trustworthy Foundation Models at NeurIPS 2025 , 2025. [44] C. Yaras, S. Chen, P. Wang, and Q. Qu, “Explaining and mitigating the modality gap in contrastive multimodal learning,” in Conference on Parsimony and Learning . PMLR, 2025, pp. 1365–1387. [45] E. Grassucci, G. Cicchetti, and D. Comminiello, “Closing the modality gap enables novel multimodal learning applications,” in Second Workshop on Representational Alignment at ICLR 2025 , 2025. [46] S. Ramasinghe, V. Shevchenko, G. Avraham, and A. Thalaiyasingam, “Accept the modality gap: An exploration in the hyperbolic space,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 27 263–27 272. [47] A. Fahim, A. Murphy, and A. Fyshe, “It’s not a modality gap: Characteriz-ing and addressing the contrastive gap,” arXiv preprint arXiv:2405.18570 ,2024. [48] T. Wang and P. Isola, “Understanding contrastive representation learning through alignment and uniformity on the hypersphere,” in International Conference on Machine Learning . PMLR, 2020, pp. 9929–9939. [49] N. M. An, E. Kim, J. Thorne, and H. Shim, “I0t: Embedding standard-ization method towards zero modality gap,” in Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics , 2025, pp. 27 182–27 199. [50] S. Eslami and G. de Melo, “Mitigate the gap: Improving cross-modal alignment in clip,” in International Conference on Learning Representa-tions , 2025. [51] J. R. Lee, Y. Shin, G. Son, and D. Hwang, “Diffusion bridge: leveraging diffusion model to reduce the modality gap between text and vision for zero-shot image captioning,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 4050–4059. [52] D. Nukrai, R. Mokady, and A. Globerson, “Text-only training for image captioning using noise-injected clip,” in Findings of the Association for Computational Linguistics: EMNLP 2022 , 2022, pp. 4055–4063. [53] S. Gu, C. Clark, and A. Kembhavi, “I can’t believe there’s no images! learning visual tasks using only language supervision,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 2672–2683. [54] L. Salewski, S. Fauth, A. Koepke, and Z. Akata, “Zero-shot audio cap-tioning with audio-language model guidance and audio context keywords,” in 37th Conference on Neural Information Processing Systems (NeurIPS 2023) - ML for Audio Workshop , 2023. [55] T. Shaharabany, A. Shaulov, and L. Wolf, “Zero-shot audio captioning via audibility guidance,” arXiv preprint arXiv:2309.03884 , 2023. [56] K. Drossos, S. Lipping, and T. Virtanen, “Clotho: An audio caption-ing dataset,” in ICASSP 2020-2020 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2020, pp. 736–740. [57] C. D. Kim, B. Kim, H. Lee, and G. Kim, “Audiocaps: Generating captions for audios in the wild,” in Proceedings of NAACL-HLT , 2019. [58] Y. Yuan, D. Jia, X. Zhuang, Y. Chen, Z. Chen, Y. Wang et al. , “Sound-vecaps: Improving audio generation with visually enhanced captions,” in 
+
+ICASSP 2025-2025 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2025, pp. 1–5. [59] A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, I. Sutskever et al. ,“Language models are unsupervised multitask learners,” OpenAI blog ,vol. 1, no. 8, p. 9, 2019. [60] E. J. Hu, yelong shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang et al. ,“LoRA: Low-rank adaptation of large language models,” in International Conference on Learning Representations , 2022. [61] L. Zheng, W.-L. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang et al. ,“Judging llm-as-a-judge with mt-bench and chatbot arena,” Advances in neural information processing systems , vol. 36, pp. 46 595–46 623, 2023. [62] H. Touvron, L. Martin, K. Stone, P. Albert, A. Almahairi, Y. Babaei 
+
+et al. , “Llama 2: Open foundation and fine-tuned chat models,” arXiv preprint arXiv:2307.09288 , 2023. [63] S. Kumar and B. Byrne, “Minimum bayes-risk decoding for statistical machine translation,” in Proceedings of the Human Language Technology Conference of the North American Chapter of the Association for Computational Linguistics: HLT-NAACL 2004 , 2004, pp. 169–176. [64] K. Chen, X. Du, B. Zhu, Z. Ma, T. Berg-Kirkpatrick, and S. Dubnov, “HTS-AT: A hierarchical token-semantic audio transformer for sound classification and detection,” in ICASSP 2022-2022 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2022, pp. 646–650. [65] K. Papineni, S. Roukos, T. Ward, and W.-J. Zhu, “BLEU: a method for automatic evaluation of machine translation,” in Proceedings of the 40th annual meeting of the Association for Computational Linguistics , 2002, pp. 311–318. [66] S. Banerjee and A. Lavie, “METEOR: An automatic metric for mt evalu-ation with improved correlation with human judgments,” in Proceedings of the ACL Workshop on Intrinsic and Extrinsic Evaluation Measures for Machine Translation and/or Summarization , 2005, pp. 65–72. [67] C.-Y. Lin, “ROUGE: A package for automatic evaluation of summaries,” in Text Summarization Branches Out . Barcelona, Spain: Association for Computational Linguistics, Jul. 2004, pp. 74–81. [68] R. Vedantam, C. Lawrence Zitnick, and D. Parikh, “CIDEr: Consensus-based image description evaluation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2015, pp. 4566– 4575. [69] P. Anderson, B. Fernando, M. Johnson, and S. Gould, “Spice: Semantic propositional image caption evaluation,” in European Conference on Computer Vision . Springer, 2016, pp. 382–398. [70] S. Liu, Z. Zhu, N. Ye, S. Guadarrama, and K. Murphy, “Improved image captioning via policy gradient optimization of spider,” in Proceedings of the IEEE International Conference on Computer Vision , 2017, pp. 873– 881.
