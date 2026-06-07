@@ -1,0 +1,375 @@
+Title: FlowOVD: Learning Generative Latent Flows for Zero-shot Open-vocabulary Detection
+
+URL Source: https://arxiv.org/pdf/2606.00782v1
+
+Published Time: Tue, 02 Jun 2026 00:54:37 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# FlowOVD: Learning Generative Latent Flows for Zero-shot Open-vocabulary Detection 
+
+Yao Wei 1, Andrea Cavallaro 2, Changjae Oh 11Queen Mary University of London 2EPFL 
+
+https://qm-ipalab.github.io/FlowOVD/ 
+
+## Abstract 
+
+Open-vocabulary object detection (OVD) has achieved remarkable progress through large-scale vision-language pre-training. Existing methods, however, typically formulate OVD as a discriminative prediction problem, where decoder queries are either static or initialized from encoder features, thus limiting their diversity and flexibility. In this paper, we introduce a generative perspective by modeling decoder query generation as a continuous transport process in latent space. We propose FlowOVD, a text-conditioned query generation framework based on rectified flow that progressively transforms text-agnostic queries into text-guided queries. By introducing continuous latent query dynamics into a vision-language model (VLM) based detector, our method avoids heuristic discrete query construction and enables more expressive semantic alignment for open-vocabulary detection. Without requiring additional training data, FlowOVD achieves 49.5 AP on COCO and 31.5 AP on LVIS, outperforming GroundingDINO by +1.2 AP (+2.5 %) and +4.1 AP (+15.0 %), respectively. The larger gain on the challenging long-tailed LVIS benchmark further highlights the effectiveness of continuous query generation for open-vocabulary generalization. 
+
+## 1 Introduction 
+
+Open-vocabulary object detection (OVD) aims to detect and localize objects beyond a predefined set of categories. Recent advances in vision-language models (VLMs) have substantially improved OVD performance by aligning visual and textual representations within Transformer-based architectures [ 12 , 16 , 20 ]. In particular, methods such as GroundingDINO [ 16 ] demonstrate strong performance by integrating grounded pre-training with a strong Transformer detector and end-to-end optimization. Despite these advances, OVD approaches are fundamentally discriminative , relying on explicit supervision signals such as contrastive learning for grounding and bounding box regression for localization. This reliance induces a discrete latent space, which hinders the modeling of fine-grained semantic variations. As shown in Fig. 1, object queries are typically initialized using static queries [ 32 ], such as learnable embeddings, which remain the same for different images during inference. Alternatives are heuristics [ 16 ] like selecting Top K proposals from encoder features. While effective, these designs impose a rigid structure on the query distribution, limiting its diversity and expressiveness. This restriction is problematic in open-vocabulary settings, where the model must handle a wide range of semantic concepts with varying visual appearances. Generative modeling (e.g., [ 10 , 17 ] provides a principled way to capture underlying data distributions and naturally encourages diversity. Despite success in modeling complex visual distributions, the potential of generative modeling for discriminative vision-language tasks remains largely under-explored. Recent works [ 3, 1] begin to incorporate generative processes into object detection by modeling distributions over object bounding boxes. While these approaches demonstrate the promise              
+
+> Preprint.
+> arXiv:2606.00782v1 [cs.CV] 30 May 2026 SOTA
+> Our Work:
+> Generative OVD
+> Ours
+> Previous Work:
+> Discriminative OVD
+> ED
+> Image
+> Text
+> ED
+> Image
+> Text
+> Static Query Query Selection
+> Discrete Latent Space Continuous Latent Space
+> ball . lifted player .dog . sandals . bag .
+> missing detection false detection
+> Grounding Localization Grounding Localization
+> Latent Latent
+
+Figure 1: We model query initialization as a continuous, text-conditioned flow in latent space, transporting text-agnostic queries to text-guided queries, leading to more diverse and expressive open-vocabulary detection and better efficiency with fewer decoder layers. of generative modeling for localization tasks, they focus on geometric object generation without semantic representation learning. In contrast, OVD relies on cross-modal semantic alignment, where language conditions are supposed to actively guide the generation for open-world generalization. We present FlowOVD , a novel OVD approach that reformulates query initialization as a continuous generative process in the latent space. We propose a text-conditioned query flow that transforms an initial set of text-agnostic queries into a text-guided distribution. Specifically, we adopt a rectified flow formulation to model a time-dependent velocity field that transports queries under language conditioning. This enables controllable, and diverse query generation while remaining fully compati-ble with existing Transformer-based detectors. Our approach offers several key advantages. First, it enhances query diversity by exploring a continuous latent trajectory rather than relying on discrete query selection strategies. Second, it naturally incorporates text conditioning into the generative process, improving region-text alignment. Third, it introduces minimal architectural changes and can be seamlessly integrated into existing OVD pipelines. We evaluate our method on widely used benchmarks COCO and LVIS, where it consistently improves over strong baselines. These results demonstrate the effectiveness of incorporating generative modeling into query representations for OVD. Our main contributions are summarized as follows: • We reformulate decoder query generation as a continuous transport process in latent space, introduc-ing a generative perspective for OVD and moving beyond conventional discrete query construction strategies. • We propose a text-conditioned query flow based on rectified flow, which progressively trans-forms text-agnostic queries into semantically aligned query representations and can be seamlessly integrated into existing Transformer-based vision-language detectors. Extensive experiments on COCO and LVIS demonstrate that our approach consistently improves open-vocabulary detection performance and achieves better efficiency with fewer decoder layers. 
+
+## 2 Related Works 
+
+2.1 Open-vocabulary Object Detection 
+
+Modern object detectors include CNN-based approaches such as the R-CNN series [ 24 , 9] and YOLO series [ 22 , 23 ], as well as Transformer-based approaches like DETR and its variants [ 2, 33 , 32 ]. Despite impressive performance, these detectors operate under a closed-set assumption, which restricts their generalization to novel categories in real-world scenarios. 2OVD addresses this limitation by leveraging external semantic knowledge to detect objects beyond predefined categories. One key challenge in OVD is aligning visual representations with language embeddings, enabling models to transfer knowledge from large-scale vision-language pre-training. Recent advances in detection architectures, such as DyHead [ 5 ] and DINO [ 32 ], provide strong foundations for open-vocabulary detectors. Early vision-language detection frameworks such as GLIP [ 12 ] demonstrate the effectiveness of grounding-based pre-training for open-vocabulary transfer. Building upon DETR-style architectures, GroundingDINO [ 16 ] further unifies detection and ground-ing within a Transformer-based framework through cross-modal feature interaction and region-text alignment, enabling direct localization using arbitrary text prompts. More recently, YOLO-World [ 4]explores efficient real-time OVD, while GroundingDINO 1.5 [ 25 ] and Dynamic-DINO [ 20 ] further improve performance through model scaling and MoE-based adaptation. However, the modeling of latent query representations is largely simplified or overlooked in existing OVD frameworks. In Transformer-based detectors [ 2, 33 , 32 , 16 ], decoder queries are typically constructed either from static learnable embeddings or directly selected from encoder features through heuristic selection strategies. While such query construction mechanisms are effective, they may restrict the diversity and flexibility, especially in open-vocabulary scenarios requiring rich semantic generalization. In contrast, we introduce a generative perspective by modeling a continuous transport process in latent space, enabling more expressive and text-aligned query representations. 
+
+2.2 Generative Modeling 
+
+Generative models stand out for their ability to model the underlying data distribution. Representa-tive architectures include Generative Adversarial Networks (GANs) [ 7], Normalizing Flows [ 27 ], Denoising Diffusion Models [ 10 ], and Flow Matching [ 15 ]. Among them, diffusion models have achieved remarkable success due to their stable training and high-quality generation. More recently, flow-based methods, such as Rectified Flow [ 17 ], have emerged as an efficient alternative by directly learning continuous transformations between distributions. Several recent works have explored generative formulations for discriminative tasks, such as object detection [ 3, 1] and referring video segmentation [ 31 ]. These works demonstrate the potential of generative modeling for improving diversity in visual localization tasks. Nevertheless, directly extending these works to OVD remains challenging. In particular, FlowDet [ 1], although conceptually related to our work, fundamentally operates in the bounding box space by learning a transport process from randomly sampled boxes toward ground-truth box distributions. This formulations mainly focus on generative geometric localization, while the core challenge of OVD lies in visual-text alignment, where language conditions should effectively guide the generation process for semantic generalization. Moreover, box-space generative detectors typically require pre-processing like box padding due to varying numbers of objects across diverse images, which may reduce flexibility. Motivated by these observations, we introduce generative modeling into the latent query space of Transformer-based OVD frameworks. Instead of operating directly in box space as in [ 3, 1], our method models a continuous, text-conditioned flow over semantic query representations, enabling more controllable and semantically aligned query generation while naturally preserving compatibility with dominant vision-language detection frameworks. 
+
+## 3 Method 
+
+3.1 Overview 
+
+Traditionally, OVD is formulated as a discriminative prediction task through a Transformer encoder-decoder architecture [ 16 ]. Given an input image I and a text prompt P , visual and textual backbones are first employed to extract visual features and textual embeddings, respectively. These features are subsequently fused via a shared vision-language encoder, enabling cross-modal interaction between image regions and textual tokens. A set of object queries is then used by the Transformer decoder to produce object-wise predictions, including bounding boxes B = {b1, b2, . . . , bN } and corresponding class labels C = {c1, c2, . . . , cN }, where N represents the number of queries. Despite its effectiveness, such a formulation relies on discrete (e.g., static) query initialization, which limits the diversity and flexibility of query representations. 3Encoder  Flow  Decoder                                        
+
+> Image 𝐼
+> Text Prompt 𝑃
+> “puppy . rope
+> toy . balloon . ”
+> Image
+> Backbone
+> Text
+> Backbone
+> VLM
+> Encoder
+> (Shared)
+> Transformer
+> Decoder
+> Text -agnostic
+> Query 𝐪 0
+> Visual Feature 𝐟 𝐼
+> Textual Feature 𝐟 𝑃
+> Prediction
+> (boxes, classes)
+> Interpolation
+> q0~𝑝 0
+> (source)
+> q1~𝑝 1
+> (target)
+> (a) Overall framework
+> (b) Query Flow
+> …...
+> …
+> Query Flow
+> …
+> Initialization Text -guided
+> Query 𝐪 1
+> 𝑡 =0𝑡 =1
+> 1Matching 2Velocity 3
+> 𝑡 =0𝑡 =1
+> 𝐪 1←Top 𝐾 (𝐟 𝐼 ,𝐟 𝑃 )𝐪 𝑡 =1−𝑡 𝐪 0+𝑡 𝐪 1
+> 𝜽
+> 𝐪 𝑡
+> 𝐯 𝜃
+> Condition 𝑐
+> Timestep 𝑡
+> 𝐮 =𝐪 1−𝐪 0
+> 𝓛 𝒇𝒍𝒐𝒘
+> Ground Truth
+> (boxes, classes)
+> 𝓛 𝒅𝒆𝒕
+> Velocity
+> Field
+
+Figure 2: (a) Overall framework. Given an image I and a text prompt P , a vision-language encoder extracts visual features fI and textual features fP . In the latent space, we present a query flow that transforms a set of text-agnostic queries into text-conditioned queries. The refined queries are then consumed by the transformer decoder to produce final predictions. (b) Query Flow. First, a set-level matching is performed between source queries q0 and target queries q1. Intermediate states qt
+
+are obtained via linear interpolation. A velocity field vθ (qt, t, c ) is trained to learn the transport dynamics with conditions c. The final queries are obtained by integrating the learned flow, resulting in more diverse and text-aligned query representations. As illustrated in Fig. 2 (a), our FlowOVD builds upon a DETR-like architecture and consists of three components: a vision-language encoder, a query flow module in the latent space, and a Transformer decoder. We first construct an initial set of N text-agnostic queries q0 ∈ RN ×d, which can be implemented as learnable embeddings, inspired by Rectified Flow [ 17 ]. Meanwhile, we obtain a set of text-guided target queries q1 ∈ RN ×d by performing query selection over encoder features fI and 
+
+fP . Instead of directly feeding either q0 or q1 into the decoder as previous works (e.g., [ 32 , 16 ]), we introduce Query Flow that learns a continuous transformation, which is achieved by a velocity network (parameterized as θ), between text-agnostic and text-guided query distributions. The goal is to gradually refine queries toward semantically aligned representations. The resulting queries of the learned Query Flow, denoted as qflow , are then passed to the Transformer decoder to produce final detection results. By re-framing query initialization as a conditional generative process, our method enhances the diversity of query representations while preserving strong alignment with textual semantics, which naturally fits with OVD in a zero-shot setting. 
+
+3.2 Text-conditioned Query Flow 
+
+To enable more diverse latent query representations, we introduce text-conditioned Query Flow that learns a continuous transport process from an initial query set q0 ∼ p0 to a target query set q1 ∼ p1.Here, p0 denotes a source distribution of text-agnostic queries (e.g., learnable embeddings), while 
+
+p1 is a target distribution of text-guided queries constructed from encoder features. Specifically, we follow a language-guided query selection strategy [ 16 ] to obtain q1. Given visual features 
+
+fI ∈ RNI ×d and textual features fP ∈ RNP ×d, we first compute a similarity matrix: 
+
+S = fI f ⊤ 
+
+> P
+
+, (1) where S ∈ RNI ×NP measures the alignment between image tokens and text tokens. Then, the similarity is aggregated over text tokens to obtain a score for each image token. The target query q1
+
+4Self -Attention        
+
+> Cross -Attention
+> FFN
+> 𝐟 𝑃
+> …
+> Self -Attention
+> 𝐪 𝑡
+> 𝑡
+> sinusoidal
+> MLP 𝛾 𝑡 ,𝛽 (𝑡 )
+> condition
+> 𝐯 𝜃
+> ×𝐿 QFflow layers
+> FiLM MLP
+> update new layer
+> forward pass
+> ℎ𝛿 +1ℎ𝛿
+
+Figure 3: The architecture of velocity network θ, which contains LQF flow layers. Taking timestep t,interpolated query qt, and textual feature fP (condition) as input, θ learns to predict velocity field vθ .is constructed by selecting the top K image tokens with the highest scores: 
+
+q1 = fI [k] , k = Top K
+
+
+
+max  
+
+> j
+
+S:,j 
+
+
+
+. (2) As shown in Fig. 2 (b), Query Flow contains the following key concepts. 
+
+Matching. Since q0 and q1 are unordered sets, we first establish a one-to-one correspondence between them. We perform set-level matching (e.g., greedy matching based on cosine similarity) to obtain paired queries, ensuring that each source query in q0 is aligned with a corresponding target query in q1. This matching step provides supervision for learning a meaningful transport trajectory in the latent space. 
+
+Interpolation. Given matched pairs (q0, q1), we construct intermediate states via linear interpolation: 
+
+qt = (1 − t)q0 + tq1, (3) where t ∈ [0 , 1] is a timestep. This interpolated qt defines the transport path connecting the source and target query distributions. 
+
+Velocity. We model the transformation using a time-dependent velocity field vθ (qt, t, c ) ∈ RN ×d,where c denotes the textual condition (i.e., fP ) derived from encoder features. Formally, the query evolution follows an ordinary differential equation (ODE). The dynamics can be formulated as: 
+
+dqt
+
+dt = vθ (qt, t, c ). (4) As depicted in Fig. 3, the velocity network is achieved by a lightweight Transformer. Textual conditioning is incorporated via cross-attention to text features. In addition, the timestep t is encoded using sinusoidal positional encoding [ 30 ], followed by multi-layer perceptron (MLP) layers to yield modulation parameters, scale γ(t) and shift β(t). We adopt Feature-wise Linear Modulation (FiLM) [21] to inject time embeddings into intermediate representations h:
+
+hδ+1 = ( γ(t) + 1) · hδ + β(t), δ = 0 , 1, 2, . . . , L QF − 1. (5) where hδ is initialized from the interpolated queries qt, and LQF is the number of flow layers. Each layer consists of a self-attention layer, a text cross-attention layer, another self-attention layer, and a feed-forward network (FFN), with residual connections and layer normalization applied after each sub-layer. Stacking LQF such layers forms the complete velocity network. This design enables the model to jointly capture intra-query interactions and query-text alignment. 
+
+3.3 Training Objective 
+
+We adopt the flow matching objective, which supervises the velocity network θ to approximate the transport path between source and target distributions. The ground-truth velocity field is defined as: 
+
+u = q1 − q0. (6) 5Encoder Encoder 
+
+> Decoder
+> Learn.
+
+(a) Static Query [2] Encoder  
+
+> Query
+> Selection
+> Decoder
+> Top K
+
+(b) Vanilla Selection [33] Encoder  
+
+> Query
+> Selection
+> Decoder
+> Top K
+> Learn.
+
+(c) Mixed Selection [32] Encoder  
+
+> Query
+> Selection
+> Decoder
+> Top K
+> 𝐪 1
+> Gen.
+> Query Flow
+> 𝐪 0
+> 𝑐
+> Learn.
+
+(d) Query Flow (Ours) 
+
+Figure 4: Different query construction strategies for initializing decoder queries, where filled and hollow squares are content queries and positional queries, respectively. KEY– Learn.: learnable query embeddings, Gen.: generative content queries. Best viewed in color. The flow loss is computed by the mean squared error between the predicted velocity and the ground-truth transport direction: 
+
+Lflow = Et, q0,q1
+
+h
+
+∥vθ (qt, t, c ) − u∥22
+
+i
+
+, (7) which is jointly optimized with the standard detection loss, including the bounding box regression loss [ 32 ] composed of L1 and GIOU losses [ 26 ], and the classification loss [ 12 ] computed by the focal loss [13]: 
+
+Ldet = Lbbox + Lclass 
+
+= L1 + LGIOU + Lfocal . (8) The total training objectives is: 
+
+L = Ldet + λLflow , (9) where λ is the balancing coefficient of the flow objective. Overall, the detection loss enforces the discriminative localization capability, while the flow loss leads to generating semantically aligned query representations. Unlike box-space generative methods [ 3, 1], our model is trained in the latent space, avoiding explicit box generation and enabling seamless integration with Transformer-based VLMs. 
+
+3.4 Inference 
+
+At inference time, we generate refined queries by integrating the learned text-conditioned velocity field starting from the initial query set q0. The transported queries are obtained by integrating the velocity field from t = 0 to t = 1 :
+
+qflow = q0 +
+
+Z 10
+
+vθ (qt, t, c ) dt. (10) In practice, this continuous process is approximated using Euler discretization with step size ϵ.Starting from q0, the queries are iteratively updated as: 
+
+qt+ϵ = qt + ϵ · vθ (qt, t, c), (11) where t ∈ [0 , 1] is uniformly increased by ϵ at each integration step. After several iterations, the final transported state is taken as qflow .To balance stability and expressiveness, we combine the transported queries with the original queries: 
+
+qinit = (1 − α)q0 + αqflow , (12) where α controls the strength of the generative refinement. In Transformer-based detectors, each query consists of two components: a content query and a 
+
+positional query . The content query encodes semantic information for feature interaction, while the 6Table 1: Zero-shot domain transfer on COCO. AP s, AP m, and AP l are the AP of small, medium, and large categories, respectively. †indicates the results of our replication, which is also used for our model’s initialization. Datasets shown in gray are only used for model initialization. 
+
+Method Backbone Pre-Training Data Size COCO val2017 
+
+AP AP s / AP m / AP l
+
+DyHead [5] Swin-T O365 0.61M 43.6 -GLIP [12] Swin-T O365 0.61M 44.9 -DINO [32] Swin-T O365 0.61M 46.2 -GroundingDINO [16] Swin-T O365 0.61M 46.7 -GroundingDINO † Swin-T O365 0.61M 45.3 31.6 / 48.1 / 57.6 FlowOVD (Ours) Swin-T O365 0.61M 45.5 32.0 / 48.4 / 58.0 YOLO-World [4] YOLOv8 O365,GoldG,CC3M 1.63M 45.1 -Dynamic-DINO [20] EfficientViT O365,GoldG,V3Det 1.58M 46.2 -GLIP [12] Swin-T O365,GoldG,Cap4M 5.38M 46.3 -GroundingDINO [16] Swin-T O365,GoldG,Cap4M 5.38M 48.3 34.0 / 51.6 / 62.9 FlowOVD (Ours) Swin-T O365,GoldG,Cap4M 0.61M 49.5 35.4 / 52.6 / 63.6 
+
+Table 2: Zero-shot domain transfer on LVIS. AP r , AP c, and AP f are the AP of rare, common, and frequent categories, respectively. †indicates the results of our replication, which is also used for our model’s initialization. 
+
+Method Pre-Training Data Size LVIS minival 
+
+AP AP r / AP c / AP f
+
+GLIP [12] O365,GoldG 1.38M 24.9 17.7 / 19.5 / 31.0 GroundingDINO [16] O365,GoldG 1.38M 25.6 14.4 / 19.6 / 32.2 GLIP [12] O365,GoldG,Cap4M 5.38M 26.0 20.8 / 21.4 / 31.0 GroundingDINO [16] O365,GoldG,Cap4M 5.38M 27.4 18.1 / 23.3 / 32.7 GroundingDINO † O365,GoldG,Cap4M 5.38M 24.3 17.2 / 20.9 / 28.6 FlowOVD (Ours) O365,GoldG,Cap4M 0.61M 31.5 22.4 / 27.0 / 37.1 
+
+positional query provides spatial priors (e.g., reference points) for object localization. In this work, we apply the proposed flow-based refinement only to the content queries, while keeping the positional queries unchanged. The refined content queries qinit , together with the original positional queries, are then fed into the Transformer decoder for final object prediction. Fig. 4 illustrates the evolution of query initialization strategies. Existing approaches either rely on static learnable queries (Learn.), pure Top K selection from encoder features, or a heuristic combination of both. In contrast, our method introduces a flow-based query refinement module that transports learnable queries q0 toward text-guided target queries q1 in a continuous manner. This reformulates query initialization as a generative process in the latent space, leading to more flexible, diverse, and text-aligned query representations (Gen.). 
+
+## 4 Experiments 
+
+4.1 Experimental Setup Pre-training and evaluation datasets. Our FlowOVD is trained on Objects365 (O365) [ 28 ], a large-scale detection dataset containing over 600K training images. To assess zero-shot OVD performance, the pre-trained model is evaluated on COCO val2017 [ 14 ], COCO with refined masks (COCO-ReM) [29], and LVIS [8]. Following standard protocols, we report Average Precision (AP). 
+
+Implementation details. For the backbones, we consider the Swin Transformer Tiny (Swin-T) [ 18 ]as the visual backbone, and the BERT [ 6] as the textual backbone. We set the number of flow layers 
+
+LQF to 2 and the step size ϵ to 0.25. During training, the weight allocated to flow loss, i.e., λ, is set as 0.05. In addition, we set α = 0.2 to balance between learnable and generative queries when initializing decoder queries. The number of object queries N is set to 900, with 6 decoder layers by 7Table 3: Ablation study where all models are trained on the O365 dataset with a Swin-T backbone. The results in brackets are evaluated on COCO-ReM. 
+
+Query Initialization COCO (COCO-ReM) 
+
+AP AP s AP m AP l
+
+Vanilla Selection 44.9 (46.4) 31.3 (33.1) 47.9 (50.7) 56.5 (59.9) Mixed Selection 45.3 (46.7) 31.6 (33.1) 48.1 (50.9) 57.6 (60.9) Query Flow 49.5 (51.1) 35.4 (36.6) 52.6 (55.7) 63.6 (67.4) 
+
+Table 4: Efficiency comparisons. All models are trained on the O365 dataset with a Swin-T backbone using 4 H100 GPUs. We report model size (parameters), training time per epoch, and inference speed (FPS). Inference speed is measured on a single H100 GPU. 
+
+Method Configuration Training Inference 
+
+Flow Decoder Params (M) ↓ Time (h) ↓ COCO AP ↑ FPS ↑
+
+GroundingDINO × 6 layers 172.3 9.58 48.3 2.23 FlowOVD 
+
+✓ 6 layers 177.6 9.60 49.5 2.46 
+
+✓ 4 layers 174.0 9.22 49.3 2.48 
+
+✓ 2 layers 170.3 8.83 48.9 2.57 
+
+default. To obtain q1, we set K = N = 900. Our FlowOVD is trained on 4 NVIDIA H100 GPUs with a batch size of 16. We adopt the AdamW optimizer [ 19 ] with a base learning rate of 1 × 10 −4
+
+and a specific learning rate of 2 × 10 −5 for backbones. More details are provided in Appendix. 
+
+4.2 Results and Analysis 
+
+Our FlowOVD is compared with the state-of-the-art open-vocabulary detectors, including DyHead [ 5], GLIP [12], DINO [32], YOLO-World [4], GroundingDINO [16], and Dynamic-DINO [20]. As reported in Table 1, the models are evaluated under two pre-training settings. For the standard O365-only setting, our method achieves 45.5 AP on COCO val2017 , outperforming the reproduced GroundingDINO baseline by +0.2 AP while consistently improving performance across different object scales. When initialized from large-scale vision-language pre-training on O365, GoldG [ 11 ], and Cap4M [ 12 ], FlowOVD further improves to 49.5 AP, surpassing GroundingDINO by +1.2 AP. The larger gain under stronger pre-training suggests that the proposed text-conditioned query flow can effectively leverage rich cross-modal semantic priors for query generation. Table 2 presents the zero-shot transfer results on LVIS containing over 1200 categories, which is considerably more challenging due to its long-tailed category distribution. The reproduced baseline achieves 24.3 AP, where the difference from the reported results mainly comes from variations in prompt construction and evaluation settings. Under the same protocol, the proposed FlowOVD consistently improves over the baseline across all category frequencies. When initialized from large-scale vision-language pre-training on O365, GoldG, and Cap4M, FlowOVD achieves 31.5 AP on LVIS minival , outperforming GroundingDINO by +4.1 AP. Notably, the improvement is especially significant on rare categories, where AP r improves from 17.2 to 22.4. As demonstrated in Table 3, the proposed flow-based query generation consistently outperforms both vanilla and mixed query selection strategies across all evaluation metrics. These results suggest that reformulating query initialization as a continuous generative process in latent space leads to more expressive and semantically aligned query representations, which are especially beneficial for open-vocabulary generalization. We analyze the efficiency of our method with respect to decoder depth in Table 4. Compared with GroundingDINO, the proposed FlowOVD achieves both better efficiency and stronger detection performance. Specifically, our full 6-layer model improves COCO AP from 48.3 to 49.5 while introducing only a marginal increase in model size (177.6M vs. 172.3M). Despite the additional query flow formulation, the training time remains comparable, and inference speed is also slightly improved. Moreover, reducing the decoder depth improves both training and inference efficiency 8Input Image  GroundingDINO  FlowOVD  
+
+> (A) Text Prompt: “ cat tail . ”
+> (B) Text Prompt: “ ball . adult . running child . ”
+> (C) Text Prompt: “ beer bottle . drinking glass . salad bowl . ”
+
+Figure 5: Qualitative comparison between GroundingDINO and our FlowOVD on COCO images. Given the same text prompts, FlowOVD demonstrates stronger grounding ability in fine-grained localization and compositional understanding. while maintaining competitive performance. For example, the lightweight 2-layer variant still outperforms GroundingDINO using substantially fewer parameters and higher inference speed. Qualitative comparisons are provided in Figure 5 to highlight the advantages of our method. As shown in Figure 5 (A), GroundingDINO often responds to the entire object when queried with fine-grained phrases such as “cat tail”, indicating limited localization precision. In contrast, FlowOVD accurately focuses on the specified part, demonstrating improved alignment between textual semantics and visual regions. In Figure 5 (B), GroundingDINO fails to detect certain queried concepts, including an occluded “running child” and an “adult”, while FlowOVD successfully identifies both, showing stronger robustness under occlusion. In particular, FlowOVD can further distinguish “running child” from a standing “child” on the right, indicating improved sensitivity to action-related language cues. In cluttered multi-object scenes (Figure 5 (C)), FlowOVD achieves more complete detections across different object types compared to GroundingDINO. These results demonstrate that FlowOVD provides stronger grounding performance in open-vocabulary scenarios. 
+
+## 5 Conclusion 
+
+We presented FlowOVD, a generative framework for OVD that reformulates decoder query initializa-tion as a continuous, text-conditioned transport process in latent space. By learning a rectified flow from static text-agnostic queries to semantically aligned query representations, our method produces more diverse and expressive object queries for OVD. Extensive experiments on COCO and LVIS demonstrate consistent improvements over prior arts. Additionally, our flow-based query generation reduces the reliance on deep Transformer decoders, achieving improved efficiency while maintaining competitive detection performance. The results of our formulation demonstrate that generative latent modeling provides a promising alternative to discriminative query-based models for open-world vision-language perception. 9References 
+
+[1] Enis Baty, CP Bridges, and Simon Hadfield. Flowdet: Unifying object detection and generative transport flows. arXiv preprint arXiv:2512.16771 , 2025. [2] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In European conference on computer vision , pages 213–229. Springer, 2020. [3] Shoufa Chen, Peize Sun, Yibing Song, and Ping Luo. Diffusiondet: Diffusion model for object detection. In Proceedings of the IEEE/CVF international conference on computer vision , pages 19830–19843, 2023. [4] Tianheng Cheng, Lin Song, Yixiao Ge, Wenyu Liu, Xinggang Wang, and Ying Shan. Yolo-world: Real-time open-vocabulary object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16901–16911, 2024. [5] Xiyang Dai, Yinpeng Chen, Bin Xiao, Dongdong Chen, Mengchen Liu, Lu Yuan, and Lei Zhang. Dynamic head: Unifying object detection heads with attentions. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 7373–7382, 2021. [6] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers) , pages 4171–4186, 2019. [7] Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. Advances in neural information processing systems , 27, 2014. [8] Agrim Gupta, Piotr Dollar, and Ross Girshick. Lvis: A dataset for large vocabulary instance segmentation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5356–5364, 2019. [9] Kaiming He, Georgia Gkioxari, Piotr Dollár, and Ross Girshick. Mask r-cnn. In Proceedings of the IEEE international conference on computer vision , pages 2961–2969, 2017. [10] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. [11] Aishwarya Kamath, Mannat Singh, Yann LeCun, Gabriel Synnaeve, Ishan Misra, and Nicolas Carion. Mdetr-modulated detection for end-to-end multi-modal understanding. In Proceedings of the IEEE/CVF international conference on computer vision , pages 1780–1790, 2021. [12] Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, Jianwei Yang, Chunyuan Li, Yiwu Zhong, Lijuan Wang, Lu Yuan, Lei Zhang, Jenq-Neng Hwang, et al. Grounded language-image pre-training. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10965–10975, 2022. [13] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Dollár. Focal loss for dense object detection. In Proceedings of the IEEE international conference on computer vision ,pages 2980–2988, 2017. [14] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In European conference on computer vision , pages 740–755. Springer, 2014. [15] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching for generative modeling. arXiv preprint arXiv:2210.02747 , 2022. [16] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, et al. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In European conference on computer vision , pages 38–55. Springer, 2024. 10 [17] Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. arXiv preprint arXiv:2209.03003 , 2022. [18] Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo. Swin transformer: Hierarchical vision transformer using shifted windows. In Proceedings of the IEEE/CVF international conference on computer vision , pages 10012–10022, 2021. [19] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. [20] Yehao Lu, Minghe Weng, Zekang Xiao, Rui Jiang, Wei Su, Guangcong Zheng, Ping Lu, and Xi Li. Dynamic-dino: Fine-grained mixture of experts tuning for real-time open-vocabulary object detection. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20847–20856, 2025. [21] Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron Courville. Film: Visual reasoning with a general conditioning layer. In Proceedings of the AAAI conference on artificial intelligence , volume 32, 2018. [22] Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object detection. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 779–788, 2016. [23] Joseph Redmon and Ali Farhadi. Yolo9000: better, faster, stronger. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 7263–7271, 2017. [24] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. Advances in neural information processing systems , 28, 2015. [25] Tianhe Ren, Qing Jiang, Shilong Liu, Zhaoyang Zeng, Wenlong Liu, Han Gao, Hongjie Huang, Zhengyu Ma, Xiaoke Jiang, Yihao Chen, et al. Grounding dino 1.5: Advance the" edge" of open-set object detection. arXiv preprint arXiv:2405.10300 , 2024. [26] Hamid Rezatofighi, Nathan Tsoi, JunYoung Gwak, Amir Sadeghian, Ian Reid, and Silvio Savarese. Generalized intersection over union: A metric and a loss for bounding box regression. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 658–666, 2019. [27] Danilo Rezende and Shakir Mohamed. Variational inference with normalizing flows. In 
+
+International conference on machine learning , pages 1530–1538. PMLR, 2015. [28] Shuai Shao, Zeming Li, Tianyuan Zhang, Chao Peng, Gang Yu, Xiangyu Zhang, Jing Li, and Jian Sun. Objects365: A large-scale, high-quality dataset for object detection. In Proceedings of the IEEE/CVF international conference on computer vision , pages 8430–8439, 2019. [29] Shweta Singh, Aayan Yadav, Jitesh Jain, Humphrey Shi, Justin Johnson, and Karan Desai. Benchmarking object detectors with coco: A new path forward. In European Conference on Computer Vision , pages 279–295. Springer, 2024. [30] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. [31] Zanyi Wang, Dengyang Jiang, Liuzhuozheng Li, Sizhe Dang, Chengzu Li, Harry Yang, Guang Dai, Mengmeng Wang, and Jingdong Wang. Deforming videos to masks: Flow matching for referring video segmentation. arXiv preprint arXiv:2510.06139 , 2025. [32] Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M Ni, and Heung-Yeung Shum. Dino: Detr with improved denoising anchor boxes for end-to-end object detection. 
+
+arXiv preprint arXiv:2203.03605 , 2022. [33] Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, and Jifeng Dai. Deformable detr: Deformable transformers for end-to-end object detection. arXiv preprint arXiv:2010.04159 ,2020. 11 A Additional Details 
+
+A.1 Dataset Details 
+
+Our FlowOVD is evaluated on diverse benchmarks in a zero-shot setting. The COCO [ 14 ] dataset is a widely used benchmark. It contains approximately 118,000 training images and 5,000 validation images with annotations from 80 object categories. In this work, we evaluate zero-shot transfer performance on the COCO val2017 split using category names as text prompts. Moreover, COCO-ReM [ 29 ] is derived from COCO by removing overlapping categories between training and evaluation sets. Compared with standard COCO evaluation, COCO-ReM better measures the generalization ability of models to novel categories. The LVIS [ 8 ] dataset, a more challenging benchmark, annotates COCO images [ 14 ] with 2,000,000 instances among a set of 1,203 object categories. Following prior works [16], we also employ the LVIS mini-validation ( minival ) for evaluation. 
+
+A.2 Reproduction and Training Details 
+
+We follow the default architecture and training settings of GroundingDINO [ 16 ]. Since the offi-cial training code is not publicly available, we reproduce the baseline based on the open-source implementation Open-GroundingDINO 1 with several modifications to better align with the original GroundingDINO training protocol. Specifically, we correct the computation of positive maps and revise the training curriculum by removing the early learning rate decay strategy, which we found limits the final detection performance. During training, we freeze the textual backbone (i.e., BERT-base [ 6]) while optimizing the visual backbone (i.e., Swin-T [ 18 ]) as well as the Query Flow and the detection decoder parameters end-to-end. For the standard O365-only setting, we train the model for 24 epochs and learning rate drops at the 15-th and 20-th epochs. For large-scale vision-language pre-training, the proposed Query Flow is trained from scratch, while the remaining detector weights are initialized from the checkpoint pretrained on O365, GoldG, and Cap4M. Specifically, the full model is further optimized end-to-end on O365 for 3 epochs. Table 5 details the major setting of hyperparameters. Table 5: Hyperparameters for FlowOVD.                                 
+
+> Hyperparameter Value
+> General Configuration
+> GPUs NVIDIA H100 ×4batch size 16 optimizer AdamW weight decay 10 −4
+> learning rate (base) 1×10 −4
+> learning rate (backbone) 2×10 −5
+> learning rate schedule multi-step decay EMA decay 0.9997 image size [800, 1333] encoder / decoder layers 6 / 6 attention head 8matcher Hungarian class / bbox / GIoU cost 1.0 / 5.0 / 2.0 class / bbox / GIoU loss coef 2.0 / 5.0 / 2.0
+> K900
+> N900
+> d256
+> Flow Configuration
+> number of flow layers LQF 2step size ϵ0.25 strength of generative refinement α0.2 flow loss weight λ0.05
+> 1https://github.com/longzw1997/Open-GroundingDino
+
+12 A.3 Additional Qualitative Results 
+
+Figure 6 provides additional qualitative comparisons which further demonstrate the advantages of our FlowOVD in open-vocabulary generalization. We also provide more zero-shot detection examples of our FlowOVD in Figure 7. GroundingDINO FlowOVD                       
+
+> (a)“sofa . painting . wok .”(b)“dog . sandals . bag . ”
+> GroundingDINO FlowOVD
+> (c)“book . phone . laptop .”
+> (e)“ball . lifted player .”(d)“surfboard . man
+> holding surfboard .”
+> (f)“mirror . window .
+> scarf . nightstand .
+> plant . bookcase . ”
+
+Figure 6: Additional qualitative comparisons. (a)(b): FlowOVD exhibits better generalization ability on rare categories such as wok and sandals . (c)(d): GroundingDINO often predicts false or repeated detection, for example, it fails to distinguish laptop from booklets on chairs. In addition, nightstand 
+
+is repeatedly detected due to occlusion. (e)(f): When multiple instances of the same category coexist, FlowOVD demonstrates stronger semantic attribute-level discrimination, producing more accurate localization for compositional descriptions such as man holding surfboard and lifted player .13 Figure 7: Additional examples of FlowOVD. 
+
+## B Discussions 
+
+B.1 Positional Query 
+
+Our work focuses on learning a latent flow to the content queries, which mainly encodes semantic information for cross-modal interaction. In contrast, positional queries serve as spatial anchors that provide localization priors for the Transformer decoder. A natural question arises: why not directly apply flow-based generation to the entire query, including both content and positional queries? To investigate this, we experimentally extend the proposed flow formulation to positional queries by modeling continuous transport in the positional latent space. However, we consistently observe degraded performance, for example, resulting in over 2 AP drops after only one epoch of training. We hypothesize that positional queries benefit from maintaining deterministic and stable spatial priors during decoder initialization. Continuous deformation in positional space may weaken the anchor behavior of positional queries, making decoder optimization less stable. Furthermore, this observation highlights a key challenge in directly introducing box-space gener-ative formulations (e.g., [ 1]) into OVD. Although geometric generation in box or positional space appears more intuitive for localization, OVD fundamentally relies on semantic alignment between visual regions and language descriptions. In contrast, content queries encode high-level semantic representations and naturally exhibit greater diversity in open-vocabulary settings, making them more suitable for continuous generative modeling. Applying flow-based refinement to content queries thus enhances semantic flexibility and expressiveness while preserving the stable localization priors provided by positional queries. 
+
+B.2 Failure Cases 
+
+Although our FlowOVD improves semantic query generation and cross-modal alignment, we observe several failure cases. As shown in Fig. 8, the model may be distracted by complex visual patterns such as reflections or cluttered backgrounds, leading to incorrect grounding results. Fine-grained open-vocabulary descriptions are also difficult when multiple visually similar objects coexist in the scene, as demonstrated by the cable car example. While the model can correctly distinguish coarse categories such as “cat” and “dog”, it may still hallucinate semantically related concepts under more compositional prompts (e.g., “dog face”). These examples highlight remaining challenges in language understanding. 14 (a) “vegetable . ” (b) “historic San Francisco cable car . ”      
+
+> (c) “cat . dog . ”(d) “keyboard .dog face . ”
+
+Figure 8: Failure cases. The model (a) is distracted by reflective regions of tomatoes; (b) fails to distinguish the target cable car from visually similar instances under fine-grained descriptions; (c) successfully differentiates between “cat” and “dog” under simple category prompts, but (d) hallucinates a “dog face” on a cat under compositional prompts. 
+
+B.3 Future Work 
+
+In the future, our work can be further extended toward improving the robustness of generative query modeling under more complex visual and textual inputs. Challenging visual conditions, such as occlusion, reflections, and cluttered backgrounds, may still interfere with accurate grounding, while fine-grained semantic distinctions between visually similar concepts remain difficult in open-vocabulary settings. We believe that the proposed generative query formulation provides a promising direction for reframing these challenges through continuous semantic modeling, especially when combined with stronger language reasoning, richer semantic supervision, and more structured generative objectives. Another promising direction is extending continuous query generation to broader multimodal perception tasks, such as video understanding and grounding. 15

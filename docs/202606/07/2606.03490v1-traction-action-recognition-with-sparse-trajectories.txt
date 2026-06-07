@@ -1,0 +1,475 @@
+Title: TrAction: Action Recognition with Sparse Trajectories
+
+URL Source: https://arxiv.org/pdf/2606.03490v1
+
+Published Time: Wed, 03 Jun 2026 01:01:23 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# TrAction: Action Recognition with Sparse Trajectories 
+
+Jan F. Meier 1, Felix B. Müller 1, Alexander Ecker 1,2, Timo Lüddecke 11 Institute of Computer Science and Campus Institute Data Science, University Göttingen, Germany  
+
+> 2
+
+Max Planck Institute for Dynamics and Self-Organization, Göttingen, Germany 
+
+jan.meier@cs.uni-goettingen.de 
+
+## Abstract 
+
+Modern action recognition models operate on memory- and compute-intensive dense RGB video volumes and frequently exploit appearance and background short-cuts, for example, predicting actions from objects or scenes instead of characteristic motion. We investigate an efficient alternative input modality that is largely free of such biases by construction: sparse point trajectories. To this end, we develop a simple transformer architecture for 2.5D trajectory-based recognition together with a masked-trajectory pretraining, which we show to substantially improve downstream action recognition accuracy. Despite using only a fraction of the dense RGB input, our method reaches 45% top-1 on Something-Something V2 and 54% on EPIC-Kitchens-100, and surpasses V-JEPA on time-reversal sensitivity. More importantly, we find trajectory features to be complementary to state-of-the-art appearance-based features. Fusing our pretrained model with DINOv2 and V-JEPA 2 improves top-1 accuracy on Something-Something V2 by 8.7 and 1.6 points, respectively. Code: https://github.com/ecker-lab/TrAction 
+
+## 1 Introduction 1. Tearing [something] into two pieces 
+
+> 2. Rolling [something] on a flat surface
+> 3. Moving [something] up
+
+Which ac�on is shown? TrAc�on method 
+
+video 
+
+2.5D 
+
+trajectories 
+
+ac�on 
+
+class 
+
+> real trajectories computed on SomethingSomething V2
+> mo�on
+> direc�on xN
+
+Trajectory 
+
+Transformer 
+
+A B C
+
+Figure 1: Motion trajectories obtained from CoTracker3 are a sparse yet expressive video representa-tion. Left: Can you guess the actions? Right: We propose a transformer-based neural network and a pretraining method to obtain competitive results in action classification based on trajectories. Large-scale video models such as V-JEPA 2 [ 1] and VideoPrism [ 2 ] are commonly used for vision tasks like action recognition, as they promise to capture temporal dynamics by jointly processing several dense video frames. In practice, this regime suffers from two fundamental limitations. First, memory and compute scale poorly with resolution and clip length, making long or high-resolution video intractable. Second, the richness of dense pixel inputs invites spurious correlations and the well-documented appearance bias [ 3–6 ]: video models excel at recognizing what appears in a video, but often lack sensitivity to the temporal dynamics of actions . The advent of accurate dynamic 
+
+> 1
+
+Solution of Figure 1: 1B, 2C, 3A Preprint. 
+
+> arXiv:2606.03490v1 [cs.CV] 2 Jun 2026
+
+point trackers enables a different novel modality on which action recognition can be based: sparse, motion-only point trajectories as a representation that sidesteps both dense volumes and strong appearance biases by construction. Motion-focused representations have a long history in action recognition, most prominently through optical flow [ 7]. Yet flow is a dense per-pixel signal, thus showing similar limitations to RGB frames: poor computational scaling behavior with input size and appearance bias. While it suppresses texture, it leaks object shape, contour and layout information through the spatial extent of moving regions [ 8 ]. Sparse point trajectories, which track multiple 2D points across frames throughout a video, are a more compact representation with a substantially weaker appearance signal: A few hundred randomly sampled point trajectories contain limited information about shape, but suffice to discriminate many motion-heavy actions (see Figure 1). This makes them a promising candidate for building an explicit representation of temporal dynamics, complementary to standard vision encoders. Reliable extraction of such point trajectories has become possible only recently with modern dynamic point trackers [ 9, 10 ] producing point trajectories for long sequences while maintaining tracks through occlusions. While point trajectories have received attention across multiple disciplines, including robotics and video generation [ 11 –13 ], their application for action recognition is underexplored so far. We address this gap by training a transformer-based action recognition model that operates directly on point trajectories. As 2D trajectories lack important information about scene depth, we aug-ment the 2D point trajectories with depth obtained from a monocular depth estimation, yielding 2.5D trajectories. This approach achieves surprisingly good results on the motion-heavy datasets Something-Something v2 (SSv2) and EPIC-Kitchens-100 (EK100) – despite input sparsity and novelty of the paradigm. As state-of-the-art vision models are largely appearance-focused, a natural next question is, whether motion trajectories are complementary to vision model features. We find that they are: Fusing both modalities yields steady gains across SSv2 and EK100, with the largest im-provements on motion-discriminative subsets where appearance models are weakest. We further show that masked-trajectory pretraining improves the trajectory model substantially, analogous to masked auto-encoding in the pixel domain. We carefully ablate model architecture, trajectory sampling and pretraining to help this emerging modality gain TrAction. In summary, our contributions are: • We propose a method for action recognition from point trajectories, comprising 2.5D trajec-tory extraction (augmenting CoTracker3 trajectories with monocular depth) and a trajectory transformer. • We introduce a self-supervised masked-trajectory pretraining objective that consistently improves downstream classification (around 5 points top-1 on SSv2 and EK100) and transfers across varying pretraining/evaluation dataset combinations. • We systematically study sparse motion trajectories as an input modality for action recognition. We find trajectories to be complementary to features of vision encoders such as DINOv2 and V-JEPA 2 and show that they can even outperform V-JEPA in special scenarios (Chirality-in-Action benchmark). 
+
+## 2 Related work 
+
+Action recognition. Video action recognition assigns an action label to a video clip and is a central problem in video understanding, evaluated on benchmarks ranging from web videos [ 14 ] to object-centric interactions [ 15 ] and egocentric recordings [ 16 ]. Early deep learning approaches applied image-level CNNs to individual frames [ 17 ], followed by recurrent models for temporal reasoning [ 18 –20 ]. Spatiotemporal convolutions [ 21 – 23 ] introduced joint space-time feature learning directly from RGB, and video transformers subsequently replaced convolutions with self-attention [ 24 , 25 ]. The current dominant paradigm pretrains video transformers with self-supervised objectives such as masked autoencoding [26–29] or feature prediction [1, 30] on large-scale unlabeled video. A parallel line of work has explored explicit motion representations beyond RGB. Two-stream architectures [ 31 , 32 ] augment an appearance branch with a dedicated optical flow stream, decoupling motion from appearance; I3D [ 14 ] extends this to spatiotemporal convolutions with a two-stream design, and [ 7] provides a systematic study of how flow integration affects recognition. Optical 2flow has also been adopted as a training signal for self-supervised representation learning [ 33 , 34 ]. Skeleton-based methods model human pose dynamics through graph convolutions [ 35 – 37 ] or attention mechanisms [ 38 , 39 ], offering a structured, appearance-invariant motion representation for scenarios where reliable pose estimation is available, though limited to human body motion and reliant on domain-specific detectors. Xue et al. [40] demonstrated that camera trajectories alone carry significant scene-level information for recognition. Recently, point trajectories have begun to emerge as a recognition modality: TrackMAE [ 41 ] uses them as a self-supervised pretraining signal, while other methods [ 42 , 43 ] combine them with DINO features for few-shot classification. Work concurrent to ours [ 44 ] studies purely trajectories across diverse perceptual tasks, including action recognition. As a general-purpose motion abstraction, point trajectories capture per-point dynamics for arbitrary scene elements without requiring a domain-specific detector, naturally extending both the local, frame-pair scope of optical flow and the sparse, human-centric structure of skeleton representations. 
+
+Dynamic point tracking. Optical flow, the task of predicting dense per-pixel correspondence between consecutive frames, is a foundational motion estimation problem, addressed by modern methods such as RAFT [ 45 ] and WAFT [ 46 ]. While optical flow provides dense frame-pair motion, it does not directly provide long-range point identity or explicit occlusion reasoning across clips. Dynamic point tracking, formalized as Track Any Point (TAP) by [ 47 ], addresses this. Given a set of query points (x, y, t ), the task is to predict their positions and visibility across all frames. TAP-Net [ 47 ], introduced alongside this formalization, applies cost volumes to match query features across frames independently. Subsequent methods improved tracking through iterative refinement [ 48 ], coarse-to-fine pipelines combining cost volumes with refinement [ 49 ], and joint multi-point tracking via inter-point attention [ 50 ], which significantly improves robustness under occlusion. More recent work has focused on efficiency, chaining optical flow estimates with lightweight refinement [ 51 ]or restricting cost volumes to local neighborhoods [ 52 ], as well as on reformulating tracking as sequential token prediction [ 10 , 53 ]. On the training side, CoTracker3 [ 9] and BootsTAP [ 54 ] address the synthetic-to-real domain gap by generating pseudo-labels from existing trackers on unlabeled video. A parallel direction lifts point tracking into 3D, using geometric priors [ 55 , 56 ] or factored spatiotemporal attention [57] to predict 3D trajectories. 
+
+Point trajectories as a motion representation. Beyond tracking itself, point trajectories have rapidly become a versatile representation adopted across diverse vision tasks. They serve as compact state representations for robotic manipulation [ 11 , 12 , 58 , 59 ], as user-controllable motion handles for video generation [ 13 , 60 ], and as geometric priors for 3D reconstruction [ 61 – 63 ]. Point tracks have further been applied to video object segmentation [ 64 ], multi-object tracking [ 65 ], and motion forecasting [66]. For action recognition specifically, concurrent work has begun exploring trajectory-based representa-tions: TRec [ 67 ] fuses point tracks with image features via early fusion, and the methods discussed above [ 41 –44 ] each incorporate trajectories in different settings. However, these approaches either rely on hybrid trajectory-appearance input [ 42 , 43 , 67 ], are limited to few-shot evaluation [ 42 , 43 ], or address action recognition only as a secondary task [ 44 ]. We systematically evaluate trajectories on standard action recognition benchmarks, analyze the information they carry, and demonstrate their complementarity with state-of-the-art vision models. 
+
+## 3 Method: Trajectories for action recognition (TrAction) 
+
+We investigate how much semantic information point trajectories carry for action recognition and how to access it effectively. Our model operates exclusively on point trajectories and receives no RGB frames, optical flow, or appearance features as input. We design a simple yet effective architecture inspired by vision transformers, paired with a pipeline for extracting 2.5D trajectories from video, suitable tokenization, normalization, and a self-supervised pretraining strategy. Figure 2 illustrates the full pipeline, organized into three stages: trajectory extraction, model architecture, and self-supervised pretraining. 
+
+Trajectory extraction. The dynamic point tracker takes N query points (u, v, t ) describing point locations in pixel coordinates (u, v ) and time t. We use CoTracker3 [ 9 ] in offline mode, which propagates points forward and backward through the entire clip of length T . Each trajectory is represented as a sequence of 2D positions and a visibility score: (ut, v t, vis t)Tt=1 , where vis t ∈ [0 , 1] 
+
+3Cotracker3 VideoDepthAnything       
+
+> A2.5D trajectory extrac�on BSelf-supervised pretraining CModel architecture
+> Encoder
+> Decoder
+> MAE
+> [cls]
+> token
+> fla�en + MLP
+> ac�on class
+> Self-a�en�on layer
+> xN
+> Linear
+
+Figure 2: Trajectories for action recognition (TrAction) overview. We extract 2.5D trajectories using Cotracker3 and VideoDepthAnything (A). Our trajectory transformer model is first pretrained using self-supervised masked autoencoding (B) before being finetuned for action recognition (C). indicates whether the point is visible at frame t. We sample query points uniformly at random across both space and time. Querying at a single frame would systematically miss objects entering the scene mid-clip, which is common in action videos where the action’s onset rarely coincides with frame zero. To lift trajectories from 2D to 2.5D, we augment each point with a depth value obtained from Video Depth Anything [ 68 ] at position (ut, v t) in frame t, yielding (ut, v t, d t, vis t). We opt for this modular design, combining a 2D tracker with a separate depth estimator, rather than using an end-to-end 3D tracker. This provides flexibility in model selection and leverages the relative maturity and efficiency of 2D tracking methods compared to current 3D tracking approaches, which typically require costly scene reconstruction [56]. 
+
+Model architecture. Each trajectory p ∈ RT ×4 is parameterized as (u, v, d, vis) per frame. We normalize the spatial coordinates u, v by dividing by max( H, W ), computed per sample, where H
+
+and W are the video height and width in pixels. Compared to independent normalization to image coordinates (dividing u by W and v by H), this preserves the aspect ratio and spatial structure of the scene, ensuring that the relative shapes and proportions of object motions remain consistent. The depth channel d is normalized per sample to have zero mean and the same standard deviation as the spatial coordinates, placing all geometric channels on a common scale. We apply sinusoidal frequency encoding to the three geometric channels (u, v, d ), transforming each scalar through L frequency bands. This yields penc ∈ RT ×(3 ·2L+1) , where the +1 accounts for the visibility. The encoded trajectory is flattened across time into a single vector and projected to the model dimension Dmodel via a two-layer MLP with GELU activation σ and dropout: 
+
+z = W2 σ(Dropout( W1 flatten( penc ) + b1)) + b2. (1) This yields one token z ∈ RD per trajectory. Each token summarizes the full temporal extent of a single query point: temporal reasoning is handled within the per-trajectory MLP, while spatial and inter-point reasoning emerges through self-attention in the subsequent transformer layers. A 3D sinusoidal positional encoding based on each trajectory’s starting position (u0, v 0, d 0) is added to the token, providing the model with absolute spatial context. A learnable [CLS] and 4 register tokens are prepended, and the resulting m+5 tokens are processed by a stack of standard transformer encoder layers. For classification, the [CLS] token after the final layer is passed through a linear projection to the number of classes, trained with cross-entropy loss. Architecture hyperparameters are detailed in Appendix D. 
+
+Self-supervised pretraining. Self-supervised pretraining is essential for strong downstream per-formance in modern vision models [ 26 , 28 ]. Inspired by this, we pretrain our model with a masked autoencoding (MAE) objective adapted for trajectories. During pretraining, we randomly mask a fraction pmask of the m trajectory tokens. Following [ 26 ], we use an asymmetric encoder-decoder 4design: only the unmasked tokens are processed by the full encoder, reducing pretraining cost. The lightweight decoder consists of a bottleneck MLP followed by two transformer layers. Masked tokens are represented as a shared learned embedding with added positional encoding and are introduced only at the decoder stage. The reconstruction target are the raw spatial coordinates (u, v, d ) of each masked trajectory across all frames. We minimize the mean absolute error between the predicted and ground-truth coordinates in the normalized coordinate space. After pretraining, the decoder is discarded and only the encoder weights are transferred to the downstream classification task. 
+
+## 4 Experimental setup 
+
+Datasets. We evaluate action recognition on three standard benchmarks. Kinetics-400 [14 ] is appearance-dominated and included as a reference, while Something-Something v2 [ 15 ] requires fine-grained temporal reasoning. On EPIC-Kitchens-100 [16 ], we report only verb prediction, since noun recognition is inherently appearance-driven. We use two additional datasets for more targeted analyses: IARD [ 69 ] to assess motion-appearance disentanglement via k-NN classification following [ 70 ] and Chirality-in-Action [ 71 ] to assess discrimination between temporally mirrored actions. More extensive dataset descriptions and statistics are in Appendix A. 
+
+Implementation details. We extract M =2500 trajectories per video using CoTracker3-offline [ 9]and depth from Video Depth Anything-L [ 68 ]. During training we randomly sample m trajectories per forward pass. This reduces compute and serves as a straightforward form of data augmentation, since the model observes a different point set at each iteration and must learn representations that are invariant to the specific subset of points. During evaluation we use all M trajectories as an input. Except for experiments on IARD and Chirality-in-Action, where m=2500 , we consistently use 
+
+m=512 . Our model consists of six transformer encoder layers with hidden dimension Dmodel =288 ,totaling less than 8M parameters. Trajectory augmentations and remaining hyperparameters are listed in Appendix B and D. For vision-model baselines, we precompute features once per video (16 frames, single clip, single crop) and train an attentive probe [ 30 ] on the frozen features. The I3D baseline is fully-finetuned. Input resolution follows each model’s native setting. For complementary fusion, trajectory and vision features are concatenated and passed through a linear layer trained from scratch, isolating feature complementarity from the choice of fusion architecture. All experiments run on 1-4 A100 or H100 GPUs. Full setups including configurations used for baseline training are described in Appendix C. 
+
+## 5 Results 
+
+5.1 Trajectories as a modality for action recognition Trajectory-only action recognition works surprisingly well. First, we analyze how well actions can be recognized exclusively from trajectories, without appearance information. In this setting we observe a good performance on motion-driven datasets while performance drops when appearance matters. Trajectories outperform optical flow on the motion-driven SSv2 dataset (45.2 vs. 38.4), while this effect is less pronounced on EK100 (54.1 vs. 54.0). We attribute this to more frequent appearance leaks of the actions in EK100: Kitchen verbs are often tied to specific tools and interactions (e.g. cutting is associated with a knife). Trajectories perform worse than the powerful dense multi-frame DINOv2, SigLIP-2, and V-JEPA 2-L baselines. This is expected as appearance still provides a valuable signal on these datasets. On K400 this gap between trajectories and vision models grows. This is unsurprising given that K400 is known for is strong appearance bias: many of its action classes are recognizable from a single frame [74–76]. 
+
+Our trajectory model consistently complements vision models. Are point trajectories redundant with classic vision models features or do they complement them? To address this question, we fuse our trajectory encoder with multiple image and video models of increasing capacity. For each, we train an attentive probe and combine it with our trajectory encoder via late fusion (section 4). Across all vision models, fusion yields consistent gains on both SSv2 and EK100 (Table 1, green). Most notably, fusion improves V-JEPA 2-L by +1 .6 on SSv2 and +1 .1 on EK100, despite V-JEPA 2-L being one of the strongest self-supervised video encoders available. Trajectories increasing accuracy of such a model suggests that RGB pretraining does not internalize the full motion structure of actions, 5Table 1: Trajectory-only recognition and complementarity with vision models. Top-1 accuracy on K400, EK100, and SSv2. “+ Ours” columns fuse the appearance backbone with our trajectory model via late fusion. We do not use test-time augmentations. EK100 results are on val. 
+
+∗Result from [14], includes test-time augmentations and longer sequences. 
+
+motion-driven ←− −→ appearance-driven 
+
+Model Input size SSv2 EK100 K400 
+
+Non-RGB 
+
+Ours 32×2500×4 = 0.3M 45.2 54.1 33.1 I3D (flow-only) [14] 16×224 2×2 = 1.6M 38.4 54.0 63.4 ∗
+
+Image models base + Ours base + Ours 
+
+DINOv2-B (center) [72] 1×224 2×3 = 0.2M 30.8 56.8 (+26.0) 44.1 59.5 (+15.4) 66.5 DINOv2-B [72] 16×224 2×3 = 2.4M 53.6 62.3 (+8.7) 59.1 63.5 (+4.4) 73.5 SigLIP-2-B [73] 16×224 2×3 = 2.4M 51.5 61.4 (+9.9) 56.6 63.4 (+6.8) 73.6 
+
+Video models base + Ours base + Ours 
+
+VideoPrism-B [2] 16×224 2×3 = 2.4M 60.5 63.5 (+3.0) 62.9 64.5 (+1.6) 76.6 
+
+V-JEPA 2-L [1] 16×256 2×3 = 3.1M 66.7 68.3 (+1.6) 67.2 68.3 (+1.1) 73.0 0
+
+25 
+
+50 
+
+75 
+
+100 
+
+> Top-1 accuracy (%)
+
+Best Worst           
+
+> 99 turn cam right
+> 98 turn cam left
+> 94 approach sth w/ cam
+> 90 move away w/ cam
+> 87 turn cam down
+> 82 pull sth R→L
+> 82 move sth apart
+> 82 turn cam up
+> 80 move sth away from cam  80 flip sth upside down
+> 9.4 poke hole in sth soft
+> 8.8 sth collides, both halt
+> 8.3 push, it spins
+> 7.8 take sth from somewhere
+> 7.4 pretend spread air
+> 7.3 spill sth on sth
+> 5.9 push sth on sth
+> 4.8 pull sth out of sth
+> 3.3 spill sth next to sth
+> 2.7 try-fail twist sth
+
+⋯
+
+(a) Best and worst performing classes for trajecto-ries only. Trajectories perform well on motion-only classes, but struggle when appearance information is needed. 0
+
+25 
+
+50 
+
+75 
+
+100 
+
+> Top-1 accuracy (%)
+
+DINOv2 V-JEPA 2 
+
+> +53
+> turn cam right
+> +47
+> move away w/ cam
+> +44
+> move sth past each other
+> +38
+> turn cam up
+> +32
+> turn cam down
+> +31
+> move sth toward cam
+> +31
+> approach sth w/ cam
+> +26
+> turn cam left
+> +25
+> put sth on sth, falls
+> +23
+> put sth and sth on table
+> +32
+> pour sth, miss & spill  +23
+> poke, barely moves
+> +18
+> twist sth
+> +17
+> move away w/ cam
+> +14
+> push sth L→R
+> +14
+> push sth, almost falls
+> +13
+> put non-roll on slope  +12
+> pile sth up
+> +12
+> move sth toward cam
+> +12
+> show photo to cam
+
+Vision model + Trajectories 
+
+(b) Largest performance gains when combining vision models with trajectories. Performance im-provement over the vision model base are visualized as green bars on top. 
+
+Figure 3: Class-wise performance on SSv2. (a) The trajectories only model performs well on actions involving camera motion as well as directional classes. (b) Fusing both DINOv2 as well as V-JEPA 2 with our trajectory model leads to significant gains. Classes with less than 25 samples are excluded and class labels are shortened. and that sparse trajectories carry a recognition signal inaccessible to the dense video and image encoders. In general, gains are most pronounced on image models which are less able to capture motion information themselves. Combining center-frame-only DINOv2 with our model outperforms DINOv2 on 16 frames with a fifth of input size. The complementary gain decreases as the base model strengthens, as stronger video models recover more motion information from RGB on their own. 
+
+Not all classes benefit equally from trajectories. Class-wise performances (Figure 3) reveal that individual classes involving distinct, motion patterns often benefit substantially, while classes whose action label depends on object identity or scene context ( push sth. on sth. , pretend to spread air on sth. ) do not benefit or drop accuracy. Considering the classes with the highest gains on DINOv2, we see that trajectories primarily contribute information about camera motion. On V-JEPA 2, which likely encodes camera motion reasonably well, the gains are smaller and mostly affect object motions. Taken together, these findings suggest that trajectories indeed compensate for the lack of motion of the base features and are thus complementary. 
+
+Our model exhibits sensible attention patterns Figure 4 visualizes last-layer CLS attention on a 
+
+moving X closer to Y sequence. The visualized head is highly selective: 90% of its attention falls 60.05 
+
+> 0.10
+> CLS attention
+
+Figure 4: Last-layer CLS attention overlay. Top-25 trajectories from one of four heads on a moving X closer to Y sequence. Color encodes attention weight, size scales with weight, alpha with trajectory visibility. The visualized head concentrates on the manipulated object; other heads attend to different regions and motions. See Appendix F for additional examples. Table 2: Structural properties of the point trajectories as modality.                                               
+
+> (a) Appearance-invariance. On IARD [ 69 ], identity is highly recoverable from RGB-pretrained features, whereas our trajectory model is nearly appearance-invariant by construction. Baseline results from [69].
+> Model Pretrain. Action Identity
+> Random –20.0 20.0 DINOv2-B [72] LVD-142M 66.0 99.0 VideoMAE-L [26] K400 73.4 99.1 V-JEPA-L [30] VideoMix2M 82.0 96.2 DisMo-B [70] 2.8M clips 90.7 23.8 Ours K400, SSv2 76.6 27.3
+> (b) Time-reversal sensitivity. On Chirality-in-Action (SSv2 split) [ 71 ], our model distinguishes forward from reverse actions better than large pretrained video models do. Baseline results from [71].
+> Model Pretrain. SSv2
+> Random –50.0 DINOv2-S [72] LVD-142M 79.7 SigLIP 2-B [73] WebLI 76.8 VideoMAE-L [26] K400 85.7 V-JEPA-L [30] VideoMix2M 85.4 Ours K400, SSv2 86.2
+
+on 5% of trajectories, clustered on the manipulated object rather than the moving hand or arm and tracking the object across frames. The remaining heads attend to different regions and motions. This qualitative view is illustrative; we do not draw quantitative claims from it. Appendix F shows additional examples across categories. 
+
+5.2 Why the trajectory modality complements vision models 
+
+The complementarity between trajectory and vision models shown in Table 1 raises the question of what kind of information trajectories provide. We argue that trajectories are by construction largely invariant to appearance and aware of temporal dynamics, properties that pretrained appearance models acquire only partially and only at scale. We support this through two diagnostic benchmarks: IARD [ 69 ] for motion-appearance disentanglement and Chirality-in-Action [ 71 ] for time-awareness. 
+
+Trajectories have low appearance bias. An ideal motion representation would have a high sensitivity for actions while being invariant to appearance cues. We quantify the degree to which this property holds for our trajectories and standard vision models using the IARD [ 69 ] benchmark Table 2(a) which measures how well action and personal identity labels are preserved in model features using a kNN protocol. Across all RGB-pretrained models, identity is highly recoverable from features, reflecting the appearance information their pretraining preserves. As a reference point, DisMo [ 70 ], a foundation-scale model explicitly trained to suppress appearance, reaches 23.8% identity accuracy, close to the 20.0% random baseline. Our trajectory model attains a comparable 27.3% without any appearance-action-disentanglement objective and with a magnitude less pretraining data, while remaining competitive on action recognition. We attribute this to the inherent properties of trajectories as a modality. 
+
+Trajectories contain strong time-aware motion information. Some action classes have similar appearance with the main difference being temporal direction, e.g. opening/closing a door. A model’s ability to correctly discriminate these chiral classes thus measures (this aspect of) its time-awareness. To evaluate this (Table 2(b)), we use the recently proposed Chirality-in-Action benchmark by Bagad and Zisserman [71] . Our trajectory model surpasses state-of-the-art video models on this task, using only point trajectories as a sparse signal that discards appearance entirely. This indicates that temporal information is encoded well in point trajectories. 71 2 4 8 16 32 64        
+
+> Number of
+> frames
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> SSv2 Top-1 accuracy (%)  default
+> 2.5D
+> 2D
+> 16 32 128 512 2048
+> Number of trajectories during
+> inference ( minf )
+> default
+> Vary train traj. ( mtrain =minf )
+> Fix train traj. ( mtrain = 512)
+
+Figure 5: Effect of frames and trajectories on SSv2. 
+
+Performance increases with more frames and saturates beyond 16. Increasing the number of trajectories helps consistently but gains are small beyond 256 trajectories. Table 3: Comparison of trajectories (Ours) and optical flow (I3D) as com-plementary input to vision models. 
+
+Trajectories excel on the motion-heavy SSv2 dataset and perform close to op-tical flow on EK100, despite being 5×
+
+smaller.                          
+
+> model input SSv2 EK100 size
+> DINOv2-B 2.4M 53.6 59.1
+> + I3D 1.6M 60.1 (+6.5) 64.1 (+5.0)
+> + Ours 0.3M 62.3 (+8.7) 63.5 (+4.4) V-JEPA-L 3.1M 66.7 67.2
+> + I3D 1.6M 67.9 (+1.2) 69.1 (+1.9)
+> + Ours 0.3M 68.3 (+1.6) 68.3 (+1.1)
+
+These two findings suggest a structural source of the complementarity between trajectory and vision models: Trajectories posses an appearance-invariance and time-awareness that vision models acquire only partially, even at scale. Combining the two representations is therefore not a redundant compounding of similar features but an addition of structurally different information. 
+
+5.3 Ablations 
+
+For all ablations, we train our model from scratch without self-supervised pretraining. 
+
+Scaling behavior of frame and trajectory counts We explore how the number of frames and trajectories affects trajectory-only action recognition (Figure 5). First, we vary the number of frames provided during training and inference by linearly interpolating each full-length trajectory to the target length T . Unlike re-running tracking at lower frame rates, this subsampling approach decouples the model’s frame sensitivity from tracker-side degradation under large strides. Frame-count gains saturate beyond 8 frames, indicating that coarse temporal sampling already captures most of the action-discriminative motion. We also compare 2D point trajectories (without depth information) to our default 2.5D trajectories and that depth information brings a substantial performance gain that is independent of the number of frames. Second, we investigate how the number of trajectories affects the model. We find that our model performs well with few trajectories. Halving the trajectory count from 512 to 256 during training only costs 0.3 percentage points and even 16 trajectories achieve non-trivial performance (27.8 %). Increasing trajectory counts beyond 512 still increases performance albeit at a small rate. Even when trained on a fixed number of trajectories (here: mtrain = 512 ), our model can take varying numbers of trajectories during inference. Increasing the number of trajectories boosts performance slightly and it still performs well with less trajectories. Highest performance, however, is always achieved when using the same number of trajectories for training and inference. Note that default configuration used throughout the paper is mtrain = 512 and minf = 2500 .
+
+Comparing point trajectories and optical flow as complementary modalities As optical flow is also designed to primarily capture motion information, it is a natural comparison to point trajectories. We compare our model to I3D using the same late-fusion approach and find that both modalities consistently complement vision models. Both approaches perform comparable, despite I3D pro-cessing dense features 5× the size of point trajectories. Ours outperforms I3D on SSv2, while I3D performs better on EK100, see Table 3. This is consistent with SSv2 and point trajectories being less appearance-biased compared to EK100 and optical flow. 
+
+Design choices During the development of our model and pretraining we made several design choices that we assess next (Table 4). (a) Pretraining significantly boosts the accuracy by 4.9 and 5.1 points on SSv2 and EK100 respectively. There is no large difference between different pretraining datasets, which indicates that masked-trajectory pretraining captures generic motion structure rather 8dataset SSv2 EK100 no 40.9 49.4 K400 45.8 53.9 SSv2 45.6 53.8 both 45.8 54.5                                              
+
+> (a) Pre-training dataset. Source dataset for MAE pretraining.
+> mask ratio SSv2 EK100 0.60 45.2 54.1
+> 0.75 45.6 54.1
+> 0.90 45.8 53.9 0.95 45.1 52.6
+> (b) Mask ratio during pretraining on K400.
+> model SSv2 EK100 base 40.9 49.4
+> w/o sine-enc. 40.7 48.5 w/o pos enc. 38.4 48.1 rel. coords 32.0 42.1
+> (c) Encoding of input trajecto-ries.
+> modality SSv2 EK100 base 40.9 49.4
+> w/o depth 31.4 43.5 w/o visibility 39.3 48.6
+> (d) Modalities. Modality ablation; “base” is full model.
+> strategy SSv2 EK100 rand. 512 40.0 48.7 rand. 512 ×540.8 49.3 all 40.9 49.4
+> (e) Inference sampling. Trajec-tory selection at inference.
+
+Table 4: Ablation experiments. All models share the same backbone and training schedule. The default choice for our model is highlighted in gray . Ablations (c) - (e) are performed without pretraining to rule out any influence of the pretraining strategy. Scores are computed on val. set. than dataset-specific pattern. (b) There is no clear trend towards higher or lower masking ratio, except that 0.95 is too high. (c) Passing the three geometric channels (u, v, d ) directly ( w/o sine-enc. )instead of performing sinusoidal frequency encoding slightly reduces performance. Removing the 3D positional encoding from the trajectory tokens ( w/o pos enc. ) negatively impacts the performance, even though the tokenizer has access to the absolute trajectory positions. Surprisingly, only feeding relative trajectories (all coordinates start at the origin in the first frame, rel. coords ) in the model, while introducing the absolute position only via the positional encoding, severely hurts the performance. 
+
+(d) The additional depth information boosts the accuracy by 9.5 and 5.9 points on SSv2 and EK100, respectively. Using the visibility of the trajectories as an additional feature also increases the accuracy, but only to a smaller extent. (e) During training, we randomly sample 512 from the 2500 extracted trajectories. During inference, the best approach is to use all 2500 trajectories. This performs better than sampling 5 times 512 trajectories and averaging the logits as a form of test-time augmentation. We use the highlighted configuration as our default throughout the paper. 
+
+5.4 Limitations 
+
+Our approach relies on a separate, computationally expensive trajectory extraction step. This is a one-time cost that is amortized over many training runs by caching trajectories. The extraction step itself imposes a second limitation: modern point trackers can struggle on highly dynamic scenarios with rapid camera motion or abrupt scene changes. Lastly, motion trajectories are only beneficial when motion is informative for the task. On benchmarks dominated by static scene appearance (e.g., Kinetics-400, UCF-101, HMDB-51), trajectories are not informative. 
+
+## 6 Conclusion 
+
+We show that sparse point trajectories are a viable modality for action recognition. Despite carrying no pixel-level appearance, a compact transformer trained on trajectories reaches 45% top-1 on SSv2 and 54% on EK100. A detailed analysis shows that our approach is competitive with significantly larger models on appearance-invariance (IARD) and time-awareness (Chirality-in-Action). Most importantly, trajectory features are complementary to RGB-based representations: late fusion with frozen DINOv2 or V-JEPA 2 encoders yields consistent gains over each modality alone, with the largest improvements on classes where motion disambiguates appearance. We further show that masked-trajectory pretraining significantly improves downstream performance. While most contemporary video models entangle appearance and motion in a single learned representation, sparse trajectories offer an alternative: an explicit motion signal that can be analyzed, fused, or replaced independently of appearance. Trajectories are not a replacement for appearance-based video understanding and fail predictably where appearance dominates. But in scenarios where motion carries the signal, point trajectories have proven to be a useful sparse representation of the video. We 9hope this motivates further work on explicit motion modalities and their fusion with appearance-based video models. 
+
+## Acknowledgments 
+
+The project was funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foun-dation) – Project-ID 454648639 – SFB 1528. The authors gratefully acknowledge the computing time granted by the Resource Allocation Board and provided on the supercomputer Emmy/Grete at NHR-Nord@Göttingen as part of the NHR infrastructure. The calculations for this research were conducted with computing resources under the project nib00021. 
+
+## References 
+
+[1] Mido Assran, Adrien Bardes, David Fan, Quentin Garrido, Russell Howes, Matthew Muck-ley, Ammar Rizvi, Claire Roberts, Koustuv Sinha, Artem Zholus, and others. V-jepa 2: Self-supervised video models enable understanding, prediction and planning. arXiv preprint arXiv:2506.09985 , 2025. [2] Long Zhao, Nitesh Bharadwaj Gundavarapu, Liangzhe Yuan, Hao Zhou, Shen Yan, Jennifer J. Sun, Luke Friedman, Rui Qian, Tobias Weyand, Yue Zhao, Rachel Hornung, Florian Schroff, Ming-Hsuan Yang, David A. Ross, Huisheng Wang, Hartwig Adam, Mikhail Sirotenko, Ting Liu, and Boqing Gong. VideoPrism: A Foundational Visual Encoder for Video Understanding. In Forty-first International Conference on Machine Learning , 2024. [3] Xinyu Sun, Peihao Chen, Liangwei Chen, Changhao Li, Thomas H Li, Mingkui Tan, and Chuang Gan. Masked motion encoding for self-supervised video representation learning. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 2235–2245, 2023. [4] Otto Brookes, Maksim Kukushkin, Majid Mirmehdi, Colleen Stephens, Paula Dieguez, Thurston C Hicks, Sorrel Jones, Kevin Lee, Maureen S McCarthy, Amelia Meier, and others. The panaf-fgbg dataset: Understanding the impact of backgrounds in wildlife behaviour recogni-tion. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 5433–5443, 2025. [5] Jinpeng Wang, Yuting Gao, Ke Li, Yiqi Lin, Andy J Ma, Hao Cheng, Pai Peng, Feiyue Huang, Rongrong Ji, and Xing Sun. Removing the background by adding the background: Towards background robust self-supervised video representation learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 11804–11813, 2021. [6] Jinwoo Choi, Chen Gao, Joseph CE Messou, and Jia-Bin Huang. Why can’t i dance in the mall? learning to mitigate scene bias in action recognition. Advances in Neural Information Processing Systems , 32, 2019. [7] Laura Sevilla-Lara, Yiyi Liao, Fatma Güney, Varun Jampani, Andreas Geiger, and Michael J Black. On the integration of optical flow and action recognition. In German conference on pattern recognition , pages 281–297. Springer, 2018. [8] Filip Ilic, Thomas Pock, and Richard P Wildes. Is appearance free action recognition possible? In European Conference on Computer Vision , pages 156–173. Springer, 2022. [9] Nikita Karaev, Yuri Makarov, Jianyuan Wang, Natalia Neverova, Andrea Vedaldi, and Christian Rupprecht. Cotracker3: Simpler and better point tracking by pseudo-labelling real videos. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 6013–6022, 2025. [10] Artem Zholus, Carl Doersch, Yi Yang, Skanda Koppula, Viorica Patraucean, Xu Owen He, Ignacio Rocco, Mehdi SM Sajjadi, Sarath Chandar, and Ross Goroshin. Tapnext: Tracking any point (tap) as next token prediction. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 9693–9703, 2025. 10 [11] Homanga Bharadhwaj, Roozbeh Mottaghi, Abhinav Gupta, and Shubham Tulsiani. Track2act: Predicting point tracks from internet videos enables generalizable robot manipulation. In 
+
+European Conference on Computer Vision , pages 306–324. Springer, 2024. [12] Abdelrhman Werby, Martin Büchner, Adrian Röfer, Chenguang Huang, Wolfram Burgard, and Abhinav Valada. Articulated Object Estimation in the Wild. In Joseph Lim, Shuran Song, and Hae-Won Park, editors, Proceedings of The 9th Conference on Robot Learning , volume 305 of 
+
+Proceedings of Machine Learning Research , pages 3828–3849. PMLR, September 2025. [13] Ruihang Chu, Yefei He, Zhekai Chen, Shiwei Zhang, Xiaogang Xu, Bin Xia, Dingdong WANG, Hongwei Yi, Xihui Liu, Hengshuang Zhao, Yu Liu, Yingya Zhang, and Yujiu Yang. Wan-Move: Motion-controllable Video Generation via Latent Trajectory Guidance. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. [14] Joao Carreira and Andrew Zisserman. Quo vadis, action recognition? a new model and the kinetics dataset. In proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pages 6299–6308, 2017. [15] Raghav Goyal, Samira Ebrahimi Kahou, Vincent Michalski, Joanna Materzynska, Susanne Westphal, Heuna Kim, Valentin Haenel, Ingo Fruend, Peter Yianilos, Moritz Mueller-Freitag, and others. The" something something" video database for learning and evaluating visual common sense. In Proceedings of the IEEE international conference on computer vision , pages 5842–5850, 2017. [16] Dima Damen, Hazel Doughty, Giovanni Maria Farinella, Antonino Furnari, Jian Ma, Evangelos Kazakos, Davide Moltisanti, Jonathan Munro, Toby Perrett, Will Price, and Michael Wray. Rescaling Egocentric Vision: Collection, Pipeline and Challenges for EPIC-KITCHENS-100. 
+
+International Journal of Computer Vision (IJCV) , 130:33–55, 2022. [17] Andrej Karpathy, George Toderici, Sanketh Shetty, Thomas Leung, Rahul Sukthankar, and Li Fei-Fei. Large-scale video classification with convolutional neural networks. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pages 1725–1732, 2014. [18] Jeffrey Donahue, Lisa Anne Hendricks, Sergio Guadarrama, Marcus Rohrbach, Subhashini Venugopalan, Kate Saenko, and Trevor Darrell. Long-term recurrent convolutional networks for visual recognition and description. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 2625–2634, 2015. [19] Nicolas Ballas, Li Yao, Chris Pal, and Aaron C. Courville. Delving Deeper into Convolutional Networks for Learning Video Representations. In Yoshua Bengio and Yann LeCun, editors, 
+
+4th International Conference on Learning Representations, ICLR 2016, San Juan, Puerto Rico, May 2-4, 2016, Conference Track Proceedings , 2016. [20] Joe Yue-Hei Ng, Matthew Hausknecht, Sudheendra Vijayanarasimhan, Oriol Vinyals, Rajat Monga, and George Toderici. Beyond short snippets: Deep networks for video classification. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 4694–4702, 2015. [21] Du Tran, Lubomir Bourdev, Rob Fergus, Lorenzo Torresani, and Manohar Paluri. Learning spa-tiotemporal features with 3d convolutional networks. In Proceedings of the IEEE international conference on computer vision , pages 4489–4497, 2015. [22] Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, and Kaiming He. Slowfast networks for video recognition. In Proceedings of the IEEE/CVF international conference on computer vision , pages 6202–6211, 2019. [23] Christoph Feichtenhofer. X3d: Expanding architectures for efficient video recognition. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 203–213, 2020. [24] Gedas Bertasius, Heng Wang, and Lorenzo Torresani. Is space-time attention all you need for video understanding? In Icml , volume 2, page 4, 2021. 11 [25] Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Luˇ ci´ c, and Cordelia Schmid. Vivit: A video vision transformer. In Proceedings of the IEEE/CVF international conference on computer vision , pages 6836–6846, 2021. [26] Zhan Tong, Yibing Song, Jue Wang, and Limin Wang. Videomae: Masked autoencoders are data-efficient learners for self-supervised video pre-training. Advances in neural information processing systems , 35:10078–10093, 2022. [27] Limin Wang, Bingkun Huang, Zhiyu Zhao, Zhan Tong, Yinan He, Yi Wang, Yali Wang, and Yu Qiao. Videomae v2: Scaling video masked autoencoders with dual masking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 14549–14560, 2023. [28] Christoph Feichtenhofer, Yanghao Li, Kaiming He, and others. Masked autoencoders as spatiotemporal learners. Advances in neural information processing systems , 35:35946–35958, 2022. [29] Daniel Zoran, Nikhil Parthasarathy, Yi Yang, Drew A Hudson, Joao Carreira, and Andrew Zisserman. Recurrent Video Masked Autoencoders. arXiv preprint arXiv:2512.13684 , 2025. [30] Adrien Bardes, Quentin Garrido, Jean Ponce, Xinlei Chen, Michael Rabbat, Yann LeCun, Mido Assran, and Nicolas Ballas. Revisiting Feature Prediction for Learning Visual Representations from Video. Transactions on Machine Learning Research , 2024. ISSN 2835-8856. [31] Karen Simonyan and Andrew Zisserman. Two-stream convolutional networks for action recognition in videos. Advances in neural information processing systems , 27, 2014. [32] Christoph Feichtenhofer, Axel Pinz, and Andrew Zisserman. Convolutional two-stream network fusion for video action recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 1933–1941, 2016. [33] Tengda Han, Weidi Xie, and Andrew Zisserman. Memory-augmented dense predictive coding for video representation learning. In European conference on computer vision , pages 312–329. Springer, 2020. [34] Alex N. Wang, Christopher Hoang, Yuwen Xiong, Yann LeCun, and Mengye Ren. Poo-DLe: Pooled and dense self-supervised learning from naturalistic videos. In The Thirteenth International Conference on Learning Representations , 2025. [35] Sijie Yan, Yuanjun Xiong, and Dahua Lin. Spatial temporal graph convolutional networks for skeleton-based action recognition. In Proceedings of the AAAI conference on artificial intelligence , volume 32, 2018. [36] Chao Li, Qiaoyong Zhong, Di Xie, and Shiliang Pu. Co-occurrence feature learning from skeleton data for action recognition and detection with hierarchical aggregation. In Proceedings of the 27th International Joint Conference on Artificial Intelligence , IJCAI’18, pages 786–792. AAAI Press, 2018. ISBN 978-0-9992411-2-7. [37] Lei Shi, Yifan Zhang, Jian Cheng, and Hanqing Lu. Skeleton-Based Action Recognition With Directed Graph Neural Networks. In 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 7904–7913, 2019. doi: 10.1109/CVPR.2019.00810. [38] Sijie Song, Cuiling Lan, Junliang Xing, Wenjun Zeng, and Jiaying Liu. An end-to-end spatio-temporal attention model for human action recognition from skeleton data. In Proceedings of the AAAI conference on artificial intelligence , volume 31, 2017. [39] Jun Liu, Gang Wang, Ping Hu, Ling-Yu Duan, and Alex C. Kot. Global Context-Aware Attention LSTM Networks for 3D Action Recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , July 2017. [40] Zihui Xue, Kristen Grauman, Dima Damen, Andrew Zisserman, and Tengda Han. Seeing without Pixels: Perception from Camera Trajectories. arXiv preprint arXiv:2511.21681 , 2025. 12 [41] Renaud Vandeghen, Fida Mohammad Thoker, Marc Van Droogenbroeck, and Bernard Ghanem. TrackMAE: Video Representation Learning via Track Mask and Predict. arXiv preprint arXiv:2603.27268 , 2026. [42] Pulkit Kumar, Namitha Padmanabhan, Luke Luo, Sai Saketh Rambhatla, and Abhinav Shri-vastava. Trajectory-aligned space-time tokens for few-shot action recognition. In European Conference on Computer Vision , pages 474–493. Springer, 2024. [43] Pulkit Kumar, Shuaiyi Huang, Matthew Walmer, Sai Saketh Rambhatla, and Abhinav Shrivas-tava. Trokens: Semantic-Aware Relational Trajectory Tokens for Few-Shot Action Recognition. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 13544– 13556, 2025. [44] Willem Davison, Xinyue Hao, and Laura Sevilla-Lara. It’s a Matter of Time: Three Lessons on Long-Term Motion for Perception. arXiv preprint arXiv:2602.14705 , 2026. [45] Zachary Teed and Jia Deng. Raft: Recurrent all-pairs field transforms for optical flow. In 
+
+European conference on computer vision , pages 402–419. Springer, 2020. [46] Yihan Wang and Jia Deng. WAFT: Warping-Alone Field Transforms for Optical Flow. In The Fourteenth International Conference on Learning Representations , 2026. [47] Carl Doersch, Ankush Gupta, Larisa Markeeva, Adria Recasens, Lucas Smaira, Yusuf Aytar, Joao Carreira, Andrew Zisserman, and Yi Yang. Tap-vid: A benchmark for tracking any point in a video. Advances in Neural Information Processing Systems , 35:13610–13626, 2022. [48] Adam W Harley, Zhaoyuan Fang, and Katerina Fragkiadaki. Particle video revisited: Tracking through occlusions using point trajectories. In European Conference on Computer Vision , pages 59–75. Springer, 2022. [49] Carl Doersch, Yi Yang, Mel Vecerik, Dilara Gokay, Ankush Gupta, Yusuf Aytar, Joao Carreira, and Andrew Zisserman. Tapir: Tracking any point with per-frame initialization and temporal refinement. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 10061–10072, 2023. [50] Nikita Karaev, Ignacio Rocco, Benjamin Graham, Natalia Neverova, Andrea Vedaldi, and Christian Rupprecht. Cotracker: It is better to track together. In European conference on computer vision , pages 18–35. Springer, 2024. [51] Guillaume Le Moing, Jean Ponce, and Cordelia Schmid. Dense optical tracking: Connecting the dots. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 19187–19197, 2024. [52] Seokju Cho, Jiahui Huang, Jisu Nam, Honggyu An, Seungryong Kim, and Joon-Young Lee. Local all-pair correspondence for point tracking. In European conference on computer vision ,pages 306–325. Springer, 2024. [53] Sebastian Jung, Artem Zholus, Martin Sundermeyer, Carl Doersch, Ross Goroshin, David Joseph Tan, Sarath Chandar, Rudolph Triebel, and Federico Tombari. TAPNext++: What’s Next for Tracking Any Point (TAP)? arXiv preprint arXiv:2604.10582 , 2026. [54] Carl Doersch, Pauline Luc, Yi Yang, Dilara Gokay, Skanda Koppula, Ankush Gupta, Joseph Heyward, Ignacio Rocco, Ross Goroshin, Joao Carreira, and others. Bootstap: Bootstrapped training for tracking-any-point. In Proceedings of the Asian Conference on Computer Vision ,pages 3257–3274, 2024. [55] Yuxi Xiao, Qianqian Wang, Shangzhan Zhang, Nan Xue, Sida Peng, Yujun Shen, and Xiaowei Zhou. Spatialtracker: Tracking any 2d pixels in 3d space. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 20406–20417, 2024. [56] Yuxi Xiao, Jianyuan Wang, Nan Xue, Nikita Karaev, Yuri Makarov, Bingyi Kang, Xing Zhu, Hujun Bao, Yujun Shen, and Xiaowei Zhou. Spatialtrackerv2: Advancing 3d point tracking with explicit camera motion. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 6726–6737, 2025. 13 [57] Tuan Duc Ngo, Peiye Zhuang, Evangelos Kalogerakis, Chuang Gan, Sergey Tulyakov, Hsin-Ying Lee, and Chaoyang Wang. DELTA: DENSE EFFICIENT LONG-RANGE 3D TRACKING FOR ANY VIDEO. In The Thirteenth International Conference on Learning Representations ,2025. [58] Wenyao Zhang, Hongsi Liu, Zekun Qi, Yunnan Wang, XinQiang Yu, Jiazhao Zhang, Runpei Dong, Jiawei He, He Wang, Zhizheng Zhang, Li Yi, Wenjun Zeng, and Xin Jin. DreamVLA: A Vision-Language-Action Model Dreamed with Comprehensive World Knowledge. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. [59] Jingjing Chen, Hongjie Fang, Chenxi Wang, Shiquan Wang, and Cewu Lu. History-Aware Visuomotor Policy Learning via Point Tracking. arXiv preprint arXiv:2509.17141 , 2025. [60] Yao-Chih Lee, Zhoutong Zhang, Jiahui Huang, Jui-Hsien Wang, Joon-Young Lee, Jia-Bin Huang, Eli Shechtman, and Zhengqi Li. Generative Video Motion Editing with 3D Point Tracks. 
+
+arXiv preprint arXiv:2512.02015 , 2025. [61] Jianyuan Wang, Nikita Karaev, Christian Rupprecht, and David Novotny. Vggsfm: Visual geometry grounded deep structure from motion. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 21686–21697, 2024. [62] Qianqian Wang, Vickie Ye, Hang Gao, Weijia Zeng, Jake Austin, Zhengqi Li, and Angjoo Kanazawa. Shape of motion: 4d reconstruction from a single video. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 9660–9672, 2025. [63] Daheng Yin, Isaac Ding, Yili Jin, Jianxin Shi, and Jiangchuan Liu. TrackerSplat: Exploiting Point Tracking for Fast and Robust Dynamic 3D Gaussians Reconstruction. In Proceedings of the SIGGRAPH Asia 2025 Conference Papers , pages 1–11, 2025. [64] Frano Rajiˇ c, Lei Ke, Yu-Wing Tai, Chi-Keung Tang, Martin Danelljan, and Fisher Yu. Segment anything meets point tracking. In Proceedings of the Winter Conference on Applications of Computer Vision , pages 9284–9293, 2025. [65] Guangze Zheng, Shijie Lin, Haobo Zuo, Changhong Fu, and Jia Pan. Nettrack: Tracking highly dynamic objects with a net. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 19145–19155, 2024. [66] Neerja Thakkar, Shiry Ginosar, Jacob Walker, Jitendra Malik, Joao Carreira, and Carl Doersch. Forecasting Motion in the Wild, April 2026. arXiv:2604.01015 [cs]. [67] Dennis Holzmann and Sven Wachsmuth. TRec: Learning Hand-Object Interactions through 2D Point Track Motion, January 2026. arXiv:2601.03667 [cs]. [68] Sili Chen, Hengkai Guo, Shengnan Zhu, Feihu Zhang, Zilong Huang, Jiashi Feng, and Bingyi Kang. Video depth anything: Consistent depth estimation for super-long videos. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 22831–22840, 2025. [69] Andrea Tacchetti, Leyla Isik, and Tomaso Poggio. Invariant recognition drives neural represen-tations of action sequences. PLOS Computational Biology , 13(12):1–20, December 2017. doi: 10.1371/journal.pcbi.1005859. [70] Thomas Ressler-Antal, Frank Fundel, Malek Ben Alaya, Stefan Andreas Baumann, Felix Krause, Ming Gui, and Björn Ommer. DisMo: Disentangled Motion Representations for Open-World Motion Transfer. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. [71] Piyush Nitin Bagad and Andrew Zisserman. Chirality in Action: Time-Aware Video Repre-sentation Learning by Latent Straightening. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. [72] Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, and others. DINOv2: Learning Robust Visual Features without Supervision. Transactions on Machine Learning Research Journal , 2024. 14 [73] Michael Tschannen, Alexey Gritsenko, Xiao Wang, Muhammad Ferjad Naeem, Ibrahim Al-abdulmohsin, Nikhil Parthasarathy, Talfan Evans, Lucas Beyer, Ye Xia, Basil Mustafa, and others. Siglip 2: Multilingual vision-language encoders with improved semantic understanding, localization, and dense features. arXiv preprint arXiv:2502.14786 , 2025. [74] Matthew Kowal, Mennatullah Siam, Md Amirul Islam, Neil DB Bruce, Richard P Wildes, and Konstantinos G Derpanis. A deeper dive into what deep spatiotemporal networks encode: Quantifying static vs. dynamic information. In Proceedings of the IEEE/CVF Conference on computer vision and pattern recognition , pages 13999–14009, 2022. [75] Yingwei Li, Yi Li, and Nuno Vasconcelos. RESOUND: Towards Action Recognition without Representation Bias. In Proceedings of the European Conference on Computer Vision (ECCV) ,September 2018. [76] De-An Huang, Vignesh Ramanathan, Dhruv Mahajan, Lorenzo Torresani, Manohar Paluri, Li Fei-Fei, and Juan Carlos Niebles. What Makes a Video a Video: Analyzing Temporal Information in Video Understanding Models and Datasets. In 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 7366–7375, 2018. doi: 10.1109/CVPR.2018. 00769. [77] Ilya Loshchilov and Frank Hutter. Decoupled Weight Decay Regularization. In International Conference on Learning Representations , 2019. 15 A Datasets 
+
+We evaluate our method on five action recognition datasets covering a range of video domains, label granularities, and motion characteristics. Table 5 summarizes the key statistics for each dataset. 
+
+Kinetics-400 (K400) [ 14 ]. Kinetics-400 is a large-scale action recognition benchmark consisting of short clips collected from YouTube and labeled with 400 human action classes covering a wide range of everyday activities. Clips are roughly 10 seconds long and depict a diverse set of scenes, viewpoints, and actors. 
+
+EPIC-Kitchens-100 (EK100) [ 16 ]. EPIC-Kitchens-100 is a large-scale egocentric video dataset of unscripted cooking activities recorded with head-mounted cameras in real kitchen environments. Each segment is annotated with verb and noun labels. In this work, we evaluate on the 97 verb classes, which capture the type of action being performed (e.g., “cut”, “open”, “pour”). The dataset features substantial camera motion, frequent hand-object interactions, and long-tailed class distributions. Clip length in EK100 varies widely. To maximize temporal coverage without using test-time augmentations, we sample frames video-length-dependent. We choose smallest stride such that we are not missing more than 2 × stride each left and right of the temporally-centered crop. We use a maximal stride of 20. 
+
+Something-Something V2 (SSv2) [ 15 ]. Something-Something V2 contains short clips of people performing object manipulation actions in front of a static camera, annotated with 174 templated action classes such as “moving something from left to right” or “pretending to put something into something”. Because the templates abstract away from specific objects and scenes, recognition on SSv2 strongly depends on the temporal dynamics of the interaction rather than on appearance. 
+
+Invariant Action Recognition Dataset (IARD) [ 69 ]. The Invariant Action Recognition Dataset contains short clips of actors performing a controlled set of actions under systematic variations in viewpoint and actor identity. The dataset was originally introduced to study invariant action recogni-tion in human visual cortex and supports controlled evaluation of how robust learned representations are to such nuisance transformations. We use it to assess the viewpoint and actor invariance. 
+
+Chirality in Action (CiA) [ 71 ]. The Chirality in Action benchmark is a curated subset of SSv2, EK100 and Charades that focuses on chiral action pairs, i.e., actions whose meaning changes when the video is played in reverse or mirrored (e.g., “moving something from left to right” vs. “moving something from right to left”). The benchmark is specifically designed to probe whether models capture the temporal direction and asymmetry of motion, rather than relying on appearance shortcuts, and is therefore well-suited to evaluating trajectory-based representations. In this work, we evaluate on the SSv2 split from Chirality in Action. 
+
+## B Augmentations 
+
+To improve the generalization of our trajectory model, we apply a sequence of stochastic augmenta-tions during training. All augmentations operate directly on the extracted point trajectories and are designed to be consistent with the geometric structure of trajectory data, i.e., they preserve the relative motion patterns that our model is intended to recognize. We apply the following augmentations: 
+
+Global translation. We translate all trajectories in a clip jointly by a random offset (∆ x, ∆y) in the image plane, with ∆x and ∆y sampled uniformly from a fixed range. This encourages invariance to the absolute position of the action in the frame. 
+
+Global rotation. We apply a random rotation around the z-axis (i.e., in the image plane) to all trajectories of a clip jointly, with the rotation angle sampled uniformly from [−θmax , θ max ]. This makes the model more robust to small variations in camera roll and viewpoint orientation while preserving the relative motion between trajectories. 
+
+Temporal shifting with padding. We randomly shift the trajectories along the temporal axis by an offset sampled uniformly from a fixed range, padding the resulting empty frames at the beginning or end of the clip. This augmentation discourages the model from relying on the absolute timing of an action within the input window. 16 Table 5: Overview of the datasets used in our experiments. Numbers correspond to the splits and label spaces used in this paper. For EK100 we evaluate on the verb label space, and since test labels are not publicly available, evaluation is performed on the validation set. For IARD, we report statistics for both the Action and ID classification splits.                                                       
+
+> IARD K400 EK100 SSv2 Action Identity CiA-SSv2 Domain Web videos Egocentric cooking Object interactions Controlled lab Object interactions
+> Viewpoint exo-centric ego-centric exo-centric exo-centric exo-centric
+> #Classes 400 97 (verbs) 174 52 (per group)
+> #Train clips 241,181 67,217 168,913 3,720 3,712 12,216
+> #Val clips 19,877 9,668 24,777 ––1,430
+> #Test clips 38,671 13,092 27,157 920 928 –
+> Avg. frames 262 173 45.8 60.0 43.2
+> Avg. length (s) 9.6 3.1 3.8 2.0 3.6
+> Resolution Variable 1080p 240p 600 ×1080 240p
+> Source YouTube Head-mounted cam Crowd-sourced Lab recordings Subset of SSv2
+
+Trajectory jitter. Independently for each trajectory, we add small Gaussian noise to the per-frame 
+
+(x, y ) coordinates. Unlike the global augmentations above, this noise is applied per-trajectory rather than jointly, which simulates imperfect trajectory extraction and prevents the model from overfitting to exact trajectory geometry. 
+
+Spatial cropping. We randomly crop a region in the (x, y ) plane and discard trajectories that fall outside it; the remaining trajectories are recentered into the crop. This acts analogously to random spatial cropping in image-based training and exposes the model to different spatial extents of the underlying scene. 
+
+## C Detailed Experimental Setup 
+
+This section provides the detailed experimental setup for each of the experiments reported in the main paper. Hyperparameter values are listed in Appendix D. 
+
+Pretraining. We pretrain our trajectory model on the training split of the respective target dataset only. Pretraining operates on trajectory sequences of 32 timesteps, with coordinates expressed in normalized image coordinates. On top of the trajectory encoder, we attach a lightweight bottleneck followed by a decoder consisting of two self-attention layers and a final prediction MLP. The decoder is trained to reconstruct the input trajectory coordinates, and we optimize the mean absolute error (L1) between the reconstructed and ground-truth normalized coordinates. After pretraining, the decoder is discarded and only the encoder weights are retained for downstream training. 
+
+Single model evaluation. For each main dataset, we fine-tune our trajectory model on the cor-responding training split only. On top of the pretrained encoder, we attach a classification head consisting of a linear layer that projects the [CLS] token to the number of action classes of the dataset. The model is trained end-to-end using the standard cross-entropy loss. 
+
+Vision baseline evaluation. To compare against image and video foundation models on equal footing, we re-evaluate all vision baselines under a unified protocol rather than relying on the heterogeneous evaluation setups used in the respective original papers. Specifically, for every vision backbone we (i) extract and cache features once, using a center crop at the model’s native input resolution and a single clip with a single crop (i.e., the standard 16 ×1×1 protocol), and (ii) train an attentive probe on top of the cached features following the single cross-attention probe design from V-JEPA [ 30 ]. For image models, we add a 3D positional encoding on top of the cached features to provide explicit temporal information. We cache features to save compute and under the assumption that well-trained vision foundation encoders are largely robust to simple augmentations. We use 17 a test-time augmentation free setting for all evaluated models including our own, to ensure a fair comparison between methods. This protocol ensures that differences between methods reflect the underlying representations rather than differences in test-time augmentation or probe design. 
+
+I3D baseline As optical flow baseline, we take only the flow-branch of I3D [ 14 ]. I3D processed RGB and flow features separately and only adds logits, which makes it possible to use the flow-branch standalone. We use a checkpoint that is pretrained on both ImageNet and Kinetics-400 (supervised pretraining). We extract optical flow using RAFT-Small. We extract flow once at fixed temporal locations with frames resized to 256 short side, clipping flow values larger than 20 pixels. Following previous work, we extract 16 frames via linspace sampling on SSv2 and 16 frames with stride 4 on K400. For EK100, we use the same adaptive sampling strategy employed for our model. This increases temporal coverage compared to the standard stride 4 sampling, which is important as we do not use test-time augmentations. During training, we use random cropping and random horizontal flip as augmentations and train with p = 0 .5 dropout. We use SGD with 0.9 momentum and an initial learning rate of 0.02. Following [ 14 ], we use a step learning rate scheduler, reducing to 0.002 after 8 epochs for K400 and SSv2 and 15 epochs for the smaller EK100. 
+
+Complementary fusion experiments. For the complementary experiments combining our tra-jectory model with vision backbones, we follow the protocol introduced in the Chirality in Action paper [ 71 ]. Both the trajectory model and the attentive probe on top of the vision backbone are first trained on the full training set of the respective dataset. We then select the best model checkpoint based on validation accuracy (or the last checkpoint on EK100), discard the final linear classification layer of each model, and freeze both backbones. A new linear classifier is then trained on top of the concatenated features. This protocol isolates the complementarity of the two representations. 
+
+IARD. For the Invariant Action Recognition Dataset (IARD) [ 69 ], we follow the evaluation protocol of DisMo [ 70 ]. The dataset is evaluated under two splits: an action split, in which trajectories of four participants are used for training and a held-out fifth participant is used for testing; and an 
+
+identity split, in which four actions are used for training and a held-out fifth action is used for testing. Evaluation is performed by k-NN classification on mean-pooled backbone features with k = 20 :we cache the pooled embeddings for all test clips, and predictions on the validation set are obtained via weighted majority voting over the k nearest training embeddings. Baseline results for V-JEPA, VideoMAE, and DisMo are taken directly from the DisMo paper. DINOv2 and our trajectory model are evaluated by us under the same protocol. 
+
+Chirality in Action (CiA-SSv2). For Chirality in Action, we follow the standard protocol of [ 71 ]. For each chiral group, we train a linear classifier on top of the backbone features using the training set of that group. We report the average accuracy across all chiral groups on the test set. 
+
+## D Hyperparameters 
+
+The hyperparameters used during pretraining and finetuning are listed in Table 6. We used the same parameters for all datasets. In the complementary experiments, we concatenate the trajectory model’s cls token with the vision embedding after the attentive pooling and train a single linear layer on top. Therefore, the model dimensions are fixed. We train the linear layer using the same setup as for finetuning, except that we reduce the epochs to 5, increase the weight decay to 5e − 2 and increase the warmup ratio to 0.4. For the CiA-SSv2 experiments, we use the same hyperparameter as for finetuning, except that we decrease the learning rate to 1e − 4 and reduce the maximum epochs to 10, while performing at least 100 training iterations. This is done to guarantee that the linear readout is trained long enough on small groups. 
+
+## E Trajectory extraction 
+
+All trajectories are extracted in float16 using torch.amp . The temporal sampling differs slightly per dataset to match the effective time horizon used by the vision-model baselines and to accommodate variable-length videos. On Something-Something v2 and IARD we extract all available frames and interpolate the resulting trajectories to a fixed length of 32 frames. On Kinetics-400 we extract 32 frames at a stride of 2, matching the temporal horizon of the vision baselines, which use 16 frames at 18 Table 6: Hyperparameters used for pretraining and fine-tuning of our trajectory model. Pre-training refers to the self-supervised reconstruction stage on the respective training split. Fine-tuning 
+
+refers to the supervised classification stage on the same dataset. Entries marked – are not applicable to the corresponding stage. 
+
+Pretraining Fine-tuning 
+
+Optimization 
+
+Epochs 300 15 Batch size 512 64 Optimizer adamW [77] adamW Learning rate 2e-4 2e-4 
+
+β1 0.9 0.9 
+
+β2 0.999 0.999 Weight decay 5e-3 5e-3 LR scheduler cosine cosine Warmup ratio 0.1 0.1 
+
+Trajectory input 
+
+#Trajectories per clip 512 512 Trajectory length (frames) 32 32 
+
+Encoder architecture 
+
+Embedding dim 288 288 #Layers 6 6#Heads 4 4Sinusoidal embedding dim 32 32 
+
+Decoder architecture (pretraining only) 
+
+Mask ratio 0.9 –Decoder embedding dim 144 –Decoder #layers 2 –Decoder #heads 4 –stride 4. On EPIC-Kitchens-100, where action segments vary substantially in length, we extract 32 trajectories with a stride that depends on the segment duration. 
+
+## F Visualizations 
+
+We visualize the last-layer CLS attention of all four attention heads in Figure 6. It can be seen that different heads attend to different sets of trajectories. 
+
+## G Computational resources 
+
+The full pipeline involves three stages with distinct compute requirements. Trajectory extraction (including depth estimation) across all datasets totals approximately 360 A100 GPU-hours and is performed once. Pretraining the trajectory model on Kinetics-400 takes around 12 A100 GPU-hours per run, and fine-tuning on Kinetics-400 takes approximately 0.75 A100 GPU-hours per run. Trajectory and depth features are precomputed and cached, so neither contributes to the per-run cost of training or fine-tuning. We estimate the total compute for this project, including ablations, hyperparameter exploration, and unreported experiments, at approximately 900 A100 GPU-hours. 
+
+## H Broader Impacts 
+
+Our work advances action recognition from point trajectories, with potential positive impact in assistive technology, human-robot interaction, and video accessibility. Operating on sparse trajectories 19 0.05 
+
+> 0.10
+> 0.15
+> CLS attention 0.02
+> 0.03
+> CLS attention 0.02
+> 0.04
+> 0.06
+> CLS attention 0.05
+> 0.10
+> CLS attention
+
+Figure 6: Last-layer CLS attention overlay over all heads. Different heads focus on different trajectories. Head 1 and 3 focus on the trajectories covering the bottle cap, whereas head 2 and 4 focus on the head movement either directly through trajectories on the hand or through background trajectories which get occluded. rather than raw pixels also reduces the amount of identifying visual information processed by the model. As with most human-centric vision research, action recognition has an indirect connection to surveil-lance and could be misused in ways that raise privacy or fairness concerns. Our contribution is methodological: we train closed-set classifiers on established public benchmarks (SSv2, EK100, K400), and the resulting model does not identify individuals or generate content. Its capabilities are not qualitatively different from those of existing action recognition systems. As with any such model, predictions can be incorrect and performance may vary across demographic groups, so we caution against deployment in high-stakes settings without application-specific evaluation. 
+
+## I Licenses 
+
+I.1 Licenses of datasets used 
+
+We list below the licenses, terms of use, and sources of all datasets used in this paper. We respect the terms of use of each dataset and use them strictly for non-commercial academic research. • Kinetics-400 (K400) [14] License: not specified by the original release. Videos are sourced from YouTube and remain subject to the terms of their original uploaders. We use the dataset for non-commercial academic research. Source: https://github.com/cvdfoundation/kinetics-dataset .20 • EPIC-Kitchens-100 (EK100) [16] License: Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0). Source: https://epic-kitchens.github.io/2026 .• Something-Something V2 (SSv2) [15] License: Qualcomm Research Use License. Source: https://www.qualcomm.com/developer/software/ something-something-v-2-dataset .• Invariant Action Recognition Dataset (IARD) [69] License: Creative Commons Zero v1.0 Universal (CC0 1.0). Source: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10. 7910/DVN/DMT0PG .• Chirality in Action (CiA-SSv2) [71] A curated subset of SSv2. The underlying videos are governed by the SSv2 license above. Source: https://github.com/bpiyush/LiFT .
+
+I.2 Licenses of pretrained models used 
+
+We additionally use the following pretrained vision foundation models as baselines and/or feature extractors. We respect the terms of use of each model and use them strictly for non-commercial academic research. • CoTracker3 [9] License: Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0). Source: https://github.com/facebookresearch/co-tracker .• Video Depth Anything [68] License: Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0). Source: https://github.com/DepthAnything/Video-Depth-Anything .• DINOv2 [72] License: FAIR Noncommercial Research License. Source: https://github.com/facebookresearch/dinov2 .• SigLIP 2 [73] License: Apache License 2.0 (code) and Creative Commons Attribution 4.0 International (CC-BY 4.0, model weights). Source: https://github.com/google-research/big_vision/blob/main/big_ vision/configs/proj/image_text/README_siglip2.md .• VideoMAE [26] License: Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0). Source: https://github.com/mcg-nju/videomae .• VideoPrism [2] License: Apache License 2.0 (code) and Creative Commons Attribution 4.0 International (CC-BY 4.0, model weights). Source: https://github.com/google-deepmind/videoprism .• V-JEPA 2 [1] License: MIT License (with portions of the training code under Apache License 2.0). Source: https://github.com/facebookresearch/vjepa2 .21

@@ -6,91 +6,103 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-06
-- 运行时间：2026-06-06 21:31:48 UTC
+- 最新运行日期：2026-06-07
+- 运行时间：2026-06-07 21:10:15 UTC
 - 运行状态：成功
-- 本次总论文数：23
-- 精读区：12
-- 速读区：11
+- 本次总论文数：27
+- 精读区：15
+- 速读区：12
 
 ### 今日简报（AI）
-今日精读聚焦跨模态对齐新范式，速读覆盖情感三元组提取与AI动态评估。  
-最值得关注：用变分适配器学习统一跨模态相似度，以及自适应多模态对齐实现跨领域情绪识别。  
-建议普通读者从《UF-AMA》的框架图入手，理解多模态情感识别如何在不同场景间迁移。
-- 详情：[/202606/06/README](/202606/06/README)
+今日精读27篇论文，聚焦长视频流式叙述与视频时刻检索等前沿方法。  
+最值得关注的是《FlowNar》用流式旁白撑起超长视频理解，以及《GIRL-DETR》用梯度隔离强化学习精准定位视频片段。  
+建议视频创作者与AI应用开发者关注流式叙事与精准时刻定位的落地可能，先从开源实现入手尝试。
+- 详情：[/202606/07/README](/202606/07/README)
 
 ### 精读区论文标签
-1. [Variational Adapter for Cross-modal Similarity Representation](/202606/06/2605.30968v1-variational-adapter-for-cross-modal-similarity-representation)  
+1. [FlowNar: Scalable Streaming Narration for Long-Form Videos](/202606/07/2606.00620v1-flownar-scalable-streaming-narration-for-long-form-videos)  
+   标签：评分：10.0/10、query:long-video
+   evidence：通过有界内存实现可扩展流式叙述，用于高效长视频理解
+2. [GIRL-DETR: Gradient-Isolated Reinforcement Learning for Video Moment Retrieval](/202606/07/2606.00775v1-girl-detr-gradient-isolated-reinforcement-learning-for-video-moment-retrieval)  
+   标签：评分：9.0/10、query:long-video
+   evidence：优化视频矩检索，通过自然语言查询直接检测视频中的重要事件
+3. [SuperMemory-VQA: An Egocentric Visual Question-Answering Benchmark for Long-Horizon Memory](/202606/07/2606.00825v1-supermemory-vqa-an-egocentric-visual-question-answering-benchmark-for-long-horizon-memory)  
+   标签：评分：9.0/10、query:long-video
+   evidence：面向长时记忆的自我中心视频问答基准，评估长持续时间视频的语义理解。
+4. [CoSTL: Comprehensive Spatial-Temporal Representation Learning for Moment Retrieval and Highlight Detection](/202606/07/2606.01149v1-costl-comprehensive-spatial-temporal-representation-learning-for-moment-retrieval-and-highlight-detection)  
+   标签：评分：9.0/10、query:long-video
+   evidence：面向长视频摘要的视频片段检索与精彩瞬间检测
+5. [TLG: Temporal-Logic Grounding for Video Question Answering via Source-Annotation Reconstruction and Category-Targeted Reasoning](/202606/07/2606.01591v1-tlg-temporal-logic-grounding-for-video-question-answering-via-source-annotation-reconstruction-and-category-targeted-reasoning)  
+   标签：评分：9.0/10、query:long-video
+   evidence：视频问答中的时序逻辑接地，建模长程时间依赖
+6. [3rd Place at CVPR 2026 CASTLE Challenge: Agentic Multi-View Long-Context Video Understanding via Hierarchical Knowledge Graph Retrieval](/202606/07/2606.01933v1-3rd-place-at-cvpr-2026-castle-challenge-agentic-multi-view-long-context-video-understanding-via-hierarchical-knowledge-graph-retrieval)  
+   标签：评分：9.0/10、query:long-video
+   evidence：基于智能体和分层知识图谱检索的长上下文视频理解，实现复杂时空推理。
+7. [Reason-Then-Retrieve for CoVR-R with Structured Edit Prompts and Dense-Sparse Fusion](/202606/07/2606.02450v1-reason-then-retrieve-for-covr-r-with-structured-edit-prompts-and-dense-sparse-fusion)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：变分适配器处理视觉-语言跨模态相似度学习中的标注噪声
-2. [UF-AMA: A unified framework for cross-domain emotion recognition via adaptive multimodal alignment](/202606/06/2606.00170v1-uf-ama-a-unified-framework-for-cross-domain-emotion-recognition-via-adaptive-multimodal-alignment)  
+   evidence：组合视频检索中的跨模态推理推进了CV和NLP的表示学习
+8. [AdaCodec: A Predictive Visual Code for Video MLLMs](/202606/07/2606.02569v1-adacodec-a-predictive-visual-code-for-video-mllms)  
+   标签：评分：9.0/10、query:long-video
+   evidence：预测性视频编码减少视觉令牌，实现高效视频多模态大语言模型
+9. [TrAction: Action Recognition with Sparse Trajectories](/202606/07/2606.03490v1-traction-action-recognition-with-sparse-trajectories)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：基于EEG的自适应多模态对齐跨域情绪识别
-3. [MindZero: Learning Online Mental Reasoning With Zero Annotations](/202606/06/2606.00240v1-mindzero-learning-online-mental-reasoning-with-zero-annotations)  
+   evidence：用于动作识别的Transformer架构直接符合计算机视觉中最新基于Transformer的模型
+10. [Benchmarking Visual State Tracking in Multimodal Video Understanding](/202606/07/2606.03920v1-benchmarking-visual-state-tracking-in-multimodal-video-understanding)  
+   标签：评分：9.0/10、query:long-video
+   evidence：视频中视觉状态跟踪基准，要求持续时空整合
+11. [A Motivational Architecture for Conversational AGI](/202606/07/2606.05411v1-a-motivational-architecture-for-conversational-agi)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：自监督强化学习训练多模态大语言模型进行在线心理推理
-4. [Hyperbolic and Evidence-Prioritized Experts for Large Vision-Language Models](/202606/06/2606.00275v1-hyperbolic-and-evidence-prioritized-experts-for-large-vision-language-models)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：用于非对称视觉-语言对齐的双曲混合专家模型
-5. [A Multiscale Network with Supervised Contrastive Learning for Real-Time Facial Emotion Recognition](/202606/06/2606.01069v1-a-multiscale-network-with-supervised-contrastive-learning-for-real-time-facial-emotion-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：使用多尺度网络和监督对比学习进行实时面部情绪识别。
-6. [Feature Alignment Determines Fusion Strategy: A Comparative Study of Cross-Attention and Concatenation in Multimodal Learning](/202606/06/2606.01207v1-feature-alignment-determines-fusion-strategy-a-comparative-study-of-cross-attention-and-concatenation-in-multimodal-learning)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：特征对齐质量决定最优融合策略（交叉注意力或拼接）
-7. [HOLA: Holistic Multi-Modal Alignment for Open-Set 3D Recognition](/202606/06/2606.01334v1-hola-holistic-multi-modal-alignment-for-open-set-3d-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：点云与多视图图像和多文本的整体多模态对齐
-8. [Turing Patterns for Multimedia: Reaction-Diffusion Multi-Modal Fusion for Language-Guided Video Moment Retrieval](/202606/06/2606.01615v1-turing-patterns-for-multimedia-reaction-diffusion-multi-modal-fusion-for-language-guided-video-moment-retrieval)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：反应扩散过程建模动态视频-文本交互实现对齐
-9. [Before Fusion, Ask What to Keep: Contextual Calibration of Multimodal Signals](/202606/06/2606.02679v1-before-fusion-ask-what-to-keep-contextual-calibration-of-multimodal-signals)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：提出多模态信号上下文校准模块，通过支持与冲突线索调整表示，改进跨模态融合
-10. [Intra-Modal Neighbors Never Lie: Rectifying Inter-Modal Noisy Correspondence via Graph-Based Intra-Modal Reasoning](/202606/06/2606.04061v1-intra-modal-neighbors-never-lie-rectifying-inter-modal-noisy-correspondence-via-graph-based-intra-modal-reasoning)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：基于图内模态推理校正跨模态噪声对应
-11. [Geometry-Preserving Unsupervised Alignment for Heterogeneous Foundation Models](/202606/06/2606.04385v1-geometry-preserving-unsupervised-alignment-for-heterogeneous-foundation-models)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：无监督地对齐视觉-语言与纯视觉模型，保持几何结构
-12. [LifeSide: Benchmarking Agents as Lifelong Digital Companions](/202606/06/2606.04660v1-lifeside-benchmarking-agents-as-lifelong-digital-companions)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：基准测试终身数字伴侣中的情感陪伴能力
+   evidence：为对话代理提出动机架构，调节归属感和养育等情感需求，类似于情感智能。
+12. [LongSpace: Exploring Long-Horizon Spatial Memory from Perception to Recall in Video](/202606/07/2606.05677v1-longspace-exploring-long-horizon-spatial-memory-from-perception-to-recall-in-video)  
+   标签：评分：9.0/10、query:long-video
+   evidence：探索长视频中的长期空间记忆，直接相关于理解长视频中的语义
+13. [VTI-CoT: Visual-Textual Interleaved Chain of Thought for Video Reasoning](/202606/07/2606.05736v1-vti-cot-visual-textual-interleaved-chain-of-thought-for-video-reasoning)  
+   标签：评分：9.0/10、query:long-video
+   evidence：提出视觉-文本交织思维链进行视频推理，将视觉帧融入推理步骤
+14. [Imagine Before You Predict: Interleaved Latent Visual Reasoning for Video Event Prediction](/202606/07/2606.05769v1-imagine-before-you-predict-interleaved-latent-visual-reasoning-for-video-event-prediction)  
+   标签：评分：9.0/10、query:long-video
+   evidence：通过交错潜在视觉推理直接处理视频事件预测，检测未来重要事件
+15. [MemoryCard: Topic-Aware Multi-Modal Clue Compression for Long-Video Question Answering](/202606/07/2606.05917v1-memorycard-topic-aware-multi-modal-clue-compression-for-long-video-question-answering)  
+   标签：评分：9.0/10、query:long-video
+   evidence：将长视频组织为自包含的记忆卡，捕获连贯事件级语义以进行问答
 
 ### 速读区论文标签
-1. [EUDAIMONIA: Evaluating Undesirable Dynamics in AI](/202606/06/2605.30654v1-eudaimonia-evaluating-undesirable-dynamics-in-ai)  
+1. [Pause and Think: A Dataset and Benchmark for Video-Grounded Assistive Action Suggestion](/202606/07/2606.00616v2-pause-and-think-a-dataset-and-benchmark-for-video-grounded-assistive-action-suggestion)  
+   标签：评分：8.0/10、query:long-video
+   evidence：基于视频的辅助行为建议基准，具时序推理需求
+2. [Temporal Evidence Routing with Structured Visual Evidence for TimeLogicQA](/202606/07/2606.01106v1-temporal-evidence-routing-with-structured-visual-evidence-for-timelogicqa)  
+   标签：评分：8.0/10、query:long-video
+   evidence：通过结构化视觉证据路由实现长视频上的时序推理
+3. [Community-Aware Assessment of Social Textual Engagement and Resonance: A Human-Centric Perspective on User-Generated Content Evaluation](/202606/07/2606.01897v1-community-aware-assessment-of-social-textual-engagement-and-resonance-a-human-centric-perspective-on-user-generated-content-evaluation)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：评估LLM在情感陪伴和社交动态中的表现，与情感对话代理相关
-2. [Fine-grained Verification via Diagnostic Reasoning Supervision for Aspect Sentiment Triplet Extraction](/202606/06/2605.31446v1-fine-grained-verification-via-diagnostic-reasoning-supervision-for-aspect-sentiment-triplet-extraction)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：细粒度验证提升方面情感三元组抽取的可靠性，用于情感分析
-3. [Zamba2-VL Technical Report](/202606/06/2606.00390v1-zamba2-vl-technical-report)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：混合Mamba2状态空间层和Transformer块的视觉语言模型，与领先的Transformer VLM竞争
-4. [Density-Aware Translation of Spurious Correlations in Zero-Shot VLMs](/202606/06/2606.01710v1-density-aware-translation-of-spurious-correlations-in-zero-shot-vlms)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：密度感知翻译修正视觉-语言模型中的虚假线索
-5. [SOCO: Benchmarking Semantic Object Correspondence in Vision Foundation Models](/202606/06/2605.31597v1-soco-benchmarking-semantic-object-correspondence-in-vision-foundation-models)  
+   evidence：利用多模态属性评估用户生成内容的社区共鸣，属于多模态情感分析。
+4. [InfoMerge: Information-aware Token Compression for Efficient Video Large Language Models](/202606/07/2606.02161v1-infomerge-information-aware-token-compression-for-efficient-video-large-language-models)  
+   标签：评分：8.0/10、query:long-video
+   evidence：InfoMerge通过信息感知令牌压缩实现高效视频大模型，支持有限计算下的长视频理解。
+5. [V-LynX: Token Interface Alignment for Video+X LLMs](/202606/07/2606.00508v1-v-lynx-token-interface-alignment-for-videox-llms)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：评估视觉基础模型中语义物体对应关系的基准，包含语言描述
-6. [Beyond the Mouth: Upper-Face Affective Cues in Audiovisual Sentence Recognition under Acoustic Uncertainty](/202606/06/2606.00670v1-beyond-the-mouth-upper-face-affective-cues-in-audiovisual-sentence-recognition-under-acoustic-uncertainty)  
+   evidence：V-LynX通过令牌接口对齐将新模态集成到视频LLM中，无需配对监督推进跨模态表示学习。
+6. [ETC: Extreme Token Compression via Task-aware Visual Information Distillation in VLMs](/202606/07/2606.00543v1-etc-extreme-token-compression-via-task-aware-visual-information-distillation-in-vlms)  
+   标签：评分：7.0/10、query:long-video
+   evidence：VLMs的极端令牌压缩通过减少视觉令牌数支持高效长视频理解
+7. [Pause and Think: A Dataset and Benchmark for Video-Grounded Assistive Action Suggestion](/202606/07/2606.00616v1-pause-and-think-a-dataset-and-benchmark-for-video-grounded-assistive-action-suggestion)  
+   标签：评分：7.0/10、query:long-video
+   evidence：面向视频推理的辅助行动建议数据集与基准，需对视频语义进行推理和时序理解。
+8. [R^3: Composed Video Retrieval via Reasoning-Guided Recalling and Re-ranking](/202606/07/2606.01113v1-r3-composed-video-retrieval-via-reasoning-guided-recalling-and-re-ranking)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：上脸部情感线索在听觉不确定条件下辅助视听句子识别
-7. [Towards Understanding Modality Interaction in Multimodal Language Models via Partial Information Decomposition](/202606/06/2606.00959v1-towards-understanding-modality-interaction-in-multimodal-language-models-via-partial-information-decomposition)  
-   标签：评分：7.0/10、query:affective-ai
-   evidence：用部分信息分解量化MLLM中模态的独特、冗余和协同贡献，指导跨模态融合设计
-8. [DiffuSent: Towards a Unified Diffusion Framework for Aspect-Based Sentiment Analysis](/202606/06/2606.01323v1-diffusent-towards-a-unified-diffusion-framework-for-aspect-based-sentiment-analysis)  
-   标签：评分：7.0/10、query:affective-ai
-   evidence：统一的扩散框架用于方面级情感检测
-9. [T-CLIP: Enabling Thermal Perception for Contrastive Language-Image Pretraining](/202606/06/2606.00673v1-t-clip-enabling-thermal-perception-for-contrastive-language-image-pretraining)  
+   evidence：基于推理引导召回与重排序的零样本组合视频检索，融合视觉与文本模态。
+9. [An Attribute-Based Measure of Video Complexity](/202606/07/2606.00640v1-an-attribute-based-measure-of-video-complexity)  
+   标签：评分：6.0/10、query:long-video
+   evidence：提出基于属性的视频-问题复杂度度量，预测视频LLM失败，辅助语义视频理解
+10. [FlowOVD: Learning Generative Latent Flows for Zero-shot Open-vocabulary Detection](/202606/07/2606.00782v1-flowovd-learning-generative-latent-flows-for-zero-shot-open-vocabulary-detection)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：通过改进CLIP对齐热图像与文本，实现跨模态感知
-10. [ACAT: A Collaborative Platform for Efficient Aspect-Based Sentiment Dataset Annotation](/202606/06/2606.04189v1-acat-a-collaborative-platform-for-efficient-aspect-based-sentiment-dataset-annotation)  
-   标签：评分：6.0/10、query:affective-ai
-   evidence：方面级情感标注平台
-11. [Video2LoRA: Parametric Video Internalization for Vision-Language Models](/202606/06/2606.04351v1-video2lora-parametric-video-internalization-for-vision-language-models)  
-   标签：评分：6.0/10、query:affective-ai
-   evidence：通过预测LoRA适配器实现视觉语言模型的视频内化
+   evidence：利用VLM和生成流实现开放词汇检测，推进跨模态表示学习。
+11. [EvoCut: Multi-Layer Evolution-Aware Visual Token Compression for Efficient Large Vision-Language Models](/202606/07/2606.01756v1-evocut-multi-layer-evolution-aware-visual-token-compression-for-efficient-large-vision-language-models)  
+   标签：评分：6.0/10、query:long-video
+   evidence：提出视觉标记压缩方法以提升大型视觉语言模型的效率，可用于长视频理解
+12. [Retrieve What's Missing: Coverage-Maximizing Retrieval for Consistent Long Video Generation](/202606/07/2606.02479v1-retrieve-whats-missing-coverage-maximizing-retrieval-for-consistent-long-video-generation)  
+   标签：评分：6.0/10、query:long-video
+   evidence：覆盖最大化检索确保长视频生成中的几何一致性，处理长程时间依赖。
 
 
 <div class="dpr-home-promo-card">
