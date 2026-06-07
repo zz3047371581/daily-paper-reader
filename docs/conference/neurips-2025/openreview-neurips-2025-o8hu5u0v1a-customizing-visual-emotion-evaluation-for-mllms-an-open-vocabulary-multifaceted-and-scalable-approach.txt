@@ -1,0 +1,3339 @@
+Title: 14766_Customizing_Visual_Emoti.pdf
+
+URL Source: https://openreview.net/pdf?id=O8Hu5u0v1A
+
+Number of Pages: 25
+
+Markdown Content:
+# Customizing Visual Emotion Evaluation for MLLMs: An Open-vocabulary, Multifaceted, and Scalable Approach 
+
+Anonymous Author(s) 
+
+Affiliation Address 
+
+email 
+
+Abstract 
+
+Recently, Multimodal Large Language Models (MLLMs) have achieved excep-1
+
+tional performance across diverse tasks, continually surpassing previous expec-2
+
+tations regarding their capabilities. Nevertheless, their proficiency in perceiving 3
+
+emotions from images remains debated, with studies yielding divergent results in 4
+
+zero-shot scenarios. We argue that this inconsistency stems partly from constraints 5
+
+in existing evaluation methods, including the oversight of plausible responses, lim-6
+
+ited emotional taxonomies, neglect of extra-visual factors, and labor-intensive anno-7
+
+tations. To facilitate customized visual emotion evaluation for MLLMs, we propose 8
+
+an Emotion Statement Judgment task that overcomes these constraints. Comple-9
+
+menting this task, we devise an automated pipeline that efficiently constructs 10 
+
+emotion-centric statements with minimal human effort. Through systematically 11 
+
+evaluating prevailing MLLMs, our study showcases their stronger performance 12 
+
+in emotion interpretation and context-based emotion judgment, while revealing 13 
+
+relative limitations in direct determination of sentiment polarity and personalized 14 
+
+emotion prediction. When compared to humans, even top-performing MLLMs 15 
+
+like GPT-4o demonstrate remarkable performance gaps, underscoring key areas 16 
+
+for future improvement. By developing a fundamental evaluation framework and 17 
+
+conducting a comprehensive MLLM assessment, we hope this work contributes to 18 
+
+advancing emotional intelligence in MLLMs. Codes and data will be released. 19 
+
+1 Introduction 20 
+
+Perceiving emotional signals from visual stimuli is essential for humans to improve decision-making 21 
+
+and build effective communication [ 1, 2]. To computationally model this capability, Affective Image 22 
+
+Content Analysis (AICA) has emerged as a key research direction in computer vision [ 3], focusing 23 
+
+on emotion perception through visual features [ 4]. Over the decades, advances in this field have 24 
+
+given rise to various applications, including opinion mining [ 5 ], customized advertising [ 6 ], and 25 
+
+mental health care [ 7]. Recently, the advent of Multimodal Large Language Models (MLLMs) 26 
+
+[ 8, 9] has revolutionized image understanding tasks [ 10 ]. However, their effectiveness in AICA 27 
+
+remains contested. Divergent findings underscore a paradox: while some studies [ 11 , 12 ] demonstrate 28 
+
+MLLMs’ poor zero-shot emotion recognition performance, others successfully employ them as 29 
+
+emotion annotators for training data augmentation [ 13 , 14 ]. We attribute this discrepancy to the 30 
+
+partial incompatibility of conventional emotion evaluation approaches with MLLMs. 31 
+
+Specifically, current evaluation approaches can be broadly categorized into emotion classification and 32 
+
+emotion interpretation, as illustrated in Fig. 1 (a,b). In emotion classification, models are required 33 
+
+to assign the emotional state of an input image to a predefined set of emotion categories, with most 34 
+
+Submitted to 39th Conference on Neural Information Processing Systems (NeurIPS 2025). Do not distribute. Emotion Classification  
+
+> Task: What emotion(s) might the image evoke?
+> Label: Disconnection, Doubt
+> GPT4o Prediction:
+> Confident, Disconnection, Disquietment
+
+Emotion Interpretation                             
+
+> Task: What might cause a specific emotional state?
+> Label: Sad
+> Question: What is the cause of the man in the image being sad?
+> Ground Truth Answers:
+> 1. Crying. 2. Indoors or at night.
+> 3. Standing next to another person.
+> 4. Being comforted by another.
+> GPT4o Answers:
+> 1. Downturned mouth, and slightly closed eyes.
+> 2. A possibly cold or harsh environment.
+> 3. He might experience an emotional difficulty .
+> Label: Contentment
+> Question: Why might the image evoke contentment in viewers?
+> Ground Truth Explanation:
+> Itis dark and gloomy but the house has a lot of character s.
+> GPT4o Explanation:
+> Its peaceful and rural setting depict a quiet village or countryside scene.
+> Single-label Classification
+> Label: Amusement
+> GPT4o Prediction: Contentment
+> Multi-label Classification
+> Emotion Explanation
+> Human Evaluation: Reasonable Metric Evaluation: Incorrect
+> Emotional Trigger Identification
+> Human Evaluation: Reasonable
+> Metric Evaluation: Incorrect
+> Human Evaluation: Reasonable
+> Metric Evaluation: Incorrect Human Evaluation: Reasonable Metric Evaluation: Incorrect
+
+Emotion Statement Judgement (ESJ)       
+
+> Task: Is the statement correct regarding the image?
+> Statement on Sentiment Polarity
+> Upon viewing th eimage, observers, despite individual or cont -
+> extual factors, are most likely to experience negative emotions.
+> Label: Incorrect
+> Statement on Emotion Interpretation
+> The image might evoke 'bravery' because it depicts a firefigh -
+> ter engaged in extinguishing a fire . The firefighter's protective
+> gear and the use of a fire extinguisher suggest a high level of
+> skill and courage required to handle such a situation.
+> Label: Correct
+> Statement on Scene Context
+> In the context of: 'A firefighter rushes into a burning forest to
+> save a family of four, despite the danger', the image is likely to
+> evoke a sense of urgency.
+> Label: Correct
+> Statement on Perception Subjectivity Label: Incorrect
+> Upon viewing the image, a 35-year-old male firefighter is more
+> inclined to feel fear compared to urgency.
+
+(a). (b). 
+
+(c). Figure 1: Illustration of different visual emotion evaluation approaches. Compared to current evaluation approaches, emotion statement judgement adopts a deterministic label while maintaining extensibility to evaluation depth and breadth. benchmarks [ 15 , 16 , 17 , 18 , 19 ] providing a single label per image, and a few [ 20 , 21 ] incorporating 35 
+
+multiple labels. In contrast, emotion interpretation focuses on understanding the underlying causes of 36 
+
+emotions in images. It encompasses two primary sub-tasks: explaining the causes of emotional states 37 
+
+[22, 23] and identifying salient visual elements that contribute to the emotional response [24]. 38 
+
+We identify four primary limitations when applying these evaluation approaches to MLLMs. Firstly ,39 
+
+their adoption of fixed ground-truth answers for open-ended questions imposes structural constraints 40 
+
+that exclude other plausible responses. Emotion perception is inherently subjective [ 25 , 26 ], as 41 
+
+the same image may evoke divergent reactions across individuals, and emotional states permit 42 
+
+varied interpretations. As demonstrated in Fig. 1 (a,b), responses generated by GPT-4o that seem 43 
+
+reasonable to humans are judged as inaccurate under rigid evaluation metrics. Secondly , they are 44 
+
+mostly constructed upon emotion theories with limited emotional taxonomies. Popular emotion 45 
+
+classification and interpretation benchmarks, such as FI [ 16 ] and Artemis [ 22 ], comprise only eight 46 
+
+emotion categories. Such taxonomic granularity fails to capture fine-grained affective variations 47 
+
+between images. Thirdly , they focus solely on intrinsic image attributes while neglecting extrinsic 48 
+
+contextual factors. According to recent studies [ 4, 27 ], emotion perception can also be shaped by 49 
+
+extra-visual factors, including the scene context where the image takes place, as well as the identity 50 
+
+and personality of the viewer [ 25 ]. Fourthly , they predominantly rely on majority voting mechanisms 51 
+
+to ensure label reliability in crowdsourced annotations [ 28 ], which is labor-intensive, particularly 52 
+
+for fine-grained annotation tasks. EMOTIC [ 20 ], for instance, requires coordination with 23,788 53 
+
+annotators to label 18,316 images. This operational burden severely constrains dataset scalability in 54 
+
+magnitude and generalization capacity across image domains. 55 
+
+To facilitate customized visual emotion evaluations for MLLMs, we propose a dual-component 56 
+
+solution that addresses these limitations: the Emotion Statement Judgment (ESJ) task, complemented 57 
+
+by the INSETS ( IN telligent Vi Sual Emotion Tagger and Statement Constructor) pipeline for efficient 58 
+
+annotation. As a pioneering effort, we prioritize a precise over a complex evaluation design, aiming 59 
+
+to establish a fundamental offline standard. With this purpose, ESJ reformulates visual emotion 60 
+
+evaluation by requiring MLLMs to validate emotion-centric statements for a given image . It 61 
+
+effectively mitigates ambiguity in open-ended questions while being highly extensible for evaluation 62 
+
+depth and diversity. Meanwhile, INSETS annotates images with multiple open-vocabulary emotion 63 
+
+labels, significantly refining the emotional taxonomies. These labels are then utilized to construct 64 
+
+multifaceted emotion-centric statements, covering intrinsic image attributes like sentiment polarity 65 
+
+and emotion interpretation, as well as extrinsic contextual factors like scene context and perception 66 
+
+subjectivity. Crucially, only minimal human intervention is required, ensuring a high scalability of 67 
+
+the approach. An example of ESJ is illustrated in Fig. 1 (c). 68 
+
+2Leveraging INSETS, we introduce two ESJ benchmarks: a large-scale INSETS-462K and its human-69 
+
+refined subset INSETS-3K. Systematic evaluation demonstrates that recent MLLMs exhibit non-trivial 70 
+
+visual emotion perception capabilities, yet maintain non-negligible performance gaps compared to 71 
+
+humans, particularly in discerning sentiment polarity and comprehending perception subjectivity. In 72 
+
+summary, the contributions of this paper are three-fold: 73 
+
+• This paper constitutes a pioneer effort to identify limitations in existing visual emotion 74 
+
+evaluations for MLLMs and address them with a customized ESJ task. 75 
+
+• Complementing the ESJ task, this paper designs the INSETS pipeline, providing a reli-76 
+
+able approach to annotating images with multiple open-vocabulary emotion labels and 77 
+
+constructing multifaceted emotion-centric statements with minimal human effort. 78 
+
+• Utilizing the ESJ task and the INSETS pipeline, this paper conducts a systematic evaluation 79 
+
+of recent MLLMs in visual emotion understanding, offering insights and fostering further 80 
+
+developments of emotional intelligence in MLLMs. 81 
+
+2 Related Works 82 
+
+2.1 AICA Benchmarks 83 
+
+Psychological researchers conceptualize emotion representation through two principal frameworks: 84 
+
+the Categorical Emotion Space (CES), which discretizes affective states into predefined taxonomies, 85 
+
+and the Dimensional Emotion Space (DES), which maps emotions onto continuous 2D/3D coordinate 86 
+
+systems (e.g., valence-arousal-dominance (VAD) axes [ 29 ]). For simplicity and better interpretability, 87 
+
+most benchmarks adopt emotion classification evaluations based on discrete CES emotion taxonomies. 88 
+
+This category encompasses both early small-scale benchmarks, such as IAPSa [ 30 ] and Abstract 89 
+
+[15 ], as well as later larger-scale benchmarks like FI [ 16 ] and WebEmo [ 18 ]. Over time, benchmarks 90 
+
+with enriched metadata have also been developed. Notable examples include EMOTIC [ 20 ], which 91 
+
+integrates multiple emotion categories, VAD values, and human-related bounding boxes, and EmoSet 92 
+
+[19], which employs describable emotion attributes that cover different levels of visual information. 93 
+
+Some other benchmarks adopt emotion interpretation evaluations by extending CES-based taxonomies 94 
+
+with additional emotional explanations, such as Artemis [ 22 ] and Affection [ 23 ]. EIBench [ 24 ]95 
+
+diverges slightly, shifting focus on identifying and extracting visual emotional triggers. Based on 96 
+
+these benchmarks, numerous expert models [ 31 , 32 , 33 ] have been developed, demonstrating strong 97 
+
+performance under the fine-tuning and testing paradigm. In contrast to them, MLLMs are commonly 98 
+
+pre-trained on web-scale data, without explicitly aligning with benchmark-specific knowledge. This 99 
+
+discrepancy introduces multiple constraints when applying conventional benchmarks to MLLMs, 100 
+
+necessitating customized visual emotion evaluation approaches that account for their generalized 101 
+
+knowledge structures. 102 
+
+2.2 Evaluation of MLLMs 103 
+
+Recent years have witnessed surging academic and industrial interest in MLLMs. Unlike earlier 104 
+
+models that are limited to specific domains, MLLMs demonstrate versatile competence across diverse 105 
+
+tasks [ 34 , 35 ], fueling expectations about their trajectory toward Artificial General Intelligence [ 36 ]. 106 
+
+To evaluate MLLMs, various benchmarks have been established to examine their capabilities in areas 107 
+
+such as perception [ 37 , 9], reasoning [ 38 , 39 ], ethics [ 40 , 41 ], and specialized domains [ 42 , 43 ]. 108 
+
+However, emotional intelligence remains conspicuously underexplored. In existing efforts, FABA-109 
+
+Bench [ 44 ] evaluates MLLMs’ comprehension of facial expressions and actions, MM-BigBench [ 45 ]110 
+
+simply aggregates mainstream image-text benchmarks, and EmoBench [ 46 ] is confined to solely 111 
+
+language modality. To fill this gap, we propose the ESJ task and corresponding benchmarks INSETS-112 
+
+462K and INSETS-3K to advance more comprehensive visual emotion evaluation of MLLMs. 113 
+
+3 Emotion Statement Judgement 114 
+
+ESJ aims to evaluate the proficiency of MLLMs in perceiving emotions from visual content. In 115 
+
+each evaluation trial, MLLMs receive an image and a paired emotion-centric statement. MLLMs 116 
+
+are then required to judge the correctness of the statement in relation to the image by responding 117 
+
+3with Correct or Incorrect . To ensure both depth and breadth in evaluation, we systematically design 118 
+
+emotion-centric statements from four dimensions: 119 
+
+Sentiment Polarity Statements require MLLMs to decide sentiment polarities without any additional 120 
+
+clues. They assess MLLMs’ proficiency in directly identifying the basic emotional tone. 121 
+
+Emotion Interpretation Statements ask MLLMs to verify the consistency between affective expla-122 
+
+nations and corresponding emotional states. They measure MLLMs’ affective reasoning capability 123 
+
+given specific emotional triggers. 124 
+
+Scene Context Statements probe MLLMs’ comprehension of the dynamic interplay between the 125 
+
+external scene context where the image takes place, and image-evoked emotional responses. 126 
+
+Perception Subjectivity Statements task MLLMs to predict the personalized emotional responses 127 
+
+under assumptions of specific viewer identities, examining whether MLLMs can recognize how 128 
+
+subjectivity shapes emotional perceptions. 129 
+
+Collectively, these dimensions establish a holistic visual emotion evaluation framework for MLLMs. 130 
+
+They cover both intrinsic image attributes emphasized in existing benchmarks and underexplored 131 
+
+extrinsic contextual factors critical for human emotional perception [47, 48]. 132 
+
+4 Annotation Pipeline: INSETS 133 
+
+Complementing the ESJ task, we design an automated pipeline for constructing emotion-centric 134 
+
+statements, termed INSETS ( IN telligent Vi Sual Emotion Tagger and Statement Constructor). It 135 
+
+operates through two primary stages: open-vocabulary emotion tagging and emotion statement 136 
+
+construction. The prompts and templates used in the process are listed in Appendix Table 5. 137 
+
+4.1 Preliminary: Parrott’s Hierarchical Model 138 
+
+We first introduce a well-established emotion model, which provides essential context for understand-139 
+
+ing the subsequent stages. Parrott’s Hierarchical model [ 49 , 50 ] is a tree-structured emotion taxonomy, 140 
+
+comprising 6 primary emotions, 25 secondary emotions, and 113 tertiary emotions. The primary 141 
+
+category contains three positive emotions (joy, love, and surprise) and three negative emotions (anger, 142 
+
+fear, and sadness). Secondary emotions offer more diverse emotional states, each categorized under a 143 
+
+corresponding primary emotion, while tertiary emotions further refine secondary emotions into more 144 
+
+specific affective states. The complete taxonomy is presented in Appendix Table 7. 145 
+
+4.2 Open-vocabulary Emotion Tagging 146 
+
+At this stage, INSETS aims to assign open-vocabulary emotion labels for images, laying a solid 147 
+
+foundation for constructing meaningful emotion-centric statements, with its procedure depicted in 148 
+
+Fig. 2. According to Cheng et al. [14 ], MLLMs demonstrate promising capabilities in generating emo-149 
+
+tional descriptions from visual content and extracting underlying emotions from these descriptions. 150 
+
+However, challenges such as hallucinations [ 51 ], trustworthiness issues [ 52 ], and inherent limitations 151 
+
+in emotional perception can lead to inaccuracies in the extracted emotions. To enhance reliability, we 152 
+
+devise an ensemble-based majority voting mechanism, aggregating outputs from multiple MLLMs to 153 
+
+cross-validate and refine emotion label assignments. 154 
+
+Given an image sample, we first extract its potential open-vocabulary emotions from multiple MLLMs. 155 
+
+MLLMs are prompted to analyze the emotions evoked by the image (with #1 prompt in Table 5, 156 
+
+abbreviated as “#1” in the following) and then extract emotions applicable to the image (#2) [Fig. 2 157 
+
+(a)]. This process is iteratively applied to all images in the dataset, aggregating potential emotions into 158 
+
+an emotion pool. Next, we refine this pool by filtering out words unsuitable as emotion descriptors 159 
+
+(#3), using GPT-4 [ 53 ] as the judge due to its superior linguistic emotional perception [ 46 ] [Fig. 2 (b)]. 160 
+
+Once the filtered emotion pool is obtained, we attach the remaining emotions to Parrott’s hierarchical 161 
+
+emotion model [Fig. 2 (c)]. Specifically, GPT-4 is prompted to categorize each open-vocabulary 162 
+
+emotion into the closest tertiary emotion in Parrott’s model (#4), followed by manual refinement by a 163 
+
+human expert. This process results in an extended version of Parrott’s model, which we refer to as 164 
+
+the Parrott-based Open-vocabulary Hierarchical Model (POM) [Fig. 2 (d)]. This unified framework 165 
+
+4Extract Open -Vocabulary 
+
+> Emotions
+
+Image Dataset 
+
+Filter Unqualified Words 
+
+Filtered Emotion Pool 
+
+Attach Open -vocabulary Emotions to Parrott’s Hierarchical Emotion Model 
+
+Instruction: Determine which emotional category from [ Tertiary Categories ] most aligns with [ Word ]. (#4) 
+
+GPT -4: {[ Reverence ]: Adoration}, {[ Admiration ]: Adoration}, {[ Intimacy ]: Caring}, {[ Protectiveness ]: Caring}, {[ Warm ]: Tenderness}, 
+
+[Word]  [Tertiary Categories] 
+
+Emotion Pool 
+
+Qualified [Word] 
+
+Parrott’s Hierarchical Emotion Model 
+
+Polarity 
+
+Primary 
+
+Secondary 
+
+Tertiary 
+
+Positive, Negative 
+
+Joy, Love, Surprise 
+
+Positive 
+
+> Comprises:
+
+Affection Lust, Longing 
+
+Love 
+
+> Comprises:
+
+Caring, Tenderness, 
+
+Affection 
+
+> Comprises:
+
+...... 
+
+Rough Relation 
+
+Instruction: Determine whether [ Word ] describes an emotional state. (#3) 
+
+GPT -4: {[ Serenity ]: }, {[ Calmness ]: }, {[ Energy ]: },  ...... 
+
+[Word] 
+
+...... 
+
+Reverence 
+
+Manual Refinement 
+
+Open -vocabulary 
+
+Emotions 
+
+Parrott’s Tertiary 
+
+Emotions 
+
+Admiration 
+
+Intimacy 
+
+Protectiveness 
+
+Warm 
+
+Camaraderie 
+
+Adoration 
+
+Caring 
+
+Fondness 
+
+Tenderness 
+
+Reverence 
+
+Open -vocabulary 
+
+Emotions 
+
+Admiration 
+
+Intimacy 
+
+Protectiveness 
+
+Warm 
+
+Camaraderie 
+
+Adoration 
+
+Caring 
+
+Fondness 
+
+Liking 
+
+Instruction: Analyze the emotions evoked by the <image>. 
+
+MLLM: The individuals in the image are wearing matching 
+
+costumes that include feather boas, sequined tops, and 
+
+elaborate headpieces. The headpieces are adorned with … 
+
+Instruction: Extract emotions applicable for the <image>. 
+
+MLLM: Happiness, Excitement, Joy, Euphoria, Community, 
+
+Creativity, Festivity, Celebration, Enthusiasm, Satisfaction 
+
+Instruction: Analyze the emotions evoked by the <image>. 
+
+MLLM: The costumes are elaborate and festive, with 
+
+elements such as flowers, feathers, and possibly animal motifs. 
+
+These elements can evoke a sense of celebration, festivity … 
+
+Instruction: Extract emotions applicable for the <image>. 
+
+MLLM: Joy, Happiness, Excitement, Celebration, Community, 
+
+Cultural Appreciation 
+
+Instruction: Analyze the emotions evoked by the <image>. 
+
+MLLM: The scene is incredibly bright and full of vivid colors. 
+
+Pink, green, red, and blue dominate the palette, creating an 
+
+energetic and cheerful atmosphere. Bright and saturated … 
+
+Instruction: Extract emotions applicable for the <image>. 
+
+MLLM: Joy, Exuberance, Euphoria, Playfulness, Whimsy, 
+
+Celebration, Inclusion, Community 
+
+Instruction: Analyze the emotions evoked by the [ Image ]. (#1) 
+
+MLLM: The image depicts a vibrant and colorful scene, likely 
+
+from a festival or parade. The use of bright and vivid colors, 
+
+such as pink, green and blue, can evoke feelings of joy … 
+
+Instruction: Extract emotions applicable for the [ Image ]. (#2) 
+
+MLLM: Joy, Excitement, Happiness, Wonder, Amusement, 
+
+Anticipation, Celebration, Community, Engagement 
+
+Qwen2 -VL 
+
+InternVL2.5 
+
+Llava -Next 
+
+Idefics3 
+
+Extract Open -vocabulary Emotions 
+
+Image Sample 
+
+[Image] 
+
+Vote for Consensus Emotions based on POM 
+
+Qwen2 -VL 
+
+InternVL2.5 
+
+Llava -Next 
+
+Idefics3 
+
+Happiness, Engagement … 
+
+Exuberance, Euphoria … 
+
+Joy, Cultural Appreciation … 
+
+Excitement, Enthusiasm … 
+
+Qwen2 -VL 
+
+InternVL2.5 
+
+Llava -Next 
+
+Idefics3 
+
+Cheerfulness, Optimism … 
+
+Cheerfulness, Zest 
+
+Cheerfulness, Zest 
+
+Cheerfulness, Zest 
+
+Map Open -vocabulary Emotions 
+
+to Secondary Emotions 
+
+Vote at 
+
+Secondary -level  Cheerfulness  Optimism  Zest 
+
+Quota: 3
+
+4/4 Votes 
+
+Quota: 0 
+
+1/4 Votes 
+
+Quota: 1 
+
+3/4 Votes 
+
+Happiness Engagement … 
+
+Exuberance, Euphoria …
+
+Joy Cultural Appreciation … 
+
+Excitement Enthusiasm … 
+
+Cheerfulness 
+
+Zest 
+
+Select Top -
+
+frequent Open -
+
+vocabulary 
+
+Emotions 
+
+Parrott -based Open -vocabulary Hierarchical Model (POM) 
+
+PM  : Primary 
+
+OV  : Open -vocabulary 
+
+SC  : Secondary 
+
+PL  : Polarity 
+
+TT  : Tertiary 
+
+Positive  Negative 
+
+Joy 
+
+Love 
+
+Surprise 
+
+Fear 
+
+Anger 
+
+Sadness 
+
+Affection 
+
+Lust 
+
+Longing 
+
+Zest 
+
+Irritability 
+
+Exasperation 
+
+Rage 
+
+Reverence 
+
+Admiration 
+
+Reverent 
+
+> OV
+> OV
+> OV
+
+Warm 
+
+Closeness 
+
+Companionship 
+
+> OV
+> OV
+> OV
+
+Passion 
+
+Passionate 
+
+> OV
+> OV
+
+Intense 
+
+Emotional 
+
+Intensity 
+
+> OV
+> OV
+
+Frustration 
+
+Hostility 
+
+Dislike 
+
+Outrage 
+
+Outrage 
+
+> OV
+
+Unloving 
+
+Aversion 
+
+> OV
+> OV
+
+Surprise Passion 
+
+Fondness 
+
+Adoration 
+
+Caring 
+
+Suffering 
+
+Horror  Unkind 
+
+Hostility 
+
+Aggression 
+
+Aggressive 
+
+Confrontation   
+
+> OV
+> OV
+> OV
+> OV
+> OV
+> TT
+> TT
+> TT
+> TT
+> TT
+> TT
+> TT
+> TT
+> SC
+> SC
+> SC
+> SC
+> SC
+> SC
+> SC
+> SC
+> SC PM
+> PM
+> PM
+> PM
+> PM
+> PM
+> PL PL
+
+Guide 
+
+Dataset -wise 
+
+Sample -wise 
+
+Open -vocabulary Emotions 
+
+Happiness 
+
+Joy 
+
+Euphoria 
+
+Excitement 
+
+Require API Costs  Require API Costs and Human Efforts 
+
+Local MLLMs inferences  Local MLLMs inferences 
+
+Happiness 
+
+Joy 
+
+Euphoria 
+
+Excitement 
+
+Parrott’s Tertiary 
+
+Emotions 
+
+(a). 
+
+(b).  (c). 
+
+(e). 
+
+(a). 
+
+(d). Figure 2: Illustration of the open-vocabulary emotion tagging stage. We first extract all potential open-vocabulary emotions from the image dataset (a) and then attach these emotions to a well-established emotion model (b,c). Through this model (d), we identify and select open-vocabulary emotions consistently recognized by multiple MLLMs as the labels of each image (e). enables multi-level tracing of affective states for each open-vocabulary emotion, facilitating more 166 
+
+accurate and interpretable emotion tagging. 167 
+
+Subsequently, leveraging POM, the ensemble-based majority voting mechanism selects reliable 168 
+
+open-vocabulary emotion labels for images [Fig. 2 (e)]. First, open-vocabulary emotions extracted 169 
+
+from multiple MLLMs are mapped to secondary emotion categories, with model voting determining 170 
+
+the quota of open-vocabulary emotions for each secondary category. Second, within each secondary 171 
+
+category, the open-vocabulary candidates are ranked based on their frequencies, and the top-ranked 172 
+
+ones are selected according to the allocated quota. This process guarantees label reliability while pre-173 
+
+serving the open-vocabulary nature of the emotion labels, thereby achieving synergistic optimization 174 
+
+between annotation precision and semantic coverage. 175 
+
+4.3 Emotional Statement Construction 176 
+
+Building upon the assigned emotion labels, we construct both correct and incorrect emotion-centric 177 
+
+statements from four dimensions: sentiment polarity, emotion interpretation, scene context, and 178 
+
+perception subjectivity. Its procedure is illustrated in Fig. 3. 179 
+
+The construction pipeline initiates with prototype statement generation [Fig. 3 (a)]. For each emotion 180 
+
+label, we trace it back to the MLLM that extracts it, prompting the MLLM to generate three prototype 181 
+
+statements: [1] . prototype interpretation of the emotion by inquiring about the cause of the emotion 182 
+
+(#5); [2] . prototype context that aligns with the emotion by requesting a background story (#6); and 183 
+
+[3] . prototype character who would experience the emotion by questioning the possible identity of 184 
+
+the viewer (#7). From the dataset perspective, the prototype generation is distributed across multiple 185 
+
+MLLMs, ensuring diversity in the subsequent statement construction. 186 
+
+Sentiment Polarity Statement Construction [Fig. 3 (b)]: Under the guidance of POM, we derive 187 
+
+sentiment polarity by mapping the labels to primary emotions. Each image’s sentiment polarity is 188 
+
+classified into three mutually exclusive categories: 1). Fully Positive when all labels reside in the 189 
+
+positive spectrum; 2). Fully Negative when all labels reside in the negative spectrum; 3). Mixed 190 
+
+when positive and negative labels both exist. Next, the ground truth correctness of three predefined 191 
+
+statements on sentiment polarity (#8,9,10) is determined accordingly. 192 
+
+5Determination 
+
+Solidarity 
+
+Anger 
+
+Hope 
+
+Frustration 
+
+InternVL 2.5 
+
+InternVL2.5 
+
+Qwen2 -VL 
+
+Llava -Next 
+
+Idefics3 
+
+Generate Prototype Statements 
+
+Instruction: Explain the cause of [ Emotion ]. (#5) 
+
+MLLM: The image evokes hope through the presence of a diverse group of 
+
+> people united in a peaceful protest, advocating for positive change and
+> expressing their opinions on important social issues.
+
+Statements of [Emotion] are Generated by the Source [MLLM] 
+
+Instruction: Imagine a context that would evoke [ Emotion ]. (# 6)
+
+MLLM: In a bustling city, people gather to peacefully protest for a better 
+
+> future, united in their quest for change and a brighter tomorrow.
+> Trace Back to Source MLLM
+
+Instruction: Image a character who feels [ Emotion ]. (#7) 
+
+MLLM: A middle -aged female teacher, wearing a red cardigan and glasses, 
+
+> recognizing the importance of advocating for healthcare and education.
+
+Interpretation 
+
+Context 
+
+Character 
+
+[Emotion]  [MLLM] 
+
+Local MLLMs inferences 
+
+Interpretatio n
+
+Context 
+
+Character 
+
+Hope: 
+
+Interpretation 
+
+Context 
+
+Character 
+
+Anger: 
+
+Interpretation 
+
+Context 
+
+Character 
+
+Solidarity: 
+
+Interpretation 
+
+Context 
+
+Character 
+
+Frustration: 
+
+Interpretation 
+
+Context 
+
+Character 
+
+Determination: 
+
+Prototype Statements 
+
+Prototype Statement Generation 
+
+Sentiment Polarity Statement Construction 
+
+Hope 
+
+POM  Map Open -vocabulary Emotions 
+
+to Sentiment Polarities 
+
+Anger  Solidarity  Frustration  Determination 
+
+Positive  Negative  Positive  Negative  Positive 
+
+Classify the Sentiment Polarity as Mixed 
+
+Emotions (Can be Both Positive and Negative) 
+
+Claim of Fully Positive Image. (#8) 
+
+Statements on Sentiment Polarity Sentiment Polarity 
+
+Fully Positive 
+
+Fully Negative 
+
+Mixed √
+
+Claim of Fully Negative Image. (#9) 
+
+Claim of Mixed Image. (#10) 
+
+Label 
+
+Incorrect 
+
+Incorrect 
+
+Correct 
+
+Guide 
+
+Emotion Interpretation Statement Construction 
+
+Statement on Emotion Interpretation  Label 
+
+Raw Statement of Emotion 
+
+Interpretation for Each Label. 
+
+Matched Labels and 
+
+Prototype Statements 
+
+Raw Statement of Emotion 
+
+Interpretation for Each Label. 
+
+Raw Statement of Emotion 
+
+Interpretation 
+
+Correct Statement Construction 
+
+Correct 
+
+Incorrect Statement Construction 
+
+Intra -image Dis ruption 
+
+Inter -image Dis ruption 
+
+Image Dataset 
+
+> Query
+
+Current Image 
+
+Interpretation 
+
+Interpretation 
+
+Substitute Current 
+
+Image’s Interpretation 
+
+Emotionally 
+
+Similar but Visually 
+
+Dissimilar 
+
+Visually Similar 
+
+but Emotionally 
+
+Dissimilar 
+
+Interpretation  Emotions with Mismatch 
+
+Interpretation from Other Images 
+
+Emotion Statements with Mismatch 
+
+Interpretation from Other Images 
+
+Emotion Statement with Mismatch 
+
+Interpretation from Other Images  Incorrect 
+
+Determination  Frustration 
+
+Interpretation  Interpretation 
+
+Exchange Interpretations 
+
+between Positive and 
+
+Negative Labels 
+
+Emotions with Mismatch 
+
+Interpretation from Other Images 
+
+Emotion Statements with Mismatch 
+
+Interpretation from Other Images 
+
+Emotion Statement with Mismatch 
+
+Interpretation from the Current Image  Incorrect 
+
+Scene Context Statement Construction 
+
+Correct Statement Construction 
+
+Statements on Scene Context  Label 
+
+Templated Context Statement Templated Context Statement  Correct 
+
+Incorrect 
+
+Incorrect 
+
+Incorrect Statement Construction 
+
+In the Context of 
+
+[Context], the Image is 
+
+Likely to Evoke [Emotion]. 
+
+Context with Polarity -flipped Emotion 
+
+Mismatch Context from the Current Image 
+
+Template (#12) 
+
+Hope 
+
+Context 
+
+Exchange Contexts 
+
+between Positive and 
+
+Negative Labels 
+
+Anger 
+
+Context 
+
+Template 
+
+Context 
+
+Determination 
+
+Context 
+
+Determination 
+
+Context 
+
+Determination 
+
+Templated Context Statement 
+
+with Mismatched Context 
+
+Templated Context Statement 
+
+with Mismatched Context 
+
+Templated Context Statement 
+
+with Mismatched Context 
+
+Templated Context Statement 
+
+with Polarity -flipped Emotion 
+
+Hope 
+
+Context 
+
+Anger 
+
+Context 
+
+Anger 
+
+Context  Template 
+
+Zeal 
+
+Context 
+
+Flip 
+
+Polarity 
+
+Perception Subjectivity Statement Construction 
+
+Statements on 
+
+Perception Subjectivity 
+
+Label 
+
+Correct 
+
+Incorrect 
+
+Correct Statement Construction 
+
+Upon Viewing the Image, 
+
+[Role] is More Inclined to 
+
+Feel [Emotion1] Compared 
+
+to [Emotion2]. 
+
+Incorrect Statement Construction 
+
+Template (#13) 
+
+Correct Templated 
+
+Subjectivity Statement 
+
+Anger 
+
+Character 
+
+Correct Templated 
+
+Subjectivity Statement 
+
+Correct Templated 
+
+Subjectivity Statement 
+
+Correct Templated 
+
+Subjectivity Statement 
+
+Correct Templated 
+
+Subjectivity Statement 
+
+Incorrect Templated 
+
+Subjectivity Statement 
+
+[Emotion2] 
+
+Zeal  Solidarity 
+
+Construction of Emotion Pairs with Preference 
+
+Retrieve from 
+
+Opposite Polarity 
+
+Character 
+
+Anger 
+
+Emotion and the 
+
+Corresponding 
+
+Statement 
+
+Template 
+
+Flip Polarity 
+
+Non -
+
+preferred 
+
+Preferred 
+
+Non -
+
+preferred 
+
+Preferred 
+
+Non -preferred 
+
+[Emotion1]  Character 
+
+[Role 
+
+]
+
+[Emotion1]  Template 
+
+Preferred 
+
+Non -preferred 
+
+[Emotion2]  Character 
+
+[Role] 
+
+Template 
+
+(# 11 )
+
+Context 
+
+Determination 
+
+Interpretation 
+
+Determination 
+
+(a). 
+
+(b).  (c). 
+
+(d). (e). Figure 3: Illustration of the emotional statement construction stage. It begins with prototype statement generation (a) for each emotion label, which is distributed across multiple MLLMs. Then, based on the assigned emotion labels and the corresponding prototype statements, correct and incorrect emotion-centric statements are constructed from four dimensions: sentiment polarity (b), emotion interpretation (c), scene context (d), and perception subjectivity (e). 
+
+Emotion Interpretation Statement Construction [Fig. 3 (c)]: We combine a prototype interpretation 193 
+
+with an emotional state (#11) to construct an emotion interpretation statement. Matched labels 194 
+
+and prototype statements are assigned as correct statements, while unmatched ones are considered 195 
+
+incorrect. To construct mismatched pairs, we design two strategies: inter-image and intra-image 196 
+
+disruption. The former retrieves two images from the dataset - one exhibiting visual similarity but 197 
+
+emotional dissimilarity to test whether MLLMs can comprehend the affective gap [ 54 ], and the other 198 
+
+demonstrating emotional similarity but visual dissimilarity to evaluate whether MLLMs can identify 199 
+
+the emotional triggers in images. Visual similarity is quantified using CLIP-score [ 55 ], whereas 200 
+
+emotional similarity is determined by the correspondence at tertiary emotions of POM. The latter 201 
+
+strategy exchanges interpretations between emotion labels of contrasting polarity within identical 202 
+
+images, aiming to assess whether MLLMs can establish precise causal linkages between emotional 203 
+
+triggers and specific emotions. 204 
+
+Scene Context Statement Construction [Fig. 3 (d)]: We combine a prototype context and an emotional 205 
+
+conclusion (#12) to form a scene context statement, where the construction of correct statements 206 
+
+mirrors the previous case. The strategy for incorrect statements differs slightly: in addition to 207 
+
+exchanging prototype contexts between emotion labels of contrasting polarity within identical images, 208 
+
+we devise a flip polarity operation. Specifically, the emotional label is substituted with a tertiary 209 
+
+emotion randomly sampled from the opposing polarity spectrum in POM. 210 
+
+Perception Subjectivity Statement Construction [Fig. 3 (e)]: We combine a prototype character 211 
+
+and their inclination toward one of two candidate emotions (#13) to form a perception subjectivity 212 
+
+statement. We first create emotion pairs with preference bias. For each prototype character, its 213 
+
+preferred emotion is the corresponding emotion label. The non-preferred emotion is derived by either 214 
+
+retrieving opposite polarity emotions within the image or the flip polarity operation for the preferred 215 
+
+emotion. Next, correct and incorrect statements are constructed by configuring emotion pairs into 216 
+
+canonical or anomalous orders, respectively. 217 
+
+6Table 1: Statistics of the MLLMs employed in INSETS. For each MLLM, we report the number of parameters, the average extracted emotions per image, the number selected as emotion labels, and the proportion of prototype statements it generates. MLLMs #P Extracted Selected Generated (B) Emotion Emotion Statement LLaVa-1.6 [56] 7.6 8.3 2.4 9.8% Mantis [57] 8.5 12.6 2.9 13.1% mPLUG-Owl3 [58] 8.1 9.2 2.7 11.2% Idefics3 [59] 8.5 10.0 2.9 12.5% Phi-3.5-Vision [60] 4.1 9.9 2.8 11.7% Qwen2-VL [61] 8.3 8.8 2.7 10.9% Llama-3.2-Vision [62] 10.7 7.2 2.3 9.3% Molmo [63] 8.0 10.8 2.7 12.0% InternVL2.5 [64] 8.3 8.5 2.3 9.5% Table 2: Statistics of emotion labels and statements in INSETS-462K and INSETS-3K. INSETS-462K Number of Images 17,716 Number of Statements 462,369 Emotion Labels Per Image 4.9 Distinct Emotion Labels 751 Statements Per Image 26.1 Average Length of Statements 39.0 INSETS-3K Number of Images 3,086 Number of Statements 3,086 Emotion Labels Per Image 5.2 Distinct Emotion Labels 424 Statements Per Image 1.0 Average Length of Statements 37.0 Anticipation                 
+
+> Satisfaction
+> Joy
+> Pleasure
+> Excitement
+> Label: Incorrect
+> The chaotic and disorganized arrangement of various
+> food packaging can evoke a sense of anxiety due to the
+> overwhelming number of items and cluttered space.
+> Emotion
+> Labels
+> Emotion -centric Statement
+> Joy
+> Excitement
+> Nostalgia
+> Happiness
+> Contentment
+> Warmth
+> Sadness
+> Fear
+> Curiosity
+> Playfulness
+> Anxiety
+> Celebration
+> Anticipation
+> Serenity
+> Awe
+> Concern
+> Wonder
+> Love
+> Comfort
+> Freedom
+> Unease
+> Joy
+> 40.3%
+> 28.5%
+> 26.5%
+> 23.8%
+> 21.5%
+> 21.3%
+> 18.2%
+> 15.7%
+> 15.3%
+> 14.8%
+> 10.9%
+> 9.8%
+> 9.0%
+> 8.4%
+> 8.3%
+> 8.1%
+> 8.1%
+> 8.0%
+> 6.9%
+> 6.9%
+> 6.9%
+> 6.8%
+> Love
+> 17.2%
+> Surprise
+> 7.7%
+> Sadness
+> 17.7%
+> Fear
+> 13.4%
+> Angry
+> 3.7%
+> Sentiment
+> Polarity
+> 12.6%
+> 37.5%
+> 24.9%
+> 25.0%
+> Emotion
+> Interpretation
+> Scene
+> Context
+> Perception
+> Subjectivity
+> Correct
+> 54.1% Incorrect
+> 45.9%
+> 010 20 30 40 50 60 70 80 90 100 110 120
+> 0.1% 0.6% 2.1% 3.3% 3.0% 2.8% 3.8%
+> 6.3%
+> 11.5%
+> 15.8%
+> 19.6%
+> 31.2%
+> Average Length: 37.0 Words
+> Length Distribution
+
+(a) 
+
+(b) 
+
+(c) 
+
+Figure 4: A closer gaze at INSETS-3K. Illustrations of a sample (a), the distribution of emotion labels (b), and the distribution of emotion-centric statements (c). 
+
+4.4 Evaluation Benchmarks 218 
+
+In this process, INSETS begins with an image dataset, relying primarily on local MLLM inferences to 219 
+
+assign reliable open-vocabulary emotion labels and construct meaningful emotion-centric statements. 220 
+
+For open-vocabulary emotion extraction and prototype statement generation, we employ nine recent 221 
+
+popular MLLMs with impressive performance [ 65 ]. As reported in Table 1, the final assigned emotion 222 
+
+labels and prototype statements are evenly sourced across the MLLMs, ensuring diversity in the 223 
+
+constructed benchmark. Given the high quality of Emoset [ 19 ], we select it as the image source. 224 
+
+From a subset of 17,716 images, we construct 462K emotion-centric statements, referred to as 225 
+
+INSETS-462K. 226 
+
+To further enhance accuracy, we sample 3,164 distinct image-statement pairs from INSETS-462K 227 
+
+for human validation. Among them, annotators judge 218 pairs (6.9%) as inaccurate, 2,868 pairs 228 
+
+(90.6%) as accurate, and 79 pairs (2.5%) as ambiguous. Accurate pairs are retained, incorrect labels 229 
+
+are corrected, and ambiguous ones are discarded, yielding a high-quality subset of 3,086 distinct 230 
+
+image-statement pairs, which we name INSETS-3K. Although the open-vocabulary emotion labels 231 
+
+are not required in the ESJ task, we retain them in both INSETS-462K and INSETS-3K to enhance 232 
+
+interpretability and facilitate future development of the benchmarks. The statistics of emotion labels 233 
+
+and statements are reported in Table 2. 234 
+
+5 Analysis and Evaluation 235 
+
+5.1 Details of INSETS-3K 236 
+
+To gain deeper insights into the properties of INSETS-3K, we provide detailed statistics in Fig. 4. A 237 
+
+sample is shown in Fig. 4 (a), which includes five emotion labels and an emotion-centric statement. 238 
+
+Fig. 4 (b) illustrates the distribution of popular emotion labels, where the most frequent labels 239 
+
+include Joy, Excitement, Nostalgia, Happiness, and Contentment. When mapped to the primary 240 
+
+emotions in Parrott’s model, Joy is the most dominant category (40.3%), followed by Sadness (17.7%), 241 
+
+7Table 3: Evaluation results on INSETS-3K. The MLLMs involved in constructing INSETS-3K are listed in the upper part of the table, while other results are listed in the lower part. The highest values in each section are marked in bold .MLLMs #Param Accuracy Positive Ratio Give-up Ratio Sentiment Emotion Scene Perception Total Polarity Interpretation Context Subjectivity LLaVa-1.6 [56] 7.6B 66.4 69.7 55.3 49.7 60.2 18.4 0Mantis [57] 8.5B 61.2 65.9 67.2 61.2 64.4 84.4 0.1 mPLUG-Owl3 [58] 8.1B 73.9 79.3 81.7 75.0 78.1 67.3 0Idefics3 [59] 8.5B 75.4 78.6 75.5 62.6 73.4 49.5 0.2 Phi-3.5-Vision [60] 4.1B 74.7 72.5 82.6 74.8 75.9 64.1 0Qwen2-VL [61] 8.3B 70.7 75.0 86.1 72.8 76.6 65.7 0Llama-3.2-Vision [62] 10.7B 68.7 75.9 85.2 72.0 76.3 71.2 0.2 Molmo [63] 8.0B 61.4 76.0 79.2 59.4 70.7 38.1 0InternVL2.5 [64] 8.3B 75.7 80.2 79.4 61.3 74.7 52.9 0.2 BLIP2 [66] 7.7B 51.1 52.8 55.4 52.5 53.2 96.8 2.5 InstructBLIP [67] 7.9B 29.8 40.5 33.9 37.8 36.8 43.8 37.5 Otter [68] 8.2B 32.6 21.4 32.1 27.2 27.0 9.9 52.1 DeepSeek-VL [69] 7.3B 68.7 70.8 81.1 73.2 73.7 73.1 0Paligemma [70] 2.9B 50.6 46.3 49.3 45.7 47.4 49.4 5.5 MiniCPM [71] 8.7B 70.4 78.4 81.9 70.5 76.2 66.0 0Qwen2.5-VL [72] 8.3B 63.2 81.5 83.9 66.3 75.9 45.9 0GPT4o-mini [53] – 62.5 80.0 78.9 71.8 75.4 49.5 0GPT4o [53] – 72.5 84.3 81.6 69.2 78.3 65.0 1.6 Love (17.2%), Fear (13.4%), Surprise (7.7%), and Anger (3.7%). This distribution suggests a rich 242 
+
+representation of emotions, ensuring coverage of diverse affective states. Fig. 4 (c) presents statistics 243 
+
+on the statements, which exhibit a natural length distribution and a well-balanced distribution across 244 
+
+the four evaluation dimensions as well as correct/incorrect labels. 245 
+
+5.2 Evaluation Preparations 246 
+
+We evaluate MLLMs through the ESJ task. Specifically, we provide each MLLM with an image-247 
+
+statement pair and prompt it to determine the correctness of the statement. The prompt is formulated 248 
+
+as: “Based on the provided image and emotional statement, please determine whether the statement 249 
+
+aligns with the content of the image. If it does, respond with Correct . If it does not, respond with 250 
+
+Incorrect .” Each image-statement pair is queried three times per MLLM, and the most frequent 251 
+
+response is selected as the final decision. After collecting responses for all images, we adopt accuracy 252 
+
+as the primary evaluation metric. As identified in prior work [ 73 ], some MLLMs may exhibit a 253 
+
+strong bias toward either positive or negative responses, which may compromise accuracy-based 254 
+
+evaluation validity. To mitigate this, we introduce two diagnostic metrics: Positive Ratio calculates 255 
+
+the proportion of positive responses out of all responses; Give-up Ratio measures the proportion of 256 
+
+cases where the MLLM neither provides a positive nor a negative response. 257 
+
+To conduct a comprehensive evaluation, we adopt a diverse range of MLLMs, including both open-258 
+
+source and closed-source ones. Besides the MLLMs used to construct the benchmarks, we also 259 
+
+incorporate the following MLLMs: BLIP-2 [ 66 ], InstructBLIP [ 67 ], Otter [ 68 ], Deepseek-VL [ 69 ], 260 
+
+Paligemma [ 70 ], MiniCPM [ 71 ], Qwen2.5-VL [ 72 ], GPT4o-mini, and GPT4o [ 53 ]. All experiments 261 
+
+are conducted on NVIDIA GeForce RTX 4090 GPUs. 262 
+
+5.3 Results and Findings 263 
+
+The evaluation results on INSETS-3K are reported in Table 3. Overall, more recent MLLMs 264 
+
+outperform earlier MLLMs. The latter suffers from severe response biases or instructional failures. 265 
+
+This indicates that advancements in general visual tasks also enhance emotional perception. However, 266 
+
+no MLLM achieves optimal performance across all tasks. While InternVL2.5 and GPT4o demonstrate 267 
+
+superior performance in identifying the basic emotional tone and performing affective reasoning, they 268 
+
+exhibit comparative deficiencies in contextual and personalized emotion prediction. This underscores 269 
+
+the multifaceted challenges of visual emotion understanding. Further evaluation on INSETS-462K is 270 
+
+reported in Appendix Table 6. 271 
+
+8Table 4: Evaluation results of MLLMs and humans on a subset of INSETS-3K containing 300 image-statement pairs. MLLMs #Param Accuracy Positive Ratio Give-up Ratio Sentiment Emotion Scene Perception Total Polarity Interpretation Context Subjectivity mPLUG-Owl3 [58] 8.1B 74.6 80.4 82.9 77.2 79.5 67.3 0Phi-3.5-Vision [60] 4.1B 75.4 72.9 83.9 73.3 76.1 64.0 0InternVL2.5 [64] 8.1B 77.2 79.5 79.3 63.2 75.1 52.1 0DeepSeek-VL [69] 7.3B 70.2 70.5 80.2 73.7 73.7 73.5 0MiniCPM [71] 8.7B 70.2 78.9 82.4 72.4 77.1 65.4 0Qwen2.5-VL [72] 8.3B 64.0 81.5 83.3 68.0 76.4 47.4 0GPT4o-mini [53] - 64.0 79.2 77.5 71.3 74.9 49.8 0GPT4o [53] - 73.7 84.5 81.2 71.1 79.0 64.6 0.6 Human Average – 92.3 90.1 95.3 89.6 91.6 53.4 0Human Best – 97.4 95.8 98.7 94.7 95.2 – –
+
+Comparison with Human Performance : We sample 300 image-statement pairs from INSETS-3K and 272 
+
+evaluate 25 human participants alongside leading MLLMs. As shown in Table 4, humans achieve near-273 
+
+perfect accuracy. In contrast, MLLMs exhibit notable performance gaps, particularly in determining 274 
+
+sentiment polarity and understanding perception subjectivity. Given their comparatively high accuracy 275 
+
+on emotion interpretation statements, we suggest that the affective reasoning from emotional clues to 276 
+
+emotional states is essential for MLLMs to perceive emotions. Regarding perception subjectivity, 277 
+
+we speculate that MLLMs may lack sufficient awareness of individual differences. Overall, ESJ is 278 
+
+a fundamental task format, and the performance gap between MLLMs and humans highlights the 279 
+
+considerable potential for improvement in MLLMs’ visual emotional intelligence. 280 
+
+6 Limitations and Discussion 281 
+
+Several limitations in this work can be further improved. First , our evaluation primarily focuses 282 
+
+on MLLMs with parameters under 10B due to computational constraints imposed by hardware. 283 
+
+Although this covers practical deployment scenarios, it excludes larger-scale open-source MLLMs 284 
+
+that may exhibit superior visual emotion perception capabilities. Second , the current implementation 285 
+
+is limited to monolingual evaluation. Yet we highlight that adapting INSETS for multilingual 286 
+
+construction would require relatively limited engineering effort, primarily involving adjustments in 287 
+
+MLLM selection, prompt design, and template configuration. Moreover, while we explored basic 288 
+
+reasoning strategies, advanced strategies such as in-context learning and chain-of-thought prompting 289 
+
+remained underexplored. Systematically investigating these techniques can potentially reveal deeper 290 
+
+insights into MLLMs’ visual emotion perception mechanisms. Third , due to the lack of human 291 
+
+validation, the INSETS-462K benchmarks inevitably incorporate certain noises and inaccuracies. 292 
+
+Nevertheless, the validation process of the INSETS-3K benchmark suggests that over 85% image-293 
+
+statement pairs retain high accuracy. This can be attributed to our efforts in ensuring reliability, 294 
+
+including the ensemble-based majority voting mechanism and necessary human interventions. 295 
+
+Future work includes expanding MLLM coverage, extending INSETS to support multilingual con-296 
+
+struction and further refinement of the human-AI collaborative annotation process. 297 
+
+7 Conclusion 298 
+
+In this paper, we propose the ESJ task and a complemented automated pipeline, INSETS, to advance 299 
+
+open-vocabulary, multifaceted, and scalable visual emotion evaluation in MLLMs. Through them, we 300 
+
+provide a nuanced and comprehensive evaluation framework that covers sentiment polarity, emotion 301 
+
+interpretation, scene context, and perception subjectivity. Our evaluation reveals that while MLLMs 302 
+
+exhibit certain capabilities in visual emotion perception, they still lag behind humans, highlighting 303 
+
+the necessity of developing emotion-oriented training objectives. We hope that INSETS-3K and 304 
+
+INSETS-462K can serve as reliable benchmarks to advance future research, fostering the development 305 
+
+of MLLMs with improved emotional reasoning and understanding. 306 
+
+9References 307 
+
+[1] N. S. Schutte, J. M. Malouff, C. Bobik, T. D. Coston, C. Greeson, C. Jedlicka, E. Rhodes, 308 
+
+and G. Wendorf, “Emotional intelligence and interpersonal relations,” The Journal of Social 309 
+
+Psychology , vol. 141, no. 4, pp. 523–536, 2001. 310 
+
+[2] J. Yang, J. Li, L. Li, X. Wang, and X. Gao, “A circular-structured representation for visual 311 
+
+emotion distribution learning,” in CVPR , 2021, pp. 4237–4246. 312 
+
+[3] L. Zhang, S. Wang, and B. Liu, “Deep learning for sentiment analysis: A survey,” WIREs Data 313 
+
+Mining Knowl. Discov. , vol. 8, no. 4, 2018. 314 
+
+[4] S. Zhao, X. Yao, J. Yang, G. Jia, G. Ding, T. Chua, B. W. Schuller, and K. Keutzer, “Affective 315 
+
+image content analysis: Two decades review and new perspectives,” Trans. Pattern Anal. Mach. 316 
+
+Intell. , vol. 44, no. 10, pp. 6729–6751, 2022. 317 
+
+[5] S. Zhao, H. Yao, Y. Gao, R. Ji, W. Xie, X. Jiang, and T. Chua, “Predicting personalized emotion 318 
+
+perceptions of social images,” in MM , 2016, pp. 1385–1394. 319 
+
+[6] A. Shukla, S. S. Gullapuram, H. Katti, M. S. Kankanhalli, S. Winkler, and R. Subramanian, 320 
+
+“Recognition of advertisement emotions with application to computational advertising,” Trans. 321 
+
+Affect. Comput. , vol. 13, no. 2, pp. 781–792, 2022. 322 
+
+[7] G. N. Yannakakis, “Enhancing health care via affective computing,” 2018. 323 
+
+[8] S. Yin, C. Fu, S. Zhao, K. Li, X. Sun, T. Xu, and E. Chen, “A survey on multimodal large 324 
+
+language models,” 2023. 325 
+
+[9] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,” in NeurIPS , 2023. 326 
+
+[10] Z. Yang, L. Li, K. Lin, J. Wang, C. Lin, Z. Liu, and L. Wang, “The dawn of lmms: Preliminary 327 
+
+explorations with gpt-4v(ision),” CoRR , vol. abs/2309.17421, 2023. 328 
+
+[11] H. Xie, C. Peng, Y. Tseng, H. Chen, C. Hsu, H. Shuai, and W. Cheng, “Emovit: Revolutionizing 329 
+
+emotion insights with visual instruction tuning,” in CVPR , 2024, pp. 26 586–26 595. 330 
+
+[12] S. Bhattacharyya and J. Z. Wang, “Evaluating vision-language models for emotion recognition,” 331 
+
+arXiv preprint arXiv:2502.05660 , 2025. 332 
+
+[13] Z. Lian, H. Sun, L. Sun, J. Yi, B. Liu, and J. Tao, “Affectgpt: Dataset and framework for 333 
+
+explainable multimodal emotion recognition,” CoRR , vol. abs/2407.07653, 2024. 334 
+
+[14] Z. Cheng, Z. Cheng, J. He, K. Wang, Y. Lin, Z. Lian, X. Peng, and A. G. Hauptmann, “Emotion-335 
+
+llama: Multimodal emotion recognition and reasoning with instruction tuning,” in NeurIPS ,336 
+
+2024. 337 
+
+[15] J. Machajdik and A. Hanbury, “Affective image classification using features inspired by psy-338 
+
+chology and art theory,” in MM , 2010, pp. 83–92. 339 
+
+[16] Q. You, J. Luo, H. Jin, and J. Yang, “Building a large scale dataset for image emotion recognition: 340 
+
+The fine print and the benchmark,” in AAAI , 2016, pp. 308–314. 341 
+
+[17] L. Vadicamo, F. Carrara, A. Cimino, S. Cresci, F. Dell’Orletta, F. Falchi, and M. Tesconi, 342 
+
+“Cross-media learning for image sentiment analysis in the wild,” in ICCV Workshops , 2017, pp. 343 
+
+308–317. 344 
+
+[18] R. Panda, J. Zhang, H. Li, J. Lee, X. Lu, and A. K. Roy-Chowdhury, “Contemplating visual 345 
+
+emotions: Understanding and overcoming dataset bias,” in ECCV , vol. 11206, 2018, pp. 594– 346 
+
+612. 347 
+
+[19] J. Yang, Q. Huang, T. Ding, D. Lischinski, D. Cohen-Or, and H. Huang, “Emoset: A large-scale 348 
+
+visual emotion dataset with rich attributes,” in ICCV , 2023, pp. 20 326–20 337. 349 
+
+[20] R. Kosti, J. M. Álvarez, A. Recasens, and À. Lapedriza, “EMOTIC: emotions in context dataset,” 350 
+
+in CVPR Workshops , 2017, pp. 2309–2317. 351 
+
+[21] Z. Wei, J. Zhang, Z. Lin, J.-Y. Lee, N. Balasubramanian, M. Hoai, and D. Samaras, “Learning 352 
+
+visual emotion representations from web data,” in CVPR , 2020, pp. 13 106–13 115. 353 
+
+[22] P. Achlioptas, M. Ovsjanikov, K. Haydarov, M. Elhoseiny, and L. J. Guibas, “Artemis: Affective 354 
+
+language for visual art,” in CVPR , 2021, pp. 11 569–11 579. 355 
+
+[23] P. Achlioptas, M. Ovsjanikov, L. J. Guibas, and S. Tulyakov, “Affection: Learning affective 356 
+
+explanations for real-world visual data,” in CVPR , 2023, pp. 6641–6651. 357 
+
+10 [24] E. Authors, “Eibench: Assessing the emotion interpretation ability of vision large language 358 
+
+models,” https://github.com/Lum1104/EIBench, 2024. 359 
+
+[25] S. Zhao, H. Yao, Y. Gao, R. Ji, W. Xie, X. Jiang, and T. Chua, “Predicting personalized emotion 360 
+
+perceptions of social images,” in MM , 2016, pp. 1385–1394. 361 
+
+[26] J. Yang, M. Sun, and X. Sun, “Learning visual sentiment distributions via augmented conditional 362 
+
+probability neural network,” in AAAI , 2017, pp. 224–230. 363 
+
+[27] S. Zhao, X. Hong, J. Yang, Y. Zhao, and G. Ding, “Toward label-efficient emotion and sentiment 364 
+
+analysis,” Proceedings of the IEEE , vol. 111, no. 10, pp. 1159–1197, 2023. 365 
+
+[28] S. Li, W. Deng, and J. Du, “Reliable crowdsourcing and deep locality-preserving learning for 366 
+
+expression recognition in the wild,” in CVPR , 2017, pp. 2584–2593. 367 
+
+[29] H. Schlosberg, “Three dimensions of emotion.” Psychological review , vol. 61, no. 2, p. 81, 368 
+
+1954. 369 
+
+[30] J. A. Mikels, B. L. Fredrickson, G. R. Larkin, C. M. Lindberg, S. J. Maglio, and P. A. Reuter-370 
+
+Lorenz, “Emotional category data on images from the international affective picture system,” 371 
+
+Behavior Research Methods , vol. 37, pp. 626–630, 2005. 372 
+
+[31] L. Xu, Z. Wang, B. Wu, and S. Lui, “MDAN: multi-level dependent attention network for visual 373 
+
+emotion analysis,” in CVPR . IEEE, 2022, pp. 9469–9478. 374 
+
+[32] G. Jia and J. Yang, “S 2 -ver: Semi-supervised visual emotion recognition,” in ECCV , ser. Lecture 375 
+
+Notes in Computer Science, vol. 13697, 2022, pp. 493–509. 376 
+
+[33] T. Feng, J. Liu, and J. Yang, “Probing sentiment-oriented pretraining inspired by human 377 
+
+sentiment perception mechanism,” in CVPR , 2023, pp. 2850–2860. 378 
+
+[34] J. Li and W. Lu, “A survey on benchmarks of multimodal large language models,” CoRR , vol. 379 
+
+abs/2408.08632, 2024. 380 
+
+[35] S. Tong, Z. Liu, Y. Zhai, Y. Ma, Y. LeCun, and S. Xie, “Eyes wide shut? exploring the visual 381 
+
+shortcomings of multimodal llms,” in CVPR . IEEE, 2024, pp. 9568–9578. 382 
+
+[36] Y. Maruyama, “The conditions of artificial general intelligence: Logic, autonomy, resilience, 383 
+
+integrity, morality, emotion, embodiment, and embeddedness,” in AGI , ser. Lecture Notes in 384 
+
+Computer Science, vol. 12177, 2020, pp. 242–251. 385 
+
+[37] B. Li, R. Wang, G. Wang, Y. Ge, Y. Ge, and Y. Shan, “Seed-bench: Benchmarking multimodal 386 
+
+llms with generative comprehension,” CoRR , vol. abs/2307.16125, 2023. 387 
+
+[38] J. Nie, G. Zhang, W. An, Y. Tan, A. C. Kot, and S. Lu, “Mmrel: A relation understanding dataset 388 
+
+and benchmark in the MLLM era,” CoRR , vol. abs/2406.09121, 2024. 389 
+
+[39] C. Zhang, F. Gao, B. Jia, Y. Zhu, and S. Zhu, “RAVEN: A dataset for relational and analogical 390 
+
+visual reasoning,” in CVPR , 2019, pp. 5317–5327. 391 
+
+[40] Y. Qian, H. Zhang, Y. Yang, and Z. Gan, “How easy is it to fool your multimodal llms? an 392 
+
+empirical analysis on deceptive prompts,” CoRR , vol. abs/2402.13220, 2024. 393 
+
+[41] T. Guan, F. Liu, X. Wu, R. Xian, Z. Li, and et al., “Hallusionbench: An advanced diagnostic 394 
+
+suite for entangled language hallucination and visual illusion in large vision-language models,” 395 
+
+in CVPR , 2024, pp. 14 375–14 385. 396 
+
+[42] P. Chen, J. Ye, G. Wang, Y. Li, Z. Deng, and et al., “Gmai-mmbench: A comprehensive 397 
+
+multimodal evaluation benchmark towards general medical AI,” in NeurIPS , 2024. 398 
+
+[43] T. Qian, J. Chen, L. Zhuo, Y. Jiao, and Y. Jiang, “Nuscenes-qa: A multi-modal visual question 399 
+
+answering benchmark for autonomous driving scenario,” in AAAI , 2024, pp. 4542–4550. 400 
+
+[44] Y. Li, A. Dao, W. Bao, Z. Tan, T. Chen, H. Liu, and Y. Kong, “Facial affective behavior analysis 401 
+
+with instruction tuning,” in ECCV , ser. Lecture Notes in Computer Science, vol. 15076, 2024, 402 
+
+pp. 165–186. 403 
+
+[45] X. Yang, W. Wu, S. Feng, M. Wang, D. Wang, and et al., “Mm-bigbench: Evaluating multimodal 404 
+
+models on multimodal content comprehension tasks,” 2023. 405 
+
+[46] S. Sabour, S. Liu, Z. Zhang, J. M. Liu, J. Zhou, and et al., “Emobench: Evaluating the emotional 406 
+
+intelligence of large language models,” in ACL , 2024, pp. 5986–6004. 407 
+
+11 [47] G. Stemmler and J. Wacker, “Personality, emotion, and individual differences in physiological 408 
+
+responses,” Biological psychology , vol. 84, no. 3, pp. 541–551, 2010. 409 
+
+[48] L. F. Barrett, B. Mesquita, and M. Gendron, “Context in emotion perception,” Current Directions 410 
+
+in Psychological Science , vol. 20, no. 5, pp. 286–290, 2011. 411 
+
+[49] P. Shaver, J. Schwartz, D. Kirson, and C. O’connor, “Emotion knowledge: Further exploration 412 
+
+of a prototype approach.” Journal of personality and social psychology , vol. 52, no. 6, p. 1061, 413 
+
+1987. 414 
+
+[50] W. G. Parrott, Emotions in Social Psychology: Essential Readings . Psychology Press, 2001. 415 
+
+[51] Z. Bai, P. Wang, T. Xiao, T. He, Z. Han, Z. Zhang, and M. Z. Shou, “Hallucination of multimodal 416 
+
+large language models: A survey,” CoRR , vol. abs/2404.18930, 2024. 417 
+
+[52] X. Liu, Y. Zhu, J. Gu, Y. Lan, C. Yang, and Y. Qiao, “Mm-safetybench: A benchmark for safety 418 
+
+evaluation of multimodal large language models,” in ECCV , ser. Lecture Notes in Computer 419 
+
+Science, vol. 15114, 2024, pp. 386–403. 420 
+
+[53] OpenAI, “GPT-4 technical report,” CoRR , vol. abs/2303.08774, 2023. 421 
+
+[54] A. Hanjalic, “Extracting moods from pictures and sounds: Towards truly personalized tv,” IEEE 422 
+
+Signal Processing Magazine , vol. 23, no. 2, pp. 90–100, 2006. 423 
+
+[55] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, and et. al., “Learning transferable visual 424 
+
+models from natural language supervision,” in ICML , ser. Proceedings of Machine Learning 425 
+
+Research, vol. 139, 2021, pp. 8748–8763. 426 
+
+[56] H. Liu, C. Li, Y. Li, and Y. J. Lee, “Improved baselines with visual instruction tuning,” in CVPR ,427 
+
+2024, pp. 26 286–26 296. 428 
+
+[57] D. Jiang, X. He, H. Zeng, C. Wei, M. Ku, Q. Liu, and W. Chen, “MANTIS: interleaved 429 
+
+multi-image instruction tuning,” CoRR , vol. abs/2405.01483, 2024. 430 
+
+[58] J. Ye, H. Xu, H. Liu, A. Hu, M. Yan, and et al., “mplug-owl3: Towards long image-sequence 431 
+
+understanding in multi-modal large language models,” CoRR , vol. abs/2408.04840, 2024. 432 
+
+[59] H. Laurençon, A. Marafioti, V. Sanh, and L. Tronchon, “Building and better understanding 433 
+
+vision-language models: Insights and future directions,” CoRR , vol. abs/2408.12637, 2024. 434 
+
+[60] M. I. Abdin, S. A. Jacobs, A. A. Awan, J. Aneja, A. Awadallah, and et al., “Phi-3 technical 435 
+
+report: A highly capable language model locally on your phone,” CoRR , vol. abs/2404.14219, 436 
+
+2024. 437 
+
+[61] P. Wang, S. Bai, S. Tan, S. Wang, Z. Fan, and et al., “Qwen2-vl: Enhancing vision-language 438 
+
+model’s perception of the world at any resolution,” CoRR , vol. abs/2409.12191, 2024. 439 
+
+[62] A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, and et al., “The llama 3 herd of 440 
+
+models,” CoRR , vol. abs/2407.21783, 2024. 441 
+
+[63] M. Deitke, C. Clark, S. Lee, R. Tripathi, Y. Yang, and et al., “Molmo and pixmo: Open weights 442 
+
+and open data for state-of-the-art multimodal models,” CoRR , vol. abs/2409.17146, 2024. 443 
+
+[64] Z. Chen, W. Wang, Y. Cao, Y. Liu, Z. Gao, and et al., “Expanding performance bound-444 
+
+aries of open-source multimodal models with model, data, and test-time scaling,” CoRR , vol. 445 
+
+abs/2412.05271, 2024. 446 
+
+[65] O. Contributors, “Opencompass: A universal evaluation platform for foundation models,” 447 
+
+https://github.com/open-compass/opencompass, 2023. 448 
+
+[66] J. Li, D. Li, S. Savarese, and S. C. H. Hoi, “BLIP-2: bootstrapping language-image pre-training 449 
+
+with frozen image encoders and large language models,” in ICML , ser. Proceedings of Machine 450 
+
+Learning Research, vol. 202, 2023, pp. 19 730–19 742. 451 
+
+[67] W. Dai, J. Li, D. Li, A. M. H. Tiong, J. Zhao, and et al., “Instructblip: Towards general-purpose 452 
+
+vision-language models with instruction tuning,” in NeurIPS , 2023. 453 
+
+[68] B. Li, Y. Zhang, L. Chen, J. Wang, J. Yang, and Z. Liu, “Otter: A multi-modal model with 454 
+
+in-context instruction tuning,” CoRR , vol. abs/2305.03726, 2023. 455 
+
+[69] H. Lu, W. Liu, B. Zhang, B. Wang, K. Dong, and et al., “Deepseek-vl: Towards real-world 456 
+
+vision-language understanding,” CoRR , vol. abs/2403.05525, 2024. 457 
+
+12 [70] L. Beyer, A. Steiner, A. S. Pinto, A. Kolesnikov, X. Wang, and et al., “Paligemma: A versatile 458 
+
+3b VLM for transfer,” CoRR , vol. abs/2407.07726, 2024. 459 
+
+[71] Y. Yao, T. Yu, A. Zhang, C. Wang, J. Cui, and et al., “Minicpm-v: A GPT-4V level MLLM on 460 
+
+your phone,” CoRR , vol. abs/2408.01800, 2024. 461 
+
+[72] Q. Team, “Qwen2.5-vl,” https://qwenlm.github.io/blog/qwen2.5-vl/, 2025. 462 
+
+[73] Y. Li, Y. Du, K. Zhou, J. Wang, W. X. Zhao, and J. Wen, “Evaluating object hallucination in 463 
+
+large vision-language models,” in EMNLP , 2023, pp. 292–305. 464 
+
+13 A Links of MLLMs 465 
+
+We provide the links to the model cards of the MLLMs we evaluated in the experiments. 466 
+
+LLaVa-1.6 [56] 467 
+
+https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf 468 
+
+Mantis [57] 469 
+
+https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3 470 
+
+mPLUG-Owl3 [58] 471 
+
+https://huggingface.co/mPLUG/mPLUG-Owl3-7B-241101 472 
+
+Idefics3 [59] 473 
+
+https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3 474 
+
+Phi-3.5-Vision [60] 475 
+
+https://huggingface.co/microsoft/Phi-3.5-vision-instruct 476 
+
+Qwen2-VL [61] 477 
+
+https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct 478 
+
+Llama-3.2-Vision [62] 479 
+
+https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct 480 
+
+Molmo [63] 481 
+
+https://huggingface.co/allenai/Molmo-7B-D-0924 482 
+
+InternVL2.5 [64] 483 
+
+https://huggingface.co/OpenGVLab/InternVL2_5-8B 484 
+
+BLIP2 [66] 485 
+
+https://huggingface.co/Salesforce/blip2-opt-6.7b-coco 486 
+
+InstructBLIP [67] 487 
+
+https://huggingface.co/Salesforce/instructblip-vicuna-7b 488 
+
+Otter [68] 489 
+
+https://huggingface.co/luodian/OTTER-Image-LLaMA7B-LA-InContext 490 
+
+DeepSeek-VL [69] 491 
+
+https://huggingface.co/deepseek-ai/deepseek-vl-7b-chat 492 
+
+Paligemma [70] 493 
+
+https://huggingface.co/google/paligemma-3b-pt-448 494 
+
+MiniCPM [71] 495 
+
+https://huggingface.co/openbmb/MiniCPM-o-2_6 496 
+
+Qwen2.5-VL [72] 497 
+
+https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct 498 
+
+B Prompts and Statement Templates 499 
+
+The prompts and statement templates used in the INSETS pipeline are presented in Table 5. 500 
+
+14 Table 5: Prompts and statement templates employed in the INSETS pipeline. Prompts and Statement Templates #1 You are an Emotional Perception Expert. Please analyze the emotions that might be evoked by the given image. Your analysis should explore a wide range of visual attributes, such as brightness, colorfulness, depicted scenes, objects, human actions, and facial expressions. Additionally, provide detailed explanations linking these attributes to the emotions they may trigger. If applicable, discuss any potential cultural or psychological factors influencing these emotional responses. #2 You are an Emotional Perception Expert. Your task is to extract all applicable emotions as comprehensively as possible based on the image description. Focus on distinct emotions such as happiness, sadness, fear, anger, etc. Keep the list concise, with a maximum of 10 distinct emotions. #3 You are tasked with determining whether the word “ [word] ” describes a specific emotional state. An emotional state is a psychological condition involving feelings and reactions triggered by internal or external events. Respond with “Yes” if the word aligns with this definition, or “No” otherwise. The output format should be {“word”: “response”}. #4 You are tasked with assigning the word “ [word] ” to the most closely related emotional category from the following 115 predefined options: “ [categories] ”. Consider broader semantic connections and possible emotional nuances when making your judgment. If the word cannot reasonably fit any category, respond with “not applicable”. Do not create or assign new categories outside of the provided list. Do not provide any explanations or reasons for your choice. The output format should be {“word”: “response”}. #5 Briefly explain why this image might evoke “ [emotion] ” in viewers, without mentioning any other emotions. #6 Imagine a background story for the image that would evoke a sense of “ [emotion] ” in viewers. Respond in one sentence. Do not mention the content in the image. #7 Imagine a character who would feel “ [emotion] ” when viewing this image. Include details such as their age, gender, profession, and other relevant traits. Describe the character in one concise sentence without further explanation. #8 Upon viewing this image, observers, despite various individual or contextual factors, are most likely to experience positive emotions. #9 Upon viewing this image, observers, despite various individual or contextual factors, are most likely to experience negative emotions. #10 Upon viewing this image, observers are equally likely to experience either positive or negative emotions, depending on individual or contextual factors. #11 Therefore, the image might evoke “ [emotion] ” in viewers. #12 In the context of: “ [context] ”, the image is likely to evoke a sense of “ [emotion] ”. #13 Upon viewing the image, “ [role] ” is more inclined to feel “ [emotion1] ” compared to “ [emotion2] ”. Table 6: Evaluation results of MLLMs on INSETS-462K. (SP: Sentiment Polarity, EI: Emotion Interpretation, SC: Scene Context, PS: Perception Subjectivity) MLLMs #P Accuracy (B) SP EI SC PS Total mPLUG-Owl3 [58] 8.1 64.3 78.1 80.5 78.3 77.4                               
+
+> Phi-3.5-Vision [60] 4.1 66.7 63.7 82.2 76.6 70.3 InternVL2.5 [64] 8.1 71.4 69.9 82.8 75.0 73.5 DeepSeek-VL [69] 8.7 58.3 60.2 86.2 77.0 68.7 MiniCPM [71] 8.7 64.3 77.1 86.8 83.6 79.3
+> Qwen2.5-VL [72] 8.3 58.3 81.3 76.4 63.9 74.3
+
+C Details of Parrott’s Hierarchical Model 501 
+
+We present the complete emotion taxonomy of Parrott’s hierarchical model in Table 7. 502 
+
+D Further evaluation on INSETS-462K 503 
+
+Despite dataset noise, obvious task-specific disparities persist: MiniCPM surpasses Qwen2.5-VL 504 
+
+in judging scene context statements (86.8% vs. 76.4%) but trails in judging emotion interpretation 505 
+
+statements (77.1% vs. 81.3%). This finding reinforces the need for emotion-oriented training 506 
+
+objectives in the future MLLM developments. 507 
+
+15 Table 7: Emotion taxonomy of Parrott’s hierarchical model. Primary Emotion Secondary Emotion Tertiary Emotion Love Affection Adoration, Fondness, Liking, Attraction, Caring, Tenderness, Compassion, Sentimentality Lust Desire, Passion, Infatuation Longing Longing Joy Cheerfulness Amusement, Bliss, Gaiety, Glee, Jolliness, Joviality, Joy, Delight, Enjoyment, Gladness, Happiness, Jubilation, Elation, Satisfaction, Ecstasy, Euphoria Zest Enthusiasm, Zeal, Excitement, Thrill, Exhilaration Contentment Pleasure Pride Triumph Optimism Eagerness, Hope Enthrallment Enthrallment, Rapture Relief Relief Surprise Surprise Amazement, Astonishment Anger Irritability Aggravation, Agitation, Annoyance, Grouchy, Grumpy, Crosspatch Exasperation Frustration Rage Anger, Outrage, Fury, Wrath, Hostility, Ferocity, Bitterness, Hatred, Scorn, Spite, Vengefulness, Dislike, Resentment Disgust Revulsion, Contempt, Loathing Envy Jealousy Torment Torment Sadness Suffering Agony, Anguish, Hurt Sadness Depression, Despair, Gloom, Glumness, Unhappiness, Grief, Sorrow, Woe, Misery, Melancholy Disappointment Dismay, Displeasure Shame Guilt, Regret, Remorse Neglect Alienation, Defeatism, Dejection, Embarrassment, Homesickness, Humiliation, Insecurity, Insult, Isolation, Loneliness, Rejection Sympathy Pity, Mono no aware, Sympathy Fear Horror Alarm, Shock, Fear, Fright, Horror, Terror, Panic, Hysteria, Mortification Nervousness Anxiety, Suspense, Uneasiness, Apprehension, Worry, Distress, Dread 
+
+E Visualization of INSETS-3K 508 
+
+More samples from INSETS-3K are visualized in Fig. 5, Fig. 6, Fig. 7, Fig. 8, Fig. 9, Fig. 10, Fig. 11, 509 
+
+Fig. 12. 510 Warmth 
+
+Joy 
+
+Amusement 
+
+Contentment 
+
+Relaxation 
+
+Label: Correct 
+
+> Upon viewing this image, observers, despite various
+> individual or contextual factors, are most likely to
+> experience positive emotions.
+
+Emotion 
+
+Labels 
+
+Sentiment Polarity Statement 
+
+Concern 
+
+Disgust 
+
+Anger 
+
+Sadness 
+
+Label: Correct 
+
+> Upon viewing this image, observers, despite various
+> individual or contextual factors, are most likely to
+> experience negative emotions.
+
+Emotion 
+
+Labels 
+
+Sentiment Polarity Statement 
+
+Empathy 
+
+Anger 
+
+Determination 
+
+Urgency 
+
+Concern 
+
+Label: Correct 
+
+> Upon viewing this image, observers are equally likely to
+> experience either positive or negative emotions,
+> depending on individual or contextual factors.
+
+Emotion 
+
+Labels 
+
+Sentiment Polarity Statement 
+
+Solidarity 
+
+Figure 5: Correct sentiment polarity statements. 16 Discomfort 
+
+Dread 
+
+Confusion 
+
+Horror 
+
+Anxiety 
+
+Label: Incorrect 
+
+Upon viewing this image, observers, despite various 
+
+individual or contextual factors, are most likely to 
+
+experience positive emotions. 
+
+Emotion 
+
+Labels 
+
+Sentiment Polarity Statement 
+
+Warm 
+
+Comfort 
+
+Contentment 
+
+Label: Incorrect 
+
+Upon viewing this image, observers, despite various 
+
+individual or contextual factors, are most likely to 
+
+experience negative emotions. 
+
+Emotion 
+
+Labels 
+
+Sentiment Polarity Statement 
+
+Excitement 
+
+Empowerment 
+
+Confidence 
+
+Enthusiasm 
+
+Passion 
+
+Label: In correct 
+
+Upon viewing this image, observers are equally likely to 
+
+experience either positive or negative emotions, 
+
+depending on individual or contextual factors. 
+
+Emotion 
+
+Labels 
+
+Sentiment Polarity Statement 
+
+Joy 
+
+Fear Figure 6: Incorrect sentiment polarity statements. Excitement 
+
+Confidence 
+
+Happiness 
+
+Prid e
+
+Label: Correct 
+
+The image might evoke confidence because the 
+
+individuals are dressed in recognizable uniforms, 
+
+implying a sense of belonging and success. The setting 
+
+and professional attire can suggest achievement and 
+
+involvement in meaningful activities. 
+
+Emotion 
+
+Labels 
+
+Emotion Interpretation Statement 
+
+Thrill 
+
+Awe 
+
+Relaxation 
+
+Excitement 
+
+Freedom 
+
+Label: Correct 
+
+The image of a surfer riding a wave in the ocean, 
+
+surrounded by the calming blue water and white foam, 
+
+can evoke a sense of relaxation in viewers. The surfer's 
+
+focused posture and the gentle motion of the wave 
+
+create a peaceful and serene atmosphere, which can be 
+
+calming and soothing to observe. 
+
+Emotion 
+
+Labels 
+
+Emotion Interpretation Statement 
+
+Fear 
+
+Anxiety 
+
+Awe 
+
+Label: Correct 
+
+The image might evoke anxiety in viewers due to the 
+
+snake's coiled position and the close proximity to the 
+
+rocks, which could be perceived as a threatening or 
+
+dangerous situation. 
+
+Emotion 
+
+Labels 
+
+Emotion Interpretation Statement 
+
+Courage 
+
+Figure 7: Correct emotion interpretation statements. Excitement 
+
+Passion 
+
+Determination 
+
+Joy 
+
+Label: In correct 
+
+The accordion, a traditional and often vintage musical 
+
+instrument, may evoke nostalgia in viewers due to its 
+
+association with past cultural and social experiences. 
+
+Emotion 
+
+Labels 
+
+Emotion Interpretation Statement 
+
+Excitement 
+
+Amusement 
+
+Joy 
+
+Label: In correct 
+
+The image of a smiling woman holding a glass of wine in 
+
+a beautiful outdoor setting, possibly a patio or a balcony, 
+
+might evoke happiness in viewers because it portrays a 
+
+moment of relaxation and enjoyment . 
+
+Emotion 
+
+Labels 
+
+Emotion Interpretation Statement 
+
+Fascination 
+
+Wonder 
+
+Fear 
+
+Label: In correct 
+
+The image of a fly might evoke wonder in viewers 
+
+because of its large, bulbous eyes and sharp, pointed 
+
+mouthparts, which could be perceived as menacing or 
+
+threatening. Additionally, the fly's proximity to the 
+
+viewer's face may create a sense of discomfort or unease, 
+
+as if it is about to land on them. 
+
+Emotion 
+
+Labels 
+
+Emotion Interpretation Statement 
+
+Serenity 
+
+Concentration  Disgust 
+
+Figure 8: Incorrect emotion interpretation statements. Excitement 
+
+Joy 
+
+Enthusiasm 
+
+Label: Correct 
+
+In the context of: 'After years of struggling to find her 
+
+place in the world, Sarah finally discovered her passion 
+
+for stand -up comedy, and now she's taking the stage at 
+
+Comic -Con, beaming with pride and accomplishment', 
+
+the image is likely to evoke a sense of joy. 
+
+Emotion 
+
+Labels 
+
+Scene Context Statement 
+
+Stillness 
+
+Solitude 
+
+Wonder 
+
+Label: Correct 
+
+In the context of: 'In the vast expanse of the icy 
+
+landscape, a lone figure trudges through the snow, 
+
+leaving behind a trail of footprints that tell a silent tale 
+
+of a solitary journey', the image is likely to evoke a sense 
+
+of solitude. 
+
+Emotion 
+
+Labels 
+
+Scene Context Statement 
+
+Appreciation 
+
+Determination 
+
+Hope 
+
+Label: Correct 
+
+In the context of: 'A group of people gathered in a public 
+
+space, united by a common cause, holding up signs that 
+
+express their gratitude and celebrate a significant 
+
+milestone', the image is likely to evoke a sense of hope. 
+
+Emotion 
+
+Labels 
+
+Scene Context Statement 
+
+Gratitude 
+
+Solidarity 
+
+Figure 9: Correct scene context statements. 17 Peace 
+
+Melancholic 
+
+Label: Incorrect 
+
+In the context of: 'A lonely man wanders through a 
+
+desolate forest, searching for a glimpse of hope in the 
+
+midst of a bleak and unforgiving landscape', the image is 
+
+likely to evoke a sense of peace. 
+
+Emotion 
+
+Labels 
+
+Scene Context Statement 
+
+Admiration 
+
+Label: Incorrect 
+
+In the context of: 'A firefighter rushes into a burning 
+
+building to save a family of four, despite the danger', the 
+
+image is likely to evoke a sense of fear. 
+
+Emotion 
+
+Labels 
+
+Scene Context Statement 
+
+Joy 
+
+Wonder 
+
+Anticipation 
+
+Label: Incorrect 
+
+In the context of: 'A family gathered together at a fair, 
+
+laughing and sharing the excitement of the colorful 
+
+carnival rides, creating memories that will last a lifetime', 
+
+the image is likely to evoke a sense of isolation. 
+
+Emotion 
+
+Labels 
+
+Scene Context Statement 
+
+Thrill 
+
+Excitement 
+
+Fear 
+
+Bravery 
+
+Curiosity 
+
+Determination 
+
+Seriousness Figure 10: Incorrect scene context statements. Happiness 
+
+Peacefulness 
+
+Admiration 
+
+Excitement 
+
+Label: Correct 
+
+Upon viewing the image, a 35 -year -old marine biologist 
+
+is more inclined to feel awe compared to misery. 
+
+Emotion 
+
+Labels 
+
+Perception Subjectivity Statement  Label: Correct 
+
+Upon viewing the image, an elderly woman who lost her 
+
+bakery in the 2010s due to the economic downturn, is 
+
+more inclined to feel sad compared to delight. 
+
+Emotion 
+
+Labels 
+
+Perception Subjectivity Statement Label: Correct 
+
+Upon viewing the image, a young child, possibly a girl is 
+
+more inclined to feel wonder compared to nostalgia. 
+
+Emotion 
+
+Labels 
+
+Perception Subjectivity Statement 
+
+Awe 
+
+Playfulness 
+
+Nostalgia 
+
+Happiness 
+
+Excitement 
+
+Freedom 
+
+Peace 
+
+Wonder 
+
+Nostalgia 
+
+Neglect 
+
+Fear 
+
+Contemplative 
+
+Abandonment 
+
+Sadness 
+
+Figure 11: Correct perception subjectivity statements. Contentment 
+
+Security 
+
+Love 
+
+Happiness 
+
+Label: Incorrect 
+
+Upon viewing the image, a 35 -year -old female 
+
+pediatrician, who is a mother of two is more inclined to 
+
+feel revulsion compared to warmth. 
+
+Emotion 
+
+Labels 
+
+Perception Subjectivity Statement  Label: Incorrect 
+
+Upon viewing the image, a middle -aged male politician, 
+
+who is pro -war and anti -peace is more inclined to feel 
+
+solidarity compared to frustration. 
+
+Emotion 
+
+Labels 
+
+Perception Subjectivity Statement Label: Incorrect 
+
+Upon viewing the image, a middle -aged male kayaker is 
+
+more inclined to feel fear compared to determination. 
+
+Emotion 
+
+Labels 
+
+Perception Subjectivity Statement 
+
+Warmth 
+
+Connection 
+
+Determination 
+
+Excitement 
+
+Appreciation 
+
+Thrill 
+
+Wonder 
+
+Fear 
+
+Hope 
+
+Empathy 
+
+Anger 
+
+Concern 
+
+Solidarity 
+
+Frustration 
+
+Figure 12: Incorrect perception subjectivity statements. 18 NeurIPS Paper Checklist 511 
+
+1. Claims 512 
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the 513 
+
+paper’s contributions and scope? 514 
+
+Answer: [Yes] 515 
+
+Justification: The main claims include a new ESJ task for visual emotion evaluation of 516 
+
+MLLMs and a complemented INSETS pipeline for efficient annotation. It accurately reflects 517 
+
+the paper’s contribution and scope. 518 
+
+Guidelines: 519 
+
+• The answer NA means that the abstract and introduction do not include the claims 520 
+
+made in the paper. 521 
+
+• The abstract and/or introduction should clearly state the claims made, including the 522 
+
+contributions made in the paper and important assumptions and limitations. A No or 523 
+
+NA answer to this question will not be perceived well by the reviewers. 524 
+
+• The claims made should match theoretical and experimental results, and reflect how 525 
+
+much the results can be expected to generalize to other settings. 526 
+
+• It is fine to include aspirational goals as motivation as long as it is clear that these goals 527 
+
+are not attained by the paper. 528 
+
+2. Limitations 529 
+
+Question: Does the paper discuss the limitations of the work performed by the authors? 530 
+
+Answer: [Yes] 531 
+
+Justification: The potential limitations are discussed before the conclusion section. 532 
+
+Guidelines: 533 
+
+• The answer NA means that the paper has no limitation while the answer No means that 534 
+
+the paper has limitations, but those are not discussed in the paper. 535 
+
+• The authors are encouraged to create a separate "Limitations" section in their paper. 536 
+
+• The paper should point out any strong assumptions and how robust the results are to 537 
+
+violations of these assumptions (e.g., independence assumptions, noiseless settings, 538 
+
+model well-specification, asymptotic approximations only holding locally). The authors 539 
+
+should reflect on how these assumptions might be violated in practice and what the 540 
+
+implications would be. 541 
+
+• The authors should reflect on the scope of the claims made, e.g., if the approach was 542 
+
+only tested on a few datasets or with a few runs. In general, empirical results often 543 
+
+depend on implicit assumptions, which should be articulated. 544 
+
+• The authors should reflect on the factors that influence the performance of the approach. 545 
+
+For example, a facial recognition algorithm may perform poorly when image resolution 546 
+
+is low or images are taken in low lighting. Or a speech-to-text system might not be 547 
+
+used reliably to provide closed captions for online lectures because it fails to handle 548 
+
+technical jargon. 549 
+
+• The authors should discuss the computational efficiency of the proposed algorithms 550 
+
+and how they scale with dataset size. 551 
+
+• If applicable, the authors should discuss possible limitations of their approach to 552 
+
+address problems of privacy and fairness. 553 
+
+• While the authors might fear that complete honesty about limitations might be used by 554 
+
+reviewers as grounds for rejection, a worse outcome might be that reviewers discover 555 
+
+limitations that aren’t acknowledged in the paper. The authors should use their best 556 
+
+judgment and recognize that individual actions in favor of transparency play an impor-557 
+
+tant role in developing norms that preserve the integrity of the community. Reviewers 558 
+
+will be specifically instructed to not penalize honesty concerning limitations. 559 
+
+3. Theory assumptions and proofs 560 
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and 561 
+
+a complete (and correct) proof? 562 
+
+19 Answer: [NA] 563 
+
+Justification: This paper does not include theoretical results. 564 
+
+Guidelines: 565 
+
+• The answer NA means that the paper does not include theoretical results. 566 
+
+• All the theorems, formulas, and proofs in the paper should be numbered and cross-567 
+
+referenced. 568 
+
+• All assumptions should be clearly stated or referenced in the statement of any theorems. 569 
+
+• The proofs can either appear in the main paper or the supplemental material, but if 570 
+
+they appear in the supplemental material, the authors are encouraged to provide a short 571 
+
+proof sketch to provide intuition. 572 
+
+• Inversely, any informal proof provided in the core of the paper should be complemented 573 
+
+by formal proofs provided in appendix or supplemental material. 574 
+
+• Theorems and Lemmas that the proof relies upon should be properly referenced. 575 
+
+4. Experimental result reproducibility 576 
+
+Question: Does the paper fully disclose all the information needed to reproduce the main ex-577 
+
+perimental results of the paper to the extent that it affects the main claims and/or conclusions 578 
+
+of the paper (regardless of whether the code and data are provided or not)? 579 
+
+Answer: [Yes] 580 
+
+Justification: We present the proposed annotation framework step-by-step, and all prompts 581 
+
+and statement templates are listed in the Appendix. We will also release data and code. 582 
+
+Guidelines: 583 
+
+• The answer NA means that the paper does not include experiments. 584 
+
+• If the paper includes experiments, a No answer to this question will not be perceived 585 
+
+well by the reviewers: Making the paper reproducible is important, regardless of 586 
+
+whether the code and data are provided or not. 587 
+
+• If the contribution is a dataset and/or model, the authors should describe the steps taken 588 
+
+to make their results reproducible or verifiable. 589 
+
+• Depending on the contribution, reproducibility can be accomplished in various ways. 590 
+
+For example, if the contribution is a novel architecture, describing the architecture fully 591 
+
+might suffice, or if the contribution is a specific model and empirical evaluation, it may 592 
+
+be necessary to either make it possible for others to replicate the model with the same 593 
+
+dataset, or provide access to the model. In general. releasing code and data is often 594 
+
+one good way to accomplish this, but reproducibility can also be provided via detailed 595 
+
+instructions for how to replicate the results, access to a hosted model (e.g., in the case 596 
+
+of a large language model), releasing of a model checkpoint, or other means that are 597 
+
+appropriate to the research performed. 598 
+
+• While NeurIPS does not require releasing code, the conference does require all submis-599 
+
+sions to provide some reasonable avenue for reproducibility, which may depend on the 600 
+
+nature of the contribution. For example 601 
+
+(a) If the contribution is primarily a new algorithm, the paper should make it clear how 602 
+
+to reproduce that algorithm. 603 
+
+(b) If the contribution is primarily a new model architecture, the paper should describe 604 
+
+the architecture clearly and fully. 605 
+
+(c) If the contribution is a new model (e.g., a large language model), then there should 606 
+
+either be a way to access this model for reproducing the results or a way to reproduce 607 
+
+the model (e.g., with an open-source dataset or instructions for how to construct 608 
+
+the dataset). 609 
+
+(d) We recognize that reproducibility may be tricky in some cases, in which case 610 
+
+authors are welcome to describe the particular way they provide for reproducibility. 611 
+
+In the case of closed-source models, it may be that access to the model is limited in 612 
+
+some way (e.g., to registered users), but it should be possible for other researchers 613 
+
+to have some path to reproducing or verifying the results. 614 
+
+5. Open access to data and code 615 
+
+20 Question: Does the paper provide open access to the data and code, with sufficient instruc-616 
+
+tions to faithfully reproduce the main experimental results, as described in supplemental 617 
+
+material? 618 
+
+Answer: [Yes] 619 
+
+Justification: We provide INSETS-3K benchmark in the supplemental material. 620 
+
+Guidelines: 621 
+
+• The answer NA means that paper does not include experiments requiring code. 622 
+
+• Please see the NeurIPS code and data submission guidelines ( https://nips.cc/ 623 
+
+public/guides/CodeSubmissionPolicy ) for more details. 624 
+
+• While we encourage the release of code and data, we understand that this might not be 625 
+
+possible, so “No” is an acceptable answer. Papers cannot be rejected simply for not 626 
+
+including code, unless this is central to the contribution (e.g., for a new open-source 627 
+
+benchmark). 628 
+
+• The instructions should contain the exact command and environment needed to run to 629 
+
+reproduce the results. See the NeurIPS code and data submission guidelines ( https: 630 
+
+//nips.cc/public/guides/CodeSubmissionPolicy ) for more details. 631 
+
+• The authors should provide instructions on data access and preparation, including how 632 
+
+to access the raw data, preprocessed data, intermediate data, and generated data, etc. 633 
+
+• The authors should provide scripts to reproduce all experimental results for the new 634 
+
+proposed method and baselines. If only a subset of experiments are reproducible, they 635 
+
+should state which ones are omitted from the script and why. 636 
+
+• At submission time, to preserve anonymity, the authors should release anonymized 637 
+
+versions (if applicable). 638 
+
+• Providing as much information as possible in supplemental material (appended to the 639 
+
+paper) is recommended, but including URLs to data and code is permitted. 640 
+
+6. Experimental setting/details 641 
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyper-642 
+
+parameters, how they were chosen, type of optimizer, etc.) necessary to understand the 643 
+
+results? 644 
+
+Answer: [Yes] 645 
+
+Justification: Most of the experiments are evaluations of MLLMs. We follow their default 646 
+
+settings provided by the model card, which are listed in the Appendix. 647 
+
+Guidelines: 648 
+
+• The answer NA means that the paper does not include experiments. 649 
+
+• The experimental setting should be presented in the core of the paper to a level of detail 650 
+
+that is necessary to appreciate the results and make sense of them. 651 
+
+• The full details can be provided either with the code, in appendix, or as supplemental 652 
+
+material. 653 
+
+7. Experiment statistical significance 654 
+
+Question: Does the paper report error bars suitably and correctly defined or other appropriate 655 
+
+information about the statistical significance of the experiments? 656 
+
+Answer: [No] 657 
+
+Justification: We have not reported error bars. However, to ensure the reliability of results, 658 
+
+in each evaluation trial, we queried three times per MLLM and selected the most frequent 659 
+
+response as the final decision. 660 
+
+Guidelines: 661 
+
+• The answer NA means that the paper does not include experiments. 662 
+
+• The authors should answer "Yes" if the results are accompanied by error bars, confi-663 
+
+dence intervals, or statistical significance tests, at least for the experiments that support 664 
+
+the main claims of the paper. 665 
+
+21 • The factors of variability that the error bars are capturing should be clearly stated (for 666 
+
+example, train/test split, initialization, random drawing of some parameter, or overall 667 
+
+run with given experimental conditions). 668 
+
+• The method for calculating the error bars should be explained (closed form formula, 669 
+
+call to a library function, bootstrap, etc.) 670 
+
+• The assumptions made should be given (e.g., Normally distributed errors). 671 
+
+• It should be clear whether the error bar is the standard deviation or the standard error 672 
+
+of the mean. 673 
+
+• It is OK to report 1-sigma error bars, but one should state it. The authors should 674 
+
+preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis 675 
+
+of Normality of errors is not verified. 676 
+
+• For asymmetric distributions, the authors should be careful not to show in tables or 677 
+
+figures symmetric error bars that would yield results that are out of range (e.g. negative 678 
+
+error rates). 679 
+
+• If error bars are reported in tables or plots, The authors should explain in the text how 680 
+
+they were calculated and reference the corresponding figures or tables in the text. 681 
+
+8. Experiments compute resources 682 
+
+Question: For each experiment, does the paper provide sufficient information on the com-683 
+
+puter resources (type of compute workers, memory, time of execution) needed to reproduce 684 
+
+the experiments? 685 
+
+Answer: [Yes] 686 
+
+Justification: All experiments are conducted on NVIDIA GeForce RTX 4090 GPUs. 687 
+
+Guidelines: 688 
+
+• The answer NA means that the paper does not include experiments. 689 
+
+• The paper should indicate the type of compute workers CPU or GPU, internal cluster, 690 
+
+or cloud provider, including relevant memory and storage. 691 
+
+• The paper should provide the amount of compute required for each of the individual 692 
+
+experimental runs as well as estimate the total compute. 693 
+
+• The paper should disclose whether the full research project required more compute 694 
+
+than the experiments reported in the paper (e.g., preliminary or failed experiments that 695 
+
+didn’t make it into the paper). 696 
+
+9. Code of ethics 697 
+
+Question: Does the research conducted in the paper conform, in every respect, with the 698 
+
+NeurIPS Code of Ethics https://neurips.cc/public/EthicsGuidelines ?699 
+
+Answer: [Yes] 700 
+
+Justification: We have carefully checked the NeurIPS Code of Ethics and conformed in 701 
+
+every respect. 702 
+
+Guidelines: 703 
+
+• The answer NA means that the authors have not reviewed the NeurIPS Code of Ethics. 704 
+
+• If the authors answer No, they should explain the special circumstances that require a 705 
+
+deviation from the Code of Ethics. 706 
+
+• The authors should make sure to preserve anonymity (e.g., if there is a special consid-707 
+
+eration due to laws or regulations in their jurisdiction). 708 
+
+10. Broader impacts 709 
+
+Question: Does the paper discuss both potential positive societal impacts and negative 710 
+
+societal impacts of the work performed? 711 
+
+Answer: [Yes] 712 
+
+Justification: The main positive societal impacts of this paper include the promotion of 713 
+
+emotional intelligence in MLLMs. Since this paper mainly focuses on MLLMs’ evaluation, 714 
+
+there are limited negative societal impacts. 715 
+
+Guidelines: 716 
+
+22 • The answer NA means that there is no societal impact of the work performed. 717 
+
+• If the authors answer NA or No, they should explain why their work has no societal 718 
+
+impact or why the paper does not address societal impact. 719 
+
+• Examples of negative societal impacts include potential malicious or unintended uses 720 
+
+(e.g., disinformation, generating fake profiles, surveillance), fairness considerations 721 
+
+(e.g., deployment of technologies that could make decisions that unfairly impact specific 722 
+
+groups), privacy considerations, and security considerations. 723 
+
+• The conference expects that many papers will be foundational research and not tied 724 
+
+to particular applications, let alone deployments. However, if there is a direct path to 725 
+
+any negative applications, the authors should point it out. For example, it is legitimate 726 
+
+to point out that an improvement in the quality of generative models could be used to 727 
+
+generate deepfakes for disinformation. On the other hand, it is not needed to point out 728 
+
+that a generic algorithm for optimizing neural networks could enable people to train 729 
+
+models that generate Deepfakes faster. 730 
+
+• The authors should consider possible harms that could arise when the technology is 731 
+
+being used as intended and functioning correctly, harms that could arise when the 732 
+
+technology is being used as intended but gives incorrect results, and harms following 733 
+
+from (intentional or unintentional) misuse of the technology. 734 
+
+• If there are negative societal impacts, the authors could also discuss possible mitigation 735 
+
+strategies (e.g., gated release of models, providing defenses in addition to attacks, 736 
+
+mechanisms for monitoring misuse, mechanisms to monitor how a system learns from 737 
+
+feedback over time, improving the efficiency and accessibility of ML). 738 
+
+11. Safeguards 739 
+
+Question: Does the paper describe safeguards that have been put in place for responsible 740 
+
+release of data or models that have a high risk for misuse (e.g., pretrained language models, 741 
+
+image generators, or scraped datasets)? 742 
+
+Answer: [NA] 743 
+
+Justification: The paper poses no such risks. 744 
+
+Guidelines: 745 
+
+• The answer NA means that the paper poses no such risks. 746 
+
+• Released models that have a high risk for misuse or dual-use should be released with 747 
+
+necessary safeguards to allow for controlled use of the model, for example by requiring 748 
+
+that users adhere to usage guidelines or restrictions to access the model or implementing 749 
+
+safety filters. 750 
+
+• Datasets that have been scraped from the Internet could pose safety risks. The authors 751 
+
+should describe how they avoided releasing unsafe images. 752 
+
+• We recognize that providing effective safeguards is challenging, and many papers do 753 
+
+not require this, but we encourage authors to take this into account and make a best 754 
+
+faith effort. 755 
+
+12. Licenses for existing assets 756 
+
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in 757 
+
+the paper, properly credited and are the license and terms of use explicitly mentioned and 758 
+
+properly respected? 759 
+
+Answer: [Yes] 760 
+
+Justification: This appropriately cites the original paper that produced the code package or 761 
+
+dataset. 762 
+
+Guidelines: 763 
+
+• The answer NA means that the paper does not use existing assets. 764 
+
+• The authors should cite the original paper that produced the code package or dataset. 765 
+
+• The authors should state which version of the asset is used and, if possible, include a 766 
+
+URL. 767 
+
+• The name of the license (e.g., CC-BY 4.0) should be included for each asset. 768 
+
+23 • For scraped data from a particular source (e.g., website), the copyright and terms of 769 
+
+service of that source should be provided. 770 
+
+• If assets are released, the license, copyright information, and terms of use in the 771 
+
+package should be provided. For popular datasets, paperswithcode.com/datasets 772 
+
+has curated licenses for some datasets. Their licensing guide can help determine the 773 
+
+license of a dataset. 774 
+
+• For existing datasets that are re-packaged, both the original license and the license of 775 
+
+the derived asset (if it has changed) should be provided. 776 
+
+• If this information is not available online, the authors are encouraged to reach out to 777 
+
+the asset’s creators. 778 
+
+13. New assets 779 
+
+Question: Are new assets introduced in the paper well documented and is the documentation 780 
+
+provided alongside the assets? 781 
+
+Answer: [Yes] 782 
+
+Justification: We provide details about the benchmarks we constructed. We will also provide 783 
+
+documentation alongside the benchmarks upon releasing them. 784 
+
+Guidelines: 785 
+
+• The answer NA means that the paper does not release new assets. 786 
+
+• Researchers should communicate the details of the dataset/code/model as part of their 787 
+
+submissions via structured templates. This includes details about training, license, 788 
+
+limitations, etc. 789 
+
+• The paper should discuss whether and how consent was obtained from people whose 790 
+
+asset is used. 791 
+
+• At submission time, remember to anonymize your assets (if applicable). You can either 792 
+
+create an anonymized URL or include an anonymized zip file. 793 
+
+14. Crowdsourcing and research with human subjects 794 
+
+Question: For crowdsourcing experiments and research with human subjects, does the paper 795 
+
+include the full text of instructions given to participants and screenshots, if applicable, as 796 
+
+well as details about compensation (if any)? 797 
+
+Answer: [Yes] 798 
+
+Justification: In benchmark construction, human interventions are performed by the authors 799 
+
+of the paper. In human testing, volunteers are provided the same instructions as MLLMs, 800 
+
+which are provided in the manuscript. 801 
+
+Guidelines: 802 
+
+• The answer NA means that the paper does not involve crowdsourcing nor research with 803 
+
+human subjects. 804 
+
+• Including this information in the supplemental material is fine, but if the main contribu-805 
+
+tion of the paper involves human subjects, then as much detail as possible should be 806 
+
+included in the main paper. 807 
+
+• According to the NeurIPS Code of Ethics, workers involved in data collection, curation, 808 
+
+or other labor should be paid at least the minimum wage in the country of the data 809 
+
+collector. 810 
+
+15. Institutional review board (IRB) approvals or equivalent for research with human 811 
+
+subjects 812 
+
+Question: Does the paper describe potential risks incurred by study participants, whether 813 
+
+such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) 814 
+
+approvals (or an equivalent approval/review based on the requirements of your country or 815 
+
+institution) were obtained? 816 
+
+Answer: [Yes] 817 
+
+Justification: Study participants are asked to judge whether emotion-centric statements are 818 
+
+accurate in relation to images. All potential risks are disclosed to the volunteers. 819 
+
+Guidelines: 820 
+
+24 • The answer NA means that the paper does not involve crowdsourcing nor research with 821 
+
+human subjects. 822 
+
+• Depending on the country in which research is conducted, IRB approval (or equivalent) 823 
+
+may be required for any human subjects research. If you obtained IRB approval, you 824 
+
+should clearly state this in the paper. 825 
+
+• We recognize that the procedures for this may vary significantly between institutions 826 
+
+and locations, and we expect authors to adhere to the NeurIPS Code of Ethics and the 827 
+
+guidelines for their institution. 828 
+
+• For initial submissions, do not include any information that would break anonymity (if 829 
+
+applicable), such as the institution conducting the review. 830 
+
+16. Declaration of LLM usage 831 
+
+Question: Does the paper describe the usage of LLMs if it is an important, original, or 832 
+
+non-standard component of the core methods in this research? Note that if the LLM is used 833 
+
+only for writing, editing, or formatting purposes and does not impact the core methodology, 834 
+
+scientific rigorousness, or originality of the research, declaration is not required. 835 
+
+Answer: [Yes] 836 
+
+Justification: This paper focuses on the visual emotion evaluation of MLLMs and adopts 837 
+
+MLLMs as tools for efficient annotations. 838 
+
+Guidelines: 839 
+
+• The answer NA means that the core method development in this research does not 840 
+
+involve LLMs as any important, original, or non-standard components. 841 
+
+• Please refer to our LLM policy ( https://neurips.cc/Conferences/2025/LLM )842 
+
+for what should or should not be described. 843 
+
+25
