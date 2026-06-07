@@ -1,0 +1,1189 @@
+Title: Graph4MM: Weaving Multimodal Learning with Structural Information
+
+URL Source: https://openreview.net/pdf?id=FB2e8PV6qg
+
+Number of Pages: 25
+
+Markdown Content:
+# Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Xuying Ning * 1 Dongqi Fu * 2 Tianxin Wei 1 Wujiang Xu 3 Jingrui He 1
+
+## Abstract 
+
+Real-world multimodal data usually exhibit com-plex structural relationships beyond traditional one-to-one mappings like image-caption pairs. Entities across modalities interact in intricate ways, with images and text forming diverse inter-connections through contextual dependencies and co-references. Graphs provide powerful structural information for modeling intra-modal and inter-modal relationships. However, previous works fail to distinguish multi-hop neighbors and treat the graph as a standalone modality, which frag-ments the overall understanding. This limita-tion presents two key challenges in multimodal learning: (1) integrating structural information from multi-hop neighbors into foundational mod-els, and (2) fusing modality-specific information in a principled manner. To address these chal-lenges, we revisit the role of graphs in multi-modal learning within the era of foundation mod-els and propose Graph4MM, a graph-based multi-modal learning framework. To be specific, we introduce Hop-Diffused Attention, which inte-grates multi-hop structural information into self-attention through causal masking and hop diffu-sion. Furthermore, we design MM-QFormer, a multi-mapping querying transformer for cross-modal fusion. Through theoretical and empiri-cal analysis, we show that leveraging structures to integrate both intra- and inter-modal interac-tions improves multimodal understanding beyond treating them as a standalone modality . Experi-ments on both generative and discriminative tasks show that Graph4MM outperforms larger VLMs, LLMs, and multimodal graph baselines, achieving a 6.93% average improvement. 
+
+> *
+
+Equal contribution 1University of Illinois Urbana-Champaign 
+
+> 2
+
+Meta AI 3Rutgers University. Correspondence to: Jingrui He 
+
+<jingrui@illinois.edu >.
+
+Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s). include   
+
+> Section I
+> (pure text)
+> Section II
+> (pure text)
+> Section III
+> (?)
+> previous
+> next
+> previous
+> next
+> pair
+> include
+> Caption
+> (pure text)
+> include
+> Image I
+> include
+> include
+> include
+> Given the contents and relations,
+> can we generate the Section III?
+> Image II
+> Page
+> Description
+> (pure text)
+> Image -Image
+> Text -Image
+> Text -Text
+> previous
+
+Figure 1. Multimodal relationships in a document, where sections, images, captions, and page descriptions form a structured graph. The task aims to generate Section III using the neighboring context. 
+
+## 1. Introduction 
+
+Data modalities, in general, refer to different types of the data, like text, image, and audio (Ngiam et al., 2011). Jointly considering cross-modality data has great research and ap-plication potential, and it has been widely applied in image generation, question answering, and many more (Gao et al., 2020; Summaira et al., 2021; Stahlschmidt et al., 2022; Jabeen et al., 2023). Recently, a pioneering study (Yoon et al., 2023) discovered that the relationship of data modal-ities is complex and far beyond the one-to-one modeling, like the image-caption pair, in real-world scenarios. For example, in an academic paper, the image and text data have different semantic and non-linear correlations, i.e., the image and its caption have a direct pairing relation to each other, but the relation between the image and its following section contents and the page summarization is intricate, as shown in Figure 1. However, most Vision-Language Models (VLMs) (Alayrac et al., 2022a; Li et al., 2023c; Koh et al., 2023; Zhang et al., 2024a) are still limited to modeling one-to-one relationships between images and text, making them inadequate for capturing complex multimodal interactions. Graphs, as a relational data structure, have the inherent advantage of modeling complex modality relationships to-gether. To the best of our knowledge, MMGL (Yoon et al., 2023) is the state-of-the-art work that models modalities into graphs and obtains promising performance in the gen-eration task, as compared to single-modal pre-trained lan-guage models and vision-language models. In particular, it 1Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+models each modality data item (e.g., a sentence piece, an image) as a node and establishes their edges based on the concrete application scenario. For example, when address-ing section summarization, edges are established based on section-subsection hierarchy and co-occurrence of images and text within the same section. Establishing the modality graph can help select and fuse the important knowledge from the raw multimodal data and further contribute to solving the context length limitation for language models. Nevertheless, the modality fusion in the pioneering MMGL (Yoon et al., 2023) is simple and does not fully exploit the complex relationship. To be more specific, although cross-modal data is modeled into multi-modal graphs, MMGL simply concatenates the neighbors’s multi-modal data together, where the internal adjacency is largely ignored, e.g., different distant nodes are treated equally. Moreover, MMGL regards the established graph as a standalone modality with images and text. However, this approach for injecting graph topology information does not yield the expected performance improvements. Motivated by the above observation, we further explore the role of graphs in multimodal learning in the era of foun-dation models from empirical and theoretical analysis in Section 4.3. Briefly, unlike conventional modalities such as text and images with densely pretrained representation, treating graph structures as an independent modality and pro-jecting graph embeddings into the same space as language and vision models often result in suboptimal performance. This is primarily due to the volume of training data and the well-aligned feature spaces of pre-trained language and vision foundation models, which can hinder effective fusion and limit the model’s ability to do downstream tasks. Therefore, we propose Graph4MM , a structured multi-modal learning framework that simultaneously captures intra-modal multi-hop structural connectivity and fuses inter-modal representations in a principled manner. Our contribu-tions are summarized as follows: 
+
+• A Novel Structure-Guided Paradigm for Multimodal Learning. To address the limitations of existing multi-modal learning methods in capturing complex modality in-teractions, we propose Graph4MM, a multimodal learning framework that integrates structural information from multi-hop neighbors into foundation models and fuses modality-specific representations in a principled manner. 
+
+• Designs of Hop-Diffused MM-QFormer. We introduce Hop-Diffused Attention, which incorporates multi-hop con-nectivity into self-attention using causal masking and hop diffusion. Theoretical analysis shows that it avoids over-smoothing and does not rely on stacking multiple GNN layers for multi-hop aggregation. Additionally, we design MM-QFormer, a querying transformer, to facilitate cross-modal fusion. 
+
+• Revisiting the Role of Graphs in Multimodal Learn-ing. We conduct both theoretical and empirical analysis on the role of graphs in multimodal learning within the era of foundation models. Our findings suggest that leverag-ing topological structures to guide intra- and inter-modal interactions is more effective than treating graphs as an independent modality. 
+
+• State-of-the-Art Performance Across Generation and Discrimination. We evaluate Graph4MM on generative (e.g., academic paper section summarization) and discrimi-native (e.g., zero-shot fashion classification) tasks. Exten-sive experiments show that it consistently outperforms pre-trained VLMs, LLMs, and multimodal graph learning meth-ods, achieving an average improvement of 6.93% across textual and visual metrics. 
+
+## 2. Preliminary 
+
+In this section, to pave the way for introducing our mul-timodal framework Graph4MM, we first introduce the multimodal graph modeling and the corresponding advan-tages. Then, we introduce two formal tasks the proposed Graph4MM aims to solve. 
+
+2.1. Multimodal Graph Modeling 
+
+Existing works (Yoon et al., 2023; Jin et al., 2024; Zhu et al., 2024b) offer varying definitions of multimodal graphs. To unify these perspectives, we define a multimodal graph as an unweighted, undirected structure: G = ( V, E, T , P).𝒊                 
+
+> 𝒋
+> 𝒌
+> text -to -text relation
+> (optional): e.g., section -
+> subsection
+> image -to -image relation
+> (optional): e.g., figure -subfigure
+> Struct Node {
+> index 𝑖 ;
+> text (optional) 𝑡 !;
+> image (optional) 𝑣 !;
+> }captioning relation
+> Figure 2. Multimodal Graph Modeling
+
+Node . In the multimodal graph G = ( V, E, T , P), we model a node with a unique index and optional textual and visual attributes. Mathematically, each node vi ∈ V (e.g., a sec-tion in a webpage) is represented by a unique node index i
+
+and may optionally include textual attribute tvi ∈ T (e.g., its textual content) and visual attribute pvi ∈ P (e.g., an associated image). 
+
+Edge . In the multimodal graph G = ( V, E, T , P), we con-sider three kinds of edges, i.e., text-to-text , image-to-image ,and text-to-image . Based on our node modeling, the text-to-image relationship, like captioning, is basic and already encoded in each node. Further, the text-to-text edge exists 2Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+between nodes i and j if and only if both nodes contain non-null text features and share a meaningful predefined real-world relationship (e.g., section-subsection in a paper, de-scriptions of frequently co-purchased items). The same rule also applies to image-to-image edges between two nodes. Through this multimodal graph representation, for a node 
+
+i, along text-to-text (or image-to-image) edges, we can easily induce its textual subgraph Gt = ( Vt, Et, Tt, Pt) as 
+
+Vt = {u ∈ V | dist (u, v i) ≤ τ }, where Vt includes nodes with textual attributes reachable within τ -hops, and Et cap-tures text-text relationships. Similarly, the visual subgraph 
+
+Gp = ( Vp, Ep, Tp, Pp) models image-to-image interactions. These subgraphs, combined with text-image associations at the node level, act as adjacency heuristics that guide causal masking attention, facilitating both intra-modality coherence and inter-modality fusion. 
+
+2.2. Task Definitions 
+
+By modeling multiple modalities into graphs, we then math-ematically introduce the tasks Graph4MM aims to solve. 
+
+Generation Task . Given a node vi ∈ V, an instruc-tion prompt I, and its associated multimodal subgraphs 
+
+Gt and Gp, our objective is to generate a response ˆyvi =
+
+{ˆy1, ˆy2, . . . , ˆyL} by maximizing:           
+
+> ˆyvi= arg max
+> yvi
+> LY
+> t=1
+> P(yt|ˆy1,ˆy2, . . . , ˆyt−1,Gt,Gp,I),(1)
+
+where Gt and Gp represent the textual and visual subgraphs. The generated response leverages multimodal interactions to address the task defined by I. For example, in document understanding, given the instruction “Summarize this sec-tion”, Graph4MM integrates broader page-level multimodal context to generate a coherent and context-aware summary. 
+
+Discriminative Task . Here, we target the more challenging zero-shot classification task, where an LLM is called to generate a language response conditioned on the textual subgraph Gt, the visual subgraph Gp, and a classification prompt I. For a given node vi ∈ V , LLM generates a response ˆyvi for the classification answer and assigns the node to the most relevant class by solving: c(vi) = arg max 
+
+> cj
+
+ϕ(ˆ yvi , dcj ), (2) where ˆyvi = PLM (Gt, Gp, I) is the generated response from the pretrained language model, and ϕ(·) denotes a similarity function. Here, dcj represents the embedding of the description of class j. Graph4MM utilizes both node and neighbor attributes for enhanced zero-shot classification, which is generally unavailable in traditional graph learning. 
+
+## 3. Proposed Graph4MM Framework 
+
+In this section, we systematically present our Graph4MM framework, which synergizes the heterogeneous inputs from vision and language while simultaneously capturing their complex structural interactions. The overview of our frame-work is presented in Figure 3. To be specific, in Subec-tion 3.1, we first introduce an elementary backbone for fusing multimodal information, which serves as a vanilla architecture to inspire the more effective Graph4MM. Then, in Subsection 3.2, we dive into each modality and utilize multi-hop neighbor connectivity in the graph to guide the intra-modality information fusion via the proposed Hop-Diffused Attention. Finally, in Subsection 3.3, we intro-duce multimodal query transformer, MM-QFormer, which captures inter-modal interaction and fuses modal-specific information for downstream foundation models to deal with generation and discrimination tasks. 
+
+3.1. The Vanilla Architecture for Fusing Multimodal Information 
+
+The emergent reasoning capabilities (Wei et al., 2022a) of large language models are essential for tackling zero-shot open-ended QA tasks (Guo et al., 2023). To effectively pre-serve these abilities of pretrained language models while efficiently integrating relevant visual information, our mul-timodal fusion strategy focuses on projecting visual inputs seamlessly into the LLM’s semantic space, leveraging off-the-shelf frozen pretrained language and vision models. 
+
+Textual Context Integration. We define the textual con-text cT (Gt) derived from the subgraph Gt = ( Vt, Et, Tt, Pt),where Vt consists of the target node vi and its τ -hop neigh-bors N (vi) = {u ∈ V | dist (u, v i) ≤ τ }. The textual input sequence is constructed as: 
+
+cT (Gt) = hT (I), {hT (tv ) | v ∈ V t} ∈ RlT ×d, (3) where I represents instruction prompts, hT (·) maps text inputs to their corresponding token embeddings, lT is the sequence length of the complete textual input, d is the di-mensionality of the token embeddings, and [·] represents the concatenation operation. 
+
+Visual Context Integration. The visual context cP (Gp)
+
+is derived from the visual attributes of nodes in Gp =(Vp, Ep, Tp, Pp) . Using a frozen visual encoder gimg (·),we compute the visual embeddings as: 
+
+cP (Gp) = {gimg (pv ) | v ∈ V p}) ∈ R|V p|× dp , (4) where pv ∈ P p denotes the visual attribute of node v, and 
+
+dp is the dimensionality of the visual embeddings. 
+
+Structured Multi-modal Input for PLM. Both textual and visual contexts are processed separately and then con-3Graph4MM: Weaving Multimodal Learning with Structural Information Token (embedded)         
+
+> Cross -Attention Layer
+> Instruction &
+> Node Textual Attributes
+> Response
+> …
+> Query Tokens
+> MM
+> Tokens
+> MM -QFormer
+> …
+> Pre -trained
+> LLM
+> Anchor
+> 1Hop
+> Neighbors
+> 2Hop
+> Neighbors
+> …
+> …
+> …
+> …
+> Anchor
+> 1Hop
+> Neighbors
+> 2Hop
+> Neighbors
+> Pre -trained
+> Vision Encoder
+> Learnable
+> Fixed
+> Embedding Vector
+> Self -Attention Layer
+> Feed -Forward Moule
+> Language Model Adapter
+> …
+> …
+> Causal Mask
+> Self -Attention
+> Diffusion
+> Hop -Diffused
+> Attention
+> Causal Mask
+> Self -Attention
+> Diffusion
+> Hop -Diffused
+> Attention
+> Multimodal
+> Graph
+> Text Subgraph
+> Vision Subgraph
+> Induce
+> Adjacency Heuristic
+> Adjacency Heuristic
+
+Figure 3. Overview of the Graph4MM framework. Hop-Diffused Attention applies adjacency heuristics via causal masking and hop diffusion, while MM-QFormer captures fine-grained text-image interactions before passing inputs to the LLM. 
+
+catenated to form the input to the pretrained language model: 
+
+h(cT , c P ) = cT (Gt), f (cP (Gp))  ∈ R(lT +lP )×d,
+
+where cT (Gt) ∈ RlT ×d represents the textual context, and 
+
+f (cP (Gp)) ∈ RlP ×d maps the visual context cP (Gp) ∈
+
+R|V p|× dp into the PLM’s semantic space using a transfor-mation function f : R|V p|× dp → RlP ×d, which will be comprehensively introduced in the Section 3.3. This map-ping ensures the alignment of visual features with the token embeddings of the language model, and lP is the num-ber of multi-modal (MM) tokens corresponding to each node. Then, the PLM takes h(cT , c P ) as input tokens and generates target outputs based on the task requirements as mentioned in the instruction. In our implementation, the MM tokens corresponding to each node are inserted directly after the textual attribute to-kens of the same node. This arrangement ensures adjacency between textual and MM tokens, effectively highlighting the one-to-one correspondence for downstream pretrained language models to process multimodal inputs. 
+
+3.2. Hop-Diffused Attention. 
+
+Existing vision-language models (Li et al., 2023b; Yuan et al., 2021; Tsimpoukelli et al., 2021; Radford et al., 2021) primarily align single image-text pairs, overlooking the com-plex relationships among multiple images and text in tasks like ours. For example, LLMs often treat all visual inputs equally, ignoring the greater importance of a node’s own image. To address this, we propose Hop-Diffused Attention which integrates graph structure form multi-hop connec-tivity into node embeddings through self-attention, causal masking, and a diffusion mechanism. 
+
+Text and Vision Encoding. We encode the text attributes of nodes in Vt using a frozen pretrained language model. Mean pooling over the sequence length dimension produces textual embeddings: HT ∈ R|V t|× d. To integrate visual in-formation, visual embeddings are first concatenated over all nodes in Vp, and then projected into the token embedding space of the language model via a learnable linear transfor-mation Mproj ∈ Rdp×d: HP = L 
+
+> v∈V p
+
+gimg (pv ) · Mproj ∈
+
+R|V p|× d. The Hop-Diffused Attention module is completely symmetric for both visual embeddings HP and textual em-beddings HT ; for brevity, we use HP to illustrate below. 
+
+Self-Attention. Self-attention captures semantic relation-ships between node embeddings. For HP ∈ R|V p|× d, where each row hvi represents the embedding of node vi, and 
+
+qvi = Wq hvi , kvj = Wkhvj , the initial attention matrix 
+
+A′ ∈ R|V p|×|V p| is computed as: 
+
+A′ 
+
+> i,j
+
+= Softmax j
+
+q⊤ 
+
+> vi
+
+kvj
+
+√d
+
+!
+
+, (5) where Wq , Wk ∈ Rd×d are learnable weight matrices pro-jecting node embeddings into query and key spaces, and 
+
+A′ 
+
+> i,j
+
+reflects the importance of node vj to node vi.
+
+Causal Masking. To encode the graph structure, we define a causal mask Mi,j that restricts attention to valid neighbors based on Ep, the edge set of the subgraph Gp. The mask is defined as: 
+
+Mi,j =
+
+(
+
+1, if (vi, v j ) ∈ E p,
+
+0, otherwise . (6) This mask ensures that attention is computed only for nodes connected by edges in Ep. The attention scores between nodes are then calculated as: Ai,j = Softmax (Mi,j · A′ 
+
+> i,j
+
+).
+
+By applying Mi,j , nodes are restricted to attend only to their immediate neighbors, preserving the graph’s local structure. This ensures that the attention mechanism aligns with the graph topology and the downstream model can distinguish between semantically similar images with different connec-tivity (e.g., directly connected or not connected). 4Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Diffusion Mechanism. While causal masking ensures local connectivity, multi-hop structural information is captured via a diffusion mechanism that propagates attention across neighbors iteratively. Inspired by Wang et al. (2020), the diffusion matrix A is defined as: 
+
+A =
+
+> ∞
+
+X
+
+> i=0
+
+θiAi, θi = α(1 − α)i, α ∈ (0 , 1) , (7) where Ai represents the i-power of the masked attention matrix A, and θi are decay coefficients with P∞ 
+
+> i=0
+
+θi = 1 .The parameter α controls the influence of higher-hop neigh-bors, prioritizing closer connections through exponential decay. In practical implementation, we approximate the infinite summation by truncating at a finite number of steps 
+
+K referred to as the diffusion step. The node embeddings are updated using the diffused atten-tion matrix with residual connection: 
+
+HP ← HP + AHP , (8) where HP ∈ R|V p|× d integrates multi-hop structural infor-mation into the node representations after the above update. This formulation enables nodes to aggregate information not only from their direct neighbors but also from distant nodes while attenuating the impact of farther nodes. The resulting hop-diffused embeddings HP and HT are then fed into the MM-QFormer, which will be discussed in the Sec-tion 3.3 ensuring effective multimodal fusion and structural information integration. 
+
+Theoretical Justification of Hop-Diffused Attention. We establish the validity of Hop-Diffused Attention by proving that the diffused attention matrix preserves key attention properties, ensuring that each row sums to one. This guaran-tees that the mechanism remains a valid attention operation while generalizing Personalized PageRank with an adaptive multi-hop weighting scheme. Detailed proof and theoretical analysis can be found in Appendix A and Appendix B. We further analyze Hop-Diffused Attention in terms of gra-dient smoothing and demonstrate why it cannot be replaced by traditional graph models like GAT (Veli ˇckovi ´c et al., 2018). Specifically, we establish the following result: 
+
+Proposition 3.1. Let X(1) be the node representation matrix after the Hop-Diffused Attention module, and X(k) be the representation at the k-th layer of GAT. When both methods aggregate information from k-hop neighbors, Hop-Diffused Attention retains higher Dirichlet energy, preserving more feature variance and mitigating over-smoothing. Formally, for large k,
+
+EHop-Diffused (X(1) ) > EGAT (X(k)), (9) 
+
+where E(·) denotes the Dirichlet Energy, which quantifies the smoothness of node representations. 
+
+The definition of Dirichlet Energy and the proof of Proposi-tion 3.1 are provided in Appendix C. 
+
+A Lightweight Alternative: Hop-Aware Attention. To simplify the computation complexity ( O(|V p| · d2)) of Hop-Diffused Attention while incorporating topology, we in-troduce learnable hop embeddings h(h) 
+
+> hop
+
+∈ Rd for each hop h ∈ { 0, 1, . . . , τ }, where τ denotes the maximum hop count in the visual subgraphs. For visual embeddings 
+
+HP ∈ R|V p|× d, hop embeddings Hhop are added based on each node’s hop information hv :
+
+HP ← HP + Hhop , Hhop = [ h(hv ) 
+
+> hop
+
+]v∈V p . (10) where [h(hv ) 
+
+> hop
+
+]v∈V p represents the concatenation of learnable hop embeddings for each neighboring node in Vp. Specifi-cally, neighbors at the same hop distance (e.g., 1-hop neigh-bors) share the same hop embedding (e.g., h(1) 
+
+> hop
+
+). The above process is fully symmetric for textual embed-dings, where hop embeddings are similarly added to the original textual features HT to create topology-aware repre-sentations. This approach reduces the computational com-plexity to O(|V p| · d), while preserving critical hop informa-tion to guide the downstream model in adaptively learning the importance of the information from different hops. 
+
+3.3. Multi-Mapping QFormer 
+
+The most relevant work in multimodal graph learning for generative tasks, (Yoon et al., 2023), uses a simple lin-ear projection (Tsimpoukelli et al., 2021) to map visual information into the language space but overlooks com-plex text-visual interactions. To address this, we propose the Multi-Mapping QFormer (MM-QFormer) framework, which takes the topology-integrated embeddings (e.g., Hop-Diffused HP and HT ) as input, inspired by (Li et al., 2023b). MM-QFormer employs learnable query tokens and a two-layer transformer, where shared self-attention facili-tates text-query interactions, and cross-attention selectively extracts visual features relevant to textual inputs. 
+
+Shared Self-Attention. We initialize learnable query to-kens as Q(0)  
+
+> v
+
+∈ RlP ×d for capturing intricate multi-modal information fusion, where lP = |V p| × nq , and nq repre-sents the number of multi-modal tokens per node. At each layer t, the query tokens from the previous layer Q(t−1) 
+
+> v
+
+are concatenated with the textual embeddings HT to form a joint representation: 
+
+HQT = Q(t−1)  
+
+> v
+
+, HT
+
+ ∈ R(lP +|V t|)×d, (11) To make the learnable query can be condition on text in-formation, the joint representation HQT is then processed through shared self-attention: 
+
+H′ 
+
+> QT
+
+= SAT [q = HQT , k = HQT , v = HQT ], (12) 5Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+where SAT (·) denotes multi-head self-attention. The up-dated query tokens are: Q′(t) 
+
+> v
+
+= H′ 
+
+> QT
+
+[: lP , :] ∈ RlP ×d.
+
+The query tokens are designed to integrate multimodal in-formation by jointly learning from text and visual features. Through shared self-attention, the query tokens refine their representations while being conditioned on textual context, laying the foundation for better interacting with visual fea-tures in subsequent cross-modal operations. 
+
+Modality Cross-Attention. The cross-attention mecha-nism then aligns the updated query tokens Q′(t) 
+
+> v
+
+with these visual embeddings: 
+
+Q(t) 
+
+> v
+
+= CAT [q = Q′(t) 
+
+> v
+
+, k = HP , v = HP ] ∈ RlP ×d,
+
+(13) where CAT (·) denotes multi-head cross-attention. The cross-attention module enables the query tokens to extract relevant visual information by attending to the visual em-beddings. This ensures that the multimodal query tokens are aligned with the most pertinent visual features while maintaining the contextual guidance established by the text. 
+
+Feed-Forward Module. Each cross-attention layer is followed by a feed-forward network (FFN) to further pro-cess the updated query tokens: Q(t) 
+
+> v
+
+= FFN (Q(t) 
+
+> v
+
+), where FFN (·) is a two-layer fully connected network with a non-linear activation function in between, ensuring dimensional consistency: Q(t) 
+
+> v
+
+∈ RlP ×d.After L layers of shared self-attention, cross-attention, and feed-forward modules, the final query tokens Q(L) 
+
+> v
+
+are pro-jected into the multimodal semantic space, f (cP (Gp)) = 
+
+Q(L) 
+
+> v
+
+∈ RlP ×d. Here, f (cP (Gp)) represents the learned multimodal tokens, and lP = |V p| × nq . Combined with textual prompts, these tokens form the input sequence for the downstream PLM, enabling it to effectively process open-ended tasks. 
+
+## 4. Experiments 
+
+4.1. Experiments Setups Datasets. We evaluate our approach on two datasets that exhibit many-to-many text-image relationships. For the generative task , we use W IKI WEB 2M (Burns et al., 2023), where the goal is to generate a section summary (i.e., first-sentence imputation) based on multimodal web-page content, including the page description, consecutive section text, images, and captions. For the discriminative task , we use E LE -F ASHION (Zhu et al., 2024b), a prod-uct classification dataset where nodes represent products, edges capture co-purchase relationships, and text and im-ages serve as attributes. To evaluate zero-shot node clas-sification, we randomly hold out a set of unseen classes (5 out of 11 classes for the OPT-125M backbone and 9 for LLaMA-1B) for evaluation. Dataset details are pro-vided in the Appendix F. Code is available at https: //github.com/YennNing/Graph4MM .
+
+Baselines. We evaluate PLMs, VLMs, and MMAG vari-ants from MMGL (Yoon et al., 2023) under different input settings. For PLMs, we compare OPT-125M (Zhang et al., 2022b) and LLaMA-1B (Touvron et al., 2023), while for VLMs, we assess BLIP2-OPT-2.7B (Li et al., 2023b) and Qwen2-VL-7B-Instruct (Wang et al., 2024). The compar-ison includes four key settings: (1) using only a node’s text (N ODE ’S TEXT ), (2) adding image features (N ODE ’S
+
+TEXT & I MAGE ), (3) incorporating subgraph-level text (SUBGRAPH ’S TEXT ), and (4) integrating both subgraph text and images (S UBGRAPH ’S TEXT & I MAGE ). For PLMs, we further explore fine-tuning and graph-enhanced modeling. Besides, in MMGL, a unique setting is S UB -
+
+> GRAPH
+
+’S T & I + GNN that utilizes GNNs to learn the subgraph’s topological structure and incorporates it as a new modality into the visual and text input embeddings. Full baseline details are provided in the Appendix G. 
+
+4.2. Comparing Results 
+
+Our proposed Hop-Diffused and Hop-Aware MM-QFormer consistently outperforms pretrained VLMs, pretrained LLMs, and MMGL across both generative and discrimina-tive tasks with on average 1.77% and 12.09% improvement resectively. From the experiment results, we find that pre-trained VLMs perform the worst due to their pretraining focus on image captioning and simple QA, often generat-ing irrelevant image descriptions instead of directly giving answers to the instructions. Among PLM-based methods, incorporating subgraph context consistently improves per-formance over using only node attributes, further validating the importance of modeling relevant multimodal contexts. MMGL performs well, but adding GCN embeddings de-grades performance, likely due to the semantic gap between graph embeddings and LLM representations, which will be discussed in Section 4.3. Our MM-QFormer, with better text-image interaction modeling, achieves superior results compared to the strongest baselines. The introduction of Hop-Diffused Attention and Hop-Aware Attention further enhances MM-QFormer by modeling multi-hop connectiv-ity, allowing the model to capture structure-aware multi-modal information, thereby improving both generative and discriminative performance. 
+
+4.3. Discussions Ablation Studies. The performance of MM-QFormer without structural modeling is reported in Table 4.1. We ob-serve that incorporating MM-QFormer alone improves upon the baselines in most cases. Besides, we further conduct ablation experiments on both Hop-Diffused MM-QFormer 6Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Table 1. Comparison of our approach with VLMs, PLMs, and MMGL variants on different backbones. In generative tasks, BLEU-4, ROUGE-L, and CIDEr measure language modeling accuracy (higher is better). In discriminative tasks, ROUGE-L (R-L) evaluates response accuracy, while Accuracy (Acc), Recall (Rec), and Precision (Pre) assess classification correctness. The best results are bolded ,while the best baseline results are underlined.                                                                                                                                                                                                                    
+
+> Backbone Method Generative Task Discriminative Task BLEU-4 ROUGE-L CIDEr R-L Acc (%) Rec (%) Pre (%) VLMs  BLIP NODE ’STEXT (T) 0.0000 0.0496 0.0060 0.1450 21.89 9.62 16.27 SUBGRAPH ’STEXT 0.0000 0.0530 0.0063 0.1907 31.37 14.49 31.73
+> QwenVL NODE ’STEXT 0.0000 0.1223 0.0069 0.0793 11.00 4.43 10.90 SUBGRAPH ’STEXT 0.0000 0.1192 0.0084 0.1233 12.33 5.78 14.26
+> OPT-125M
+> PLM NODE ’STEXT 0.0078 0.1871 0.0783 0.2270 68.57 40.44 48.76 SUBGRAPH ’STEXT 0.0164 0.2198 0.1551 0.2762 67.68 33.14 40.26
+> MMGL
+> NODE ’STEXT 0.0642 0.3807 0.6241 0.7047 70.33 66.67 66.67 SUBGRAPH ’STEXT 0.0770 0.3992 0.7606 0.8149 99.74 71.03 71.43 NODE ’STEXT & I MAGE (I) 0.0643 0.3825 0.6371 0.7180 73.90 68.67 83.33 SUBGRAPH ’STEXT & I MAGE 0.0778 0.4041 0.7712 0.8144 99.85 83.25 83.33 SUBGRAPH ’ST & I + GNN 0.0633 0.3814 0.6326 0.5771 70.89 56.08 62.50
+> Graph4MM (Ours) MM-QF ORMER 0.0769 0.4044 0.7684 0.8195 100.00 100.00 100.00 HOP -A WARE MM-QF ORMER 0.0801 0.4063 0.7736 0.8097 100.00 100.00 100.00 HOP -D IFFUSED MM-QF ORMER 0.0800 0.4076 0.7831 0.8282 100.00 100.00 100.00 Llama-1B PLM NODE ’STEXT 0.0757 0.3691 0.7185 0.7081 94.76 78.07 83.11 SUBGRAPH ’STEXT 0.0960 0.3949 0.9179 0.7327 99.79 81.42 81.27
+> MMGL
+> NODE ’STEXT 0.0947 0.4375 0.9046 0.7083 94.80 78.12 83.19 SUBGRAPH ’STEXT 0.1087 0.4426 1.0426 0.7375 99.84 81.51 81.58 NODE ’STEXT & I MAGE 0.0981 0.4449 0.9367 0.6696 97.26 84.33 88.38 SUBGRAPH ’STEXT & I MAGE 0.1157 0.4685 1.1072 0.7446 98.07 84.55 85.50 SUBGRAPH ’ST & I + GNN 0.1003 0.4487 0.9631 0.3823 86.73 62.80 61.44
+> Graph4MM (Ours) MM-QF ORMER 0.1168 0.4699 1.1108 0.8321 99.88 99.86 99.87 HOP -A WARE MM-QF ORMER 0.1186 0.4731 1.1262 0.8891 99.87 89.86 89.88 HOP -D IFFUSED MM-QF ORMER 0.1177 0.4713 1.1221 0.8822 100.00 100.00 100.00
+
+and Hop-Aware MM-QFormer by individually removing structural priors from the image and text modalities. The result is shown in Table 4.3. In all cases, removing struc-tural information leads to a performance drop, reinforcing the importance of multi-hop structural information in guid-ing multimodal learning. Notably, removing the structural information in the image input leads to a severer perfor-mance drop, which is because text can provide structural information through explicitly added some descriptive hints (e.g., ”context from 1-hop neighbor”) in the prompt. Such prompts, illustrated in Appendix Q, allow the language modality to retain partial access to structural information. In contrast, without structural information, images from dif-ferent hops are treated with the same level of importance, leading to suboptimal performance. 
+
+Table 2. Ablation study on Hop-Diffused and Hop-Aware Atten-tion in the generative setting with OPT-125M. The first row shows original results, while −tG′ and −pG′ indicate the removal of graph adjacency heuristics for text and image subgraphs. 
+
+Ablation Variant BLEU-4 ROUGE-L CIDEr 
+
+Hop-Diffused MM-QFormer 0.0800 0.4076 0.7831 - tG′ Hop-Diffused Attention 0.0786 0.4065 0.7765 - pG′ Hop-Diffused Attention 0.0769 0.4044 0.7684 Hop-Aware MM-QFormer 0.0801 0.4063 0.7736 - tG′ Hop-Aware Attention 0.7943 0.4047 0.7736 - pG′ Hop-Aware Attention 0.0769 0.4044 0.7684 
+
+Robustness from Hop-diffused to Hop-aware Attention. 
+
+Hop-Aware Attention reduces computational complexity while maintaining strong performance. Replacing either the image or text modality with Hop-Diffused Attention across four datasets (results shownin Table 3) shows that even lightweight structural priors ensure stable performance, and hybrid approaches may sometimes outperform full Hop-Diffused Attention, due to the complementary inductive biases introduced by modality-specific structural modeling. 
+
+Table 3. Comparison of replacing text or vision structural priors in Hop-Diffused MM-QFormer with Hop-Aware Attention on the generative task using OPT-125M and LLaMA-1B. Best results are in red , second-best in yellow , and third-best in grey . tG′ and pG′
+
+denote text and visual subgraphs in MM-QFormer, respectively. 
+
+Model Method BLEU-4 ROUGE-L CIDEr 
+
+> OPT-125M
+
+Hop-Diffused (HD) 0.0800 0.4076 0.7831 
+
+Hop-Aware (HA) 0.0801 0.4063 0.7736 
+
+tG′ -HA + pG′ -HD 0.0822 0.4094 0.7947 
+
+tG′ -HD + pG′ -HA 0.0802 0.4063 0.7826 
+
+> LLaMA-1B
+
+Hop-Diffused (HD) 0.1177 0.4713 1.1221 
+
+Hop-Aware (HA) 0.1186 0.4731 1.1262 
+
+tG′ -HA + pG′ -HD 0.1176 0.4709 1.1199 
+
+tG′ -HD + pG′ -HA 0.1179 0.4744 1.1207 
+
+Should Graph be Encoded as a Modality? 
+
+A key question in multi-model graph learning is whether 7Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+graph structure should be explicitly encoded as an addi-tional modality. MMGL adopts a straightforward approach by using a GCN to encode G, then directly adding its graph representations to the pretrained vision and language em-beddings before feeding them into the LLM. The GCN itself is trained jointly with the downstream task loss. However, as shown in the first two rows of Table 4.3, this method provides little to no improvement and often performs worse than using only raw text and vision attributes. To further investigate this, we experimented with treating graph topol-ogy as an independent modality in the generative setting with OPT-125M. We explored two designs: (1) projecting GCN-learned node embeddings into global graph tokens to represent overall graph structure, and (2) mapping them into node tokens that encode local topology at the node level. Despite these efforts, neither approach yielded meaningful performance gains. A fundamental reason for this failure is the semantic gap between graph-derived topology em-beddings and pretrained vision-language representations. Unlike large-scale pretrained models, which align text and image representations through extensive multimodal train-ing, GCNs operate on small, sparsely labeled subgraphs, limiting their expressiveness. To formalize this gap, we propose the following proposition: 
+
+Proposition 4.1. Let G be a small-scale graph data distribu-tion, G ∼ r(G), and let X be a large-scale data distribution (e.g., text or image), X ∼ p(X ). Suppose f (G) 
+
+> θ
+
+is a GCN-based encoder trained only on G to produce representations 
+
+zG = f (G) 
+
+> θ
+
+(G), while f (X) 
+
+> ϕ
+
+is a large-scale pre-trained en-coder (e.g., LLM or ViT) producing zX = f (X) 
+
+> ϕ
+
+(X). Then, for almost all samples x ∈ X , the mutual information satis-fies: I(zG; X) ≪ I(zX ; X), implying a fundamental gap in expressive power between zG and zX .
+
+The proof is in Appendix D. Additionally, pretrained vi-sion and language models benefit from strong cross-modal alignment, allowing text and image representations to be semantically consistent. In contrast, graph embeddings lack such alignment, further widening the gap. Thus, we propose use graph structure as a guide for selecting and fusing mul-timodal data rather than treating it as a separate modality.                       
+
+> Table 4. Comparison of different methods for incorporating topol-ogy in the generative setting using the OPT-125M backbone.
+> Method BLEU-4 ROUGE-L CIDEr
+> Subgraph’s T & I (Emb) 0.0649 0.3800 0.6370 + Graph Embeddings 0.0633 0.3814 0.6326 Subgraph’s T& I 0.0788 0.4051 0.7790 + Graph Tokens 0.0796 0.4052 0.7736 + Node Tokens 0.0782 0.4045 0.7651 Ours (Hop-Diffused) 0.0800 0.4076 0.7831
+
+## 5. Related Work 
+
+Vision-Language Models . Recent vision-language mod-els leverage frozen pretrained components, either fixing the image encoder (Chen et al., 2020; Li et al., 2020; Zhang et al.; Zhai et al., 2022) or freezing the LLM to utilize its knowledge for vision-to-language generation (Tsimpoukelli et al., 2021; Alayrac et al., 2022b; Chen et al., 2022a). When using a frozen LLM (Touvron et al., 2023; Zhang et al., 2022b), the key challenge is aligning visual features to the text space. Frozen (Tsimpoukelli et al., 2021) fine-tunes an image encoder as soft prompts for an LLM, while Flamingo (Alayrac et al., 2022b) injects visual features via trainable cross-attention layers. BLIP-2 (Li et al., 2023b) introduces learnable query-based transformers to project visual features into the LLM’s space. Recent large-scale VLMs (Wang et al., 2024) employ multi-stage pretraining and multi-task finetuning to further enhance vision-language understanding. However, most VLMs still focus on one-to-one image-text alignment or naive concatenation of multi-modal tokens for multi-image scenarios, failing to capture complex many-to-many relationships where multiple im-ages correspond to different textual fragments. We address this by extending multimodal learning to graph structures, enabling structured cross-modal interactions. 
+
+Graph Neural Networks for Multimodal Data. Hetero-geneous Graph Neural Networks (HGNNs) extend standard GNNs (Veli ˇckovi ´c et al., 2018; Wu et al., 2020) to process multimodal graphs by integrating heterogeneous node at-tributes. This is typically done by extracting embeddings with frozen encoders and fusing modalities at different lev-els: input (Schlichtkrull et al., 2018; Zhang et al., 2019), intermediate (Hu et al., 2020), or final representation lay-ers (Yoon et al., 2022). While effective for node classifi-cation and link prediction, HGNNs are not well suited for language generation or open-ended reasoning. More discus-sion on Multi-modal Knowledge Graph (MMKG) can be seen in Appendix H. MMGL (Yoon et al., 2023) introduced multimodal graph learning for text generation by combining textual and visual encoders with GNNs. However, align-ing graph-based representations with large language models remains challenging. We address this by graph-heuristic multimodal fusion mechanism to enhance many-to-many vision-language understanding. 
+
+Learning on the Text-Attributed Graphs. Integrating structured graph data with unstructured text has evolved from early MLP- and transformer-based fusion meth-ods (Feng et al., 2020; Zhang et al., 2022c; Lin et al., 2019), which struggled to capture complex contextual dependen-cies and were insufficient for language-centric tasks like open-ended QA. Recent efforts explore LLMs for graph learning (He et al., 2023; Zhu et al., 2024c; Lin et al., 2024), 8Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+primarily refining graph representations within the LLM framework. GraphTranslator (Zhang et al., 2024b) aligns graph embeddings with LLMs using textual descriptions, but its dependence on explicit, comprehensive language an-notations of graph structures limits its applicability. Our approach extends multimodal graph learning by integrat-ing vision, enabling structured multimodal fusion for both language generation and graph-based reasoning. 
+
+## 6. Conclusion 
+
+In this paper, we propose representing the complex interactions between different modalities using a mul-timodal attributed graph and introduce a theoretically guided, adjacency-aware multimodal fusion framework, Hop-Diffused and Hop-Aware MM-QFormer. Our approach effectively enhances performance in both generative and dis-criminative tasks within multimodal learning. We also dis-cuss whether graph structure should be treated as a separate modality in the era of foundation models. 
+
+## Acknowledgements 
+
+We would like to thank Ke Jiang and Xiao Lin from the University of Illinois Urbana-Champaign for their valuable suggestions to improve our work, as well as Jiaxuan You for the insightful discussions during the CS598: Deep Learning with Graphs course. This work is supported by National Science Foundation under Award No. IIS-2117902. The views and conclusions are those of the authors and should not be interpreted as representing the official policies of the funding agencies or the government. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+## References 
+
+Ai, M., Wei, T., Chen, Y., Guo, Z., and He, J. Mlp fusion: Towards efficient fine-tuning of dense and mixture-of-experts language models. arXiv e-prints , pp. arXiv–2307, 2023. Alayrac, J., Donahue, J., Luc, P., Miech, A., Barr, I., Has-son, Y., Lenc, K., Mensch, A., Millican, K., Reynolds, M., Ring, R., Rutherford, E., Cabi, S., Han, T., Gong, Z., Samangooei, S., Monteiro, M., Menick, J. L., Borgeaud, S., Brock, A., Nematzadeh, A., Sharifzadeh, S., Binkowski, M., Barreira, R., Vinyals, O., Zisserman, A., and Simonyan, K. Flamingo: a visual language model for few-shot learning. In Koyejo, S., Mohamed, S., Agar-wal, A., Belgrave, D., Cho, K., and Oh, A. (eds.), Ad-vances in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 , 2022a. Alayrac, J.-B., Donahue, J., Luc, P., Miech, A., Barr, I., Hasson, Y., Lenc, K., Mensch, A., Millican, K., Reynolds, M., et al. Flamingo: a visual language model for few-shot learning. Advances in neural information processing systems , 35:23716–23736, 2022b. Ban, Y., Zou, J., Li, Z., Qi, Y., Fu, D., Kang, J., Tong, H., and He, J. Pagerank bandits for link prediction. In 
+
+NeurIPS , 2024. Burns, A., Srinivasan, K., Ainslie, J., Brown, G., Plummer, B. A., Saenko, K., Ni, J., and Guo, M. Wikiweb2m: A page-level multimodal wikipedia dataset. arXiv preprint arXiv:2305.05432 , 2023. Chen, J., Guo, H., Yi, K., Li, B., and Elhoseiny, M. Visual-gpt: Data-efficient adaptation of pretrained language mod-els for image captioning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 18030–18040, 2022a. Chen, X., Zhang, N., Li, L., Deng, S., Tan, C., Xu, C., Huang, F., Si, L., and Chen, H. Hybrid transformer with multi-level fusion for multimodal knowledge graph completion. In Proceedings of the 45th international ACM SIGIR conference on research and development in information retrieval , pp. 904–915, 2022b. Chen, Y.-C., Li, L., Yu, L., El Kholy, A., Ahmed, F., Gan, Z., Cheng, Y., and Liu, J. Uniter: Universal image-text repre-sentation learning. In European conference on computer vision , pp. 104–120. Springer, 2020. Chen, Z., Zhang, Y., Fang, Y., Geng, Y., Guo, L., Chen, X., Li, Q., Zhang, W., Chen, J., Zhu, Y., et al. Knowledge graphs meet multi-modal learning: A comprehensive sur-vey. arXiv preprint arXiv:2402.05391 , 2024. Feng, Y., Chen, X., Lin, B. Y., Wang, P., Yan, J., and Ren, X. Scalable multi-hop relational reasoning for knowledge-aware question answering. arXiv preprint arXiv:2005.00646 , 2020. Ferrada, S., Bustos, B., and Hogan, A. Imgpedia: a linked dataset with content-based analysis of wikimedia images. In The semantic web–ISWC 2017: 16th international semantic web conference, vienna, Austria, October 21-25, 2017, proceedings, part II 16 , pp. 84–93. Springer, 2017. Fu, D. and He, J. SDG: A simplified and dynamic graph neural network. In SIGIR , 2021. 9Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Fu, D., Fang, L., Maciejewski, R., Torvik, V. I., and He, J. Meta-learned metrics over multi-evolution temporal graphs. In KDD , 2022. Fu, D., Hua, Z., Xie, Y., Fang, J., Zhang, S., Sancak, K., Wu, H., Malevich, A., He, J., and Long, B. Vcr-graphormer: A mini-batch graph transformer via virtual connections. In ICLR , 2024. Gao, J., Li, P., Chen, Z., and Zhang, J. A survey on deep learning for multimodal data fusion. Neural Computation ,32(5):829–864, 2020. Guo, J., Li, J., Li, D., Tiong, A. M. H., Li, B., Tao, D., and Hoi, S. From images to textual prompts: Zero-shot visual question answering with frozen large language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 10867–10877, June 2023. He, X., Bresson, X., Laurent, T., Perold, A., LeCun, Y., and Hooi, B. Harnessing explanations: Llm-to-lm interpreter for enhanced text-attributed graph representation learning. 
+
+arXiv preprint arXiv:2305.19523 , 2023. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., and Chen, W. Lora: Low-rank adaptation of large language models. arXiv preprint arXiv:2106.09685 ,2021. Hu, Z., Dong, Y., Wang, K., and Sun, Y. Heterogeneous graph transformer. In Proceedings of the web conference 2020 , pp. 2704–2710, 2020. Jabeen, S., Li, X., Shoib, A. M., Omar, B., Li, S., and Jabbar, A. A review on methods and applications in multimodal deep learning. ACM Trans. Multim. Comput. Commun. Appl. , 19(2s):76:1–76:41, 2023. doi: 10.1145/3545572. Jin, B., Pang, Z., Guo, B., Wang, Y.-X., You, J., and Han, J. Instructg2i: Synthesizing images from multimodal at-tributed graphs. arXiv preprint arXiv:2410.07157 , 2024. Koh, J. Y., Fried, D., and Salakhutdinov, R. Generating images with multimodal language models. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Pro-cessing Systems 36: Annual Conference on Neural In-formation Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023. Li, G., Koutra, D., and Yan, Y. Size generalization of graph neural networks on biological data: Insights and practices from the spectral perspective. arXiv preprint arXiv:2305.15611 , 2023a. Li, J., Li, D., Savarese, S., and Hoi, S. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In International conference on machine learning , pp. 19730–19742. PMLR, 2023b. Li, J., Li, D., Savarese, S., and Hoi, S. C. H. BLIP-2: bootstrapping language-image pre-training with frozen image encoders and large language models. In Krause, A., Brunskill, E., Cho, K., Engelhardt, B., Sabato, S., and Scarlett, J. (eds.), International Conference on Ma-chine Learning, ICML 2023, 23-29 July 2023, Honolulu, Hawaii, USA , volume 202 of Proceedings of Machine Learning Research , pp. 19730–19742. PMLR, 2023c. Li, T. W., Mei, Q., and Ma, J. A metadata-driven approach to understand graph neural networks. Advances in Neu-ral Information Processing Systems , 36:15320–15340, 2023d. Li, T.-W., Qiu, R., and Tong, H. Model-free graph data selection under distribution shift, 2025a. URL https: //arxiv.org/abs/2505.17293 .Li, X., Yin, X., Li, C., Zhang, P., Hu, X., Zhang, L., Wang, L., Hu, H., Dong, L., Wei, F., et al. Oscar: Object-semantics aligned pre-training for vision-language tasks. In Computer Vision–ECCV 2020: 16th European Con-ference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XXX 16 , pp. 121–137. Springer, 2020. Li, X. L. and Liang, P. Prefix-tuning: Optimizing continuous prompts for generation. arXiv preprint arXiv:2101.00190 ,2021. Li, Z., Fu, D., and He, J. Everything evolves in personalized pagerank. In WWW , 2023e. Li, Z., Zheng, L., Jin, B., Fu, D., Jing, B., Ban, Y., He, J., and Han, J. Can graph neural networks learn language with extremely weak text supervision? arXiv preprint arXiv:2412.08174 , 2024. Li, Z., Fu, D., Ai, M., and He, J. Apex 2 : Adaptive and ex-treme summarization for personalized knowledge graphs. In KDD , 2025b. Lin, B. Y., Chen, X., Chen, J., and Ren, X. Kagnet: Knowledge-aware graph networks for commonsense rea-soning. arXiv preprint arXiv:1909.02151 , 2019. Lin, J., Qian, K., Han, H., Choudhary, N., Wei, T., Wang, Z., Genc, S., Huang, E. W., Wang, S., Subbian, K., et al. Unleashing the power of llms as multi-modal en-coders for text and graph-structured data. arXiv preprint arXiv:2410.11235 , 2024. Ngiam, J., Khosla, A., Kim, M., Nam, J., Lee, H., and Ng, A. Y. Multimodal deep learning. In Getoor, L. and Scheffer, T. (eds.), Proceedings of the 28th International Conference on Machine Learning, ICML 2011, Bellevue, 
+
+10 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Washington, USA, June 28 - July 2, 2011 , pp. 689–696. Omnipress, 2011. Ni, J., Li, J., and McAuley, J. Justifying recommendations using distantly-labeled reviews and fine-grained aspects. In Proceedings of the 2019 conference on empirical meth-ods in natural language processing and the 9th interna-tional joint conference on natural language processing (EMNLP-IJCNLP) , pp. 188–197, 2019. Ning, X., Xu, W., Wei, T., and Liu, X. i 2vae: Interest in-formation augmentation with variational regularizers for cross-domain sequential recommendation. arXiv preprint arXiv:2405.20710 , 2024. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pp. 8748–8763. PMLR, 2021. Schlichtkrull, M., Kipf, T. N., Bloem, P., Van Den Berg, R., Titov, I., and Welling, M. Modeling relational data with graph convolutional networks. In The semantic web: 15th international conference, ESWC 2018, Heraklion, Crete, Greece, June 3–7, 2018, proceedings 15 , pp. 593–607. Springer, 2018. Srinivasan, K., Raman, K., Chen, J., Bendersky, M., and Najork, M. Wit: Wikipedia-based image text dataset for multimodal multilingual machine learning. In Proceed-ings of the 44th international ACM SIGIR conference on research and development in information retrieval , pp. 2443–2449, 2021. Stahlschmidt, S. R., Ulfenborg, B., and Synnergren, J. Multi-modal deep learning for biomedical data fusion: a review. 
+
+Briefings in Bioinformatics , 23(2):bbab569, 2022. Summaira, J., Li, X., Shoib, A. M., Li, S., and Abdul, J. Recent advances and trends in multimodal deep learning: A review. arXiv preprint arXiv:2105.11087 , 2021. Tieu, K., Fu, D., Wu, J., and He, J. Invariant link selector for spatial-temporal out-of-distribution problem. In The 28th International Conference on Artificial Intelligence and Statistics , 2025. Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., Rozi `ere, B., Goyal, N., Hambro, E., Azhar, F., et al. Llama: Open and efficient foundation lan-guage models. arXiv preprint arXiv:2302.13971 , 2023. Tsimpoukelli, M., Menick, J. L., Cabi, S., Eslami, S., Vinyals, O., and Hill, F. Multimodal few-shot learn-ing with frozen language models. Advances in Neural Information Processing Systems , 34:200–212, 2021. Veli ˇckovi ´c, P., Cucurull, G., Casanova, A., Romero, A., Li `o, P., and Bengio, Y. Graph attention networks. arXiv preprint arXiv:1710.10903 , 2018. Wang, G., Ying, R., Huang, J., and Leskovec, J. Multi-hop attention graph neural network. arXiv preprint arXiv:2009.14332 , 2020. Wang, L., Hassani, K., Zhang, S., Fu, D., Yuan, B., Cong, W., Hua, Z., Wu, H., Yao, N., and Long, B. Learning graph quantized tokenizers. In ICLR , 2025. Wang, P., Bai, S., Tan, S., Wang, S., Fan, Z., Bai, J., Chen, K., Liu, X., Wang, J., Ge, W., et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024. Wei, J., Tay, Y., Bommasani, R., Raffel, C., Zoph, B., Borgeaud, S., Yogatama, D., Bosma, M., Zhou, D., Met-zler, D., et al. Emergent abilities of large language models. 
+
+arXiv preprint arXiv:2206.07682 , 2022a. Wei, T., You, Y., Chen, T., Shen, Y., He, J., and Wang, Z. Augmentations in hypergraph contrastive learning: Fab-ricated and generative. Advances in neural information processing systems , 35:1909–1922, 2022b. Wei, T., Jin, B., Li, R., Zeng, H., Wang, Z., Sun, J., Yin, Q., Lu, H., Wang, S., He, J., et al. Towards unified multi-modal personalization: Large vision-language models for generative recommendation and beyond. arXiv preprint arXiv:2403.10667 , 2024. Wu, X., Ajorlou, A., Wu, Z., and Jadbabaie, A. Demys-tifying oversmoothing in attention-based graph neural networks. Advances in Neural Information Processing Systems , 36:35084–35106, 2023. Wu, Z., Pan, S., Chen, F., Long, G., Zhang, C., and Philip, S. Y. A comprehensive survey on graph neural networks. 
+
+IEEE transactions on neural networks and learning sys-tems , 32(1):4–24, 2020. Xu, D., Xu, T., Wu, S., Zhou, J., and Chen, E. Relation-enhanced negative sampling for multimodal knowledge graph completion. In Proceedings of the 30th ACM in-ternational conference on multimedia , pp. 3857–3866, 2022. Xu, W., Li, S., Ha, M., Guo, X., Ma, Q., Liu, X., Chen, L., and Zhu, Z. Neural node matching for multi-target cross domain recommendation. In 2023 IEEE 39th In-ternational Conference on Data Engineering (ICDE) , pp. 2154–2166. IEEE, 2023. Xu, W., Liang, Z., Han, J., Ning, X., Lin, W., Chen, L., Wei, F., and Zhang, Y. Slmrec: empowering small language models for sequential recommendation. arXiv e-prints ,pp. arXiv–2405, 2024a. 11 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Xu, W., Ning, X., Lin, W., Ha, M., Ma, Q., Liang, Q., Tao, X., Chen, L., Han, B., and Luo, M. Towards open-world cross-domain sequential recommendation: A model-agnostic contrastive denoising approach. In Joint European Conference on Machine Learning and Knowl-edge Discovery in Databases , pp. 161–179. Springer, 2024b. Xu, Z., Hassani, K., Zhang, S., Zeng, H., Yasunaga, M., Wang, L., Fu, D., Yao, N., Long, B., and Tong, H. Lan-guage models are graph learners. CoRR , 2024c. Yasunaga, M., Aghajanyan, A., Shi, W., James, R., Leskovec, J., Liang, P., Lewis, M., Zettlemoyer, L., and Yih, W.-t. Retrieval-augmented multimodal language modeling. arXiv preprint arXiv:2211.12561 , 2022. Yoon, M., Palowitch, J., Zelle, D., Hu, Z., Salakhutdinov, R., and Perozzi, B. Zero-shot transfer learning within a heterogeneous graph via knowledge transfer networks. 
+
+Advances in Neural Information Processing Systems , 35: 27347–27359, 2022. Yoon, M., Koh, J. Y., Hooi, B., and Salakhutdinov, R. Multi-modal graph learning for generative tasks. arXiv preprint arXiv:2310.07478 , 2023. Yuan, L., Chen, Y., Wang, T., Yu, W., Shi, Y., Jiang, Z.-H., Tay, F. E., Feng, J., and Yan, S. Tokens-to-token vit: Training vision transformers from scratch on imagenet. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 558–567, October 2021. Zeng, Z., Zhang, S., Xia, Y., and Tong, H. Parrot: Position-aware regularized optimal transport for network align-ment. In Proceedings of the ACM Web Conference 2023 ,pp. 372–382, 2023a. Zeng, Z., Zhu, R., Xia, Y., Zeng, H., and Tong, H. Gen-erative graph dictionary learning. In International Con-ference on Machine Learning , pp. 40749–40769. PMLR, 2023b. Zhai, X., Wang, X., Mustafa, B., Steiner, A., Keysers, D., Kolesnikov, A., and Beyer, L. Lit: Zero-shot transfer with locked-image text tuning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 18123–18133, 2022. Zhang, C., Song, D., Huang, C., Swami, A., and Chawla, N. V. Heterogeneous graph neural network. In Proceed-ings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining , pp. 793–803, 2019. Zhang, J., Huang, J., Jin, S., and Lu, S. Vision-language models for vision tasks: A survey. IEEE Trans. Pattern Anal. Mach. Intell. , 46(8):5625–5644, 2024a. doi: 10. 1109/TPAMI.2024.3369699. Zhang, M., Sun, M., Wang, P., Fan, S., Mo, Y., Xu, X., Liu, H., Yang, C., and Shi, C. Graphtranslator: Aligning graph model to large language model for open-ended tasks. In 
+
+Proceedings of the ACM on Web Conference 2024 , pp. 1003–1014, 2024b. Zhang, N., Li, L., Chen, X., Liang, X., Deng, S., and Chen, H. Multimodal analogical reasoning over knowledge graphs. In The Eleventh International Conference on Learning Representations , 2022a. Zhang, P., Li, X., Hu, X., Yang, J., Zhang, L., Wang, L., Choi, Y., and Gao, J. Vinvl: Making visual representa-tions matter in vision-language models. arxiv 2021. arXiv preprint arXiv:2101.00529 .Zhang, S., Roller, S., Goyal, N., Artetxe, M., Chen, M., Chen, S., Dewan, C., Diab, M., Li, X., Lin, X. V., et al. Opt: Open pre-trained transformer language models. 
+
+arXiv preprint arXiv:2205.01068 , 2022b. Zhang, X., Bosselut, A., Yasunaga, M., Ren, H., Liang, P., Manning, C. D., and Leskovec, J. Greaselm: Graph rea-soning enhanced language models for question answering. 
+
+arXiv preprint arXiv:2201.08860 , 2022c. Zhang, Y., Chen, Z., Guo, L., Xu, Y., Hu, B., Liu, Z., Zhang, W., and Chen, H. Mixture of modality knowledge ex-perts for robust multi-modal knowledge graph completion. 
+
+CoRR, abs/2405.16869 , 2024c. Zhang, Y., Li, S., Qian, C., Liu, J., Yu, P., Han, C., Fung, Y. R., McKeown, K., Zhai, C., Li, M., et al. The law of knowledge overshadowing: Towards understanding, pre-dicting, and preventing llm hallucination. arXiv preprint arXiv:2502.16143 , 2025. Zheng, L., Jing, B., Li, Z., Zeng, Z., Wei, T., Ai, M., He, X., Liu, L., Fu, D., You, J., et al. Pyg-ssl: Agraph self-supervised learning toolkit. arXiv preprint arXiv:2412.21151 , 2024. Zheng, S., Wang, W., Qu, J., Yin, H., Chen, W., and Zhao, L. Mmkgr: Multi-hop multi-modal knowledge graph reasoning. In 2023 IEEE 39th International Conference on Data Engineering (ICDE) , pp. 96–109. IEEE, 2023. Zhu, J., Li, G., Yang, Y.-A., Zhu, J., Cui, X., and Koutra, D. On the impact of feature heterophily on link pre-diction with graph neural networks. arXiv preprint arXiv:2409.17475 , 2024a. Zhu, J., Zhou, Y., Qian, S., He, Z., Zhao, T., Shah, N., and Koutra, D. Multimodal graph benchmark. arXiv preprint arXiv:2406.16321 , 2024b. Zhu, Q., Zheng, D., Song, X., Zhang, S., Jin, B., Sun, Y., and Karypis, G. Parameter-efficient tuning large language 12 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+models for graph representation learning. arXiv preprint arXiv:2404.18271 , 2024c. Zhu, X., Li, Z., Wang, X., Jiang, X., Sun, P., Wang, X., Xiao, Y., and Yuan, N. J. Multi-modal knowledge graph con-struction and application: A survey. IEEE Transactions on Knowledge and Data Engineering , 36(2):715–735, 2022. 13 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+## Appendix Content 
+
+• Appendix A: A Remains the Property of a Valid Attention Matrix • Appendix B: Global Connectivity Aware by Hop-diffused Attention • Appendix C: Hop-Diffused Attention is Less Prone to Over-Smoothing than GAT 
+
+– C.1. Measuring Over-Smoothing: Dirichlet Energy 
+
+– C.2. Theoretical Analysis • Appendix D: Mutual Information Gap Between Small-Scale Graph Encoders and Large-Scale Pretrained Models • Appendix E: Graph Modeling • Appendix F: Dataset Details 
+
+– F.1. WikiWeb2M 
+
+– F.2. Ele-Fashion • Appendix G: Detailed Baselines • Appendix H: Related Work about Multi-Modal Knowledge Graphs • Appendix I: Implementation Details • Appendix J: Modeling Graph as a Standalone Modality on Discriminative Setting • Appendix K: Impact of the Graph Density • Appendix L: Simulation Study on Attention Diffusion vs GAT under Small K
+
+• Appendix M: Performance Comparison under Different Random Seeds • Appendix N: Performance Comparison with Link Prediction Setting • Appendix O: Validation Accuracy Curve of OPT-125M During Training Discriminative Task • Appendix P: Accuracy Evolution in Zero-Shot Node Classification with Different Number of Unseen Classes • Appendix Q: Example Prompt and Output 
+
+– Q.1. Example Prompt and Output in Generative Setting on WikiWeb2M Dataset 
+
+– Q.2. Example Prompt and Output in Discriminative Setting on Ele-Fashion Dataset 14 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+## A. A Remains the Property of a Valid Attention Matrix 
+
+Proposition A.1. The diffused attention matrix A = P∞ 
+
+> i=0
+
+θiAi where Ai is the i-th power of the base attention matrix A,and θi is a set of positive weights satisfying P∞ 
+
+> i=0
+
+θi = 1 , remains a valid attention matrix with each row summing to 1, i.e., P 
+
+> j
+
+Aij = 1 , ∀i.Proof. Since A is obtained by row-wise softmax normalization, it satisfies P 
+
+> j
+
+Aij = 1 . Since matrix multiplication preserves row-wise summation in stochastic matrices, any power Ai satisfies P 
+
+> j
+
+(Ai)ij = 1 for all i ≥ 0. The weight coefficients θi form a probability distribution with P∞ 
+
+> i=0
+
+θi = 1 , ensuring that when computing row sums in A, we have: 
+
+X
+
+> j
+
+Aij = X
+
+> j
+> ∞
+
+X
+
+> i=0
+
+θi(Ai)ij =
+
+> ∞
+
+X
+
+> i=0
+
+θi
+
+X
+
+> j
+
+(Ai)ij =
+
+> ∞
+
+X
+
+> i=0
+
+θi · 1 = 1 . (14) Thus, A is row-stochastic, meaning each row sums to 1. This confirms that the hop-diffused attention mechanism essentially adjusts the attention scores based on global connectivity at different hop distances, maintaining the fundamental property of an attention matrix. 
+
+## B. Global Connectivity Aware by Hop-diffused Attention 
+
+Proposition B.1. Hop-Diffused Attention is a generalized form of Personalized PageRank (PPR) with an adaptive multi-hop weighting scheme. Given an attention transition matrix Aatt , its diffusion process follows: 
+
+A =
+
+> ∞
+
+X
+
+> i=0
+
+θiAi
+
+> att
+
+,
+
+> ∞
+
+X
+
+> i=0
+
+θi = 1 , θi > 0. (15) 
+
+For θi = α(1 − α)i, this recovers the standard PPR formulation. Proof. Personalized PageRank is defined as: 
+
+Appr = α(I − (1 − α)Aatt )−1. (16) Expanding the inverse as a Neumann series, we obtain: 
+
+Appr = α
+
+> ∞
+
+X
+
+> i=0
+
+(1 − α)iAi
+
+> att
+
+. (17) Compared with the Hop-Diffused Attention formulation, 
+
+A =
+
+> ∞
+
+X
+
+> i=0
+
+θiAi
+
+> att
+
+, (18) where θi is a probability distribution with P∞ 
+
+> i=0
+
+θi = 1 , we see that PPR is a special case where θi = α(1 − α)i. This proposition further illustrates that akin to personalized PageRank, Hop-Diffused Attention preserves the global graph structure while adaptively regulating the influence of multi-hop neighbors, where the impact of more distant neighbors decays exponentially. 
+
+## C. Hop-Diffused Attention is Less Prone to Over-Smoothing than GAT 
+
+C.1. Measuring Over-Smoothing: Dirichlet Energy Definition C.1 (Dirichlet Energy) . Let G = ( V, E) be a graph with node set V and edge set E. Let Xn ∈ R|V|× m
+
+denote the node feature matrix at the n-th layer of a GNN. The Dirichlet energy, which quantifies the smoothness of node representations, is defined as: 
+
+E(Xn) = 1
+
+|V| 
+
+X
+
+> i∈V
+
+X
+
+> j∈N i
+
+∥Xni − Xnj ∥22, (19) where Ni denotes the neighborhood of node i. If a GNN exhibits over-smoothing, then node representations converge to similar values across the graph, implying that E(Xn) → 0.15 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+C.2. Theoretical Analysis Proposition C.2. Let X(1) be the node representation matrix after the Hop-Diffused Attention module, and X(k) be the representation at the kth layer of GAT. When both methods aggregate information from k-hop neighbors, Hop-Diffused Attention retains higher Dirichlet energy, preserving more feature variance and mitigating over-smoothing. Formally, for large k,
+
+EHop-Diffused (X(1) ) > EGAT (X(k)). (20) 
+
+Proof. In GAT, the updated rule for the lth graph attention layer can be written as: 
+
+X(l+1) = σ(A(l) 
+
+> att
+
+X(l)W (l)), (21) where Aatt is the learned aggregation matrix, W (l) is a trainable transformation matrix, and σ is a point-wise nonlinear activation function. Expanding recursively for k layers, we obtain: 
+
+X(k) = σ(A(k) 
+
+> att
+
+σ(A(k−1)  
+
+> att
+
+· · · σ(A(0)  
+
+> att
+
+X(0) W (0) ) · · · W (k−1) )W (k)). (22) To handle the nonlinearity of σ, we assume the activation function satisfies 0 ≤ σ(x) 
+
+> x
+
+≤ 1 for x̸ = 0 , and σ(0) = 
+
+σ′(0) or 1 if σ′(0) is undefined , refering to Wu et al. (2023). This holds for common activations such as ReLU and LeakyReLU. Under this assumption, any activation σ(y) on vector y can be rewritten as: 
+
+σ(y) = diag 
+
+ σ(y)
+
+y
+
+
+
+y. (23) We denote D(k) 
+
+> i
+
+as the diagonal transformation matrix induced by the activation at layer k, satisfying 
+
+diag(0) ⪯ D(k) 
+
+> i
+
+⪯ diag(1) . (24) The representation X(k+1)  
+
+> i
+
+can be recursively expanded as: 
+
+X(k+1)  
+
+> ·i
+
+= X 
+
+> jk+1 =i
+> (jk,...,j 0)∈[d]k+1
+> k
+
+Y
+
+> l=0
+
+W (l)
+
+> jljl+1
+
+!
+
+D(k) 
+
+> jk+1
+
+A(k) · · · D(0)  
+
+> j1
+
+A(0) X(0)  
+
+> ·j0
+
+. (25) Here, A(k) is a row-stochastic aggregation matrix. Since all D(k) and A(k) have spectral norm less than or equal to 1, and each weight matrix W (k) is bounded, it follows that: 
+
+X(k) ≤ ck · X(0) (26) for some constant 0 < c < 1. The Dirichlet energy is given by: 
+
+EGAT (X(k)) = 1
+
+n Tr 
+
+
+
+X(k)⊤LX (k)
+
+, (27) Let λmax be the largest eigenvalue of the Laplacian L for X(k),
+
+Tr( Z⊤LZ ) ≤ λmax · Tr( Z⊤Z) = λmax · ∥ Z∥2 
+
+> F
+
+. (28) Applying this to Eq. (27): 
+
+EGAT (X(k)) ≤ λmax 
+
+n · ∥ X(k)∥2 
+
+> F
+
+. (29) Because ∥X(k)∥F ≤ √r ∥X(k)∥ ≤ √r c k∥X(0) ∥ with r = rank( X(k)) ≤ d, we have 
+
+EGAT (X(k)) ≤ λmax 
+
+n r c 2k ∥X(0) ∥2. (30) 16 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Letting γ = c2 ∈ (0 , 1) and absorbing constants, we arrive at: 
+
+EGAT (X(k)) = O(γk · E (X(0) )) , (31) indicating exponential decay of Dirichlet energy. Hence, as k → ∞ , the energy tends to zero: 
+
+lim  
+
+> k→∞
+
+EGAT (X(k)) = 0 , (32) which reflects the over-smoothing effect in deep GATs. 
+
+Hop-Diffused Attention Analysis For Hop-Diffused Attention, we use a weighted sum of attention powers: 
+
+A =
+
+> K
+
+X
+
+> i=0
+
+θiAi
+
+> att
+
+. (33) This modifies the feature propagation as: 
+
+X(1) = AX(0) W. (34) Applying Dirichlet Energy to the Hop-Diffused Attention Propagation: 
+
+EHop-Diffused (X1) = 1
+
+|V| 
+
+X
+
+> u∈V
+
+X
+
+> v∈N u
+> K
+
+X
+
+> i=0
+
+θiAi
+
+> att
+
+XW u −
+
+> K
+
+X
+
+> i=0
+
+θiAi
+
+> att
+
+XW v
+
+> 2
+
+. (35) Using Jensen’s inequality and the convexity of the squared norm, we approximate: 
+
+EHop-Diffused (X1) ≤
+
+> K
+
+X
+
+> i=0
+
+θiE(Ai
+
+> att
+
+X). (36) Using the eigenvalue decomposition of Aatt , we approximate: 
+
+E(Ai
+
+> att
+
+X) = λi
+
+> max
+
+E(X). (37) Thus, the energy formulation simplifies to: 
+
+EHop-Diffused (X1) = 
+
+> K
+
+X
+
+> i=0
+
+θiλi
+
+> max
+
+E(X). (38) Since PKi=0 θiλi 
+
+> max
+
+remains larger than γk for sufficiently large k, it follows that: 
+
+EHop-Diffused (X1) > EGAT (Xk). (39) Thus, Hop-Diffused Attention retains higher feature heterogeneity, making it less prone to over-smoothing compared to directly applying GAT. We also provide a simulation study comparing Dirichlet energy under small values of K in Appendix L. 
+
+## D. Mutual Information Gap Between Small-Scale Graph Encoders and Large-Scale Pretrained Models 
+
+Proposition D.1. Let G be a small-scale graph data distribution, G ∼ r(G), and let X be a large-scale data distribution (e.g., text or image), X ∼ p(X ). Suppose f (G) 
+
+> θ
+
+is a GCN-based encoder trained only on G to produce representations 
+
+zG = f (G) 
+
+> θ
+
+(G), while f (X) 
+
+> ϕ
+
+is a large-scale pre-trained encoder (e.g., LLM or ViT) producing zX = f (X) 
+
+> ϕ
+
+(X). Then, for almost all samples x ∈ X , the mutual information satisfies 
+
+I(zG; X) ≪ I(zX ; X), (40) 
+
+which implies a fundamental gap in expressive power between zG and zX .
+
+17 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Proof. Let G denote graph-structured inputs drawn from a small-scale distribution r(G), and let X denote data (text, images, etc.) from a large-scale distribution p(X ). We use zG = f (G) 
+
+> θ
+
+(G) to denote the representation learned by a GCN on G, and 
+
+zX = f (X) 
+
+> ϕ
+
+(X) to denote the representation learned by a large-scale pre-trained model on X .Let zG have dimension d. By Shannon’s definition of mutual information, 
+
+I(zG; G) = H(zG) − H(zG | G). (41) For a deterministic encoder f (G) 
+
+> θ
+
+, the conditional entropy H(zG | G) is small, so 
+
+I(zG; G) ≈ H(zG). (42) Since the dataset DG is small, we have 
+
+H(zG) ≤ log DG . (43) Thus, 
+
+I(zG; G) ≤ log DG , (44) implying a strict upper bound on the captured information. Consider zX = f (X) 
+
+> ϕ
+
+(X) obtained via pre-training on X . With large data coverage DX and a sufficiently expressive model, the entropy H(zX ) can be much higher: 
+
+H(zX ) ≈ log DX (where DX ≫ DG ). (45) Hence, 
+
+I(zX ; X) = H(zX ) − H(zX | X) ≈ log DX , (46) which is significantly larger than log DG in most practical scenarios. When aligning zG and zX in a shared semantic space, note that 
+
+I(zG; X) ≤ I(zG; G) + I(G; X). (47) Since I(zG; G) ≤ log DG and I(G; X) is typically small (the graph domain is narrow or quite distinct from X ), it follows that 
+
+I(zG; X) ≪ I(zX ; X). (48) The above inequalities establish that representations zG learned only on a small-scale graph dataset G generally exhibit far lower mutual information with broader data X ∈ X . This accounts for the substantial expressiveness gap and difficulty in aligning zG with zX in a common semantic space. 18 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+## E. Graph Modeling 
+
+Defining Multi-modal Data Connectivity. In real-world scenarios, multimodal data often interact in intricate ways. For instance, in document understanding, integrating both text (e.g., section content or page titles) and images (Yasunaga et al., 2022) enables language models to better comprehend the context and improve QA performance. In e-commerce, user interactions with items, represented as text descriptions and images, often reveal implicit correlations that (Wei et al., 2024), when effectively modeled, enhance recommendation accuracy. Similarly, in biomedicine, understanding interactions between molecular compositions of proteins and their corresponding visual structures can aid in predicting new protein attributes. The challenge lies in organizing and preserving these complex relationships between multimodal data, which are often interdependent and hierarchical. To address this, we propose a graph-based framework that captures these connections explicitly. In the following sections, we outline two key approaches for defining and identifying such multimodal relationships: (a) When multimodal information exhibits intuitive connectivity in its original form, we leverage this natural structure. For instance, in multimodal documents, closer elements (e.g., adjacent paragraphs or text and images within the same section) are more relevant. Accordingly, we construct content graphs based on paragraph relationships, text-image links, and image-caption associations. (b) When no predefined connectivity exists, relevance is task-specific. For example, in e-commerce platforms, graphs are constructed from user co-click patterns, where frequently co-clicked items indicate higher relevance. Each item is associated with textual descriptions and corresponding images. 
+
+## F. Dataset Details 
+
+F.1. WikiWeb2M 
+
+WikiWeb2M (Burns et al., 2023) is a multimodal webpage dataset extending WIT (Srinivasan et al., 2021) by incorpo-rating full-page structural metadata, section text, images, captions, and hierarchical relationships. We adopt the section summarization task, where the model generates a missing first sentence for a section given its text, images, and multimodal context from related sections on the same page, which follows the data processing process in MMGL (Yoon et al., 2023). Each section and the overall page description are represented as nodes, with text and images as attributes. Edges capture the relationships between consecutive sections, links between sections and their images and captions, caption-to-section connections, and links between page descriptions and each section. Due to storage constraints, we randomly sample 10K Wikipedia pages, resulting in 13,539 section summary samples for training and 1,768 for testing. 
+
+F.2. Ele-Fashion 
+
+Ele-Fashion (Zhu et al., 2024b) is a multimodal node classification dataset constructed from Amazon-Fashion (Ni et al., 2019), designed for evaluating graph-aware multimodal learning. Each node represents a product, with textual and visual attributes derived from product titles and images. Edges encode co-purchase relationships between products. The classification task aims to predict product categories using both multimodal attributes and graph structure. Ele-Fashion consists of 11 product categories, 97,766 nodes, and 199,602 edges, with an average node degree of 4.08 and an edge homophily score of 0.7675. Each node has a textual description, and most nodes are also associated with an image. For the experiments with OPT-125M backbone, we held out 5 unseen classes for evaluation: {3,4,7,9,11 }, and due to the strong reasoning ability of LLaMA-1B, we enhance the task difficulty by holding out 9 unseen classes for evaluation: {0, 9, 6, 10, 1, 2, 3, 11, 7 }.
+
+## G. Detailed Baselines 
+
+We compare various transformer-based pretrained language models (PLMs), vision-language models (VLMs), and MMAG learning variants from MMGL (Yoon et al., 2023). For PLMs, we evaluate two backbones: (a) OPT-125M (Zhang et al., 2022b), as used in MMGL; (b) LLaMA-1B (Touvron et al., 2023), a 1B-parameter model from the latest LLaMA 3.2 family, chosen as a computationally feasible representative of large language models. For VLMs, we compare (a) BLIP2-OPT-2.7B (Li et al., 2023b), which employs query-based vision-language alignment 19 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+but lacks structured multimodal context modeling, and (b) Qwen2-VL-7B-Instruct (Wang et al., 2024), a state-of-the-art open-source VLM supporting multi-image input. For each PLM backbone, we evaluate: • N ODE ’S TEXT (T): Input single-node text attributes to a frozen PLM. • S UBGRAPH ’S T: Input text attributes of node itself and of other nodes in Gt.For VLM backbones, we compare inference performance on the same two settings as PLM. Fine-tuned VLMs are excluded due to the significant scale difference from LLMs. For MMGL(Yoon et al., 2023), we evaluate its various proposed settings: • NODE ’S TEXT : Fine-tune the PLM using single-node text attributes with parameter efficient tuning (PEFT), including prefix tuning (Li & Liang, 2021) or lora (Hu et al., 2021). • S UBGRAPH ’S TEXT : Fine-tune the PLM with text attributes of subgraph nodes. • NODE ’S TEXT & I MAGE (I): Input text and image attributes of a single node. Visual features are mapped to tokens via a frozen encoder and linear projection. The PLM is fine-tuned with PEFT. • SUBGRAPH ’S TEXT & I MAGE : Extend Node’s T & I to include text and image attributes of neighboring nodes in Gt
+
+and Gp.• SUBGRAPH ’S T& I + GNN: Map text and visual features to embeddings, process G with a GCN, and add graph embeddings to the PLM’s token embeddings. 
+
+## H. Related Work about Multi-Modal Knowledge Graphs 
+
+Multimodal Knowledge Graphs (MMKG) integrate structured relational triples (Li et al., 2025b; 2023d; Zeng et al., 2023a) in graph learning (Fu & He, 2021; Fu et al., 2022; Xu et al., 2023; Zeng et al., 2023b; Zheng et al., 2024; Li et al., 2024; Wei et al., 2022b; Zhu et al., 2024a; Li et al., 2023a; Fu et al., 2024; Xu et al., 2024c; Wang et al., 2025; Li et al., 2025a) with auxiliary modalities such as images, text, or numerical attributes (Chen et al., 2024). Early efforts focused on MMKG dataset construction (Zhu et al., 2022), enriching entities in traditional KGs (e.g., Freebase, DBpedia (Ferrada et al., 2017)) with visual features to support tasks like link prediction (Ban et al., 2024; Tieu et al., 2025) or entity matching (Li et al., 2023e). Recent work expands to multimodal knowledge graph completion (Chen et al., 2022b; Xu et al., 2022), cross-modal reasoning (Zheng et al., 2023; Zhang et al., 2022a), and adaptive entity representation via modality-aware fusion (Zhang et al., 2024c). For example, MOMOK (Zhang et al., 2024c) proposes a mixture-of-experts model (Ai et al., 2023) that dynamically attends to different modalities during embedding learning, while MarT (Zhang et al., 2022a) tackles analogical reasoning by aligning multimodal relational patterns. These methods largely operate at the entity or triple level, using contrastive or attention-based fusion (Xu et al., 2024b) to enhance representation learning, thus lacking the capacity to support both generative (Xu et al., 2024a; Zhang et al., 2025; Wei et al., 2024; Ning et al., 2024) and discriminative tasks simultaneously. 
+
+## I. Implementation Details 
+
+Subgraph Extraction. Different strategies are used based on graph density. In WikiWeb2M, where edges and images are sparse, we follow MMGL’s approach, selecting 10 textual neighbors and 4 image neighbors, along with the target node’s attributes. In contrast, Ele-Fashion has a denser structure with abundant edges. To balance structure retention and complexity, we keep all first-hop neighbors and randomly sample two second-hop neighbors, capping textual and visual subgraphs at 11 nodes (target + 10 neighbors). 
+
+PLM Input Length. For single-node input, we set 512 tokens for generative tasks and 128 tokens for discriminative tasks. When including subgraph context, limits increase to 1024 tokens (generative) and 512 tokens (discriminative) to accommodate richer information. 20 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Parameter-Efficient Tuning. We apply Prefix-Tuning for OPT-125M and LoRA for LLaMA-1B, optimizing adaptability while ensuring efficient updates. The hyper-parameters of PEFT, including the number of prefix tokens (20) and the row-rank(64) of lora, keeps the same for all baselines and our method for fair comparison. The vision encoder is CLIP. All experiments were conducted on computing nodes equipped with 2 NVIDIA A100 or 2 NVIDIA Ada A6000 GPUs. 
+
+Discriminative Task Setup. The classification task involves 11 classes with different zero-shot settings per backbone. For OPT-125M, we train on 6 classes and infer zero-shot on 5. For LLaMA-1B, given its superior generalization, we train on only 2 classes and evaluate on the remaining 9, testing its zero-shot adaptability. We match the generated response to the closest class label using SequenceMatcher, a fuzzy string matching algorithm that measures textual similarity. The vision encoder is CLIP. All experiments were conducted on computing nodes equipped with 2 NVIDIA A100 or 2 NVIDIA Ada A6000 GPUs. 
+
+Hyper-parameter Setting. The key hyperparameter setting is shown in Table I.  
+
+> Table 5. Hyperparameter settings for generative and discriminative tasks.
+
+Hyperparameter Generative Discriminative 
+
+Learning Rate 1 × 10 −4 1 × 10 −4
+
+Max Input Length 1024 512 Max Output Length 128 32 Text Neighbor Sampling 11 11 Image Neighbor Sampling 5 11 Batch Size (per device) 2 2Gradient Accumulation Steps 16 16 Visual Tokens per Image 4 4LoRA Rank 64 64 Prefix Tuning Virtual Tokens 20 20 Attention Diffusion Steps 2 2Number of MM-QFormer Block 1 1Attention Diffusion α 0.1 0.1 Number of Attention Heads 8 8Training Epochs (OPT-125M) 50 5Training Epochs (LLaMA-1B) 3 3
+
+## J. Modeling Graph as a Standalone Modality on Discriminative Setting 
+
+To further evaluate the role of graph as an independent modality, we conduct additional experiments on node classification using the OPT-125M backbone. Following the generative protocol described in Section 4.3, we feed GCN-derived node embeddings into the LLM as soft prompts, in a manner consistent with visual and textual tokens. This allows a fair comparison between graph-only modeling and our proposed fusion strategy.  
+
+> Table 6. Performance of modeling graph as a standalone modality in the discriminative setting.
+
+Method ROUGE-L Accuracy Recall Precision 
+
+Subgraph’s T&I 0.8144 99.85 83.25 83.33 +Graph Token 0.6648 99.96 89.91 89.98 +Node Token 0.6892 99.53 88.78 89.98 Ours (Hop-Diffused) 0.8282 100.00 100.00 100.00 
+
+These results reinforce our finding that directly modeling the graph as a separate modality brings limited gains. This may be due to semantic mismatches between GNN-derived embeddings and pretrained vision-language features. Our Hop-Diffused approach significantly outperforms the others, providing further evidence for the advantage of structure-aware generation as stated in Proposition 4.1. 21 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+## K. Impact of the Graph Density 
+
+We analyze the impact of graph density under the generative setting by varying the number of (text, vision) neighbors from sparse (5,2) to dense (15,8). Table 7 shows that our model exhibits stable performance across varying densities and benefits from richer structural context, with consistent improvements in generation metrics.  
+
+> Table 7. Impact of graph density on Graph4MM in the generative setting with OPT-125M backbone.
+
+Density BLEU-4 ROUGE-L CIDEr 
+
+Sparse (5,2) 0.0788 0.4049 0.7795 Medium (11,5) 0.0800 0.4076 0.7831 Dense (15,8) 0.0809 0.4086 0.8018 
+
+## L. Simulation Study on Attention Diffusion vs GAT under Small K
+
+To examine over-smoothing at small diffusion depths, we conduct a simulation study using the Cora dataset. We measure the Dirichlet energy of node embeddings from both Hop-Diffused Attention and GAT over K = 0 to 4. As shown in Table 8, Hop-Diffused Attention preserves energy better, especially at small K, justifying our default choice of K = 2 . 
+
+> Table 8. Dirichlet energy comparison across diffusion layers.
+
+Method K = 0 K = 1 K = 2 K = 3 K = 4 
+
+Hop-Diffused Attention 3.2445 3.0105 2.9504 2.8360 2.7843 GAT 3.2445 0.9775 1.1345 0.6129 0.5448 
+
+## M. Performance Comparison under Different Random Seeds 
+
+We evaluate model stability under three random seeds in the generative setting. Table 9 compares Graph4MM with MMGL and reports mean ± standard deviation for each metric.  
+
+> Table 9. Performance under different random seeds in the generative setting.
+
+Method BLEU-4 ROUGE-L CIDEr 
+
+Graph4MM 0.07991 ± 0.00066 0.40725 ± 0.00028 0.78904 ± 0.00305 MMGL 0.07762 ± 0.00059 0.40504 ± 0.00076 0.76907 ± 0.00286 
+
+## N. Performance Comparison with Link Prediction Setting 
+
+To further assess generalization, we introduce a new link prediction task on the Amazon-Sports dataset from MM-Graph Benchmark (Zhu et al., 2024b). We sample 10k positive and negative node pairs and use an 8:1:1 train/val/test split. The OPT-125M backbone and hyperparameters follow our node classification setup. Table 10 shows that Graph4MM significantly outperforms all baselines, with an average gain of 7.7% over the second-best method.  
+
+> Table 10. Link prediction performance on the Amazon-Sports dataset with OPT-125M backbone.
+
+Method ROUGE-L Accuracy Recall Precision 
+
+(PLM) Node’s Text 0.1563 52.35 51.87 72.67 (PLM) Node’s Subgraph 0.2871 56.81 56.26 74.56 (MMGL) Node’s Text & Image 0.5603 93.92 93.86 95.51 (MMGL) Subgraph’s Text & Image 0.7352 95.46 95.44 94.35 (Graph4MM) Hop-Diffused MM-QFormer 0.8904 99.98 99.97 99.86 
+
+22 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+## O. Validation Accuracy Curve of OPT-125M During Training Discriminative Task (a) Hop -Diffused ROUGE Accuracy (b) Hop -Diffused Recall -Precision    
+
+> (c) Hop -Aware ROUGE Accuracy (d) Hop -Aware Recall -Precision
+> Epoch Epoch
+> Epoch Epoch
+
+Figure 4. Validation performance across epochs in the discriminative task for Hop-Diffused and Hop-Aware methods on OPT-125M. 
+
+## P. Accuracy Evolution in Zero-Shot Node Classification with Different Number of Unseen Classes (a ) ROUGE -L and Accuracy for 
+
+different number of unseen classes 
+
+(b) Recall and Precision for different 
+
+number of unseen classes 
+
+Figure 5. The performance in discriminative task with OPT-125M backbone across different number of unseen classes (1, 3, 5, 7, 9). 
+
+23 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+## Q. Example Prompt and Output 
+
+Q.1. Example Prompt and Output in Generative Setting on WikiWeb2M Dataset Task: Summarize the given section content. Section Content: In 1682, he published a sermon titled ”By what means can ministers best win souls?” and in 1692, a letter to a minister in the country—supposed to be his eldest brother, William (1640), minister of Borthwick, Midlothian—entitled ”A Vindication of the Protestant Doctrine concerning Justification and of its Preachers and Professors from the unjust Charge of Antinomianism.” This ”angry letter,” as Dr. Calamy calls it, was occasioned by the violent controversy that broke out among the dissenting ministers of London after the republication in 1690 of the works of Dr. Tobias Crisp. Donald Macleod called it ”unrivalled.” Charges of Antinomianism were made on one side and of Arminianism on the other, and Traill was distinguished for his zeal against Arminianism. A somewhat similar controversy, known as the Marrow Controversy, followed in Scotland, and as Boston of Ettrick and others took the same side as Traill, his works became very popular among them and their adherents. He later published 
+
+”Sermons on the Throne of Grace from Heb. iv. 16” (3rd edit. 1731) and ”Sermons on the Prayer of Our Saviour, John xvii. 24.” These works were devout, plain, and edifying, and were highly favored by those who were attached to evangelical religion. Context Information: Section Image Caption: Rev Robert Traill’s New Testament (1656) 1-Hop Neighbor Section Context: Robert Traill’s early education was carefully superintended by his father, and at the University of Edinburgh he distinguished himself in both literary and theological studies. At the age of nineteen, he stood beside James Guthrie on the scaffold. He was later associated with John Welsh, minister of Irongray, known for holding armed conventicles. In 1666, he and his family were forced into hiding after a controversial book was found in their home. In 1667, he was denounced as a ’Pentland rebel’ and fled to Holland, joining his exiled father and other Scottish refugees... 2-Hop Neighbor Section Context: Robert Traill was a church minister at Cranbrook in Kent. He was born at Elie in Fife in 1642 . He was incarcerated on the Bass Rock, an island in the Firth of Forth, from July 19, 1677, to October 5, 1677. His work was often quoted by J. C. Ryle and is still published in the 21st century .(The remaining contexts are omitted for brevity.) 
+
+Expected Output: 
+
+His first short publication did not occur until he was forty years old , and the next did not appear until he was fifty .
+
+Graph4MM Output: 
+
+The first work work was not appear until was thirty years old, it second publication not appear until he was fifty. (a) Section Image (b) 1 -Hop Neighbor Image (c) 2 -Hop Neighbor Image  
+
+> Figure 6. Images from multi-hop neighboring sections within a webpage.
+
+24 Graph4MM: Weaving Multimodal Learning with Structural Information 
+
+Q.2. Example Prompt and Output in Discriminative Setting on Ele-Fashion Dataset Task: Classify the given item. Node Description: Speedo Men’s Sonic Warmup Jacket Available Classes: 0: Sneakers and Men’s Formal Shoes 1: Lingerie, Costumes, and Women’s Footwear 2: Jewelry and Accessories 3: Stockings and Watches 4: Graphic T-Shirts and Sweatshirts 6: Scarves, Suspenders, and Wallets 7: Undergarments and Socks 8: Basic T-Shirts 9: Men’s Casual and Formal Shirts 10: Dresses 11: Shoes and Boots Neighbor Information: 
+
+1-Hop Neighbor: Speedo Women’s Female Sonic Warm-Up Jacket 
+
+2-Hop Neighbor: Speedo Women’s Female Sonic Warm-Up Pant 
+
+2-Hop Neighbor: Speedo Men’s Sonic Warmup Jacket 
+
+Expected Output: 
+
+4:Graphic T-Shirts and Sweatshirts 
+
+Graph4MM Output: 
+
+4:Graphic T-Shirts and Sweatshirts. (a) Node Image (b) 1 -Hop Neighbor Image (c) 2 -Hop Neighbor Images  
+
+> Figure 7. Images from multi-hop neighboring nodes.
+
+25

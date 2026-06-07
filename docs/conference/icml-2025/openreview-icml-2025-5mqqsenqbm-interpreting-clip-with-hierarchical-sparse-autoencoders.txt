@@ -1,0 +1,2211 @@
+Title: Interpreting CLIP with Hierarchical Sparse Autoencoders
+
+URL Source: https://openreview.net/pdf?id=5MQQsenQBm
+
+Number of Pages: 39
+
+Markdown Content:
+# Interpreting CLIP with Hierarchical Sparse Autoencoders 
+
+Vladimir Zaigrajew 1 Hubert Baniecki 1 2 Przemyslaw Biecek 1 2 
+
+## Abstract 
+
+Sparse autoencoders (SAEs) are useful for de-tecting and steering interpretable features in neu-ral networks, with particular potential for un-derstanding complex multimodal representations. Given their ability to uncover interpretable fea-tures, SAEs are particularly valuable for ana-lyzing vision-language models (e.g., CLIP and SigLIP), which are fundamental building blocks in modern large-scale systems yet remain chal-lenging to interpret and control. However, current SAE methods are limited by optimizing both re-construction quality and sparsity simultaneously, as they rely on either activation suppression or rigid sparsity constraints. To this end, we in-troduce Matryoshka SAE (MSAE), a new archi-tecture that learns hierarchical representations at multiple granularities simultaneously, enabling a direct optimization of both metrics without compromise. MSAE establishes a state-of-the-art Pareto frontier between reconstruction qual-ity and sparsity for CLIP, achieving 0.99 cosine similarity and less than 0.1 fraction of variance unexplained while maintaining 80% sparsity. Fi-nally, we demonstrate the utility of MSAE as a tool for interpreting and controlling CLIP by extracting over 120 semantic concepts from its representation to perform concept-based similar-ity search and bias analysis in downstream tasks like CelebA. We make the codebase available at 
+
+https://github.com/WolodjaZ/MSAE .
+
+## 1. Introduction 
+
+Vision-language models, particularly contrastive language-image pre-training (CLIP, Radford et al., 2021; Cherti et al., 2023), revolutionize multimodal understanding by                  
+
+> 1Warsaw University of Technology, Warsaw, Poland
+> 2University of Warsaw, Warsaw, Poland. Correspondence to: Vladimir Zaigrajew <vladimir.zaigrajew.dokt@pw.edu.pl >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+> Figure 1. Matryoshka Sparse Autoencoder (MSAE) enables learning hierarchical concept representations from coarse to fine-grained features while avoiding rigid sparsity constraints in TopK and the activation shrinkage problem in ReLU SAE. (B) At train-ing, MSAE uses multiple top-kvalues up to dimension dinstead of a single klike in TopK SAE, combining losses across differ-ent granularities. (C) At inference, our method uses the whole
+> d-dimensional representation. (D) MSAE allows for more precise editing and manipulation in the concept space.
+
+learning robust representations that bridge visual and tex-tual information. Through contrastive learning on massive datasets, CLIP and its less adopted successor SigLIP (Zhai et al., 2023) demonstrate remarkable capabilities that ex-tend far beyond their primary objective of cross-modal sim-ilarity search. Its representation is a foundational compo-nent in text-to-image generation models like Stable Diffu-sion (Podell et al., 2024) and serves as a powerful feature extractor for numerous downstream vision and language tasks (Shen et al., 2022), establishing CLIP as a crucial building block in modern VLMs (Liu et al., 2023; Wang et al., 2024). Despite CLIP’s widespread adoption, understanding how it processes and represents information remains a challenge. The distributed nature of its learned representations and the complexity of the optimized loss function make it par-ticularly difficult to interpret. Traditional explainability approaches have limited success in addressing this chal-lenge: gradient-based feature attributions (Simonyan, 2013; 1Matryoshka SAE 
+
+Shrikumar et al., 2017; Selvaraju et al., 2017; Sundararajan et al., 2017; Abnar & Zuidema, 2020) struggle to provide human-interpretable explanations, perturbation-based ap-proaches (Zeiler & Fergus, 2014; Ribeiro et al., 2016; Lund-berg & Lee, 2017; Adebayo et al., 2018; Baniecki et al., 2025) yield inconsistent results, and concept-based meth-ods (Ramaswamy et al., 2023; Oikarinen et al., 2023) are constrained by their reliance on manually curated concept datasets. This interpretability gap hinders our ability to iden-tify and mitigate potential biases or failure modes of CLIP in downstream applications (Biecek & Samek, 2024). Re-cent advances in mechanical interpretability (Conmy et al., 2023; Bereska & Gavves, 2024) use sparse autoencoders (SAEs) as a tool for disentangling interpretable features in neural networks (Cunningham et al., 2024). When applied to CLIP’s representation space, SAEs offer the potential to decompose complex, distributed representations into human-interpretable components through self-supervised learning. It eliminates the need for concept datasets and limits prede-fined concept sets in favor of natural concept emergence. However, training effective SAEs poses unique challenges. The richness of data distribution and high dimensionality of CLIP’s multimodal embedding space require tuning the sparsity-reconstruction trade-off (Bricken et al., 2023; Gao et al., 2025). Furthermore, evaluating SAE effectiveness extends beyond traditional metrics, requiring the discov-ery of interpretable features that maintain their semantic meaning across both visual and textual modalities. Current approaches for enforcing sparsity in autoencoders use either 
+
+L1 (Bricken et al., 2023) or TopK (Gao et al., 2025) proxy functions, each with significant drawbacks. L1 regulariza-tion results in activation shrinkage, systematically underesti-mating feature activations and potentially missing subtle but important concepts. TopK enforces a fixed number of active neurons, imposing rigid constraints that may not align with the natural concept density in different regions of CLIP’s embedding space (Gao et al., 2025; Bussmann et al., 2024). To this end, we propose a hierarchical approach to sparse autoencoders, a new architecture inspired by Matryoshka representation learning ( , Kusupati et al., 2022), as illus-trated in Figure 1. While Matryoshka SAE (MSAE) can be applied to interpret any neural network representation, we demonstrate its utility in the CLIP’s complex multimodal embedding space. At its core, MSAE applies TopK opera-tions h-times with progressively increasing numbers of k
+
+neurons, learning representations at h granularities simulta-neously – from coarse concepts to fine-grained features. By combining reconstruction losses across all granularity levels, MSAE achieves a more flexible and adaptive sparsity pat-tern. We remove the rigid constraints of simple TopK while avoiding the activation shrinkage problems associated with 
+
+L1 regularization, resulting in the state-of-the-art Pareto frontier between the reconstruction quality and sparsity. 
+
+Contributions. We introduce a hierarchical SAE archi-tecture that establishes a new leading Pareto frontier be-tween reconstruction quality ( 0.99 cosine similarity and 
+
+< 0.1 FVU) and sparsity ( ∼ 80% ), while maintaining com-putational efficiency comparable to standard SAEs at infer-ence time. We develop a robust methodology for validat-ing discovered concepts in CLIP’s multimodal embedding space, successfully identifying and verifying over 120 in-terpretable concepts across both image and text domains. Through extensive empirical evaluation on CC3M and Ima-geNet datasets, we demonstrate progressive recovery capa-bilities and the effectiveness of hierarchical sparsity thresh-olds compared to existing approaches. We showcase the practical utility of MSAE in two key applications: concept-based similarity search with controllable concept strength and systematic analysis of gender biases in downstream clas-sification models through SAE activations and concept-level interventions on the CelebA dataset. 
+
+## 2. Related Work 
+
+Interpreting CLIP models. CLIP interpretability research follows two main directions: a direct interpretation of CLIP’s behavior and using CLIP to explain other mod-els. Direct interpretation studies focus on understanding CLIP’s components through feature attributions (Joukovsky et al., 2023; Sammani et al., 2024; Zhao et al., 2024), resid-ual transformations (Balasubramanian et al., 2024), atten-tion heads (Gandelsman et al., 2024), and individual neu-rons (Goh et al., 2021; Li et al., 2022). Li et al. (2022) discovered CLIP’s tendency to focus on image backgrounds through saliency analysis, while Goh et al. (2021) identi-fied CLIP’s multimodal neurons responding consistently to concepts across modalities. For model explanation, CLIP is used to analyze challenging examples (Jain et al., 2023), ro-bustness to distribution shifts (Crabb ´e et al., 2024), and label individual neurons (Oikarinen & Weng, 2023). In this work, we explore both directions in Section 5 via the detection of semantic concepts learned by CLIP using MSAE (Sec-tion 5.1) and the analysis of biases in downstream models built on MSAE-explained CLIP embeddings (Section 5.3). 
+
+Mechanistic interpretability. Mechanistic interpretabil-ity seeks to reverse engineer neural networks analogously to decompiling computer programs (Conmy et al., 2023; Bereska & Gavves, 2024). While early approaches focus on generating natural language descriptions of individual neurons (Hernandez et al., 2021; Bills et al., 2023), the polysemantic nature of neural representations makes this challenging. A breakthrough comes with sparse autoen-coders (SAEs) (Bricken et al., 2023; Cunningham et al., 2024), which demonstrate the ability to recover monose-mantic features. Recent architectural advancements like Gated (Rajamanoharan et al., 2024a) and TopK SAE vari-2Matryoshka SAE 
+
+ants (Gao et al., 2025) improve the sparsity–reconstruction trade-off, enabling successful application to LLMs (Temple-ton et al., 2024), diffusion models (Surkov et al., 2024), and medical imaging (Abdulaal et al., 2024). Recent work on SAE-based interpretation of CLIP embeddings (Rao et al., 2024) shows promise in extracting interpretable features. 
+
+Concept-based explainability. Concept-based explana-tions provide interpretability by identifying human-coherent concepts within neural networks’ latent spaces. While early approaches relied on manually curated concept datasets (Kim et al., 2018; Zhou et al., 2018; Bykov et al., 2023), recent work has explored automated concept extrac-tion (Ghorbani et al., 2019; Kopf et al., 2024) and explicit concept learning (Liu et al., 2020; Koh et al., 2020; Es-pinosa Zarlenga et al., 2022), with successful applications in out-of-distribution detection (Madeira et al., 2023), image generation (Misino et al., 2022), and medicine (Lucieri et al., 2020). However, existing methods often struggle to scale to modern transformer architectures with hundreds of millions of parameters. Our approach addresses this limitation by first training SAE without supervision on concept learning, then efficiently mapping unit-norm decoder columns to de-fined vocabulary concepts using cosine similarity with CLIP embeddings. 
+
+## 3. Matryoshka Sparse Autoencoder 
+
+3.1. Preliminaries 
+
+Sparse autoencoders (SAEs) decompose model activations 
+
+x ∈ Rn into sparse linear combinations of learned direc-tions, aiming for interpretability and monosemanticity. The standard SAE architecture consists of: 
+
+z = ReLU  Wenc (x − bpre ) + benc 
+
+,
+
+ˆx = Wdec z + bpre , (1) where encoder matrix Wenc ∈ Rn×d, encoder bias benc ∈
+
+Rd, decoder matrix Wdec ∈ Rd×n, and preprocessing bias 
+
+bpre ∈ Rn are the learnable parameters, with d being the dimension of the latent space. The basic reconstruction objective is L(x) := ∥x − ˆx∥22.Existing approaches established two primary sparsity mech-anisms. ReLU SAE (Bricken et al., 2023) uses L1 regu-larization with the objective L(x) := ∥x − ˆx∥22 + λ∥z∥1,while TopK SAE (Gao et al., 2025) enforces fixed spar-sity through z = ReLU (TopK ( Wenc (x − bpre ) + benc )) .However, each approach faces distinct limitations: L1 regu-larization causes activation shrinkage (Rajamanoharan et al., 2024a), while TopK imposes rigid sparsity constraints. A recent effort to address the rigidity of TopK is BatchTopK (Bussmann et al., 2024), which replaces the standard TopK 
+
+function with BatchTopK within the TopK SAE method. The BatchTopK function treats all batch activations as a single, flattened vector before applying TopK . This allows for a flexible number of active features per sample, with the total number of active features across the batch averaging to 
+
+k × batch size . Although BatchTopK relaxes the fixed spar-sity of traditional TopK, it still relies on a predetermined k
+
+parameter that requires careful tuning and continues to suf-fer from the potential for certain features to become ‘dead’ or rarely activated if they consistently fall outside the TopK selection. 
+
+3.2. Matryoshka SAE Architecture 
+
+Following Matryoshka representation learning ( , Kusu-pati et al., 2022), we propose a SAE architecture that learns representations at multiple granularities simultaneously. In-stead of enforcing a single sparsity threshold k or using 
+
+L1 regularization, our approach applies multiple TopK op-erations with increasing k values, optimizing across all granularity levels. We set k values as powers of 2, i.e. 
+
+ki = 2 i up to dimension d, which provides effective cov-erage of the representation space while maintaining rea-sonable computational costs. For a given input x, MSAE computes h latent representations during training using a sequence of increasing k values {k1, k 2, . . . , k h} with 
+
+k1 < k 2 < . . . < k h ≤ d:
+
+zi = ReLU(TopK i(Wenc (x − bpre ) + benc )) ,
+
+ˆxi = Wdec zi + bpre ,
+
+L(x) := 
+
+> h
+
+X
+
+> i=1
+
+αi∥x − ˆxi∥22,
+
+(2) where αi are weighting coefficients for each granularity level. At inference time, we can either apply TopK with any desired granularity or discard it entirely, leaving only ReLU, which allows the model to utilize all neurons it deems essential for reconstruction. 
+
+Hierarchical learning. The key insight of our approach is that different samples require different levels of sparsity (numbers of concepts) for an optimal representation. By simultaneously optimizing across multiple k values, MSAE learns a natural hierarchy of features. Our TopK opera-tions maintain a nested structure where features selected at each level form a subset of those selected at higher k
+
+values, i.e. TopK 1 ⊆ TopK 2 ⊆ . . . ⊆ TopK h. Such a hierarchical structure ensures coherence between granular-ity levels, where low k values capture coarse, high-level concepts while higher k values progressively enable fine-grained feature representation. 
+
+Sparsity coefficient weighting. We propose and evalu-ate two strategies for setting the weighting coefficients 
+
+αi. The uniform weighting (UW) approach sets αi = 1 
+
+for all i, while the reverse weighting (RW) strategy uses 
+
+αi = h − i + 1 , giving higher weights to lower k values. By 3Matryoshka SAE 
+
+weighting the loss more heavily for sparser reconstructions, RW encourages the model to learn features that maintain reconstruction quality at lower k values. As shown in Ta-ble 1, this results in improved sparsity without significant performance degradation as the model learns that sparse representations achieve better loss even with slightly worse reconstruction quality, compared to UW which focuses pri-marily on reconstruction quality. 
+
+3.3. Training and Inference 
+
+CLIP embeddings exhibit misalignment across modalities, which can impact SAE training convergence and cross-modal transferability. Following (Bhalla et al., 2024), we normalize embeddings to ensure consistent behavior across modalities. We first center embeddings by subtracting the per-modality mean estimated from the training dataset. Next, we scale the centered embeddings by a dataset-computed scaling factor following (Conerly et al., 2024) to obtain 
+
+Ex∈X [∥x∥2] = √n. This scaling ensures that λ has consis-tent effects across different CLIP architectures and modali-ties. For training, we compute the mean vector and scaling factor from the image modality. During inference on text embeddings, we apply the text-specific mean and scaling factor. Additionally, at inference, we remove TopK con-straints from TopK-trained models, allowing the model to adaptively select the number of active features based only on ReLU activation. 
+
+## 4. Evaluating MSAE 
+
+In this section, we conduct extensive experiments to evalu-ate MSAE against ReLU and TopK SAEs. We compare the sparsity–fidelity trade-off (Section 4.2), at multiple granu-larity levels (Section 4.3). We follow with evaluating the se-mantic quality of learned representations beyond traditional distance metrics (Section 4.4), analyzing decoder orthogo-nality (Section 4.5), and examining the statistical properties of SAE activation magnitudes (Section 4.6). To verify that MSAE successfully learns hierarchical features, we conduct experiments on the progressive recovery task (Section 4.7). We conclude with an ablation study comparing the influence of different training modalities in Section 4.8. In response to reviewer feedback, we’ve incorporated an analysis of BatchTopK models within Section 4.2. However, given their performance characteristics were not as competitive, we didn’t extend their evaluation to subsequent sections. 
+
+Setup. All SAE models are trained on the CC3M (Sharma et al., 2018) training set with features (post-pooled) from the CLIP ViT-L/14 or ViT-B/16 model. Image modality is evalu-ated on ImageNet-1k training set (Russakovsky et al., 2015), while text modality is evaluated on the CC3M validation set. Each SAE is trained with expansion rates of 8×, 16 ×
+
+and 32 ×, effectively scaling the latent layer from 768 to 
+
+{6144, 12288, 24576 } neurons for ViT-L/14, and from 512 to {4096, 8192, 16384 } neurons for ViT-B/16. We provide further details on the implementation and hyperparameter settings in Appendix B. 
+
+4.1. Evaluation Metrics 
+
+Here, we briefly define each metric used to evaluate SAE. 
+
+L0 denotes the mean proportion of zero elements in SAE activations. 
+
+Fraction of variance unexplained (FVU) , also known as Normalized MSE (Gao et al., 2025), measures reconstruc-tion fidelity by normalizing the mean squared reconstruction error L(x) by the mean squared value of the (mean-centered) input. Explained variance ratio (EVR) is FVU’s comple-ment metric, defined as 1 − FVU. 
+
+Linear probing (LP) assesses how well SAE preserves semantic information in the reconstructed embeddings on the downstream task. To evaluate this, we train a linear probe model on ImageNet-1k using CLIP embeddings as a backbone, with AdamW optimizer ( lr = 1 e−3), ReduceL-ROnPlateau scheduler, and batch size=256. We measure performance by comparing predictions from original versus reconstructed embeddings using two metrics: Kullback-Leibler divergence (KL) between predicted class distribu-tions and classification accuracy (Acc), where accuracy uses 
+
+argmax predictions from original embeddings as targets. 
+
+Centered kernel nearest neighbor alignment (CKNNA) 
+
+(Huh et al., 2024) measures kernel alignment based on mu-tual nearest neighbors, providing a quantitative assessment of alignment between SAE activations and input embed-dings. A detailed explanation is provided in Appendix E. 
+
+Decoder orthogonality (DO) calculates the mean cosine similarity of the lower triangular portion of the SAE decoder, where 0 indicates perfect orthogonality. This metric assesses how orthogonal the monosemantic feature directions are in the decoder. 
+
+Number of dead neurons (NDN) is a metric that measures how many neurons remain consistently inactive (zero in the SAE activations layer) across all inputs during training or evaluation, indicating the network’s inability to fully utilize its capacity for learning semantic features. 
+
+4.2. Sparsity–Fidelity Trade-off 
+
+We assess SAE performance using sparsity–fidelity trade-off, measuring sparsity with L0 and reconstruction quality with EVR, following previous work. Figure 2 reveals that ReLU SAE shows difficulty balancing performance, achiev-ing either high fidelity with low L0 or the opposite, with expansion rate primarily improving sparsity. TopK SAE with higher k values achieves better but not ReLU-level 4Matryoshka SAE 
+
+Table 1. Quantitative comparison of SAE models on ImageNet-1k. We compare the following SAEs with expansion rate 8: ReLU with varying sparsity regularization ( λ), TopK and BatchTopK with 64 or 256 active neurons, and Matryoshka using uniform (UW) or reverse weighting (RW) α coefficients. Arrows ( ↑/↓) indicate the preferred direction of metrics. NDN values in parentheses show the dead neuron count on the training set. LP (KL) values are scaled by 10 6 for readability. Extended results for higher expansion rates and the text modality are reported in Appendix F.5. 
+
+Model L0 ↑ FVU ↓ CS ↑ LP (KL) ↓ LP (Acc) ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .920 ±.008 .185 ±.031 .928 ±.009 50 .5±77 .1 .977 ±.149 .742 ±.005 .002 0(0) 
+
+ReLU ( λ = 0 .003 ) .649 ±.007 .004 ±.000 .998 ±.000 0.66 ±1.03 .994 ±.083 .781 ±.004 .003 0(0) 
+
+TopK ( k = 64 ) .950 ±.009 .172 ±.026 .912 ±.013 60 .1±90 .8 .930 ±.255 .762 ±.004 .002 0(335) 
+
+TopK ( k = 256 ) .900 ±.004 .011 ±.003 .994 ±.002 2.71 ±5.40 .987 ±.114 .874 ±.003 .003 0(296) 
+
+BatchTopK ( k = 64 ) .877 ±.012 .162 ±.022 .917 ±.011 56 .9±85 .8 .931 ±.253 .769 ±.004 .002 0(1477) 
+
+BatchTopK ( k = 256 ) .882 ±.005 .010 ±.005 .995 ±.002 2.42 ±5.12 .988 ±.108 .860 ±.003 .002 3(919) 
+
+Matryoshka (RW) .829 ±.008 .007 ±.003 .997 ±.002 3.13 ±7.08 .987 ±.115 .809 ±.002 .002 2(4) 
+
+Matryoshka (UW) .748 ±.006 .002 ±.001 .999 ±.000 0.35 ±0.82 .995 ±.070 .848 ±.003 .002 0(22) 0.65 0.70 0.75 0.80 0.85 0.90 0.95     
+
+> L0 ( sparser)
+> 0.825
+> 0.850
+> 0.875
+> 0.900
+> 0.925
+> 0.950
+> 0.975
+> 1.000
+> EVR (  better reconstruction)
+> Models
+> ReLU ( = 0.03)
+> ReLU ( = 0.01)
+> ReLU ( = 0.003)
+> TopK (k = 64)
+> TopK (k = 128)
+> TopK (k = 256)
+> BatchTopK (k = 64)
+> BatchTopK (k = 128)
+> BatchTopK (k = 256)
+> Matryoshka (RW)
+> Matryoshka (UW)
+
+Figure 2. Comparison of sparsity–fidelity trade-offs across SAE architectures on ImageNet-1k. Each model presents re-sults from all 3 expansion rates, comparing ReLU SAE ( λ =
+
+{0.03 , 0.01 , 0.003 }), TopK SAE ( k = 64 , 128 , 256 }), Batch-TopK SAE ( k = 64 , 128 , 256 }) and MSAE (RW, UW). The opti-mal SAE would occupy the upper right corner, achieving both high sparsity and reconstruction fidelity. For extended results across both modalities, refer to Figure 11. 
+
+fidelity while offering improved sparsity yet consistently suffering from at least 5% of dead neurons (Table 1). While the BatchTopK variant performs similarly to TopK, it ex-hibits higher fidelity with lesser sparsity when trained on the same k. Both variants of MSAE achieve better sparsity than ReLU and better fidelity than TopK or BatchTopK, es-tablishing a superior Pareto frontier while maintaining less than 1% of dead neurons. The RW variant further improves sparsity as expected, with only minor fidelity degradation. Notably, only Matryoshka consistently improves on both metrics with higher expansion rates, while TopK struggles with reconstruction, BatchTopK with sparsity, and ReLU shows improvements only in the highest λ at increased ex-pansion rates. As an ablation, we evaluate Cosine Similarity as an al-ternative reconstruction metric, motivated by observations that SAEs primarily struggle with embedding magnitude reconstruction and CLIP embeddings are commonly L2-normalized. Results in Appendix F.1 show consistent find-ings, with MSAE showing even clearer advantages through stable, low-variance performance across both modalities. 
+
+4.3. Ablation: Matryoshka at Lower Granularity Levels 
+
+We train both MSAE variants (RW and UW) on two gran-ularities [128 , 256] and compare them against TopK with 
+
+k = 128 and k = 256 to analyze MSAE behavior at lower granularity levels. Figure 3 shows that Matryoshka achieves similar sparsity to at least the lower TopK variant while maintaining CKNNA and EVR performance comparable to the best TopK variant, and even better with MSAE RW. This demonstrates that even at small granularity, MSAE maintains or improves the Pareto frontier over TopK across various metrics, with RW achieving better trade-offs. As ob-served also in Section 4.2, MSAE’s performance advantages over TopK increase at higher expansion rates. 
+
+4.4. Semantic Preservation Analysis 
+
+In Section 4.2, we only evaluated SAEs using L0 for activa-tion sparsity and EVR for reconstruction fidelity, however these metrics have limitations. L0 only counts active neu-rons without assessing how well SAE representations align with original embeddings, and EVR focuses solely on dis-tance reconstruction rather than semantic preservation. To address these limitations, we introduce additional metrics. Following (Yu et al., 2025), we adopt the CKNNA metric to assess how well SAE activations preserve the neighborhood structure of CLIP embeddings. We also evaluate seman-tic preservation through linear probing metrics (Gao et al., 2025; Lieberum et al., 2024), we use LP (KL) to measure prediction distribution alignment and LP (Acc) to compare 5Matryoshka SAE 0.90 0.92 0.94 0.96      
+
+> L0 ( sparser)
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> 1.00
+> EVR (  better reconstruction)
+> 0.90 0.92 0.94 0.96
+> L0 ( sparser)
+> 0.725
+> 0.750
+> 0.775
+> 0.800
+> 0.825
+> 0.850
+> 0.875
+> CKNNA (  better alignment)
+> Models
+> TopK (k = 128)
+> TopK (k = 256)
+> Matryoshka (RW) [128,256]
+> Matryoshka (UW) [128,256]
+
+Figure 3. Low Granularity Level Matroshka vs. TopK SAE on ImageNet-1k. We report FVU (left) and CKNNA (right) metrics for two TopK variants ( k = 128 , 256 ), and Matryoshka trained on these granularities in RW and UW variants at expansion rates 8 and 16. Even at this small granularity, MSAE improves the Pareto frontier relative to both TopK variants, pushing it as the expansion rate grows from 8 to 16. For extended results across other metrics, refer to Figure 13. 
+
+classification accuracy. All metrics are defined in Section 4.1 and presented in Table 1. Our analysis reveals that while cosine similarity and FVU correlate well with linear probing metrics, the alignment metric demonstrates Matryoshka’s strength in preserving semantic structures. 
+
+4.5. Orthogonality of SAE Features 
+
+SAEs can disentangle polysemantic representations into monosemantic features, as shown and explained by (Bricken et al., 2023). To evaluate feature monosemanticity, we mea-sure decoder orthogonality using the DO metric, with re-sults reported in Table 1. While all methods achieve high orthogonality as indicated by low DO values, none reach perfect orthogonality. This might stem from multiple fac-tors, including feature absorption as noted in (Chanin et al., 2025), or just learning similar concepts (such as different numbers). We argue that understanding these sources of non-orthogonality is crucial for advancing the development of more effective monosemantic feature learning in SAEs. 
+
+4.6. Activations Magnitudes Analysis 
+
+To analyze the impact of sparsity proxies on SAE, we ex-amine non-zero activation distributions across ViT-L with expansion rate 8 in Figure 4. Matryoshka models display a distinctive double-curvature distribution similar to ReLU-based models, with values between 5 to 10 appearing al-most linear in log 10 space. Following (Templeton et al., 2024), we attribute low activations to reconstruction pur-poses rather than semantic meaning. The second curvature reflects natural images’ complexity, which requires multiple concept reconstructions rather than single dominant features, as evidenced by the small number of very high values corre-10 2     
+
+> 10 5
+> Count
+> Flattened Activation Frequency
+> 10 2
+> 10 5
+> Count
+> 0510 15 20
+> 10 2
+> 10 5
+> Count
+> Models
+> ReLU ( = 0.003)
+> TopK (k = 32)
+> Matryoshka (RW)
+
+Figure 4. Distribution of non-zero SAE activations on ImageNet-1k validation set. Frequency histograms for ReLU ( λ = 0 .003 ), TopK ( k = 32 ), and Matryoshka (RW) models at expansion rate 8. Matryoshka models exhibit a double-curvature distribution similar to ReLU models but without activation shrinkage, while TopK shows this pattern only at higher 
+
+k values, as can be seen in an extended Figure 14. Extended results for higher expansion rates are reported in Figure 15. 
+
+sponding to rare, nearly singular concept images (Figure 10). As the sparsity parameter k in TopK methods increases (Fig-ure 14), the transition from one to double-curvature behavior suggests that stronger sparsity constraints create compos-ite features, supported by Appendix C showing that high-activation features ( > 15 ) in TopK methods have a lower ratio of valid named features compared to Matryoshka. 
+
+4.7. Progressive Recovery 
+
+To verify that our method learns hierarchical structure, we perform a progressive reconstruction task by using an in-creasing number of SAE activations, ordered by magnitude, to recover the original vector. Figure 5 shows that recon-struction quality improves with decreasing sparsity thresh-olds (increasing k) during inference. TopK variants exhibit performance plateaus shortly after their training thresholds (k = {32 , 64 }), while ReLU-based models show contin-ued improvement but with inferior performance at higher sparsity. MSAE demonstrates a better hierarchical structure that combines TopK’s efficient high-sparsity performance with ReLU’s scaling capabilities. While our method per-forms slightly below TopK ( k = 32 ) at the highest spar-sity, it quickly surpasses TopK’s plateau at lower sparsity, achieving performance levels above ReLU models. We observe similar patterns in the CKNNA alignment metric, with MSAE outperforming both TopK ( k = 32 ) and ReLU models beyond k = 10 while performing only slightly be-low TopK ( k = 256 ) at the lowest sparsity. Evidence of improved hierarchical feature learning across metrics and modalities is presented in Appendix F.4. 6Matryoshka SAE 
+
+Table 2. Training modality influence on MSAE performance. We train MSAE on the text version of the CC3M train set and compare it to models trained on its original image version, evaluating across both domains using the CC3M validation text set and ImageNet-1k. While models perform best on their training modality, text-trained variants show better cross-domain generalization. Bold values indicate the best performance per metric, with NDN showing dead neuron count from the final checkpoint. 
+
+Matryoshka SAE variant Language metrics on CC3M Vision metrics on ImageNet-1k NDN ↓
+
+L0 ↑ FVU ↓ CS ↑ CKNNA ↑ L0 ↑ FVU ↓ CS ↑ CKNNA ↑
+
+Image (RW) .824 ±.029 .060 ±.052 .971 ±.026 .775 ±.001 .829 ±.008 .007 ±.003 .997 ±.002 .809 ±.002 4
+
+Image (UW) .755 ±.024 .026 ±.027 .988 ±.012 .790 ±.002 .748 ±.006 .002 ±.001 .999 ±.000 .848 ±.003 22 
+
+Text (RW) .841 ±.014 .008 ±.003 .996 ±.002 .782 ±.008 .841 ±.014 .008 ±.003 .996 ±.002 .782 ±.008 0
+
+Text (UW) .791 ±.010 .001 ±.001 .999 ±.000 .784 ±.007 .799 ±.012 .015 ±.013 .993 ±.006 .877 ±.003 010 0 10 1 10 2 10 3          
+
+> L0 ( sparser)
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> FVU (  better reconstruction)  Reconstruction Fidelity vs k
+> 10 010 110 210 3
+> L0 ( sparser)
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)  CKNNA vs k
+> Models
+> ReLU ( = 0.003)
+> ReLU ( = 0.001)
+> TopK (k = 64)
+> TopK (k = 256)
+> Matryoshka (RW)
+> Matryoshka (UW)
+
+Figure 5. Progressive recovery performance on ImageNet-1k. 
+
+We report FVU (left) and CKNNA (right) metrics for different SAE architectures with expansion rate 8 as functions of increas-ing top k values by magnitudes of SAE activations during infer-ence. SAE trained with TopK variants ( k = 32 , 64 ) show per-formance plateaus beyond their training thresholds, while ReLU-based models ( λ = 0 .001 , 0.003 ) and Matryoshka variants (UW and RW) demonstrate continuous improvement. Extended results for higher expansion rates and across other metrics are reported in Figures 16 & 17. 
+
+4.8. Training Modality: Language and Vision 
+
+We evaluate how training modality affects MSAE perfor-mance by comparing models trained on text with the origi-nal image-trained models, validating both modality models across text and image domains in Table 2. While both vari-ants perform best in their training domains, text-trained models achieve superior cross-modal performance, demon-strating stronger generalization capabilities. Moreover, text-trained models achieve higher sparsity on both modalities with no dead neurons, showing better utilization of learned features. These findings position text training as a preferred approach for multi-modal applications where balanced per-formance is desired. Future research could explore training SAEs on varying ratios of text and image data to optimize cross-modal performance or try to train crosscoders (Lind-sey et al., 2024) on both modalities simultaneously. We defer extended MSAE evaluations, to Appendix F. 
+
+## 5. Interpreting CLIP with MSAE 
+
+In this section, we demonstrate how MSAE can enhance interpretability and control interpretable features in CLIP-based applications. We first establish neuron-concept map-pings in the activation layer through an automated technique described in Section 5.1. Then, we show its effectiveness in concept-based similarity search across the ImageNet valida-tion set, enabling retrieval of images with varying degrees of explicit concept presence. Moreover, we leverage MSAE to study potential conceptual biases in a gender classification model trained on the CelebA dataset (Liu et al., 2015). 
+
+5.1. Concept Naming 
+
+While self-supervised training of SAE enables learning up to d monosemantic concepts, mapping these concepts to spe-cific neurons remains non-trivial. Previous work used LLMs for identifying neuron-encoded concepts (Bills et al., 2023), but we adopt the more efficient method for CLIP-trained SAE proposed in (Rao et al., 2024), which leverages CLIP’s representation space. Our concept detection and validation methodology is detailed in Appendix A, with comprehen-sive results on valid concept counts across SAE models presented in Table 3. Figure 8 demonstrates the highest-activating text and image examples for the best-matched feature concept ‘face’ across ReLU, TopK, and MSAE. The consistent concept presence across diverse inputs observed primarily in MSAE variants suggests that only Matryoshka-based methods were capable of learning this monosemantic feature. Supplementary analysis of highly activated con-cept examples in Appendix G.1 showcases SAE’s ability to learn a wide range of concepts, from simple textures and colors to more complex ones like light (lights in darkness), countable concepts like trio (groups of three), and even nationality-related concepts like ireland or germany .Naming SAE features enables using SAE to conduct diverse interpretability analyses related to CLIP. We present two use cases where we apply the MSAE RW variant with an expansion rate of 8. 7Matryoshka SAE Class: Female; p=0.86          
+
+> 050 100
+> Neuron Magnitude
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Class Probability
+> Effect of Concept bearded
+> 0100 200
+> Neuron Magnitude
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Effect of Concept glasses
+> 020 40
+> Neuron Magnitude
+> 0.875
+> 0.900
+> 0.925
+> 0.950
+> 0.975
+> Effect of Concept blondes
+> Class probability Original value Threshold
+
+Figure 6. Impact of concept manipulation on gender classification. By increasing concept magnitudes ( bearded , glasses , blonde ) in SAE space and mapping back to CLIP space, we observe changes in gender classification probabilities. Results reveal the model’s learned gender associations through plateauing effects: bearded and glasses bias toward male classification, while blonde bias toward female. Concept Magnitude 20  Distance 0.18   
+
+> automotive britain buri foodtruck police ireland
+> Top 6 Active Concepts
+> Distance 0.37
+> crowdfunding afterno officer automotive germany police
+> Concept Magnitude 30  Distance 0.31
+> automotive britain buri foodtruck police ireland
+> Distance 0.37
+> 0510
+> foodtruck street afterno automotive police germany
+
+Figure 7. Nearest neighbor analysis with enhanced germany 
+
+concept. By increasing the magnitude of the germany concept in SAE space (from 0.3 to 20, then 30) and mapping back to CLIP space, we observe shifts in nearest neighbors. While the input image remains the top match (with increasing distance), the second-nearest neighbor changes from a British police vehicle (shown in Figure 21) to a German one. 
+
+5.2. Similarity Search 
+
+CLIP embeddings are widely used for cross-modal similar-ity search between images and text through cosine similarity metric, primarily for retrieval engines. We extend this capa-bility using SAE in three ways. First, SAE provides interpretable insights into nearest neigh-bor (NN) image retrievals. Figure 21 shows the top 8 con-cepts for the two closest retrieved images, revealing shared semantic concept patterns and explaining why both NNs match the query image of an Irish police vehicle, with the first NN (Irish police vehicle) being closer than the second (British police vehicle). Second, we compare similarity search in CLIP embedding space against SAE activation space using Manhattan distance (detailed and visualized in Appendix G.2). While the first NN remains consistent across both spaces, the second NN in the SAE space shows the same vehicle type from a different angle, demonstrating that similarity searches can be done in both spaces while SAE enables additional concept-based interpretability. Finally, we demonstrate a controlled similarity search by manip-ulating concept magnitudes. In Figure 7, increasing the 
+
+germany concept strength preserves the original image as the top match but shifts the second NN from an Irish to a German police vehicle, while preserving the overall input image structure. The increasing distances from the original image embedding show how larger magnitude adjustments affect embedding coherence. 
+
+5.3. Bias Validation on a Downstream Task 
+
+CLIP models are commonly used as feature extractors for downstream tasks, enabling efficient fine-tuning with lim-ited data. With MSAE, we can investigate whether down-stream models learn to associate specific concepts with classes. To demonstrate this, we train a single-layer classi-fier on CLIP embeddings from the CelebA dataset to per-form binary gender classification (1 for female, 0 for male), achieving an F1 score of approximately 0.99. Through statistical analysis in Appendix G.3, we uncover several concept-gender associations: bearded biases toward male classification, blonde toward female, and glasses showing modest male bias. To validate these findings, Figure 6 demonstrates an example of how increasing these concepts’ magnitudes affects classification scores for a female exam-ple (see Figure 23 for a male example). The results confirm our statistical analysis, and the plateaus in classification probabilities as concept magnitudes increase help quantify the strength of concept-gender associations in the model. 8Matryoshka SAE     
+
+> Figure 8. Comparison of top-activating examples for the ‘face’ concept across SAE methods. Through an automated interpretability process, we identified the best matching SAE neuron for the face concept, quantified by a similarity score and a validation status (Valid or Invalid). For this neuron, we then identified the highest activated examples in both text and image modalities across TopK, ReLU, and MSAE, each presented in variants optimized for either sparsity or reconstruction. Both text and image examples with the highest activation values strongly confirm. confirm the concept’s presence and demonstrate that only MSAE variants learned the concept of the
+> face . We show additional examples of valid concepts with their top-activating examples in Figure 19.
+
+## 6. Conclusion 
+
+We propose Matryoshka SAE to advance our understand-ing of CLIP embeddings through hierarchical sparse au-toencoders. MSAE improves upon both TopK and ReLU approaches, achieving superior sparsity–fidelity trade-off while providing flexible sparsity control via the α coeffi-cient. Our experiments demonstrate MSAE’s effectiveness through near-optimal metrics, progressive feature recovery, and extraction of over 120 validated concepts, enabling new applications in concept-based similarity search and bias detection in downstream tasks. 
+
+Limitations and future work. MSAE faces three limita-tions with clear paths for future improvement. The current implementation’s use of multiple decoder passes with dif-ferent TopK activations introduces computational overhead, which could be addressed through optimized CUDA kernels enabling parallel processing of multiple granularities. While we demonstrated MSAE’s effectiveness using CLIP embed-dings, it has great potential to explain hierarchical represen-tations in other embedding spaces, such as SigLIP (Zhai et al., 2023) or modality-specific representations. Finally, since not all neurons correspond to simple concepts in our vocabulary, investigating complex semantic features through LLM-based interpretability methods could provide deeper insights into the learned hierarchical representations. In con-current independent work, Bussmann et al. (2025) propose an MSAE approach to interpreting language models. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning Interpretability. There are some poten-tial societal consequences of our work, none which we feel must be specifically highlighted here. 9Matryoshka SAE 
+
+## Acknowledgement 
+
+Work on this project was financially supported from the SONATA BIS grant 2019/34/E/ST6/00052 funded by Polish National Science Centre (NCN). We also thank the anony-mous reviewers for their useful comments. 
+
+## References 
+
+Abdulaal, A., Fry, H., Monta ˜na-Brown, N., Ijishakin, A., Gao, J., Hyland, S., Alexander, D. C., and Castro, D. C. An x-ray is worth 15 features: Sparse autoencoders for interpretable radiology report generation. arXiv preprint arXiv:2410.03334 , 2024. Abnar, S. and Zuidema, W. Quantifying attention flow in transformers. In ACL , 2020. Adebayo, J., Gilmer, J., Muelly, M., Goodfellow, I., Hardt, M., and Kim, B. Sanity checks for saliency maps. In 
+
+NeurIPS , 2018. Balasubramanian, S., Basu, S., and Feizi, S. Decomposing and interpreting image representations via text in ViTs beyond CLIP. In NeurIPS , 2024. Baniecki, H., Casalicchio, G., Bischl, B., and Biecek, P. Efficient and accurate explanation estimation with distri-bution compression. In ICLR , 2025. Bereska, L. and Gavves, E. Mechanistic interpretability for AI safety–A review. Transactions on Machine Learning Research , 2024. Bhalla, U., Oesterling, A., Srinivas, S., Calmon, F., and Lakkaraju, H. Interpreting CLIP with sparse linear con-cept embeddings (SpLiCE). In NeurIPS , 2024. Biecek, P. and Samek, W. Position: Explain to question not to justify. In ICML , 2024. Bills, S., Cammarata, N., Mossing, D., Tillman, H., Gao, L., Goh, G., Sutskever, I., Leike, J., Wu, J., and Saunders, W. Language models can explain neurons in language models. https: //openaipublic.blob.core.windows.net/ neuron-explainer/paper/index.html , May 2023. Bricken, T., Templeton, A., Batson, J., Chen, B., Jermyn, A., Conerly, T., Turner, N. L., Anil, C., Denison, C., Askell, A., Lasenby, R., Wu, Y., Kravec, S., Schiefer, N., Maxwell, T., Joseph, N., Tamkin, A., Nguyen, K., McLean, B., Burke, J. E., Hume, T., Carter, S., Henighan, T., and Olah, C. Towards monosemanticity: Decomposing language models with dictionary learn-ing. https://transformer-circuits.pub/ 2023/monosemantic-features/index.html ,October 2023. Transformer Circuits Thread. Bussmann, B., Leask, P., and Nanda, N. BatchTopK sparse autoencoders. arXiv preprint arXiv:2412.06410 , 2024. Bussmann, B., Nabeshima, N., Karvonen, A., and Nanda, N. Learning multi-level features with matryoshka sparse autoencoders. arXiv preprint arXiv:2503.17547 , 2025. Bykov, K., Kopf, L., Nakajima, S., Kloft, M., and H ¨ohne, M. M. Labeling neural representations with inverse recog-nition. In NeurIPS , 2023. Chanin, D., Wilken-Smith, J., Dulka, T., Bhatnagar, H., and Bloom, J. A is for absorption: Studying feature splitting and absorption in sparse autoencoders. In ICLR , 2025. Cherti, M., Beaumont, R., Wightman, R., Wortsman, M., Ilharco, G., Gordon, C., Schuhmann, C., Schmidt, L., and Jitsev, J. Reproducible scaling laws for contrastive language-image learning. In CVPR , 2023. Conerly, T., Templeton, A., Bricken, T., Marcus, J., and Henighan, T. Update on how we train saes. https://transformer-circuits.pub/ 2024/april-update/index.html , April 2024. Transformer Circuits Thread. Conmy, A., Mavor-Parker, A., Lynch, A., Heimersheim, S., and Garriga-Alonso, A. Towards automated circuit discovery for mechanistic interpretability. In NeurIPS ,2023. Crabb ´e, J., Rodriguez, P., Shankar, V., Zappella, L., and Blaas, A. Interpreting CLIP: Insights on the robustness to imagenet distribution shifts. Transactions on Machine Learning Research , 2024. ISSN 2835-8856. Cunningham, H., Ewart, A., Riggs, L., Huben, R., and Sharkey, L. Sparse autoencoders find highly interpretable features in language models. In ICLR , 2024. Espinosa Zarlenga, M., Barbiero, P., Ciravegna, G., Marra, G., Giannini, F., Diligenti, M., Shams, Z., Precioso, F., Melacci, S., Weller, A., et al. Concept embedding models: Beyond the accuracy-explainability trade-off. In NeurIPS ,2022. Gandelsman, Y., Efros, A. A., and Steinhardt, J. Interpreting CLIP’s image representation via text-based decomposi-tion. In ICLR , 2024. Gao, L., la Tour, T. D., Tillman, H., Goh, G., Troll, R., Radford, A., Sutskever, I., Leike, J., and Wu, J. Scaling and evaluating sparse autoencoders. In ICLR , 2025. Gemma, T. and DeepMind, G. Gemma 2: Improving open language models at a practical size. arXiv preprint arXiv:2408.00118 , 2024. 10 Matryoshka SAE 
+
+Ghorbani, A., Wexler, J., Zou, J. Y., and Kim, B. Towards automatic concept-based explanations. In NeurIPS , 2019. Goh, G., Cammarata, N., Voss, C., Carter, S., Petrov, M., Schubert, L., Radford, A., and Olah, C. Multimodal neurons in artificial neural networks. Distill , 6(3):e30, 2021. Hernandez, E., Schwettmann, S., Bau, D., Bagashvili, T., Torralba, A., and Andreas, J. Natural language descrip-tions of deep visual features. In ICLR , 2021. Huh, M., Cheung, B., Wang, T., and Isola, P. The platonic representation hypothesis. In ICML , 2024. Jain, S., Lawrence, H., Moitra, A., and Madry, A. Distilling model failures as directions in latent space. In ICLR ,2023. Joukovsky, B., Sammani, F., and Deligiannis, N. Model-agnostic visual explanations via approximate bilinear models. In ICIP , 2023. Kim, B., Wattenberg, M., Gilmer, J., Cai, C., Wexler, J., Viegas, F., et al. Interpretability beyond feature attribu-tion: Quantitative testing with concept activation vectors (TCAV). In ICML , 2018. Koh, P. W., Nguyen, T., Tang, Y. S., Mussmann, S., Pierson, E., Kim, B., and Liang, P. Concept bottleneck models. In 
+
+ICML , 2020. Kopf, L., Bommer, P. L., Hedstr ¨om, A., Lapuschkin, S., H ¨ohne, M. M., and Bykov, K. Cosy: Evaluating textual explanations of neurons. In NeurIPS , 2024. Kornblith, S., Norouzi, M., Lee, H., and Hinton, G. Similar-ity of neural network representations revisited. In ICML ,2019. Kusupati, A., Bhatt, G., Rege, A., Wallingford, M., Sinha, A., Ramanujan, V., Howard-Snyder, W., Chen, K., Kakade, S., Jain, P., et al. Matryoshka representation learning. In NeurIPS , 2022. Li, Y., Wang, H., Duan, Y., Xu, H., and Li, X. Exploring visual interpretability for contrastive language-image pre-training. arXiv preprint arXiv:2209.07046 , 2022. Lieberum, T., Rajamanoharan, S., Conmy, A., Smith, L., Sonnerat, N., Varma, V., Kram ´ar, J., Dragan, A., Shah, R., and Nanda, N. Gemma Scope: Open sparse autoencoders everywhere all at once on Gemma 2. arXiv preprint arXiv:2408.05147 , 2024. Lindsey, J., Templeton, A., Marcus, J., Conerly, T., Batson, J., and Olah, C. Sparse cross-coders for cross-layer features and model diff-ing. https://transformer-circuits.pub/ 2024/crosscoders/index.html , October 2024. Transformer Circuits Thread. Liu, H., Li, C., Wu, Q., and Lee, Y. J. Visual instruction tuning. In NeurIPS , 2023. Liu, Y., Zhang, X., Zhang, S., and He, X. Part-aware pro-totype network for few-shot semantic segmentation. In 
+
+ECCV , 2020. Liu, Z., Luo, P., Wang, X., and Tang, X. Deep learning face attributes in the wild. In ICCV , 2015. Lucieri, A., Bajwa, M. N., Braun, S. A., Malik, M. I., Den-gel, A., and Ahmed, S. On interpretability of deep learn-ing based skin lesion classifiers using concept activation vectors. In IJCNN , 2020. Lundberg, S. and Lee, S.-I. A unified approach to interpret-ing model predictions. In NeurIPS , 2017. Madeira, P., Carreiro, A., Gaudio, A., Rosado, L., Soares, F., and Smailagic, A. ZEBRA: Explaining rare cases through outlying interpretable concepts. In CVPR , 2023. Misino, E., Marra, G., and Sansone, E. VAEL: Bridging variational autoencoders and probabilistic logic program-ming. In NeurIPS , 2022. Oikarinen, T. and Weng, T.-W. CLIP-Dissect: Automatic description of neuron representations in deep vision net-works. In ICLR , 2023. Oikarinen, T., Das, S., Nguyen, L. M., and Weng, T.-W. Label-free concept bottleneck models. In ICLR , 2023. Paulo, G. and Belrose, N. Sparse autoencoders trained on the same data learn different features. arXiv preprint arXiv:2501.16615 , 2025. Podell, D., English, Z., Lacey, K., Blattmann, A., Dockhorn, T., M ¨uller, J., Penna, J., and Rombach, R. SDXL: Im-proving latent diffusion models for high-resolution image synthesis. In ICLR , 2024. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In ICML , 2021. Rajamanoharan, S., Conmy, A., Smith, L., Lieberum, T., Varma, V., Kram ´ar, J., Shah, R., and Nanda, N. Improving dictionary learning with gated sparse autoencoders. arXiv preprint arXiv:2404.16014 , 2024a. Rajamanoharan, S., Lieberum, T., Sonnerat, N., Conmy, A., Varma, V., Kram ´ar, J., and Nanda, N. Jumping ahead: Improving reconstruction fidelity with JumpReLU sparse autoencoders. arXiv preprint arXiv:2407.14435 , 2024b. 11 Matryoshka SAE 
+
+Ramaswamy, V. V., Kim, S. S. Y., Fong, R., and Rus-sakovsky, O. Overlooked factors in concept-based expla-nations: Dataset choice, concept learnability, and human capability. In CVPR , 2023. Rao, S., Mahajan, S., B ¨ohle, M., and Schiele, B. Discover-then-name: Task-agnostic concept bottlenecks via auto-mated concept discovery. In ECCV , 2024. Ribeiro, M. T., Singh, S., and Guestrin, C. “Why should I trust you?”: Explaining the predictions of any classifier. In KDD , 2016. Russakovsky, O., Deng, J., Su, H., Krause, J., Satheesh, S., Ma, S., Huang, Z., Karpathy, A., Khosla, A., Bernstein, M., et al. ImageNet large scale visual recognition chal-lenge. International Journal of Computer Vision , 115: 211–252, 2015. Sammani, F., Joukovsky, B., and Deligiannis, N. Visualizing and understanding contrastive learning. IEEE Transac-tions on Image Processing , 33:541–555, 2024. Schuhmann, C., Vencu, R., Beaumont, R., Kaczmarczyk, R., Mullis, C., Katta, A., Coombes, T., Jitsev, J., and Komatsuzaki, A. LAION-400M: Open dataset of CLIP-filtered 400 million image-text pairs. arXiv preprint arXiv:2111.02114 , 2021. Selvaraju, R. R., Cogswell, M., Das, A., Vedantam, R., Parikh, D., and Batra, D. Grad-CAM: Visual explanations from deep networks via gradient-based localization. In 
+
+ICCV , 2017. Sharma, P., Ding, N., Goodman, S., and Soricut, R. Con-ceptual captions: A cleaned, hypernymed, image alt-text dataset for automatic image captioning. In ACL , 2018. Shen, S., Li, L. H., Tan, H., Bansal, M., Rohrbach, A., Chang, K.-W., Yao, Z., and Keutzer, K. How much can CLIP benefit vision-and-language tasks? In ICLR , 2022. Shrikumar, A., Greenside, P., Shcherbina, A., and Kundaje, A. Not just a black box: Learning important features through propagating activation differences. In ICML ,2017. Simonyan, K. Deep inside convolutional networks: Visu-alising image classification models and saliency maps. 
+
+arXiv preprint arXiv:1312.6034 , 2013. Sundararajan, M., Taly, A., and Yan, Q. Axiomatic attribu-tion for deep networks. In ICML , 2017. Surkov, V., Wendler, C., Terekhov, M., Deschenaux, J., West, R., and Gulcehre, C. Unpacking sdxl turbo: Inter-preting text-to-image models with sparse autoencoders. 
+
+arXiv preprint arXiv:2410.22366 , 2024. Templeton, A., Conerly, T., Marcus, J., Lindsey, J., Bricken, T., Chen, B., Pearce, A., Citro, C., Ameisen, E., Jones, A., Cunningham, H., Turner, N. L., McDougall, C., MacDiarmid, M., Tamkin, A., Durmus, E., Hume, T., Mosconi, F., Freeman, C. D., Sumers, T. R., Rees, E., Batson, J., Jermyn, A., Carter, S., Olah, C., and Henighan, T. Scaling monosemanticity: Extracting inter-pretable features from Claude 3 Sonnet. https: //transformer-circuits.pub/2024/ scaling-monosemanticity/index.html ,May 2024. Transformer Circuits Thread. Wang, W., Lv, Q., Yu, W., Hong, W., Qi, J., Wang, Y., Ji, J., Yang, Z., Zhao, L., Song, X., Xu, J., Xu, B., Li, J., Dong, Y., Ding, M., and Tang, J. CogVLM: Visual expert for pretrained language models. In NeurIPS , 2024. Yu, S., Kwak, S., Jang, H., Jeong, J., Huang, J., Shin, J., and Xie, S. Representation alignment for generation: Training diffusion transformers is easier than you think. In ICLR ,2025. Zeiler, M. D. and Fergus, R. Visualizing and understanding convolutional networks. In ECCV , 2014. Zhai, X., Mustafa, B., Kolesnikov, A., and Beyer, L. Sig-moid loss for language image pre-training. In ICCV ,2023. Zhao, C., Wang, K., Zeng, X., Zhao, R., and Chan, A. B. Gradient-based visual explanation for transformer-based CLIP. In ICML , 2024. Zhou, B., Sun, Y., Bau, D., and Torralba, A. Interpretable basis decomposition for visual explanation. In ECCV ,2018. 12 Matryoshka SAE 
+
+## Appendix for “Interpreting CLIP with Hierarchical Sparse Autoencoders” 
+
+A Concept Discovery and Validation 14 B Implementation Details 16 
+
+B.1 Hyperparameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.2 Optimal Parameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 
+
+C Highest Neuron Magnitudes 17 D Activation Soft-capping 19 
+
+D.1 Definition of Soft-capping. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 D.2 Results. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 
+
+E CKNNA Alignment Metric 20 F Evaluating MSAE: Additional Results 21 
+
+F.1 Sparsity–Fidelity Trade-off . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 F.2 Ablation: Matryoshka at Lower Granularity Levels . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 F.3 Activation Magnitudes Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 F.4 Progressive Recovery . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26 F.5 Comprehensive Evaluation with CLIP ViT-L/14 and ViT-B/16 Architectures . . . . . . . . . . . . . . . . 28 
+
+G Interpreting CLIP with MSAE: Additional Results 34 
+
+G.1 Concept Visualization Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34 G.2 SAE-Enhanced Similarity Search . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37 G.3 Gender Bias Analysis in CelebA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37 
+
+H Stability Evaluations 39 
+
+13 Matryoshka SAE 
+
+## A. Concept Discovery and Validation 
+
+Here, we describe our approach for detection, which concepts SAE learned, and how we validated the mappings of these concepts to specific neurons. While LLMs are commonly used to identify neuron-encoded concepts (Bereska & Gavves, 2024; Conmy et al., 2023), we follow Rao et al. (2024) in implementing a more computationally efficient approach, which is more tailored to the CLIP-based SAE. 
+
+CLIP-Based concept matching. The method uses predefined vocabulary of concepts (e.g., ‘hair’, ‘pink’) to compute cosine similarity between CLIP embeddings and SAE decoder columns. After mapping concepts to CLIP’s embedding space and applying the same preprocessing as during SAE training, we remove bpre from the preprocessed CLIP embeddings for comparison with the decoder. For the feature columns in the SAE decoder, which are unit-magnitude by definition, the best matching concept to the neuron is determined by maximizing cosine similarity, where a value of 1 indicates perfect alignment. Thus, the optimal concept sc for neuron pc is defined as: 
+
+sc = arg max 
+
+> v∈V
+
+[cos( pc, CLIP (v))] = arg max 
+
+> v∈V
+
+ pc · CLIP (v)
+
+|pc|| CLIP (v)|
+
+
+
+. (3) 
+
+Pre-activation bias in similarity calculations. While the method above suggests removing bpre from CLIP embeddings, our empirical analysis revealed this significantly masks neuron-concept relationships. Without bpre , in Figure 9, we show that similarities cluster around 0.1 (mean) with maxima around 0.15 − 0.2, whereas retaining bpre yields higher similarity scores ( >0.42) that correspond to correct concepts. Importantly, both approaches preserve neuron rankings, with over 95% of concepts sharing identical highest matching neurons, so not removing bias doesn’t destroy ranking. Manual evaluation confirmed that neurons with bias-removed similarities ( ∼0.2) are under-estimated compared to their bias-inclusive counterparts ( ∼0.5). Based on these findings, we retain bpre in our calculations. 0.15 0.10 0.05 0.00 0.05 0.10 0.15 0.20 0.25 0.30          
+
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> Count
+> Max Similarity Distribution with no bias for MSAE (RW)
+> 0.15 0.10 0.05 0.00 0.05 0.10 0.15 0.20 0.25 0.30
+> Max Similarity Distribution with no bias for MSAE (UW)
+> 6144
+> 12288
+> 24576
+
+(a) 0.1 0.2 0.3 0.4 0.5 0.6      
+
+> Similarity
+> 0
+> 1000
+> 2000
+> 3000
+> Count
+> Max Similarity Distribution with bias for MSAE (RW)
+> 0.1 0.2 0.3 0.4 0.5 0.6
+> Similarity
+> Max Similarity Distribution with bias for MSAE (UW)
+> 6144
+> 12288
+> 24576
+
+(b) 
+
+Figure 9. Impact of pre-activation bias on concept similarities. We take the highest neuron similarities per concept across expansion rates for (RW) and (UW) MSAE variants, (a) with and (b) without bpre . Not removing bpre yields a better distribution with higher similarities that better reflect neuron interpretability. 
+
+14 Matryoshka SAE 
+
+Limitations of the current approach. We identify several limitations in the current concept mapping approach. First, the method assigns concepts to neurons based on the highest similarity regardless of the absolute matching quality, potentially leading to poor concept assignments when no good matches exist. Second, hierarchical concepts pose a challenge when matching with more specific neuronal features. For example, a high-level concept like ‘mammal’ may show strong similarity to both ‘cat’ and ‘dog’ neurons, resulting in imprecise assignments. This issue stems from either semantic feature vectors that aren’t perfectly orthogonal or incomplete vocabulary coverage. 
+
+Threshold-based validation. To address the challenges identified above, we propose three validations to remove weak assignments. Before applying the validations, we switch the mapping from concepts to neurons, to a mapping of neurons to concepts to reduce spurious assignments. Based on this, we threshold results by either: 1. Cosine similarity > 0.42 , which ensures that the neurons exhibit strong alignment with their assigned concepts, preventing weak or ambiguous concept mappings 2. Concept similarity ratio Top similarity Second-highest similarity > 2.0, confirms concept uniqueness by requiring the best match to be at least twice as strong as the second-best concept, avoiding distributed representations 3. One concept per neuron (with the highest similarity) enforces monosemanticity by assigning only the most strongly aligned concept to each neuron, which is needed due to the vocabulary structure containing multiple variations of the same concept (e.g., ‘bird’ and ‘birdie’) 
+
+Vocab data. Following (Ramaswamy et al., 2023) principle that vocabulary concepts should be simple, we adopted the vocabulary from (Bhalla et al., 2024). This vocabulary comprises the most frequent unigrams from LAION-400m captions dataset (Schuhmann et al., 2021). To account for semantic relationships between concepts, we perform manual validation of top concepts for each discovered neuron. 
+
+Semantic consistency. Manual evaluation of top concepts per neuron verifies concept consistency and identifies hierarchical relationships, where top vocab similarities (such as dog breeds) can indicate broader categorical concepts (such as ‘dog’). 
+
+Results across SAE architectures. We evaluate concept neurons across architectures in Table 3. From 37,445 neurons at expansion rate 8, only a small fraction passed similarity validation: ∼10% for TopK and 1–3% for ReLU and Matryoshka architectures. While higher expansion rates typically reduce valid neurons, both TopK variants and ReLU ( λ = 0 .001 )exhibit increased valid mappings under best vector validation. Although these results suggest limited concept learning or concept distribution across neurons, the vocabulary structure prevents definitive conclusions, due to the dominance of non-semantic unigrams, and many semantically similar concepts appear across vocabulary (e.g., ‘blue’, ‘blau’ and ‘bleu’). The validation results from the table demonstrate that sparser architectures (TopK) yield 3–8 times more interpretable concept neurons compared to more dense ones (ReLU), with Matryoshka being between the two, supporting the hypothesis that sparsity promotes concept specialization.                                                                                                                                                                                                                                                  
+
+> Table 3. Comparison of valid concept neurons detected across different SAEs and validation methods. The validation methods include a cosine similarity threshold above 0.42, selecting the best matching neuron, combining both criteria, applying the concept similarity ratio threshold between the first and second best vocab concept for the neuron, and enforcing all conditions simultaneously. Measurements were made for each model at three expansion rates ( ×8| × 16 | × 32 ).
+> Model Similarity above 0.42 Best vector Above and best Ratio threshold All conditions
+> ReLU ( λ= 0 .03 )3308 |3765 |4181 2740 |3608 |5129 874 |1046 |1304 380 |175 |45 97 |31 |16
+> ReLU ( λ= 0 .003 )896 |781 |799 2372 |3305 |5129 217 |196 |188 395 |251 |194 29 |19 |7
+> ReLU ( λ= 0 .001 )351 |247 |128 4116 |6793 |11417 77 |63 |32 169 |47 |38|2|0
+> TopK ( k= 32 )4081 |4719 |5027 2755 |3415 |3827 1021 |1259 |1411 999 |857 |858 216 |197 |203
+> TopK ( k= 64 )3797 |4504 |4915 2557 |3272 |167 873 |1080 |1238 1322 |1151 |1167 238 |232 |238
+> TopK ( k= 128 )2141 |2590 |3059 2167 |2670 |3306 455 |565 |745 1508 |1383 |1379 211 |226 |231
+> TopK ( k= 256 )943 |888 |962 1883 |2191 |2631 168 |167 |171 1579 |1523 |1554 134 |126 |127
+> Matryoshka (RW) 1136 |1109 |1038 1628 |2213 |2541 237 |257 |259 1429 |1135 |1059 140 |132 |121
+> Matryoshka (UW) 907 |894 |748 1517 |1908 |2396 195 |191 |167 1254 |1169 |1069 125 |128 |98
+
+15 Matryoshka SAE 
+
+## B. Implementation Details 
+
+We conducted experiments using CLIP ViT-L/14 (and ViT-B/16, reported later in the appendix) pre-trained on the CC3M dataset image training subset. Following (Bricken et al., 2023; Gao et al., 2025) and this blog (Conerly et al., 2024), our SAE implementation uses unit-norm constraint on the decoder columns with untied encoder and decoder. We initialized bpre 
+
+and benc with zeros, decoder with uniform Kaiming initialization (scaled L2 norm to 0.1), and encoder as the decoder’s transpose. Gradient clipping was set to 1. For data preprocessing, we centralized embeddings per modality (Bhalla et al., 2024) and scaled by a constant to achieve Ex∈X [∥x∥2] = √n. All models were trained for 30 epochs on a single NVIDIA A100 GPU with batch size 4096, except for the model with an expansion rate of 32, which was trained for 20 epochs. While MSAE and TopK showed dead neurons, we omitted revival strategies as only in TopK the number of dead neurons exceeded 1%. 
+
+B.1. Hyperparameters 
+
+We first conducted experiments on CLIP RN50 using hyperparameters from (Rao et al., 2024), later validating them on ViT-L/14. For ViT-L/14, we explored parameters near RN50-optimal values to ensure cross-architecture consistency. With expansion factor 8 (768 → 6144), we explore: • Learning rates per method: 1 · 10 −5, 5 · 10 −5, 1 · 10 −4, 5 · 10 −4, 1 · 10 −3
+
+• ReLU L1 coefficients ( λ): 1 · 10 −4, 3 · 10 −3, 1 · 10 −3, 3 · 10 −2
+
+• TopK values: k ∈ { 32, 64, 128, 256 }, up to 256 as (Gao et al., 2025) suggests higher values do not learn interpretable features • Matryoshka K-lists: {32. . . 6144 } and {64. . . 6144 }, for higher expansion rates we adjust the upper limit • α coefficients: uniform weighting (UW) {1,1,1,1,1,1,1 } and reverse weighting (RW) {7,6,5,4,3,2,1 }
+
+The optimal parameters from these experiments were applied to larger expansion factors of 16 ( 768 → 12288 ), 32 (768 → 24576 ), and all expansion rates of VIT-B/16. Following reviewer suggestions, we extended our evaluations to include TopK ( k = 512 ) and BatchTopK for ∈ { 16, 32, 64, 128, 256 }. The BatchTopK models were trained using the same hyperparameters as TopK models. These additional results are presented in the Appendix. We also attempted to integrate JumpReLU (Rajamanoharan et al., 2024b) into our evaluations, but did not achieve meaningful results, which may be attributed to an implementation error in our code. 
+
+B.2. Optimal Parameters 
+
+Based on RN50 experiments and subsequent adjustment to VIT-L/14 with expansion factor 8, we selected the following optimal configurations: ReLU with learning rate 5 · 10 −5 and λ values of 1 · 10 −3, 3 · 10 −3, 3 · 10 −2; TopK with learning rate 5 · 10 −4 and k values of 32, 64, 128, and 256; MSAE with learning rate 1 · 10 −4, K-list {64. . . 6144 }, for both uniform (UW) and reverse weighting (RW) α strategies. 16 Matryoshka SAE 
+
+## C. Highest Neuron Magnitudes 
+
+Based on results from Figure 4, we analyze images from ImageNet-1k validation set that produced the highest neuron magnitudes for TopK and MSAE architectures. In Table 4, we show that more constrained SAEs (TopK ( k ≤ 128 )) produce a higher number of samples with neurons above 15; however, the percentage of valid neurons is lower than in MSAE and TopK ( k = 256 ) which have significantly less high magnitude samples. This indicates that high-magnitude neurons in highly constrained TopK may presumably learn complex features. Figure 10 presents the top 6 valid highest neuron magnitude images per model, demonstrating that very high magnitudes often correspond to images with almost singular concepts.      
+
+> Table 4. Analysis of high-magnitude neurons across architectures. We analyze samples with magnitude >15 in the ImageNet-1k validation set, showing the number of total occurrences, the proportion of valid concepts among high-magnitude concepts, and the rate of high-magnitude valid concepts relative to all valid concepts in the model from Table 3.
+
+Model High-Magnitude Samples Valid Concept Rate High-Magnitude Concept Rate 
+
+TopK ( k = 32 ) 113 6 (5% ) 216 (3% )TopK ( k = 64 ) 18 0 (0% ) 238 (0% )TopK ( k = 128 ) 3 0 (0% ) 211 (0% )TopK ( k = 256 ) 12 8 (67% ) 134 (6% )MSAE (RW) 21 8 (38% ) 140 (6% )MSAE (UW) 22 7 (32% ) 125 (6% )17 Matryoshka SAE Concept graduate 
+
+Magnitude 16 
+
+Concept cabbage 
+
+Magnitude 16 
+
+Concept merry 
+
+Magnitude 15 
+
+Concept bell 
+
+Magnitude 15 
+
+Concept corn 
+
+Magnitude 17 
+
+Concept golf 
+
+Magnitude 15 
+
+(a) Concept food 
+
+Magnitude 15 
+
+Concept horse 
+
+Magnitude 16 
+
+Concept medical 
+
+Magnitude 16 
+
+Concept alcoholic 
+
+Magnitude 15 
+
+Concept interiordesign 
+
+Magnitude 16 
+
+Concept military 
+
+Magnitude 16 (b) Concept bread 
+
+Magnitude 17 
+
+Concept birthday 
+
+Magnitude 16 
+
+Concept military 
+
+Magnitude 15 
+
+Concept clock 
+
+Magnitude 16 
+
+Concept alcoholic 
+
+Magnitude 15 
+
+Concept candles 
+
+Magnitude 15 
+
+(c) Concept sheep 
+
+Magnitude 15 
+
+Concept birthday 
+
+Magnitude 15 
+
+Concept clock 
+
+Magnitude 17 
+
+Concept horse 
+
+Magnitude 16 
+
+Concept aircraft 
+
+Magnitude 17 
+
+Concept money 
+
+Magnitude 17 (d) 
+
+Figure 10. Images with the highest valid concept neuron magnitudes. We took 6 images from ImageNet-1k validation set per model based on results from Table 4 with (a) TopK k = 32 , (b) TopK k = 256 , (c) Matryoshka RW, and (d) Matryoshka UW. 
+
+18 Matryoshka SAE 
+
+## D. Activation Soft-capping 
+
+Analysis of MSAE in Figure 4 reveals that despite effective handling of multi-granular sparsity, the model learns to encode concepts using extremely large activation values ( >15). This can lead to more composite rather than atomic features, as it was in the case of TopK ( k ≤ 128 ) revealed in Appendix C. 
+
+D.1. Definition of Soft-capping. 
+
+To address this, we introduce activation soft-capping (SC), adapting the logit soft-capping concept from language mod-els (Gemma & DeepMind, 2024). This technique prevents too high activation magnitude and circumvention of sparsity constraints via activation magnitude manipulation: 
+
+ˆz = softcap · tanh( z/ softcap) , ˆx = Wdec ˆz + bpre , (4) where softcap hyperparameter controls maximum activation magnitude. Combined with ReLU, this bounds SAE activations to (0 , softcap) .
+
+D.2. Results. 
+
+In Table 5, we show soft-capping’s impact on MSAE performance across key metrics using the ImageNet-1k training set. Our analysis reveals two key benefits of applying soft-capping on MSAE. First, it consistently improves L0 sparsity, with MSAE RW (SC) achieving values of 0.830 and 0.889 for 6144 and 12288 sizes, respectively. Second, while base MSAE UW maintains better FVU and CS scores, the soft-capped MSAE RW significantly reduces the number of dead neurons. With a latent size of 12288, MSAE RW exhibits only 66 dead neurons, compared to 491 in the model with a latent size of 6144. These findings show that soft-capping is particularly beneficial for large-scale SAEs with wider sparse layers, where neuron utilization becomes more challenging. The technique provides a practical approach to reducing dead neurons while maintaining high L0 sparsity, with only minimal impact on reconstruction fidelity. 
+
+Table 5. Impact of soft-capping (SC) on MSAE performance. We evaluate soft-capping across different expansion rates (8 and 16) on the ImageNet-1k validation set, comparing UW and RW variants. While base MSAE maintains better FVU and CS scores, soft-capped variants show improved L0 sparsity and reduced number of dead neurons, particularly at larger sizes. Bold values indicate the best performance per metric and size, with NDN in parentheses showing dead neuron counts from the final checkpoint. Size Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ NDN ↓
+
+6144 Matryoshka (RW) 0.829 ±.008 0.007 ±.003 0.997 ±.002 0.809 ±.002 2(4) 
+
+Matryoshka (UW) 0.748 ±.006 0.001 ±.002 0.999 ±.000 0.848 ±.003 0(22) 
+
+Matryoshka (RW, SC) 0.830 ±.007 0.010 ±.003 0.995 ±.002 0.839 ±.004 1(2) 
+
+Matryoshka (UW, SC) 0.774 ±.006 0.004 ±.001 0.998 ±.001 0.856 ±.003 1(3) 
+
+12288 Matryoshka (RW) 0.884 ±.006 0.005 ±.003 0.998 ±.001 0.801 ±.003 32(124) 
+
+Matryoshka (UW) 0.830 ±.003 0.000 ±.000 1.000 ±.000 0.853 ±.002 22(491) 
+
+Matryoshka (RW, SC) 0.889 ±.005 0.007 ±.003 0.997 ±.001 0.833 ±.002 11(66) 
+
+Matryoshka (UW, SC) 0.842 ±.005 0.001 ±.001 0.999 ±.000 0.849 ±.002 87(172) 
+
+19 Matryoshka SAE 
+
+## E. CKNNA Alignment Metric 
+
+Introduced in Section 4.4, CKNNA (Centered Kernel Nearest-Neighbor Alignment) measures representation similarity between networks while focusing on local neighborhood structures. Unlike its predecessor CKA (Kornblith et al., 2019), CKNNA refines the alignment computation by considering only k-nearest neighbors, making it more sensitive to local geometric relationships. The alignment score between two networks’ representations in our case CLIP embeddings and SAE activation is computed as: CKNNA (K, L) = Align (K, L)
+
+pHSIC (K, K)HSIC (L, L) ,
+
+HSIC (K, L) = 1(n − 1) 2
+
+X
+
+> i
+
+X
+
+> j
+
+(⟨ϕi, ϕ j ⟩ − El[⟨ϕi, ϕ l⟩])( ⟨ψi, ψ j ⟩ − El[⟨ψi, ψ l⟩]) 
+
+ ,
+
+Align (K, L) = 1(n − 1) 2
+
+X
+
+> i
+
+X
+
+> j
+
+α(i, j )( ⟨ϕi, ϕ j ⟩ − El[⟨ϕi, ϕ l⟩])( ⟨ψi, ψ j ⟩ − El[⟨ψi, ψ l⟩]) 
+
+ ,α(i, j ; k) = 1[i̸ = j and ϕj ∈ knn (ϕi; k) and ψj ∈ knn (ψi; k)] ,
+
+(5) where HSIC measures the global similarity between kernel matrices, and Align introduces the neighborhood constraint through α(i, j ; k). The indicator function α(i, j ; k) ensures that only pairs of points that are k-nearest neighbors in both representation spaces contribute to the alignment score. Here, ϕi, ϕ j represent CLIP embeddings and ψi, ψ j represent SAE activations for corresponding input data points i and j. Following (Yu et al., 2025), we set k = 10 as it provides better alignment sensitivity and calculate CKNNA over randomly sampled (batch size) 10,000 representations when evaluating. Higher CKNNA scores indicate stronger similarity between the CLIP and SAE learned representations. 20 Matryoshka SAE 
+
+## F. Evaluating MSAE: Additional Results 
+
+We extend the results from Section 4 by analyzing multiple expansion rates, SAE variants, input modalities, and CLIP architectures. Unless otherwise specified, experiments use CLIP ViT-L/14 with an expansion rate of 8 on image modality. For text modality evaluations, we use the CC3M validation subset, while image modality evaluations are performed on the ImageNet-1k training subset. 0.6 0.7 0.8 0.9 1.0 
+
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> EVR (  better reconstruction)
+
+ImageNet-1K       
+
+> 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+
+CC3m Text     
+
+> 0.6 0.7 0.8 0.9 1.0
+
+L0 ( sparser)       
+
+> 0.825
+> 0.850
+> 0.875
+> 0.900
+> 0.925
+> 0.950
+> 0.975
+> 1.000
+> CS (  better reconstruction)
+> 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+L0 ( sparser) 
+
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> 1.1
+
+Models     
+
+> ReLU ( = 0.03)
+> ReLU ( = 0.01)
+> ReLU ( = 0.003)
+> ReLU ( = 0.001)
+> Top-K (k = 32)
+> Top-K (k = 64)
+> Top-K (k = 128)
+> Top-K (k = 256)
+> Batch Top-K (k = 32)
+> Batch Top-K (k = 64)
+> Batch Top-K (k = 128)
+> Batch Top-K (k = 256)
+> Matryoshka (RW)
+> Matryoshka (UW)
+
+Figure 11. Extended sparsity-fidelity trade-off analysis across modalities. Expanding on Figure 2, we compare ReLU SAE ( λ =0.03 , 0.01 , 0.003 , 0.001 ), TopK SAE ( k = 32 , 64 , 128 , 256 ), BatchTopK SAE ( k = 32 , 64 , 128 , 256 ), and MSAE (RW, UW) using two reconstruction metrics: mean EVR fidelity (top) and mean cosine similarity (bottom). Results are shown for both image (left) and text (right) modalities, with standard deviation also reported for each metric, demonstrating MSAE’s consistent performance across modalities and metrics. 
+
+F.1. Sparsity–Fidelity Trade-off 
+
+Figure 11 presents an extended analysis of sparsity-fidelity trade-offs, including standard deviations and an alternative reconstruction metric tailored for CLIP embeddings (cosine similarity). The results demonstrate MSAE’s superior stability 21 Matryoshka SAE 
+
+across both modalities, particularly in text representations where only MSAE models shows stable and elevated results. Furthermore, we observe that models learned with lower k or higher sparsity regularization show high variance on the trained (image) modality, and this instability becomes even more pronounced on the text modality. Due to MSAE’s inherently low variance in the image modality, this similar low variance is preserved in the other modality, leading to consistently high and stable performance across both modalities. Figure 12 further strengthens our findings by showing MSAE’s superiority on a different CLIP architecture (ViT-B/16). 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> EVR (  better reconstruction)
+
+ImageNet-1K    
+
+> 0.4 0.6 0.8 1.0
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+
+CC3m Text       
+
+> 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+L0 ( sparser)    
+
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> 1.00
+> CS (  better reconstruction)
+> 0.4 0.6 0.8 1.0
+
+L0 ( sparser) 
+
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> 1.1
+
+Models     
+
+> ReLU ( = 0.03)
+> ReLU ( = 0.01)
+> ReLU ( = 0.003)
+> ReLU ( = 0.001)
+> Top-K (k = 32)
+> Top-K (k = 64)
+> Top-K (k = 128)
+> Top-K (k = 256)
+> Batch Top-K (k = 32)
+> Batch Top-K (k = 64)
+> Batch Top-K (k = 128)
+> Batch Top-K (k = 256)
+> Matryoshka (RW)
+> Matryoshka (UW)
+
+Figure 12. ViT-B/16 sparsity-fidelity trade-off analysis across modalities. Parallel analysis to ViT-L/14 (Figure 11), demonstrating that MSAE’s superior performance and stability generalizes across CLIP architectures. 
+
+22 Matryoshka SAE 
+
+F.2. Ablation: Matryoshka at Lower Granularity Levels 
+
+Figure 13 extends the analysis from Figure 3 by evaluating four key metrics: reconstruction fidelity (EVR), reconstruction error (CS), alignment (CKNNA), and neuron utilization (NDN). Our expanded comparison reinforces MSAE’s competitive performance against TopK SAE, demonstrating that MSAE (RW) achieves similar or better results across most metrics except for NDN, where (UW) version of MSAE performs better.   
+
+> Figure 13. Comprehensive comparison of Matryoshka and TopK SAE on ImageNet-1k. Extension of Figure 3 comparing model performance on reconstruction fidelity (EVR), reconstruction error (CS), concept alignment (CKNNA), and neuron utilization (NDN) against sparsity (L0). MSAE (RW) demonstrates competitive performance across most metrics, while MSAE (UW) achieves better results in neuron utilization.
+
+23 Matryoshka SAE 
+
+F.3. Activation Magnitudes Analysis 
+
+We extend the activation magnitude analysis from Figure 4 by including varying versions of model sparsity from each evaluated SAE architecture. Figure 14 shows non-zero and maximum SAE activations for expansion rate 8, revealing that less constrained TopK models exhibit double-curvature distributions similar to MSAE and ReLU. Maximum activation analysis highlights ReLU’s shrinkage effect, while TopK and MSAE maintain distributions closer to normal. These patterns persist at higher expansion rates (16 and 32) as shown in Figure 15. 10 1
+
+> 10 3
+> 10 5
+> 10 7
+> Count
+
+Flattened Activation 
+
+> 0
+> 200
+> 400
+> 600
+> ReLU (  = 0.003)
+
+Max Activation Per Sample     
+
+> 10 1
+> 10 3
+> 10 5
+> 10 7
+> Count
+> 0
+> 200
+> 400
+> 600
+> ReLU (  = 0.001)
+> 10 1
+> 10 3
+> 10 5
+> 10 7
+> Count
+> 0
+> 200
+> 400
+> 600
+> TopK (k = 64)
+> 10 1
+> 10 3
+> 10 5
+> 10 7
+> Count
+> 0
+> 200
+> 400
+> 600
+> TopK (k = 256)
+> 10 1
+> 10 3
+> 10 5
+> 10 7
+> Count
+> 0
+> 200
+> 400
+> 600
+> Matryoshka (RW)
+> 010 20
+> 10 1
+> 10 3
+> 10 5
+> 10 7
+> Count
+> 510 15
+> 0
+> 200
+> 400
+> 600
+> Matryoshka (UW)
+
+Figure 14. Activation distributions at expansion rate 8. Extended analysis of Figure 4 showing: (left) non-zero activation distributions, revealing TopK’s convergence to double-curvature patterns at lower constraints (higher k), (right) maximum activation distributions, demonstrating ReLU shrinkage problem compared to TopK and MSAE behavior which resembles a normal distribution. 
+
+24 Matryoshka SAE 10 1
+
+10 3
+
+10 5
+
+10 7
+
+> Count
+
+Flattened Activation 
+
+0
+
+200 
+
+400 
+
+600 
+
+> ReLU (  = 0.003)
+
+Max Activation Per Sample 
+
+10 1
+
+10 3
+
+10 5
+
+10 7
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> ReLU (  = 0.001)
+
+10 1
+
+10 3
+
+10 5
+
+10 7
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> TopK (k = 64)
+
+10 1
+
+10 3
+
+10 5
+
+10 7
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> TopK (k = 256)
+
+10 1
+
+10 3
+
+10 5
+
+10 7
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> Matryoshka (RW)
+
+0 10 20 
+
+10 1
+
+10 3
+
+10 5
+
+10 7
+
+> Count
+
+5 10 15 20 
+
+0
+
+200 
+
+400 
+
+600 
+
+> Matryoshka (UW)
+
+(a) Expansion rate 16 10 2
+
+10 5
+
+10 8
+
+> Count
+
+Flattened Activation 
+
+0
+
+200 
+
+400 
+
+600 
+
+> ReLU (  = 0.003)
+
+Max Activation Per Sample 
+
+10 2
+
+10 5
+
+10 8
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> ReLU (  = 0.001)
+
+10 2
+
+10 5
+
+10 8
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> TopK (k = 64)
+
+10 2
+
+10 5
+
+10 8
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> TopK (k = 256)
+
+10 2
+
+10 5
+
+10 8
+
+> Count
+
+0
+
+200 
+
+400 
+
+600 
+
+> Matryoshka (RW)
+
+0 10 20 
+
+10 2
+
+10 5
+
+10 8
+
+> Count
+
+0 5 10 15 
+
+0
+
+200 
+
+400 
+
+600  
+
+> Matryoshka (UW)
+
+(b) Expansion rate 32 
+
+Figure 15. Activation distributions at higher expansion rates. Extended analysis of Figure 4 for expansion rates 16 (a) and 32 (b), showing consistency of distribution patterns across scales. 
+
+25 Matryoshka SAE 
+
+F.4. Progressive Recovery 
+
+We extend the analysis from Figure 2 by examining progressive reconstruction performance across additional metrics and modalities. Figure 16 demonstrates performance at expansion rate 8 for reconstruction quality (EVR, CS) and neuron utilization (NDN) across both modalities, while Figure 17 extends this analysis to expansion rates 16 and 32. 10 3  
+
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> FVU (  better reconstruction)
+
+Reconstruction Fidelity vs k 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)
+
+CKNNA vs k 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CS (  better reconstruction)
+
+Cosine similarity vs k 
+
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> 5000
+> NDN (  better utilization)
+> Imagenet-1k
+
+Number of Dead neurons vs k  
+
+> 10 110 3
+
+L0 ( sparser)      
+
+> 10 4
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> FVU (  better reconstruction)
+> 10 110 3
+
+L0 ( sparser)  
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)
+> 10 110 3
+
+L0 ( sparser)  
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CS (  better reconstruction)
+> 10 110 3
+
+L0 ( sparser)        
+
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> 5000
+> 6000
+> NDN (  better utilization)
+> CC3M Text
+> Models
+> ReLU ( = 0.003) ReLU ( = 0.001) TopK (k = 64) TopK (k = 256) Matryoshka (RW) Matryoshka (UW)
+
+Figure 16. Progressive recovery analysis at expansion rate 8. Extension of Figure 2 showing reconstruction (EVR, CS), alignment (CKNNA), and neuron utilization (NDN) metrics against an increasing number of utilized top magnitude SAE neurons for image and text modalities. MSAE demonstrates comparable performance to TopK ( k = 256 ) on image modality and superior performance on text. 
+
+26 Matryoshka SAE 10 4   
+
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> FVU (  better reconstruction)
+
+Reconstruction Fidelity vs k 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)
+
+CKNNA vs k 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CS (  better reconstruction)
+
+Cosine similarity vs k 
+
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> 10000
+> 12000
+> NDN (  better utilization)
+> Imagenet-1k
+
+Number of Dead neurons vs k  
+
+> 10 110 3
+
+L0 ( sparser)     
+
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> FVU (  better reconstruction)
+> 10 110 3
+
+L0 ( sparser)  
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)
+> 10 110 3
+
+L0 ( sparser)  
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CS (  better reconstruction)
+> 10 110 3
+
+L0 ( sparser)        
+
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> 10000
+> 12000
+> NDN (  better utilization)
+> CC3M Text
+> Models
+> ReLU ( = 0.003) ReLU ( = 0.001) TopK (k = 64) TopK (k = 256) Matryoshka (RW) Matryoshka (UW)
+
+(a) Expansion rate 16 10 4   
+
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> FVU (  better reconstruction)
+
+Reconstruction Fidelity vs k 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)
+
+CKNNA vs k 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CS (  better reconstruction)
+
+Cosine similarity vs k 
+
+> 0
+> 5000
+> 10000
+> 15000
+> 20000
+> 25000
+> NDN (  better utilization)
+> Imagenet-1k
+
+Number of Dead neurons vs k  
+
+> 10 110 3
+
+L0 ( sparser)      
+
+> 10 4
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> FVU (  better reconstruction)
+> 10 110 3
+
+L0 ( sparser)  
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKNNA (  better alignment)
+> 10 110 3
+
+L0 ( sparser)  
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CS (  better reconstruction)
+> 10 110 3
+
+L0 ( sparser)        
+
+> 0
+> 5000
+> 10000
+> 15000
+> 20000
+> 25000
+> NDN (  better utilization)
+> CC3M Text
+> Models
+> ReLU ( = 0.003) ReLU ( = 0.001) TopK (k = 64) TopK (k = 256) Matryoshka (RW) Matryoshka (UW)
+
+(b) Expansion rate 32 
+
+Figure 17. Progressive recovery analysis at higher expansion rates. Analysis parallel to Figure 16 for expansion rates 16 (a) and 32 (b), demonstrating the stability of the results over higher expansion rates. 
+
+27 Matryoshka SAE 
+
+F.5. Comprehensive Evaluation with CLIP ViT-L/14 and ViT-B/16 Architectures 
+
+We present an extensive quantitative comparison of SAE variants across CLIP ViT-L/14 and ViT-B/16 architectures. Our evaluation encompasses ReLU ( λ = 0 .03 , 0.01 , 0.003 , 0.001 ), TopK ( k = 32 , 64 , 128 , 256 , 512 ), BatchTopK ( k =16 , 32 , 64 , 128 , 256 ), and MSAE (RW, UW) models, tested across three expansion rates (8, 16, 32) for both image and text modalities. For text modality and ViT-B/16 architecture, we omit LP (Acc) and LP (KL) metrics based on our findings in Section 4.4 that CS and FVU correlate strongly with linear probing metrics. F.5.1. R ESULTS FOR IMAGE MODALITY 
+
+For image modality, Tables 6–8 present detailed results for ViT-L/14 across expansion rates 8, 16, and 32, while Tables 9–11 show parallel performance metrics for ViT-B/16. These tables extend the analysis from Table 1, providing comprehensive measurements across different metrics and model configurations. 
+
+Table 6. CLIP ViT-L/14 SAE comparison at expansion rate 8. Extended evaluation from Table 1 with additional TopK, ReLU and BatchTopK variants on ImageNet-1k. Arrows indicate preferred metric direction, NDN values show training set dead neurons in parentheses. 
+
+Model L0 ↑ FVU ↓ CS ↑ LP (KL) ↓ LP (Acc) ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .920 ±.008 .185 ±.031 .928 ±.009 50 .5±77 .1 .936 ±.244 .727 ±.004 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .762 ±.010 .033 ±.005 .985 ±.002 7.16 ±11 .3 .977 ±.149 .742 ±.005 .002 0(0) 
+
+ReLU ( λ = 0 .003 ) .649 ±.007 .004 ±.000 .998 ±.000 0.66 ±1.03 .994 ±.083 .781 ±.004 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .553 ±.006 .002 ±.001 .999 ±.000 0.36 ±0.65 .995 ±.073 .822 ±.004 .002 0(0) 
+
+TopK ( k = 32 ) .960 ±.010 .245 ±.043 .874 ±.021 109 ±161 .903 ±.300 .711 ±.005 .002 0(1235) 
+
+TopK ( k = 64 ) .950 ±.009 .172 ±.026 .912 ±.013 60 .1±90 .8 .930 ±.255 .762 ±.004 .002 0(335) 
+
+TopK ( k = 128 ) .928 ±.008 .098 ±.015 .951 ±.007 2.71 ±5.40 .987 ±.114 .811 ±.004 .003 0(117) 
+
+TopK ( k = 256 ) .900 ±.004 .011 ±.003 .994 ±.002 2.71 ±5.40 .987 ±.114 .874 ±.003 .003 0(296) 
+
+TopK ( k = 512 ) .922 ±.015 .346 ±.442 .923 ±.058 56 .1±13 .9 .950 ±.218 .006 ±.003 .002 0(1) 
+
+BatchTopK ( k = 16 ) .698 ±.021 .371 ±.060 .798 ±.037 281 ±326 .836 ±.372 .698 ±.037 .002 0(4278) 
+
+BatchTopK ( k = 32 ) .776 ±.019 .242 ±.034 .873 ±.020 113 ±157 .901 ±.299 .735 ±.004 .002 0(3080) 
+
+BatchTopK ( k = 64 ) .877 ±.012 .162 ±.022 .917 ±.011 56 .9±85 .8 .931 ±.253 .769 ±.004 .002 0(1477) 
+
+BatchTopK ( k = 128 ) .898 ±.010 .082 ±.012 .959 ±.006 23 .3±36 .5 .959 ±.197 .805 ±.004 .003 0(539) 
+
+BatchTopK ( k = 256 ) .882 ±.005 .010 ±.005 .995 ±.002 2.42 ±5.12 .988 ±.108 .860 ±.003 .002 3(919) 
+
+Matryoshka (RW) .829 ±.008 .007 ±.003 .997 ±.002 3.13 ±7.08 .987 ±.115 .809 ±.002 .002 2(4) 
+
+Matryoshka (UW) .748 ±.006 .002 ±.001 .999 ±.000 0.35 ±0.82 .995 ±.070 .848 ±.003 .001 0(22) 
+
+Table 7. CLIP ViT-L/14 SAE comparison at expansion rate 16. Results parallel to Table 6 showing performance scaling at higher expansion rate on ImageNet-1k. 
+
+Model L0 ↑ FVU ↓ CS ↑ LP (KL) ↓ LP (Acc) ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .945 ±.006 .147 ±.033 .939 ±.008 41 .1±64 .8 .945 ±.229 .714 ±.004 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .838 ±.008 .036 ±.005 .983 ±.002 8.41 ±13 .7 .975 ±.157 .738 ±.005 .002 0(0) 
+
+ReLU ( λ = 0 .003 ) .716 ±.009 .006 ±.001 .997 ±.000 1.08 ±1.74 .991 ±.093 .695 ±.003 .002 0(0) 
+
+ReLU ( λ = 0 .001 ) .664 ±.007 .001 ±.000 .999 ±.000 0.14 ±0.22 .997 ±.056 .789 ±.004 .002 0(0) 
+
+TopK ( k = 32 ) .972 ±.009 .249 ±.047 .873 ±.022 112 ±168 .899 ±.301 .692 ±.005 .002 0(4727) 
+
+TopK ( k = 64 ) .973 ±.006 .174 ±.028 .911 ±.014 61 .7±96 .8 .927 ±.260 .745 ±.003 .002 0(2079) 
+
+TopK ( k = 128 ) .960 ±.006 .104 ±.017 .948 ±.008 30 .7±49 .0 .951 ±.215 .801 ±.003 .002 1(897) 
+
+TopK ( k = 256 ) .937 ±.006 .019 ±.004 .991 ±.002 3.76 ±6.85 .984 ±.127 .871 ±.002 .004 15(1383) 
+
+TopK ( k = 512 ) .964 ±.008 .336 ±.413 .926 ±.064 72 .9±17 .8 .944 ±.230 .007 ±.003 .002 0(29) 
+
+BatchTopK ( k = 16 ) .669 ±.021 .404 ±.055 .786 ±.038 310 ±353 .829 ±.377 .705 ±.005 .001 0(9859) 
+
+BatchTopK ( k = 32 ) .742 ±.021 .274 ±.031 .866 ±.020 122 ±166 .897 ±.304 .736 ±.005 .002 0(8016) 
+
+BatchTopK ( k = 64 ) .880 ±.013 .167 ±.020 .916 ±.012 55 .9±85 .0 .932 ±.252 .759 ±.004 .002 0(5113) 
+
+BatchTopK ( k = 128 ) .889 ±.011 .089 ±.012 .957 ±.006 24 .6±38 .5 .956 ±.204 .806 ±.003 .002 1(2967) 
+
+BatchTopK ( k = 256 ) .880 ±.009 .023 ±.006 .990 ±.003 4.12 ±7.11 .983 ±.131 .854 ±.003 .002 12(3558) 
+
+Matryoshka (RW) .884 ±.006 .005 ±.003 .998 ±.001 2.08 ±4.68 .989 ±.103 .801 ±.003 .002 32(124) 
+
+Matryoshka (UW) .830 ±.003 .000 ±.000 .999 ±.000 0.12 ±0.41 .998 ±.050 .853 ±.002 .002 22(491) 
+
+28 Matryoshka SAE 
+
+Table 8. CLIP ViT-L/14 SAE comparison at expansion rate 32. Analysis at maximum tested expansion rate on ImageNet-1k, completing the scaling study from Tables 6 and 7. 
+
+Model L0 ↑ FVU ↓ CS ↑ LP (KL) ↓ LP (Acc) ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .964 ±.004 .120 ±.029 .948 ±.007 36 .1±60 .2 .949 ±.221 .707 ±.005 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .893 ±.006 .032 ±.005 .985 ±.002 7.65 ±12 .77 .977 ±.150 .752 ±.008 .002 0(0) 
+
+ReLU ( λ = 0 .003 ) .781 ±.007 .011 ±.002 .995 ±.001 2.06 ±3.40 .988 ±.111 .619 ±.007 .002 0(0) 
+
+ReLU ( λ = 0 .001 ) .653 ±.005 .004 ±.001 .998 ±.000 0.77 ±1.25 .993 ±.085 .493 ±.007 .002 0(0) 
+
+TopK ( k = 32 ) .938 ±.018 .246 ±.047 .872 ±.025 102 .37 ±155 .09 .906 ±.292 .697 ±.012 .002 64(14535) 
+
+TopK ( k = 64 ) .973 ±.006 .174 ±.028 .911 ±.014 61 .7±96 .8 .927 ±.260 .745 ±.003 .002 0(9347) 
+
+TopK ( k = 128 ) .964 ±.009 .110 ±.021 .947 ±.009 31 .4±51 .2 .952 ±.213 .794 ±.005 .002 10(5604) 
+
+TopK ( k = 256 ) .942 ±.012 .032 ±.008 .986 ±.003 5.39 ±8.80 .980 ±.139 .864 ±.003 .003 91(6590) 
+
+TopK ( k = 512 ) .966 ±.004 .008 ±.005 .996 ±.002 1.30 ±2.69 .992 ±.092 .422 ±.018 .002 7822(22446) 
+
+BatchTopK ( k = 16 ) .638 ±.018 .462 ±.057 .775 ±.038 344 .4±377 .9 .825 ±.380 .735 ±.005 .001 0(21631) 
+
+BatchTopK ( k = 32 ) .756 ±.015 .329 ±.042 .855 ±.024 139 .4±186 .8 .894 ±.308 .747 ±.004 .001 0(18965) 
+
+BatchTopK ( k = 64 ) .880 ±.011 .190 ±.024 .911 ±.013 55 .4±84 .7 .934 ±.249 .764 ±.004 .002 0(15035) 
+
+BatchTopK ( k = 128 ) .869 ±.012 .129 ±.016 .947 ±.007 26 .7±42 .2 .956 ±.206 .794 ±.003 .002 1(11019) 
+
+BatchTopK ( k = 256 ) .837 ±.014 .069 ±.011 .979 ±.004 8.22 ±13 .4 .976 ±.154 .851 ±.003 .002 12(11802) 
+
+Matryoshka (RW) .927 ±.004 .003 ±.001 .999 ±.001 1.00 ±2.15 .992 ±.090 .810 ±.002 .002 79(142) 
+
+Matryoshka (UW) .908 ±.002 .000 ±.000 .999 ±.000 0.09 ±0.35 .998 ±.047 .850 ±.003 .002 297(162) 
+
+Table 9. CLIP ViT-B/16 SAE comparison at expansion rate 8. Parallel analysis to ViT-L/14 (Table 6) using smaller CLIP architecture on ImageNet-1k. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .908 ±.010 .154 ±.036 .936 ±.010 .671 ±.004 .004 0(0) 
+
+ReLU ( λ = 0 .01 ) .747 ±.012 .030 ±.005 .986 ±.002 .682 ±.005 .003 0(0) 
+
+ReLU ( λ = 0 .003 ) .629 ±.008 .003 ±.000 .999 ±.000 .737 ±.003 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .366 ±.012 .009 ±.003 .996 ±.001 .695 ±.003 .002 0(0) 
+
+TopK ( k = 32 ) .946 ±.013 .200 ±.037 .897 ±.019 .684 ±.005 .004 0(672) 
+
+TopK ( k = 64 ) .935 ±.011 .138 ±.024 .930 ±.012 .730 ±.003 .003 0(196) 
+
+TopK ( k = 128 ) .843 ±.020 .116 ±.026 .948 ±.010 .735 ±.003 .003 0(95) 
+
+TopK ( k = 256 ) .859 ±.008 .024 ±.007 .988 ±.003 .787 ±.002 .004 0(8) 
+
+TopK ( k = 512 ) .882 ±.008 .058 ±.052 .972 ±.025 .005 ±.003 .003 0(0) 
+
+BatchTopK ( k = 16 ) .706 ±.023 .299 ±.050 .845 ±.030 .662 ±.005 .002 0(2666) 
+
+BatchTopK ( k = 32 ) .810 ±.019 .196 ±.031 .900 ±.017 .695 ±.005 .003 0(1763) 
+
+BatchTopK ( k = 64 ) .877 ±.013 .127 ±.020 .936 ±.010 .750 ±.004 .003 0(830) 
+
+BatchTopK ( k = 128 ) .882 ±.010 .048 ±.008 .976 ±.004 .806 ±.003 .003 0(387) 
+
+BatchTopK ( k = 256 ) .876 ±.003 .003 ±.001 .999 ±.001 .843 ±.003 .003 35(1766) 
+
+Matryoshka (RW) .783 ±.009 .003 ±.001 .999 ±.001 .792 ±.003 .003 0(0) 
+
+Matryoshka (UW) .711 ±.004 .000 ±.000 .999 ±.000 .814 ±.002 .003 0(1) 
+
+29 Matryoshka SAE 
+
+Table 10. CLIP ViT-B/16 SAE comparison at expansion rate 16. Extension of Table 9 to expansion rate 16 on ImageNet-1k. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .940 ±.007 .125 ±.030 .945 ±.008 .664 ±.006 .004 0(0) 
+
+ReLU ( λ = 0 .01 ) .824 ±.010 .033 ±.005 .984 ±.002 .669 ±.006 .003 0(0) 
+
+ReLU ( λ = 0 .003 ) .695 ±.010 .004 ±.008 .998 ±.000 .635 ±.005 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .646 ±.008 .001 ±.000 .999 ±.000 .742 ±.003 .003 0(0) 
+
+TopK ( k = 32 ) .958 ±.015 .206 ±.042 .896 ±.021 .671 ±.005 .003 0(2819) 
+
+TopK ( k = 64 ) .962 ±.008 .141 ±.026 .930 ±.012 .710 ±.003 .003 0(1268) 
+
+TopK ( k = 128 ) .950 ±.007 .072 ±.016 .965 ±.007 .782 ±.003 .004 0(597) 
+
+TopK ( k = 256 ) .935 ±.003 .003 ±.002 .998 ±.001 .839 ±.002 .003 2(4686) 
+
+TopK ( k = 512 ) .943 ±.015 .203 ±.312 .955 ±.047 .006 ±.003 .003 1(1) 
+
+BatchTopK ( k = 16 ) .658 ±.022 .349 ±.054 .837 ±.033 .670 ±.006 .002 0(6478) 
+
+BatchTopK ( k = 32 ) .757 ±.022 .230 ±.035 .896 ±.019 .704 ±.005 .002 0(5114) 
+
+BatchTopK ( k = 64 ) .853 ±.016 .135 ±.019 .938 ±.009 .741 ±.005 .003 0(3145) 
+
+BatchTopK ( k = 128 ) .887 ±.010 .061 ±.011 .971 ±.005 .799 ±.004 .003 0(1817) 
+
+BatchTopK ( k = 256 ) .876 ±.003 .003 ±.001 .999 ±.001 .843 ±.003 .002 40(4947) 
+
+Matryoshka (RW) .861 ±.005 .002 ±.001 .999 ±.001 .778 ±.003 .003 8(63) 
+
+Matryoshka (UW) .805 ±.004 .000 ±.000 .999 ±.000 .813 ±.003 .003 44(275) 
+
+Table 11. CLIP ViT-B/16 SAE comparison at expansion rate 32. Completion of ViT-B/16 scaling analysis on ImageNet-1k at maximum tested expansion rate. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .956 ±.005 .104 ±.025 .953 ±.007 .656 ±.004 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .879 ±.008 .031 ±.005 .986 ±.002 .688 ±.005 .003 0(0) 
+
+ReLU ( λ = 0 .003 ) .757 ±.009 .010 ±.002 .996 ±.001 .568 ±.005 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .625 ±.006 .004 ±.001 .998 ±.000 .516 ±.005 .003 0(0) 
+
+TopK ( k = 32 ) .933 ±.025 .230 ±.058 .891 ±.025 .674 ±.005 .003 0(9223) 
+
+TopK ( k = 64 ) .967 ±.012 .152 ±.032 .927 ±.014 .698 ±.003 .003 0(5643) 
+
+TopK ( k = 128 ) .960 ±.010 .085 ±.023 .961 ±.009 .772 ±.002 .003 2(3321) 
+
+TopK ( k = 256 ) .922 ±.014 .015 ±.006 .995 ±.002 .822 ±.002 .003 1(10480) 
+
+TopK ( k = 512 ) .967 ±.000 .001 ±.001 1.000 ±.001 .016 ±.007 .002 5902(14864) 
+
+BatchTopK ( k = 16 ) .615 ±.018 .450 ±.060 .822 ±.037 .695 ±.005 .002 0(14345) 
+
+BatchTopK ( k = 32 ) .712 ±.021 .312 ±.043 .890 ±.019 .719 ±.005 .002 0(12492) 
+
+BatchTopK ( k = 64 ) .835 ±.017 .184 ±.028 .933 ±.010 .731 ±.005 .002 2(9645) 
+
+BatchTopK ( k = 128 ) .856 ±.013 .096 ±.015 .966 ±.005 .798 ±.003 .003 0(6855) 
+
+BatchTopK ( k = 256 ) .844 ±.011 .040 ±.007 .991 ±.002 .827 ±.003 .002 0(11638) 
+
+Matryoshka (RW) .915 ±.003 .001 ±.001 .999 ±.000 .794 ±.003 .003 6(23) 
+
+Matryoshka (UW) .880 ±.003 .000 ±.000 .999 ±.000 .804 ±.002 .002 15(26) 
+
+30 Matryoshka SAE 
+
+F.5.2. R ESULTS FOR TEXT MODALITY 
+
+For text modality, Tables 12–14 present results for ViT-L/14, while Tables 15–17 show ViT-B/16 performance on CC3M validation text data, enabling cross-modal and cross-architecture comparisons. 
+
+Table 12. CLIP ViT-L/14 SAE text analysis at expansion rate 8. Evaluation on CC3M text validation set parallel to image results in Table 6, highlighting cross-modal performance differences. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .901 ±.010 .427 ±.174 .802 ±.049 .622 ±.003 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .522 ±.041 .036 ±.038 .984 ±.014 .716 ±.006 .002 0(0) 
+
+ReLU ( λ = 0 .003 ) .609 ±.027 .041 ±.039 .981 ±.018 .744 ±.002 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .522 ±.045 .035 ±.038 .984 ±.014 .706 ±.005 .002 0(0) 
+
+TopK ( k = 32 ) .724 ±.318 1.095 ±.835 .511 ±.206 .037 ±.031 .002 0(1235) 
+
+TopK ( k = 64 ) .715 ±.295 .760 ±.249 .585 ±.209 .025 ±.020 .002 0(335) 
+
+TopK ( k = 128 ) .781 ±.190 .537 ±.252 .708 ±.190 .042 ±.011 .003 0(117) 
+
+TopK ( k = 256 ) .783 ±.180 .366 ±.366 .742 ±.301 .088 ±.007 .003 0(296) 
+
+TopK ( k = 512 ) .900 ±.026 .386 ±.376 .865 ±.101 .038 ±.006 .002 0(1) 
+
+BatchTopK ( k = 16 ) .585 ±.161 1.222 ±.929 .416 ±.213 .031 ±.026 .002 0(4278) 
+
+BatchTopK ( k = 32 ) .608 ±.221 .848 ±.277 .494 ±.232 .022 ±.012 .002 0(3080) 
+
+BatchTopK ( k = 64 ) .712 ±.197 .662 ±.229 .581 ±.222 .019 ±.013 .002 0(1477) 
+
+BatchTopK ( k = 128 ) .858 ±.038 .415 ±.180 .787 ±.102 .312 ±.009 .003 0(539) 
+
+BatchTopK ( k = 256 ) .869 ±.026 .159 ±.175 .918 ±.108 .716 ±.004 .002 17(919) 
+
+Matryoshka (RW) .824 ±.029 .060 ±.052 .971 ±.026 .775 ±.001 .002 0(4) 
+
+Matryoshka (UW) .755 ±.024 .026 ±.027 .988 ±.012 .790 ±.002 .001 0(22) 
+
+Table 13. CLIP ViT-L/14 SAE text analysis at expansion rate 16. Extended CC3M text evaluation showing scaling effects at expansion rate 16, complementing image results from Table 7. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .930 ±.027 .510 ±.500 .812 ±.052 .581 ±.006 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .809 ±.052 .221 ±.255 .926 ±.043 .643 ±.008 .002 0(0) 
+
+ReLU ( λ = 0 .003 ) .675 ±.067 .070 ±.060 .973 ±.023 .654 ±.009 .002 0(0) 
+
+ReLU ( λ = 0 .001 ) .599 ±.028 .021 ±.019 .990 ±.010 .781 ±.002 .002 0(0) 
+
+TopK ( k = 32 ) .782 ±.283 1.237 ±1.122 .494 ±.208 .038 ±.028 .002 0(4727) 
+
+TopK ( k = 64 ) .774 ±.280 .790 ±.258 .583 ±.203 .023 ±.008 .002 0(2079) 
+
+TopK ( k = 128 ) .813 ±.212 .604 ±.255 .690 ±.190 .029 ±.010 .002 0(897) 
+
+TopK ( k = 256 ) .848 ±.156 .390 ±.357 .740 ±.280 .093 ±.004 .004 0(1383) 
+
+TopK ( k = 512 ) .950 ±.023 .435 ±.453 .855 ±.107 .073 ±.014 .002 0(29) 
+
+BatchTopK ( k = 16 ) .600 ±.115 .917 ±.326 .450 ±.202 .032 ±.018 .001 0(9859) 
+
+BatchTopK ( k = 32 ) .619 ±.181 .758 ±.209 .518 ±.232 .031 ±.021 .002 0(8016) 
+
+BatchTopK ( k = 64 ) .706 ±.242 .687 ±.236 .559 ±.240 .029 ±.020 .002 0(5113) 
+
+BatchTopK ( k = 128 ) .866 ±.034 .465 ±.230 .796 ±.081 .240 ±.016 .002 14(2967) 
+
+BatchTopK ( k = 256 ) .789 ±.189 .352 ±.371 .741 ±.334 .036 ±.004 .002 7(3558) 
+
+Matryoshka (RW) .880 ±.021 .043 ±.038 .980 ±.019 .783 ±.006 .002 4(124) 
+
+Matryoshka (UW) .832 ±.028 .017 ±.017 .992 ±.008 .788 ±.001 .002 0(491) 
+
+31 Matryoshka SAE 
+
+Table 14. CLIP ViT-L/14 SAE text analysis at expansion rate 32. Maximum expansion rate analysis on CC3M text. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .951 ±.023 .540 ±.667 .822 ±.053 .557 ±.001 .003 1(0) 
+
+ReLU ( λ = 0 .01 ) .867 ±.059 .339 ±.546 .927 ±.047 .549 ±.011 .002 1(0) 
+
+ReLU ( λ = 0 .003 ) .749 ±.090 .172 ±.200 .966 ±.027 .336 ±.008 .002 0(0) 
+
+ReLU ( λ = 0 .001 ) .631 ±.054 .052 ±.045 .983 ±.014 .376 ±.007 .002 0(0) 
+
+TopK ( k = 32 ) .864 ±.144 1.149 ±1.282 .551 ±.169 .058 ±.018 .002 0(14535) 
+
+TopK ( k = 64 ) .888 ±.156 .795 ±.337 .630 ±.157 .049 ±.026 .002 0(2079) 
+
+TopK ( k = 128 ) .871 ±.156 .612 ±.252 .717 ±.161 .053 ±.024 .002 0(5604) 
+
+TopK ( k = 256 ) .869 ±.134 .435 ±.342 .740 ±.240 .130 ±.006 .003 0(6590) 
+
+TopK ( k = 512 ) .937 ±.062 .115 ±.131 .944 ±.069 .070 ±.034 .002 240(22446) 
+
+BatchTopK ( k = 16 ) .601 ±.079 .818 ±.209 .496 ±.191 .034 ±.024 .002 0(21631) 
+
+BatchTopK ( k = 32 ) .681 ±.143 .733 ±.235 .592 ±.190 .034 ±.020 .002 0(21631) 
+
+BatchTopK ( k = 64 ) .784 ±.178 .636 ±.225 .657 ±.181 .042 ±.026 .002 0(18965) 
+
+BatchTopK ( k = 128 ) .861 ±.016 .377 ±.159 .830 ±.055 .526 ±.012 .002 94(11019) 
+
+BatchTopK ( k = 256 ) .784 ±.139 .332 ±.333 .778 ±.288 .060 ±.007 .002 0(11802) 
+
+Matryoshka (RW) .925 ±.014 .030 ±.026 .986 ±.013 .774 ±.000 .002 32(142) 
+
+Matryoshka (UW) .901 ±.026 .013 ±.013 .994 ±.006 .784 ±.000 .002 126(162) 
+
+Table 15. CLIP ViT-B/16 SAE text analysis at expansion rate 8. CC3M text evaluation using smaller CLIP architecture, enabling cross-modal and cross-architecture comparisons. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .870 ±.021 .472 ±.166 .761 ±.063 .661 ±.008 .004 0(0) 
+
+ReLU ( λ = 0 .01 ) .697 ±.046 .183 ±.141 .920 ±.048 .721 ±.003 .003 0(0) 
+
+ReLU ( λ = 0 .003 ) .580 ±.028 .030 ±.028 .986 ±.013 .764 ±.000 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .393 ±.122 .118 ±.177 .975 ±.022 .129 ±.021 .002 0(0) 
+
+TopK ( k = 32 ) .757 ±.265 1.095 ±1.081 .533 ±.174 .035 ±.013 .004 0(672) 
+
+TopK ( k = 64 ) .766 ±.223 .733 ±.353 .644 ±.155 .033 ±.001 .003 0(196) 
+
+TopK ( k = 128 ) .747 ±.164 .515 ±.343 .782 ±.106 .275 ±.016 .003 0(95) 
+
+TopK ( k = 256 ) .783 ±.095 .229 ±.152 .888 ±.081 .759 ±.000 .004 0(8) 
+
+TopK ( k = 512 ) .794 ±.174 .283 ±.282 .860 ±.154 .079 ±.021 .003 0(0) 
+
+BatchTopK ( k = 16 ) .602 ±.156 1.172 ±1.110 .461 ±.178 .018 ±.010 .002 0(2666) 
+
+BatchTopK ( k = 32 ) .662 ±.213 .898 ±.510 .547 ±.176 .016 ±.008 .003 0(1763) 
+
+BatchTopK ( k = 64 ) .716 ±.204 .656 ±.212 .637 ±.166 .029 ±.008 .003 0(830) 
+
+BatchTopK ( k = 128 ) .715 ±.270 .654 ±.322 .662 ±.256 .033 ±.009 .003 0(387) 
+
+BatchTopK ( k = 256 ) .774 ±.177 .317 ±.358 .776 ±.301 .103 ±.004 .003 0(1766) 
+
+Matryoshka (RW) .762 ±.063 .044 ±.047 .979 ±.023 .799 ±.001 .003 0(0) 
+
+Matryoshka (UW) .709 ±.043 .021 ±.025 .990 ±.012 .812 ±.003 .003 0(1) 
+
+32 Matryoshka SAE 
+
+Table 16. CLIP ViT-B/16 SAE text analysis at expansion rate 16. Results for expansion rate 16 with ViT-B/16 on CC3M text data. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .910 ±.023 .457 ±.178 .767 ±.067 .614 ±.008 .004 0(0) 
+
+ReLU ( λ = 0 .01 ) .777 ±.065 .248 ±.244 .911 ±.049 .600 ±.003 .003 0(0) 
+
+ReLU ( λ = 0 .003 ) .641 ±.055 .052 ±.038 .994 ±.005 .767 ±.001 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .577 ±.037 .013 ±.012 .979 ±.016 .678 ±.002 .003 0(0) 
+
+TopK ( k = 32 ) .811 ±.232 1.163 ±1.376 .518 ±.185 .043 ±.020 .003 0(2819) 
+
+TopK ( k = 64 ) .801 ±.231 .803 ±.424 .618 ±.170 .028 ±.006 .003 0(1268) 
+
+TopK ( k = 128 ) .781 ±.217 .601 ±.252 .696 ±.177 .045 ±.002 .004 0(597) 
+
+TopK ( k = 256 ) .787 ±.224 .430 ±.401 .688 ±.326 .098 ±.007 .003 0(4686) 
+
+TopK ( k = 512 ) .918 ±.051 .447 ±.804 .891 ±.089 .070 ±.009 .003 0(1) 
+
+BatchTopK ( k = 16 ) .592 ±.109 .940 ±.510 .480 ±.187 .018 ±.007 .002 0(6478) 
+
+BatchTopK ( k = 32 ) .650 ±.174 .843 ±.428 .560 ±.182 .015 ±.007 .002 0(5114) 
+
+BatchTopK ( k = 64 ) .734 ±.174 .649 ±.212 .654 ±.153 .022 ±.006 .003 0(3145) 
+
+BatchTopK ( k = 128 ) .764 ±.218 .643 ±.310 .685 ±.216 .032 ±.004 .003 0(1817) 
+
+BatchTopK ( k = 256 ) .799 ±.194 .337 ±.375 .755 ±.321 .061 ±.006 .002 0(4947) 
+
+Matryoshka (RW) .847 ±.040 .033 ±.036 .984 ±.018 .800 ±.002 .003 0(63) 
+
+Matryoshka (UW) .801 ±.043 .017 ±.021 .992 ±.010 .803 ±.001 .003 0(275) 
+
+Table 17. CLIP ViT-B/16 SAE text analysis at expansion rate 32. Final expansion rate evaluation for ViT-B/16 on CC3M text. 
+
+Model L0 ↑ FVU ↓ CS ↑ CKNNA ↑ DO ↓ NDN ↓
+
+ReLU ( λ = 0 .03 ) .934 ±.019 .472 ±.356 .790 ±.058 .610 ±.008 .003 0(0) 
+
+ReLU ( λ = 0 .01 ) .828 ±.123 .839 ±1.624 .894 ±.077 .145 ±.015 .003 0(0) 
+
+ReLU ( λ = 0 .003 ) .713 ±.103 .183 ±.201 .963 ±.028 .304 ±.004 .003 0(0) 
+
+ReLU ( λ = 0 .001 ) .600 ±.051 .041 ±.033 .987 ±.009 .422 ±.002 .003 0(0) 
+
+TopK ( k = 32 ) .850 ±.158 1.091 ±1.367 .547 ±.163 .076 ±.008 .003 0(9223) 
+
+TopK ( k = 64 ) .879 ±.146 .832 ±.622 .645 ±.138 .075 ±.028 .003 0(5643) 
+
+TopK ( k = 128 ) .863 ±.145 .590 ±.247 .740 ±.126 .150 ±.029 .003 0(3321) 
+
+TopK ( k = 256 ) .793 ±.215 .365 ±.359 .776 ±.253 .197 ±.024 .003 0(10480) 
+
+TopK ( k = 512 ) .917 ±.109 .097 ±.172 .955 ±.087 .027 ±.016 .002 73(14864) 
+
+BatchTopK ( k = 16 ) .581 ±.066 .769 ±.191 .536 ±.157 .027 ±.012 .002 0(14345) 
+
+BatchTopK ( k = 32 ) .657 ±.113 .726 ±.284 .628 ±.136 .032 ±.020 .002 0(12492) 
+
+BatchTopK ( k = 64 ) .766 ±.126 .631 ±.227 .704 ±.113 .052 ±.024 .002 0(9645) 
+
+BatchTopK ( k = 128 ) .783 ±.163 .628 ±.335 .727 ±.166 .046 ±.016 .003 0(6855) 
+
+BatchTopK ( k = 256 ) .773 ±.172 .311 ±.339 .799 ±.270 .117 ±.006 .002 0(11638) 
+
+Matryoshka (RW) .897 ±.035 .022 ±.026 .990 ±.013 .807 ±.002 .003 1(23) 
+
+Matryoshka (UW) .873 ±.030 .010 ±.014 .995 ±.007 .806 ±.003 .002 0(26) 
+
+33 Matryoshka SAE 
+
+## G. Interpreting CLIP with MSAE: Additional Results 
+
+In this appendix section, we provide additional analysis supporting Section 5. Section G.1 presents high-magnitude activation samples across modalities from MSAE (RW) with an expansion rate of 8. Section G.2 demonstrates how SAE enhances similarity search with interpretable results. Section G.3 presents statistical gender bias analysis on CelebA dataset, supported by concept manipulation visualizations that reinforce the statistical findings. These analyses strengthen our findings from Section 5 while providing deeper insights into MSAE’s interpretability capabilities. 
+
+G.1. Concept Visualization Analysis 
+
+Figures 18 and 19 showcase six valid concepts through their highest-activating images and texts, confirming concept validity. Conversely, Figure 20 demonstrates two invalid concepts, highlighting the importance of validation methods from Section A. Neuron 4169 ( blue ) with similarity 0.71 Neuron 3730 ( germany ) with similarity 0.48 Neuron 3121 ( light ) with similarity 0.62    
+
+> Neuron 3728 ( incredibleindia ) with similarity 0.54 Neuron 310 ( nighttime ) with similarity 0.64 Neuron 2242 ( ireland ) with similarity 0.53
+
+Figure 18. High-magnitude image activations for valid concepts. We gather top activating ImageNet-1k images for six valid MSAE (RW) concept neurons. 
+
+34 Matryoshka SAE Neuron 3552 ( smile ) with similarity 0.59 
+
+1. because this smile can cure the blues . 2. person with a lovely smile 3. portrait of a smiling boy 4. portrait of a senior man smiling 5. detail view of a pretty middle aged woman smiling 6. even after lots of walking ... all smiles ! 7. man smiling to the camera 
+
+(a) Neuron 3091 ( alcoholic ) with similarity 0.52 
+
+1. beverage type - the original beer 2. pouring beer into a glass , over a green background 3. customers drink beer at a bar 4. set of full beer bottles with no labels isolated on white 5. alcohol empty bottles in a window after a party 6. young woman with a mug of beer (b) Neuron 5071 ( trio ) with similarity 0.61 
+
+1. person , person and myself before the race 2. myself and the newlyweds at wedding that person at a private residence 3. putting a brave face on : the couple with person shortly before they announced their split 4. family of three on summer vacation . 5. backstage beauties : person happily posed with person and pop artist after the main event 
+
+(c) Neuron 2539 ( heart ) with similarity 0.50 
+
+1. a symbolic electronic circuit in heart shape 2. illustration of the flag shaped like a heart . 3. heart shape single wine holder capable of holding wine glasses . 4. love is in the air 5. this heart was waiting for us as we climbed the stairs 6. flag with a pole and on a heart shape (d) Neuron 220 ( runnin ) with similarity 0.55 
+
+1. sisters running to the beach 
+
+2. person running at the beach 
+
+3. friends running towards the sea at the beach 
+
+4. couple running from the sea 
+
+5. teenage soccer players running down the field 
+
+6. person , is seen running in the streets . 
+
+7. person runs through the wilderness . 
+
+(e) Neuron 2495 ( questions ) with similarity 0.53 
+
+1. person asks questions monday of people arriving at the emergency room . 2. which players could leave football team in january ? 3. animal wants to know if you would like to hold it next ?4. in what year did the bridge undergo an award - winning refurbishment ? 5. name the team to face a city (f) 
+
+Figure 19. Cross-modal highest valid concept activation samples. Extending Figure 8, we show the highest-activating ImageNet-1k images and CC3M texts from valid MSAE (RW) concepts: smile , alcoholic , trio , heart , running , and questions .
+
+35 Matryoshka SAE Concept 6 with two highest neuron similarities 0.4 and 0.17 Texts: 1. where sediment comes from 6 . 2. blues artist performs on stage during the fifth day 3. 60th anniversary : a sneak peek at new food and drinks 4. smile during the photo call for her new film at the 58th 5. students participate in activities for the 75th anniversary celebrations . 6. reserve at sixty three 63 has a wide variety of spacious floor plans 7. concert poster for folk rock artist and the 50th anniversary of composition . 8. the numbers and two painted on a dilapidated brick wall 
+
+(a) Neuron 17006 most active for: hl (0.45) hri (0.44) hig (0.43) Texts: 1. hard rock artist , the heavy band , performs a live concert 2. the hawk first entered service both as an advanced flying - training aircraft and a weapons 3. habitat the type of environment in which an organism lives ; where an organism is commonly found . 4. holiday : has a heritage that stems . 5. the harbour on a summer day 6. hand drawn head of hen , label on a white background . 7. the chocolate bar that was launched and is based on hill 8. put some different wheels on the hawk (b) 
+
+Figure 20. Analysis of invalid concept neurons in MSAE (RW). In (a), we showcase the invalid concept ’6’ with a low similarity score (< 0.42 ), which shows inconsistent presence of the number six in the top active samples. In (b), we present how a low ratio threshold (0.45 /0.44 < 2) can indicate a broader ’h’ concept rather than a specific ’hl’/’hri’ from the vocabulary. 
+
+36 Matryoshka SAE 
+
+G.2. SAE-Enhanced Similarity Search 
+
+Building upon Section 5, we demonstrate how SAE enhances nearest neighbor (NN) search by revealing shared semantic concepts between query and retrieved images. Figure 21 illustrates how SAE uncovers interpretable features that drive CLIP’s similarity assessments. Furthermore, we show that conducting similarity search directly in the SAE activation space produces comparable results to CLIP-based search while providing more semantically meaningful matches. Input Image    
+
+> 0510 15
+> crows chatt automotive britain buri foodtruck police ireland
+
+CLIP Distance 0.28    
+
+> 0510 15
+> gautomotive ouring rrrr britain foodtruck police ireland
+
+CLIP Distance 0.39    
+
+> 0510 15
+> prohib alumnus bor officer automotive foodtruck police britain
+
+SAE Distance 384.08    
+
+> 0510 15
+> gautomotive ouring rrrr britain foodtruck police ireland
+
+SAE Distance 401.58    
+
+> 0510 15
+> durham crowdfunding automotive officer foodtruck manchester police britain
+
+Figure 21. SAE-enhanced similarity search. Examples demonstrating how SAE reveals shared semantic concepts (bottom row) between query images and their CLIP nearest neighbors (top row), providing interpretable explanations for similarity matches. Additionally, the two rightmost examples show nearest neighbors retrieved based on SAE activation similarity, demonstrating how searching in the SAE space yields similar results to CLIP-based search while making the retrieval process more semantically interpretable. 
+
+G.3. Gender Bias Analysis in CelebA 
+
+We analyze gender biases in a CLIP-based classification model using the CelebA dataset, which forms the foundation for our analysis in Section 5.3. Through statistical analysis of concept magnitude distribution against the model gender predictions in Figure 24, we identify significant gender associations for concepts bearded , blondes , and glasses in the classification model. To verify that these concepts align with the true features in the CelebA dataset, we visualize highest-activation images for each concept in Figure 22. Further concept manipulation experiments on both female (Figure 7) and male (Figure 23) examples confirm and strengthen these statistical findings, providing even greater insight into the relationship between gender classification and the chosen concepts. Neuron 1877 ( bearded ) with similarity 0.38 Neuron 4890 ( glasses ) with similarity 0.59 Neuron 1899 ( blondes ) with similarity 0.49 
+
+Figure 22. Highest-activating CelebA images for gender-associated concepts. We visualize images from the CelebA test set that produce the highest activations for the concepts bearded , blondes , and glasses , validating their alignment with the concept. 
+
+37 Matryoshka SAE Class: Male; p=0.08    
+
+> 0100 200 300
+
+Neuron Magnitude 
+
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Class Probability
+
+Effect of Concept bearded    
+
+> 0100 200 300
+
+Neuron Magnitude 
+
+> 0.1
+> 0.2
+> 0.3
+
+Effect of Concept glasses    
+
+> 025 50 75
+
+Neuron Magnitude 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+
+Effect of Concept blondes 
+
+> Class probability Original value Threshold
+
+Figure 23. Impact of concept manipulation for the male example. Complementing Figure 7, we further strengthen our findings of male association for bearded , moderate for glasses , and female bias for blondes concept. 0
+
+> 5
+> 10
+> Concept Magnitude
+
+bearded - Density Plot 
+
+> 0
+> 2
+> 4
+> 6
+> Concept Magnitude
+
+bearded - Box Plot 
+
+> 0
+> 2
+> 4
+> 6
+> Concept Magnitude
+
+black - Density Plot 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Concept Magnitude
+
+black - Box Plot 
+
+> 0
+> 5
+> 10
+> Concept Magnitude
+
+ginger - Density Plot 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> Concept Magnitude
+
+ginger - Box Plot 
+
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> Concept Magnitude
+
+hair - Density Plot 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> Concept Magnitude
+
+hair - Box Plot  
+
+> 01
+
+Gender Prediction 
+
+> 0
+> 5
+> 10
+> Concept Magnitude
+
+blondes - Density Plot  
+
+> 01
+
+Gender Prediction 
+
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10 .0
+> Concept Magnitude
+
+blondes - Box Plot  
+
+> 01
+
+Gender Prediction 
+
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10 .0
+> Concept Magnitude
+
+glasses - Density Plot  
+
+> 01
+
+Gender Magnitude 
+
+> 0
+> 1
+> 2
+> Concept Magnitude
+
+glasses - Box Plot 
+
+Figure 24. Statistical analysis of concept-gender associations. We analyze six concepts: bearded , blondes , black , hair , glasses , and 
+
+ginger . For each concept, we show its density distribution of concept magnitude against gender prediction alongside corresponding boxplots. Results reveal that bearded , blondes , and glasses exhibit significant gender-specific associations. 
+
+38 Matryoshka SAE 
+
+## H. Stability Evaluations 
+
+To gain a deeper understanding of the stability of learned feature directions for the decoder and encoder across various training seeds, we calculated the stability metric proposed by Paulo & Belrose (2025). Table 18 shows the results for all tested SAEs at an expansion rate of 8. We observe that the stability metric is highly correlated with sparsity. Furthermore, Matryoshka SAE demonstrates a comparable stability trade-off to alternative architectures.   
+
+> Table 18. Stability–Sparsity–Reconstruction trade-off (Pareto front) for CLIP (ViT-L/14) on ImageNet-1k. Rows are sorted by sparsity. We observe that (1) stability is highly correlated with sparsity, and (2) Matryoshka SAE exhibits an on-par stability trade-off as compared to other architectures.
+
+Model Sparsity (L0 ↑) Reconstruction (FVU ↓) Stability (Decoder/Encoder ↑)
+
+TopK ( k = 32 ) .960 .245 .649 /. 245 
+
+TopK ( k = 64 ) .950 .172 .688 /. 240 
+
+TopK ( k = 128 ) .928 .098 .625 /. 187 
+
+TopK ( k = 512 ) .922 .336 .248 /. 187 
+
+ReLU ( λ = 0 .03 ) .920 .185 .522 /. 124 
+
+TopK ( k = 256 ) .900 .011 .624 /. 235 
+
+BatchTopK ( k = 128 ) .898 .082 .622 /. 238 
+
+BatchTopK ( k = 256 ) .882 .010 .573 /. 231 
+
+BatchTopK ( k = 64 ) .877 .162 .586 /. 238 
+
+Matryoshka (RW) .829 .007 .437 /. 102 
+
+BatchTopK ( k = 32 ) .776 .242 .467 /. 168 
+
+ReLU ( λ = 0 .01 ) .762 .033 .401 /. 068 
+
+Matryoshka (UW) .748 .002 .366 /. 065 
+
+BatchTopK ( k = 16 ) .698 .371 .352 /. 108 
+
+ReLU ( λ = 0 .003 ) .649 .004 .334 /. 042 
+
+ReLU ( λ = 0 .001 ) .553 .002 .200 /. 041 
+
+39

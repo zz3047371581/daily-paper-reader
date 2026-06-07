@@ -1,0 +1,2377 @@
+Title: Diffuse Everything: Multimodal Diffusion Models on Arbitrary State Spaces
+
+URL Source: https://openreview.net/pdf?id=AjbiIcRt6q
+
+Number of Pages: 33
+
+Markdown Content:
+# Diffuse Everything: Multimodal Diffusion Models on Arbitrary State Spaces 
+
+Kevin Rojas * 1 2 Yuchen Zhu * 1 2 Sichen Zhu 2 Felix X.-F. Ye 3 Molei Tao 1 2 
+
+## Abstract 
+
+Diffusion models have demonstrated remarkable performance in generating unimodal data across various tasks, including image, video, and text generation. On the contrary, the joint generation of multimodal data through diffusion models is still in the early stages of exploration. Existing approaches heavily rely on external preprocess-ing protocols, such as tokenizers and variational autoencoders, to harmonize varied data represen-tations into a unified, unimodal format. This process heavily demands the high accuracy of encoders and decoders, which can be problem-atic for applications with limited data. To lift this restriction, we propose a novel framework for building multimodal diffusion models on arbi-trary state spaces, enabling native generation of coupled data across different modalities. By in-troducing an innovative decoupled noise schedule for each modality, we enable both unconditional and modality-conditioned generation within a sin-gle model simultaneously. We empirically vali-date our approach for text-image generation and mixed-type tabular data synthesis, demonstrating that it achieves competitive performance. Code is available at Diffuse-Everything. 
+
+## 1. Introduction 
+
+Recent years have witnessed the tremendous success of diffusion generative models in various applications. The seminal works of continuous diffusion models on Euclidean spaces (Sohl-Dickstein et al., 2015; Song et al., 2020; Ho et al., 2020) have led to state-of-the-art methods for tasks such as image generation (Dhariwal & Nichol, 2021; Bao et al., 2023a; Karras et al., 2022; 2024b), video generation       
+
+> *Equal contribution, random order by coin flip 1School of Math-ematics, Georgia Institute of Technology, Atlanta, GA 2Machine Learning Center, Georgia Institute of Technology, Atlanta, GA
+> 3Department of Mathematics & Statistics, SUNY Albany, NY. Correspondence to: Molei Tao <mtao@gatech.edu >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+(Ho et al., 2022; Jin et al., 2025), time series forecasting (Chen et al., 2024b; Rojas et al., 2025b) and in domains such as robotics (Chi et al., 2023) and genomics (Luo et al., 2024; Zhu et al., 2025a). Pioneering works have shown that diffusion models can also be extended to curved spaces (De Bortoli et al., 2022; Huang et al., 2022; Cheng et al., 2025; Chen & Lipman, 2024; Zhu et al., 2025b), enabling a high-fidelity generation of structured data on manifolds, such as material configurations (Sriram et al., 2024) and protein backbones (Watson et al., 2023; Yim et al., 2023). Recently, discrete diffusion models have emerged as the cornerstone for modeling categorical data with inherent discrete structures (Campbell et al., 2022; Lou et al., 2024; Campbell et al., 2024; Gat et al., 2024). Discrete diffusion models have imposed great impacts on protein sciences (Wang et al., 2024b), graph generation (Xu et al., 2024; Li et al., 2025), and text generation (Nie et al., 2025a;b). In general, diffusion models have shown top performance in most scenarios with unimodal data. Generative models also demonstrated successes in multi-modal data lately. For example, conditional diffusion mod-els showed remarkable capabilities in tasks such as text-to-image generation by accurately synthesizing pictures follow-ing given instruction prompts (Ramesh et al., 2022; Chen et al., 2023; Esser et al., 2024). It’s worth noting that such models still generate single-modality outputs (such as im-ages). Therefore, to jointly generate multimodal data, lever-aging only single-task-performing conditional models is extremely computationally inefficient, as it requires combin-ing multiple independently trained models by sequentially applying them. An alternative approach is to use a single multi-modal model that captures the joint distribution of multiple modalities. Such an approach often leads to strong performances as it al-lows information to mix across modalities (Li et al., 2024a; Meta, 2024). Existing approaches of this type are mainly based on autoregressive models (AR), such as Chameleon (Meta, 2024) and Unified-IO (Lu et al., 2024), where data of different modalities are represented uniformly as tokens and generated autoregressively from left to right. Apart from these, attempts have also been made to realize this idea using diffusion/flow-based methods, such as UniDif-fuser (Bao et al., 2023b), MM-Diffusion (Ruan et al., 2023), AVDiT (Kim et al., 2024), UniDisc (Swerdlow et al., 2025), 1Multimodal Diffusion on Arbitrary State Spaces  
+
+> Figure 1. By injecting noise into different modalities in a decoupled fashion, we enable the unconditional and modality-conditioned generation in a single model. (a) Joint generation of image and text. (b) Image generation given text captions as conditions. (c) Text generation given images as conditions.
+
+OmniFlow (Li et al., 2024a), etc. These methods generate multimodal data simultaneously through iterative denoising of a randomly sampled initial noise. A commonality among the aforementioned methods de-signed for joint multimodal generation is that they typically rely heavily on preprocessing techniques to harmonize the varied data representations into a unified format ,thereby creating a single modality. One approach (taken by Chameleon (Meta, 2024), UniDisc (Swerdlow et al., 2025), etc) is to cast multimodal inputs all into discrete to-kens with modality-dependent tokenizers built with discrete or vector-quantized variational encoders (VQVAE) (Van Den Oord et al., 2017; Esser et al., 2021). An alternative route (considered by UniDiffuser (Bao et al., 2023b), Omni-Flow (Li et al., 2024a), etc) is to preprocess the multimodal data by embedding them into continuous-valued latent vec-tors with encoders trained with variational encoders (VAE) (Kingma, 2013) or representation alignment (e.g., CLIP (Radford et al., 2021)). For these approaches, regardless of whether discrete tokens or continuous latents are used, generation is performed in a unimodal space, and the original data modality must be recovered through decoding. Therefore, these pipelines may suffer from generation artifacts due to the limited accuracy of the decoders (Hoogeboom et al., 2024). Additionally, the requirement for high-performance encoder-decoder pairs can be problematic to satisfy for applications that lack abun-dant high-quality data (Zhang et al., 2023). Due to the requirement for task-specific algorithm designs, these meth-ods also cannot be conveniently extended to generate data composed of arbitrary modalities. Therefore, a natural ques-tion to ask is the following: 
+
+Can we design a principled framework to enable joint modeling of multi-modal data in their native spaces without a unified representation? 
+
+Diffusion models serve as a powerful backbone for build-ing such a framework. Theorists have shown that diffusion models can be extended to a more general idea called de-noising Markov models (Benton et al., 2024; Ren et al., 2025b), providing a solid theoretical foundation for a multi-modal extension . In addition to this, existing works such as MultiFlow (Campbell et al., 2024) and Generator Matching (Holderrieth et al., 2024) have verified the effectiveness of 
+
+multimodal models in native state spaces in protein de-sign. Motivated by these successes, we propose a general framework for building multimodal diffusion models on ar-bitrary state spaces without the need for data format unifiers. Our contributions are three-fold: 1. We propose a novel framework for building multimodal diffusion models by combining the native diffusion models designed for each data modality, and derive a unified learning objective. Under our design, learning multimodal diffusion models is as straightforward as performing a joint optimization on a sum of unimodal learning losses, despite requiring a non-trivial proof. 2. We introduce decoupled noise schedules for each data modality and theoretically justify the validity of score learning under the presence of multiple time variables. We demonstrate that this design enables us to simul-taneously handle both unconditional and conditional multimodal generation in one single model. We also propose a novel guidance mechanism effective in both use cases for enhancing generation quality. 3. We experiment with text-image generation and mixed-type tabular data synthesis, achieving competitive per-formance on both tasks with more parameter-efficient models, without relying on pre-trained models or pow-erful extra encoders. More importantly, we devise a set of training strategies for the task of text-image, which is crucial for achieving success. 2Multimodal Diffusion on Arbitrary State Spaces  
+
+> Figure 2. Network backbone for text-image generation, motivated by MMDiT (Esser et al., 2024) and DiT (Peebles & Xie, 2023).
+
+## 2. Preliminaries 
+
+In this section, we review basic concepts and formulations of common diffusion models in different state spaces. 
+
+2.1. Continuous Space Diffusion Models 
+
+For continuous diffusion models (Song et al., 2020; Ho et al., 2020), one considers a continuous time stochastic differen-tial equation (SDE) {Xt}0≤t≤T on the Euclidean space Rd
+
+as the forward process . The process is characterized by the following dynamic, 
+
+dXt = f (Xt, t )d t + g(t)d Wt,
+
+where f : Rd × R → Rd is the drift and g : R → R is the diffusion coefficient. We denote pt = Law( Xt). f and g
+
+are often chosen that pT is an easy-to-sample distribution. A popular pick is the time re-parametrized Ornstein Uhlenbeck process, which corresponds to the selection of f (Xt, t ) = 
+
+− 12 βtXt and g(t) = √βt, for some positive noise schedule 
+
+βt. In such case, pT ≈ N (0 , I ) for reasonably large T . It can be shown that the backward process is another SDE with a different drift (Anderson, 1982), 
+
+dXt = f (Xt, t )d t − g2(t)∇x log pt(Xt)d t + g(t)d Wt
+
+The common practice in training is to define the score vector 
+
+s(Xt, t ) = ∇x log pt(Xt) and we approximate it with a neural network sθ , estimated by minimizing a variant of the following score matching loss (Vincent, 2011), 
+
+min 
+
+> θ
+
+Z T
+
+> 0
+
+EXt∼pt
+
+h
+
+sθ (Xt, t ) − s(Xt, t ) 2i
+
+dt. (1) 
+
+2.2. Discrete Space Diffusion Models 
+
+For discrete diffusion models (Campbell et al., 2022; Lou et al., 2024; Ou et al., 2025; Sahoo et al., 2024; Shi et al., 2024), one considers a continuous time markov chain (CTMC) {Xt}0≤t≤T on a finite state space X as the for-ward process . The distribution of Xt is represented by a vector pt in the probability simplex on R|X|. The dynamic of Xt can be characterized by the following equation, 
+
+dpt
+
+dt = Qtpt, where Qt = ( Qt(x, y )) x,y ∈X
+
+is a transition matrix satisfying that for any x ∈ X,
+
+Qt(x, x ) = − P  
+
+> y̸=x
+
+Qt(y, x ), and for any x̸ = y ∈ X,
+
+Qt(x, y ) ≥ 0. We will also denote the dynamic of Xt using the following notation, 
+
+Xt ∼ CTMC( Qt)
+
+Qt is often chosen such that pT is a simple distribution, such as uniform on X or Dirac on a masked state. Common choices include uniform or masked transition matrix (Lou et al., 2024). It is known that the backward process is an-other process of the same form but with a different transition rate matrix (Kelly, 2011), which can be described as 
+
+Xt ∼ CTMC( Qt)
+
+where the rate matrix Qt = ( Qt(x, y )) x,y ∈X is defined as, 
+
+Qt(y, x ) = 
+
+( pT −t(y)  
+
+> pT−t(x)
+
+QT −t(x, y ), x̸ = y ∈ X,
+
+− P  
+
+> y′̸=x
+
+Qt(y′, x ), x = y ∈ X.
+
+In discrete diffusion model training, one usually defines the concrete score vector s(Xt, t ) =   pt(y)
+
+> pt(Xt)
+
+
+
+> y∈X
+
+, and we approximate it with a neural network sθ (Xt, t ), estimated by minimizing the following a variant of the following score 3Multimodal Diffusion on Arbitrary State Spaces 
+
+entropy loss (Benton et al., 2024; Lou et al., 2024), 
+
+min 
+
+> θ
+
+Z T
+
+> 0
+
+E
+
+> Xt∼pt
+
+ X 
+
+> y̸=Xt
+
+Qt(Xt, y )
+
+
+
+st(Xt, t )y log s(Xt,t )y 
+
+> sθ(Xt,t )y
+
+− s(Xt, t )y + sθ (Xt, t )y
+
+
+
+dt. (2) 
+
+2.3. Riemannian Diffusion Models 
+
+For Riemannian diffusion models, e.g. (De Bortoli et al., 2022; Huang et al., 2022), one considers a continuous time SDE {Xt}0≤t≤T on the manifold M as the forward process ,characterized by the following dynamic, 
+
+dXt = f (Xt, t )d t + d W M 
+
+> t
+
+,
+
+where f : M × R → TxM is the drift, and dW M 
+
+> t
+
+is the manifold Brownian motion. For a compact manifold 
+
+M, one can pick f = 0 , and the corresponding pT ≈
+
+Uniform( M) is the uniform distribution on the manifold for large T . It’s proved that the backward process is another SDE on the manifold (De Bortoli et al., 2022), 
+
+dXt = f (Xt, t )d t − ∇ log pt(Xt)d t + d W M 
+
+> t
+
+,
+
+where ∇ is the Riemannian gradient on M. For Rieman-nian diffusion model training, similar to the continuous case, one defines the score s(Xt, t ) = ∇ log pt(Xt) and approxi-mates it with a neural network sθ , which typically requires special design to meet the requirement sθ (Xt, t ) ∈ TXt M.Learning is performed through a variant of Riemannian score matching (De Bortoli et al., 2022; Huang et al., 2022), 
+
+min 
+
+> θ
+
+Z T
+
+> 0
+
+EXt∼pt
+
+h
+
+sθ (Xt, t ) − s(Xt, t ) 2
+
+> M
+
+i
+
+dt. (3) 
+
+## 3. Methodology 
+
+In this section, we present the framework for constructing multimodal diffusion models on general state spaces in their native forms. We first discuss a unified perspective on dif-fusion models and then present a learning algorithm for diffusion generative modeling of multiple data modalities, where each modality has an independent time variable. Such a framework allows any-to-any modality generation by one single model, which simultaneously includes the joint unconditional generation of all modalities and the condi-tional generation of a subset of modalities given the rest .Finally, we discuss the Continuous-Discrete Multimodal Diffusion as an application of this framework to illustrate its importance and flexibility. 
+
+3.1. Unified Perspective on Unimodal Diffusion Models 
+
+While common unimodal diffusion models (continuous, dis-crete, Riemannian, etc) have distinct forward/backward pro-cesses, learning objectives, and score parameterizations, they are essentially the realization of denoising Markov models (Benton et al., 2024; Ren et al., 2025b) in different situations. At a high level, diffusion models consist of a Markovian forward process that gradually injects ‘noise’ to transform the target data distribution into a simple distri-bution, and a backward generative process that inverts it using information learned from the marginals of the forward process. This abstract view is formally summarized below. Consider a Markov process {Xt}0≤t≤T with X0 ∼ pdata ,defined on a state space X . A Markov process can be con-veniently characterized using the notion of infinitesimal generators. Since Xt is not necessarily time-homogeneous, we instead consider the augmented process ¯X = ( Xt, t )
+
+defined on the augmented space X∗ = X × [0 , +∞). Under mild regularity assumptions, ¯X is a Feller process, and its generator L can be defined as, 
+
+Lf (x) = lim 
+
+> t→0
+
+E[f (Xt)|X0 = x] − f (x)
+
+t ,
+
+and f : X∗ → R is a class of test function. We can under-stand the generator through its decomposition L = ∂t + ˆL,where ˆL is an operator that acts on functions defined on the original space X . We can also unify the characterization of the evolution of marginals p(·, t ) = Law( Xt) as well as the score learning objectives in terms of L. Under weak technical assumptions, p(·, t ) satisfies the following general form of Fokker-Planck equation, 
+
+∂tp(x, t ) = ˆL∗p(x, t ), p (x, 0) = pdata (x).
+
+where ˆL∗ is the adjoint operator of ˆL. Moreover, we can define a generalized explicit score matching objective (Lyu, 2012; Benton et al., 2024), 
+
+JESM (β) = E
+
+> t,p t
+
+h
+
+Φ
+
+ pβ
+
+
+
+(Xt, t )
+
+i
+
+(4) where Φ( f ) = f −1Lf − L log f , and β : X × [0 , +∞) →
+
+R+ . Note that this is an extension of the common score matching objectives, and we could interpret JESM as a loss function that compares the ‘gradient log’ of p(x, t ) to that of β(x, t ), through which we learn the information of the forward marginal pt. For example, in continuous diffusion with g(t) = 1 , L = ∂t +f ·∇ + 12 ∆, we recover the explicit score matching objective on Euclidean space (Hyv ¨arinen & Dayan, 2005), with Φ( p/β ) = 12 ∥∇ log p − ∇ log β∥2.Note that the explicit score matching objectives are not tractable for training purposes; we will later introduce their equivalent, trainable variants. 
+
+3.2. Versatile Multimodal Diffusion Models with Decoupled Times 
+
+Building on this unified description of unimodal diffusion models, we extend the denoising Markov model framework 4Multimodal Diffusion on Arbitrary State Spaces 
+
+(a) Image conditioned on text. Sample generated using the caption: “The image features a sailboat sailing on a large body of water, with a city skyline in the back-ground.” 
+
+(b) Text conditioned on Image. We gen-erate the following caption: “The image features a cityscape with a large build-ing, a bridge, and a city skyline in the background. The city is situated near the water. ” 
+
+(c) Joint generation of text and image. 
+
+The caption corresponding to this image was: “The image features a large white boat with a blue roof, which allows peo-ple to look out. The boat is traveling through a body of water.” 
+
+Figure 3. Visualization of samples generated by our approach. Captions are truncated for brevity. 
+
+to a multimodal scenario. This enables us to perform genera-tive modeling of data distributions consisting of mixed-type data without requiring complicated preprocessing pipelines. We begin by formally defining the forward process in terms of generators of Markov processes. Assume that we have a data distribution pdata defined on the product state spaces 
+
+X 1 × · · · × X n. For 1 ≤ i ≤ n, we have a Markov process 
+
+{Xiti }1≤ti≤T on X i, which is regular enough with a unique, easy-to-sample stationary distribution πi. We pick T so that 
+
+Law( XiT ) ≈ πi for each 1 ≤ i ≤ n. Now we can introduce the following joint forward process, 
+
+Xt = ( X1 
+
+> t1
+
+, . . . , X iti , . . . , X ntn ), 0 ≤ t1, . . . , t n ≤ T
+
+(X10 , . . . , X i
+
+> 0
+
+, . . . , X n 
+
+> 0
+
+) ∼ pdata (x) (5) where t = ( t1, . . . , t n), x = ( x1, . . . , x n). We consider the i-th augmented process Xi = ( Xiti , t i) ∈ X i 
+
+> ∗
+
+= X i ×
+
+[0 , +∞) and we denote its generator as LXi . We slightly abuse the notation and define the application of LXi to a multivariable test function as the following, 
+
+LXi f (x) = lim 
+
+> ti→0
+
+E[f (x1, . . .X iti , . . ., x n)|Xi 
+
+> 0
+
+= xi] − f (x)
+
+ti
+
+We assume that Xiti are independent Markov processes when conditioned on initial conditions. We want to em-phasize that the design of this forward process (5) is not only for injecting probabilistically independent ‘noises’ into each modality. More importantly, it allows each modality to be noised in an asynchronous way. To fully characterize and understand this forward process as a whole, we need to learn the full joint marginal of Xt,which we denote as p(x, t) and should be understood as the joint distribution of X1, . . . , X n at time t1, . . . , t n. To visualize this idea, we demonstrate the forward process with two independent time variables in Fig. 1. To ‘invert’ this forward process for generative modeling pur-poses, we will need to learn information from the forward process, similar to the case of unimodal diffusion models where one performs score matching. Extending the frame-work of (Benton et al., 2024), we introduce the following generalized explicit score matching loss (GESM) for learn-ing the full marginal p(x, t).
+
+IGESM =
+
+E
+
+> t,xt∼p(·,t)
+
+" nX
+
+> i=0
+
+LXi (p/β θ )( xt, t)(p/β θ )( xt, t) − L Xi log( p/β θ )( xt, t)
+
+#
+
+here βθ : X 1 
+
+> ∗
+
+× · · · × X n 
+
+> ∗
+
+→ R+ is our parameterized unnormalized distribution. We have the following important properties that characterize the optimizer of IGESM 
+
+Theorem 1. IGESM ≥ 0, with equality reached when 
+
+βθ (x, t) ∝ p(x, t).
+
+Thm. 1 states that the minimizer of IGESM is p(x, t) up to a multiplicative constant. In practice, we often do not di-rectly model βθ , but instead parameterize its score functions, which are invariant to multiplicative constants. For example, in continuous diffusion, one often parameterizes ∇ log βθ .This makes the optimization of IGESM a well-defined prob-lem with a unique minimizer in terms of score learning. In practice, one can’t evaluate IGESM as it’s intractable due to the true marginals p being unavailable a priori. Luckily, one can efficiently compute the following denoising and implicit variants of IGESM for learning purposes. 
+
+Theorem 2. IGESM , IGDSM and IGISM are equivalent up to constants, where 
+
+IGDSM =
+
+E
+
+> t,p 0,pt|0
+
+" nX
+
+> i=1
+
+LXi (pt|0/β θ )( xt, t)(pt|0/β θ )( xt, t) − L Xi log( pt|0/β θ )( xt, t)
+
+#
+
+IGISM = E
+
+> t,p t
+
+" nX
+
+> i=1
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+βθ (xt, t) − L ∗ 
+
+> Xi
+
+log( βθ )( xt, t)
+
+#
+
+5Multimodal Diffusion on Arbitrary State Spaces 
+
+3.3. Continuous-Discrete Multimodal Diffusion 
+
+We consider a distribution pdata (x, y ) where x ∈ Rd, y ∈ X,where X is a finite space. Important applications include text-image joint generation, mixed-type tabular data synthe-sis, etc. In this case, the natural choices on each state space would be continuous diffusion on Rd and discrete diffusion on X. This results in the following forward process, 
+
+(
+
+dXt = f (Xt, t )d t + g(t)d Bt
+
+Ys ∼ CTMC( Qs), (X0, Y 0) ∼ pdata (x, y ) (6) Let’s denote the joint marginal of (Xt, Y s) as pt,s (Xt, Y s).with these choices of Markov processes, LX = ∂t + f · ∇ + 
+
+> 12
+
+g2(t)∆ , and LY = ∂s + Qs. Therefore, we can compute the generalized denoising score matching objective as, 
+
+Proposition 1. For forward process (6) , IGDSM is equiva-lent to the following objective, 
+
+E
+
+> t,s,x 0,y 0∼p0
+> xt,y s∼pt,s |0
+
+h 12 g2(t)∥sXθ − ∇ log pt(xt|x0)∥2+
+
+X 
+
+> y̸=ys
+
+Qs(ys, y )
+
+
+
+(sYθ )y − ps(y|y0)
+
+ps(ys|y0) log( sYθ )y
+
+i 
+
+where sXθ ,sYθ is the learned continuous/discrete score. 
+
+Importantly, Prop. 1 shows an amazing result that score functions of multimodal joint marginal p(·, ·, t, s ) can be learned through score matching with unimodal condi-tional score for each modality. This is a non-trivial result as IGDSM suggests that, to perform multimodal generation, we need to match the score network with conditional scores of the joint distribution such as ∇ log pt,s (xt, y s|x0, y 0) in-stead of ∇ log pt(xt|x0). However, thanks to Bayes’ rule and the design of independent noise injection per modal-ity, the two conditional scores are identical . Thus, while learning multimodal diffusion models may seem as simple as jointly optimizing a sum of unimodal diffusion model training objectives, the theoretical support for such a naive approach is grounded much deeper. With the learned score functions, we can ‘invert’ the forward process for generative purposes, which is stated in Prop. 2. 
+
+Proposition 2. The following process (Xt, Y s) has marginal distribution equals to p(x, y, T − t, T − s),
+
+
+
+dXt = −f (Xt, T − t) + g2(T − t)∇ log ←−p t,s (Xt, Y s)d t
+
++ g(T − t)d Bt
+
+Ys ∼ CTMC  ←−
+
+Q (Xt, t, s ), (X0, Y 0) ∼ p(x, y, T, T )
+
+where ←−p t,s = pT −t,T −s, ←−
+
+Q (Xt, t, s ) is a rate matrix with 
+
+y′, y entry being ←−p t,s (Xt,y ′)  
+
+> ←−pt,s (Xt,y )
+
+(QT −s)yy ′ when y′̸ = y.
+
+We note that this ‘backward process’ is not the time reversal of the forward process in a strict sense, as it involves intro-ducing multiple time variables into the system. However, 0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0       
+
+> Noise Level
+> 15.00
+> 18.50
+> 22.00
+> 25.50
+> 29.00
+> 32.50
+> 36.00
+> FID
+> = 3
+> = 5
+> = 8
+> 0.5 0.6 0.7 0.8 0.9 1.0
+> 16
+> 18
+> 20 Zoom-in
+
+Figure 4. Performance of noisy guidance on MS-COCO FID-10 K. We note that using partially noised conditions results in a better performance. A guidance interval of t ∈ [0 .3, 0.8] was used. 
+
+this enables us to design versatile conditional and uncondi-tional generative sampling algorithms by choosing different value combinations of times (t, s ). We defer the detailed discussion of design choices and sampling algorithms for continuous-discrete multimodal diffusion to App. B. 
+
+Multimodal unconditional generation. To jointly gener-ate clean data distributed as pdata (x, y ), we introduce a sim-ulation time variable u ∈ [0 , T ], and pick a time parameteri-zation t = α1(u), s = α2(u) such as αi : [0 , T ] → [0 , T ] is continuous, non-decreasing with αi(0) = 0 , α i(T ) = T for 
+
+i = 1 , 2. With this time-reparameterization for both time variables, we make the backward process a valid, ready-to-simulate process. This enables us to start from pure noise and generate samples from the data distribution uncondi-tionally for both modalities. We can also choose a singular time re-parameterization so that the simulation amounts to a 2-stage approach for multimodal generation, where we first generate one modality and sample the rest conditionally based on the generated sample. 
+
+Unimodal conditional generation. This framework with decoupled time also enables conditional generation of modalties by simulating the associated backward process. We have the following simple but important observations, • Given a partially noisy text Ys and its noise level s, sim-ulating the X backward dynamics generates a sample 
+
+XT ∼ pdata (x|Ys, s )
+
+• Given a partially noisy image Xt and its noise level 
+
+t, simulating the Y backward dynamics generates a sample YT ∼ pdata (y|Xt, t ).Note that the choices of t or s in the conditioning are not restricted. When picking t or s as T , this is equivalent to single-modality unconditional generation, as XT or YT are pure noise. When picking t or s as 0, this is equivalent to conditional generation, as X0 or Y0 are clean data sam-ples. More interestingly, when picking 0 < s, t < T as conditions, we generate samples based on partially noised conditions. This gives rise to the following new guidance mechanism for enhancing generation quality. 6Multimodal Diffusion on Arbitrary State Spaces                                                         
+
+> Table 1. Results on the text to image conditional generation on MS-COCO. We mark the extra encoders leveraged by each model with the corresponding sizes and types. SR: super resolution, TE: text encoder, VAE: variational autoencoder, VE: visual encoder, VQ-GAN: Vector Quantized GAN, VQ-VAE: vector-quantized variational autoencoder.
+> Model FID Number of Images #Params Extra Encoders Models for Text-to-Image generation only DALL-E 2 (Ramesh et al., 2022) 10.39 650M 6.5B 123M (TE) + 700M (SR) Imagen (Saharia et al., 2022) 7.27 860M 3B 4.6B (TE) + 600M (SR) Stable Diffusion (Rombach et al., 2022) 12.63 400M 1.45B 123M (TE) + 83M (VAE) PixArt-αXL/2 (Chen et al., 2023) 7.32 25M 600M 123M (TE) + 83M (VAE) MMDiT-improved (Ifriqi et al., 2024) 6.79 12M 600M 123M (TE) + 83M (VAE) Models for multimodal generation and understanding Show-o (Xie et al., 2024) 9.24 35M 1.3B 115M (VE) + 307M (VQ-VAE) Transfusion (Zhou et al., 2024) 6.78 692M 7B 86M (VAE) Chameleon (Meta, 2024) 26.7 600M 7B 307M (VQ-GAN) JetFormer (Tschannen et al., 2024) 20.86 1B 2.75B —Models for multimodal generation only Versatile Diffusion (Xu et al., 2023) 11.10 400M 1.45B 123M (TE) + 83M (VAE) + 110M (TE) UniD3 (Hu et al., 2022) 25.11 592K 600M 123M (TE) + 307M (VQ-GAN) Our model 16.16 12M 481M 83M (VAE)
+
+3.4. Noisy Guidance 
+
+Guidance techniques have been a core component in mod-ern diffusion models for improving generation quality (e.g., Dhariwal & Nichol, 2021; Ho & Salimans, 2021; Kynk ¨a ¨anniemi et al., 2024; Li et al., 2024b). For contin-uous diffusion models, with strength ω, the classifier-free guidance is obtained by interpolating the unconditional and conditional score functions, 
+
+ωs θ (xt, t, c ) + (1 − ω)sθ (xt, t, ∅) (7) One perspective to understand the effectiveness of guidance methods is to view the unconditional score function as a conditional model with a fully-noised condition input, and the interpolation effectively serves as a correction of the conditional scores. However, the unconditional score might not be the best choice of correctors, as it causes an excessive trade-off between fidelity and diversity, resulting in a signif-icant loss in the latter (Karras et al., 2024a). This raises an interesting question about whether CFG can be improved by finding a better alternative to the unconditional score in (7). In fact, within our framework, we notice that 
+
+sXθ (xt, y s, t, s ) ≈ ∇ x log pt,s (xt, y s) = ∇x log p(xt, t |ys, s )
+
+The last equality results from Bayes’ theorem, and it shows that our model in fact learns conditional scores at all noise levels . Leveraging this fact, we propose a new form of guidance named noisy guidance , where the unconditional score in (7) is replaced with a class of conditional models with conditions noised to different levels: 
+
+ωs θ (xt, y s, t, s ) + (1 − ω)sθ (xt, y σ , t, σ ) σ > s (8) We note that the noisy guidance framework is a more gen-eral one, as it recovers the vanilla setting of CFG when 
+
+s = 0 and σ = T . The scenario of conditional generation corresponds to s = 0 (a clean condition y0 is given), and we choose T > σ > 0 to improve generation quality with a 
+
+partially conditioned guiding model. More interestingly, noisy guidance can even be applied to unconditional gen-eration in an unsupervised way where s > 0. In this case, while s is changing (since we are also generating ys), we can still apply guidance in this process by adaptively picking 
+
+σ as long as σ > s . These observations indicate the power and robustness of noisy guidance as a by-product of our proposed multimodal diffusion model learning framework. To showcase the performance of noisy guidance, we evalu-ate FID-10K on MS-COCO (Lin et al., 2014) using different values of σ ∈ [0 , 1] . We find that partially denoising the caption results in an improved FID, as shown in Fig. 4. The superior performance of noisy guidance is possibly due to us-ing a partially corrupted version of the conditional model as the guiding model. This aligns closely with the idea of Autoguidance proposed in Karras et al. (2024a), which uti-lizes an under-trained, smaller model as the guiding model instead of the unconditional ones. Similar to Autoguidance, noisy guidance seeks to identify and reduce the errors made by the conditional score model by measuring its difference to the partially conditioned one, boosting the generation performance. Finally, we remark that (8) is only a special case applied to continuous diffusion, and a similar idea can be adapted to other modalities, such as discrete diffusion guidance (Nisonoff et al., 2024; Schiff et al., 2024). 
+
+## 4. Experiments 
+
+To demonstrate the effectiveness and relevance of our frame-work for training multimodal diffusion models, we con-sider two tasks: text-image generation and mixed-type tab-7Multimodal Diffusion on Arbitrary State Spaces 
+
+Table 2. Performance on the Trend metric in percentage (%). Higher values indicate better performance. Best performance in bold .Second best in underline. 
+
+Methods #Parameters Adult Default Shoppers Magic Beijing News GOGGLE (Liu et al., 2023) ∼ 5.6M 54.71 78.06 76.10 90.53 54.06 76.81 STaSy (Kim et al., 2022) ∼ 10.3M 85.49 ±0.25 94.04 ±0.26 91.51 ±0.15 93.39 ±0.53 92.00 ±0.10 96.93 ±0.04 
+
+CoDi (Lee et al., 2023) ∼ 25.0M 77.51 ±0.08 31.59 ±0.05 82.22 ±0.11 93.47 ±0.25 92.93 ±0.15 88.90 ±0.01 
+
+TabDDPM (Kotelnikov et al., 2023) ∼ 11.7M 96.99 ±0.25 95.11 ±0.10 93.39 ±0.16 98.30 ±0.22 97.20 ±0.09 86.84 ±0.11 
+
+TAB SYN (Zhang et al., 2023) ∼ 10.7M 98.46 ±0.27 97.95 ±0.12 97.93 ±0.21 98.94 ±0.31 97.76 ±0.28 98.56 ±0.03 
+
+TAB SYN (reproduced) ∼ 10.7M 98.29 ±0.22 95.25 ±0.51 97.82 ±0.14 99.16 ±0.16 94.86 ±0.34 98.52 ±0.09 
+
+Our model ∼ 64K 98.75 ±0.09 96.00 ±1.23 98.24 ±0.13 98.85 ±0.42 97.42 ±0.11 98.57 ±0.16 
+
+Table 3. Performance on the MLE metric. Higher values in AUC and lower values in RMSE indicate better testing performance. Best performance in bold . Second best in underline. 
+
+Methods #Parameters Adult Default Shoppers Magic Beijing News (AUC ↑) (AUC ↑) (AUC ↑) (AUC ↑) (RMSE ↓) (RMSE ↓)GOGGLE (Liu et al., 2023) ∼ 5.6M .778 ±0.012 .584 ±0.005 .658 ±0.052 .654 ±0.024 1.090 ±0.025 .877 ±0.002 
+
+STaSy (Kim et al., 2022) ∼ 10.3M .906 ±0.001 .752 ±0.006 .914 ±0.005 .934 ±0.003 .656 ±0.014 .871 ±0.002 
+
+CoDi (Lee et al., 2023) ∼ 25.0M .871 ±0.006 .525 ±0.006 .865 ±0.006 .932 ±0.003 .818 ±0.021 1.21 ±0.005 
+
+TabDDPM (Kotelnikov et al., 2023) ∼ 11.7M .907 ±0.001 .758 ±0.004 .918 ±0.005 .935 ±0.003 .592 ±0.011 4.86 ±3.04 
+
+TAB SYN (Zhang et al., 2023) ∼ 10.7M .915 ±0.002 .764 ±0.004 .920 ±0.005 .938 ±0.002 .582 ±0.008 .861 ±0.027 
+
+TAB SYN (reproduced) ∼ 10.7M .910 ±0.001 .755 ±0.004 .916 ±0.004 .939 ±0.003 .655 ±0.012 .851 ±0.024 
+
+Our model ∼ 64K .915 ±0.001 .764 ±0.002 .924 ±0.003 .941 ±0.002 .543 ±0.012 .864 ±0.021 
+
+ular data synthesis, both of which are accomplished using the continuous-discrete Multimodal diffusion discussed in Sec. 3.3. The results for text-image generation are presented in Sec. 4.1 and the results for tabular data synthesis are presented in Sec. 4.2. e also include results for combining Riemannian and discrete diffusion in App. E to demonstrate the generality of the framework. 
+
+4.1. Text-Image Generation Architecture We design a new score network backbone for this task based on the celebrated success of Diffusion Transformer (DiT) (Peebles & Xie, 2023) and Multimodal Diffusion Transformer (MMDiT) (Esser et al., 2024). We first process the inputted (noisy) images and texts by passing them through an MMDiT with a per-modality unique time conditioning. MMDiT’s remarkable strength in modeling cross-modal interaction, as well as allowing independent conditioning for each modality, makes it ideal for the back-bone. The tokens then undergo unimodal DiTs for a more refined learning process. We present a comprehensive di-agram of the backbone in Fig. 2 and refer the reader to App. C for further details. 
+
+Datasets We train on the SAM-LLaVA dataset introduced by Chen et al. (2023). This dataset is constructed by adding captions to the Segment Anything (SAM) (Kirillov et al., 2023) using LLaVA (Liu et al., 2024), which results in rich and diverse captions. However, it suffers from hallucinations of LLava. For example, many colored images are described as being black and white. Following (Chen et al., 2023), we tokenize each caption with a length of 120 tokens. 
+
+Training & Evaluation We train our model using a multi-stage training strategy. We kindly refer readers to App. C for more details. We evaluate FID-30 K on MS-COCO (Lin et al., 2014). Compared with SAM-LLaVA, MS-COCO comes with much shorter captions. To address this distribu-tion shift in caption length between training and inference time, we draw inspiration from (Ifriqi et al., 2024) and repli-cate the text to increase the caption size. We also limit the number of tokens to 40 during this evaluation. We compare our results to other methods in Tab. 1. In terms of text-to-image (T2I), our methods produce similar performance compared to many other industrial-level models with larger model sizes. Notably, our model is trained on fewer sam-ples, features a significantly smaller backbone, and does not utilize extra foundation models to aid multimodal rep-resentation learning. This reflects both the efficiency and the effectiveness of our proposed approach. We also present qualitative samples in Fig. 3. For evaluation of image-to-text (I2T) and joint generation, please kindly see App. F. 
+
+4.2. Mixed-type Tabular Data Synthesis Architecture We devise a score network based on DiT for this task, where both discrete and continuous tabular data are fed into the transformer after simple dimension rescaling. Our design aims at achieving early fusion of both modalities for more efficient learning. See App. D.3 for details. 
+
+Datasets We experiment on 6 real-world tabular datasets acquired from UCI Machine Learning Repository 1. Ev-ery dataset contains columns of numerical or categorical features, associated with binary classification tasks or regres-
+
+> 1
+
+https://archive.ics.uci.edu/ 
+
+8Multimodal Diffusion on Arbitrary State Spaces 
+
+sion tasks. Detailed descriptions of datasets are in App. D.2. 
+
+Training & Evaluation We describe the score model archi-tecture and training settings in App. D.3. For evaluation, we follow the same setting as Zhang et al. (2023). We evaluate the Trend, Machine Learning Efficiency (MLE), Shape, Pre-cision, and Recall of the generated data. We present results on Trend in Tab. 2 and MLE in Tab. 3. For more results on other metrics, please see App. D.4. All experiments are repeated 20 times for robustness. As evident from Tab. 2 and Tab. 3, our model performs either the best or second-best, with a negligible gap, among most datasets. Notably, our model has only ∼ 64K parameters, which is 100 to 200 times smaller than models used in other methods. The significant reduction in model size stems from the fact that our method operates natively on the state space of mixed-type tabular data, eliminating parameter-heavy encoders like VAE. Our newly designed transformer-based score network leverages the concept of early fusion (Meta, 2024), which also enhances parameter efficiency. This net-work learns a joint embedding between modalities starting from the first attention layer and is more parameter-efficient. These results again showcase the efficiency and advantage of our proposed multimodal diffusion model framework. 
+
+## 5. More Information on Related Works 
+
+Multimodal Generative Models. Various works in the lit-erature have attempted joint generation of multimodal data. Many existing methods approach the task by leveraging autoregressive models by first tokenizing multimodal data into discrete tokens and then generating them sequentially (Meta, 2024; Xie et al., 2024; Zhou et al., 2024; Tschannen et al., 2024; Lu et al., 2024; Ge et al., 2024; Wu et al., 2024; Wang et al., 2024a). Another portion of the algorithms is built on the versatile capability of diffusion/flow-based methods to generate latent representations of multimodal data (Lee et al., 2023; Bao et al., 2023b; Ruan et al., 2023; Hu et al., 2022; Zhang et al., 2023; Kim et al., 2024; Chen et al., 2024a; Li et al., 2024a; Swerdlow et al., 2025; Hayes et al., 2025; Bai et al., 2025; Shi et al., 2025). One thing in common among the aforementioned approaches is that they all extensively utilize tokenizers or encoders to produce a unimodal latent space for multimodal data, which are not modular and heavily tailored to specific applications with little theoretical support. In contrast to these works in the literature, we propose a general multimodal diffusion learn-ing framework in this paper, which is flexible for generating data on arbitrary state spaces. This is achieved by minimiz-ing the need for external, modality-specific tokenizers and encoders, while keeping the generation in the native spaces of the targeted data. 
+
+Decoupled Time Variables. It’s worth noting that the de-coupled time design, essential to our proposed framework, has in fact been explored by many application-driven works in the literature, such as UniDiffuser (Bao et al., 2023a), MultiFlow (Campbell et al., 2024), AVDiT (Kim et al., 2024), and OmniFlow (Li et al., 2024a). While these meth-ods all leverage the multiple time variable design to achieve any-to-any generation, they mostly consider this design as a trick and do not investigate it from an algorithmic perspec-tive. Our work contributes to this literature by deriving the unified training objective and backward generative process in the presence of multiple time variables, providing theoret-ical justification for the validity of this design. To the best of our knowledge, our work is the first to formalize this idea and generalize it to an arbitrary number of modalities. A highly relevant work worth discussing in more detail is UniDiffuser (Bao et al., 2023b), which addresses the same text-image joint generation task considered in this paper while also utilizing decoupled time variables. A fundamen-tal difference in algorithm design is that UniDiffuser purely relies on continuous diffusion models in the CLIP latent space, which is shared by both text and images, whereas our proposed continuous-discrete diffusion operates natively on the product space of Euclidean and finite-state spaces. 
+
+Diffusion Models in General State Spaces. Theoretical results have demonstrated that diffusion models can be gen-eralized to denoising Markov models, a class of generative models constructed based on the notion of Markov processes (Benton et al., 2024; Ren et al., 2025b). These works con-sidered unimodal diffusions on general state spaces with a single time variable. Our work extends the framework of de-noising Markov models by incorporating multimodal diffu-sion models on the product of different state spaces, as well as multiple time variables. In the literature, there are also MultiFlow (Campbell et al., 2024) and Generator Matching (Holderrieth et al., 2024), which are multimodal extensions of flow-based methods in native state spaces. Their algo-rithm construction specifically focused on the task of protein sequence-structure co-generation. In contrast, we present a general recipe for multimodal diffusion models that does not initially target specific tasks, despite empirically validat-ing the proposed framework on two examples: text-image generation and mix-type tabular data synthesis, leveraging our newly proposed Continuous-Discrete Diffusion. 
+
+## 6. Conclusions, Limitations and Future Works 
+
+We propose a novel framework for constructing multimodal diffusion models on general state spaces. We experiment on text-image and tabular data generation, and our ap-proach achieves competitive performances with a signif-icantly smaller model size. One limitation of this work is that we didn’t explore the possibility of utilizing pretrained unimodal diffusion models as initialization of multimodal diffusion training, which could further boost training effi-ciency. We leave this as a future direction for investigation. 9Multimodal Diffusion on Arbitrary State Spaces 
+
+## Acknowledgements 
+
+KR, YZ and MT are grateful for partial supports by NSF Grant DMS-1847802, Cullen-Peck Scholarship, and Emory-GT AI.Humanity Award. FY is grateful for partial support by UAlbany-IBM research funding. This research was sup-ported in part by the AI Computing Cluster at the University at Albany. 
+
+## Impact Statement 
+
+This paper presents work aimed at advancing the field of Machine Learning. There are many potential societal con-sequences of our work, none of which we feel must be specifically highlighted here. 
+
+## References 
+
+Anderson, B. D. Reverse-time diffusion equation models. 
+
+Stochastic Processes and their Applications , 12(3):313– 326, 1982. Bai, J., Ye, T., Chow, W., Song, E., Chen, Q.-G., Li, X., Dong, Z., Zhu, L., and YAN, S. Meissonic: Revital-izing masked generative transformers for efficient high-resolution text-to-image synthesis. In The Thirteenth International Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=GJsuYHhAga .Bao, F., Nie, S., Xue, K., Cao, Y., Li, C., Su, H., and Zhu, J. All are worth words: A vit backbone for diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 22669–22679, 2023a. Bao, F., Nie, S., Xue, K., Li, C., Pu, S., Wang, Y., Yue, G., Cao, Y., Su, H., and Zhu, J. One transformer fits all distributions in multi-modal diffusion at scale. In 
+
+International Conference on Machine Learning , pp. 1692– 1717. PMLR, 2023b. Benton, J., Shi, Y., De Bortoli, V., Deligiannidis, G., and Doucet, A. From denoising diffusions to denoising markov models. Journal of the Royal Statistical Soci-ety Series B: Statistical Methodology , 86(2):286–301, 2024. Campbell, A., Benton, J., De Bortoli, V., Rainforth, T., Deli-giannidis, G., and Doucet, A. A continuous time frame-work for discrete denoising models. Advances in Neural Information Processing Systems , 35:28266–28279, 2022. Campbell, A., Yim, J., Barzilay, R., Rainforth, T., and Jaakkola, T. Generative flows on discrete state-spaces: En-abling multimodal flows with applications to protein co-design. In International Conference on Machine Learn-ing , pp. 5453–5512. PMLR, 2024. Chang, H., Zhang, H., Jiang, L., Liu, C., and Freeman, W. T. Maskgit: Masked generative image transformer. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 11315–11325, 2022. Chen, C., Ding, H., Sisman, B., Xu, Y., Xie, O., Yao, B. Z., Tran, S. D., and Zeng, B. Diffusion models for multi-modal generative modeling. 2024a. URL https:// arxiv.org/abs/2407.17571 .Chen, J., Yu, J., Ge, C., Yao, L., Xie, E., Wu, Y., Wang, Z., Kwok, J., Luo, P., Lu, H., et al. Pixart-alpha: Fast training of diffusion transformer for photorealistic text-to-image synthesis. arXiv preprint arXiv:2310.00426 , 2023. Chen, R. T. and Lipman, Y. Flow matching on general geometries. In The Twelfth International Conference on Learning Representations , 2024. Chen, Y., Goldstein, M., Hua, M., Albergo, M. S., Boffi, N. M., and Vanden-Eijnden, E. Probabilistic forecasting with stochastic interpolants and f ¨ollmer processes. In 
+
+Forty-first International Conference on Machine Learn-ing , 2024b. Cheng, A., Lo, A., Lee, K. L. K., Miret, S., and Aspuru-Guzik, A. Stiefel flow matching for moment-constrained structure elucidation. In The Thirteenth International Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=84WmbzikPP .Chi, C., Xu, Z., Feng, S., Cousineau, E., Du, Y., Burchfiel, B., Tedrake, R., and Song, S. Diffusion policy: Visuomo-tor policy learning via action diffusion. The International Journal of Robotics Research , pp. 02783649241273668, 2023. De Bortoli, V., Mathieu, E., Hutchinson, M., Thornton, J., Teh, Y. W., and Doucet, A. Riemannian score-based generative modelling. Advances in Neural Information Processing Systems , 35:2406–2422, 2022. Dhariwal, P. and Nichol, A. Diffusion models beat gans on image synthesis. Advances in neural information processing systems , 34:8780–8794, 2021. Esser, P., Rombach, R., and Ommer, B. Taming transformers for high-resolution image synthesis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 12873–12883, 2021. Esser, P., Kulal, S., Blattmann, A., Entezari, R., M ¨uller, J., Saini, H., Levi, Y., Lorenz, D., Sauer, A., Boesel, F., et al. Scaling rectified flow transformers for high-resolution image synthesis. In Forty-first International Conference on Machine Learning , 2024. 10 Multimodal Diffusion on Arbitrary State Spaces 
+
+Gat, I., Remez, T., Shaul, N., Kreuk, F., Chen, R. T., Syn-naeve, G., Adi, Y., and Lipman, Y. Discrete flow match-ing. arXiv preprint arXiv:2407.15595 , 2024. Ge, Y., Zhao, S., Zhu, J., Ge, Y., Yi, K., Song, L., Li, C., Ding, X., and Shan, Y. Seed-x: Multimodal models with unified multi-granularity comprehension and generation. 
+
+arXiv preprint arXiv:2404.14396 , 2024. Hayes, T., Rao, R., Akin, H., Sofroniew, N. J., Oktay, D., Lin, Z., Verkuil, R., Tran, V. Q., Deaton, J., Wiggert, M., et al. Simulating 500 million years of evolution with a language model. Science , pp. eads0018, 2025. Ho, J. and Salimans, T. Classifier-free diffusion guid-ance. In NeurIPS Workshop on Deep Generative Mod-els and Downstream Applications , 2021. URL https: //openreview.net/forum?id=qw8AKxfYbI .Ho, J., Jain, A., and Abbeel, P. Denoising diffusion proba-bilistic models. Advances in neural information process-ing systems , 33:6840–6851, 2020. Ho, J., Salimans, T., Gritsenko, A., Chan, W., Norouzi, M., and Fleet, D. J. Video diffusion models. Advances in Neural Information Processing Systems , 35:8633–8646, 2022. Holderrieth, P., Havasi, M., Yim, J., Shaul, N., Gat, I., Jaakkola, T., Karrer, B., Chen, R. T., and Lipman, Y. Generator matching: Generative modeling with arbitrary markov processes. arXiv preprint arXiv:2410.20587 ,2024. Hoogeboom, E., Mensink, T., Heek, J., Lamerigts, K., Gao, R., and Salimans, T. Simpler diffusion (sid2): 1.5 fid on imagenet512 with pixel-space diffusion. arXiv preprint arXiv:2410.19324 , 2024. Hu, M., Zheng, C., Zheng, H., Cham, T.-J., Wang, C., Yang, Z., Tao, D., and Suganthan, P. N. Unified discrete diffu-sion for simultaneous vision-language generation. arXiv preprint arXiv:2211.14842 , 2022. Huang, C.-W., Aghajohari, M., Bose, J., Panangaden, P., and Courville, A. C. Riemannian diffusion models. Ad-vances in Neural Information Processing Systems , 35: 2750–2761, 2022. Hyv ¨arinen, A. and Dayan, P. Estimation of non-normalized statistical models by score matching. Journal of Machine Learning Research , 6(4), 2005. Ifriqi, T. B., Astolfi, P., Hall, M., Askari-Hemmat, R., Benchetrit, Y., Havasi, M., Muckley, M., Alahari, K., Romero-Soriano, A., Verbeek, J., et al. On improved conditioning mechanisms and pre-training strategies for diffusion models. In NeurIPS 2024-Thirty-eighth Confer-ence on Neural Information Processing Systems , 2024. Jin, Y., Sun, Z., Li, N., Xu, K., Jiang, H., Zhuang, N., Huang, Q., Song, Y., Mu, Y., and Lin, Z. Pyramidal flow matching for efficient video generative modeling. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview. net/forum?id=66NzcRQuOq .Karras, T., Aittala, M., Aila, T., and Laine, S. Elucidating the design space of diffusion-based generative models. 
+
+Advances in neural information processing systems , 35: 26565–26577, 2022. Karras, T., Aittala, M., Kynk ¨a ¨anniemi, T., Lehtinen, J., Aila, T., and Laine, S. Guiding a diffusion model with a bad version of itself. arXiv preprint arXiv:2406.02507 , 2024a. Karras, T., Aittala, M., Lehtinen, J., Hellsten, J., Aila, T., and Laine, S. Analyzing and improving the training dynamics of diffusion models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 24174–24184, 2024b. Kelly, F. P. Reversibility and stochastic networks . Cam-bridge University Press, 2011. Kim, G., Martinez, A., Su, Y.-C., Jou, B., Lezama, J., Gupta, A., Yu, L., Jiang, L., Jansen, A., Walker, J. C., et al. A versatile diffusion transformer with mixture of noise levels for audiovisual generation. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. Kim, J., Lee, C., and Park, N. Stasy: Score-based tabular data synthesis. arXiv preprint arXiv:2210.04018 , 2022. Kingma, D. P. Auto-encoding variational bayes. arXiv preprint arXiv:1312.6114 , 2013. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A. C., Lo, W.-Y., et al. Segment anything. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pp. 4015–4026, 2023. Kotelnikov, A., Baranchuk, D., Rubachev, I., and Babenko, A. Tabddpm: Modelling tabular data with diffusion mod-els. In International Conference on Machine Learning ,pp. 17564–17579. PMLR, 2023. Kynk ¨a ¨anniemi, T., Aittala, M., Karras, T., Laine, S., Aila, T., and Lehtinen, J. Applying guidance in a limited interval improves sample and distribution quality in diffusion models. arXiv preprint arXiv:2404.07724 , 2024. Lee, C., Kim, J., and Park, N. Codi: Co-evolving con-trastive diffusion models for mixed-type tabular synthesis. In International Conference on Machine Learning , pp. 18940–18956. PMLR, 2023. 11 Multimodal Diffusion on Arbitrary State Spaces 
+
+Li, M., Shitole, V., Chien, E., Man, C., Wang, Z., Sridharan, S., Zhang, Y., Krishna, T., and Li, P. Layerdag: A layer-wise autoregressive diffusion model for directed acyclic graph generation. In The Thirteenth International Confer-ence on Learning Representations , 2025. URL https: //openreview.net/forum?id=kam84eEmub .Li, S., Kallidromitis, K., Gokul, A., Liao, Z., Kato, Y., Kozuka, K., and Grover, A. Omniflow: Any-to-any gen-eration with multi-modal rectified flows. arXiv preprint arXiv:2412.01169 , 2024a. Li, T., Luo, W., Chen, Z., Ma, L., and Qi, G.-J. Self-guidance: Boosting flow and diffusion generation on their own. arXiv preprint arXiv:2412.05827 , 2024b. Lin, T., Maire, M., Belongie, S., Bourdev, L., Girshick, R., Hays, J., Perona, P., Ramanan, D., Doll ´ar, P., and Zitnick, C. Microsoft COCO: common objects in context. In 
+
+ECCV , 2014. Liu, H., Li, C., Wu, Q., and Lee, Y. J. Visual instruction tun-ing. Advances in neural information processing systems ,36, 2024. Liu, T., Qian, Z., Berrevoets, J., and van der Schaar, M. Goggle: Generative modelling for tabular data by learn-ing relational structure. In The Eleventh International Conference on Learning Representations , 2023. Lou, A., Meng, C., and Ermon, S. Discrete diffusion mod-eling by estimating the ratios of the data distribution. 
+
+International Conference on Machine Learning , 2024. Lu, J., Clark, C., Lee, S., Zhang, Z., Khosla, S., Marten, R., Hoiem, D., and Kembhavi, A. Unified-io 2: Scaling autoregressive multimodal models with vision language audio and action. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pp. 26439–26455, 2024. Luo, E., Hao, M., Wei, L., and Zhang, X. scdiffusion: conditional generation of high-quality single-cell data using diffusion model. Bioinformatics , 40(9):btae518, 2024. Lyu, S. Interpretation and generalization of score matching. 
+
+arXiv preprint arXiv:1205.2629 , 2012. Meta, C. Chameleon: Mixed-modal early-fusion foundation models. arXiv preprint arXiv:2405.09818 , 2024. Nie, S., Zhu, F., Du, C., Pang, T., Liu, Q., Zeng, G., Lin, M., and Li, C. Scaling up masked diffusion models on text. In The Thirteenth International Conference on Learning Representations , 2025a. URL https: //openreview.net/forum?id=WNvvwK0tut .Nie, S., Zhu, F., You, Z., Zhang, X., Ou, J., Hu, J., Zhou, J., Lin, Y., Wen, J.-R., and Li, C. Large language diffusion models. arXiv preprint arXiv:2502.09992 , 2025b. Nisonoff, H., Xiong, J., Allenspach, S., and Listgarten, J. Unlocking guidance for discrete state-space diffusion and flow models. arXiv preprint arXiv:2406.01572 , 2024. Ou, J., Nie, S., Xue, K., Zhu, F., Sun, J., Li, Z., and Li, C. Your absorbing discrete diffusion secretly models the conditional distributions of clean data. In The Thirteenth International Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=sMyXP8Tanm .Peebles, W. and Xie, S. Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision , pp. 4195–4205, 2023. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pp. 8748–8763. PMLR, 2021. Ramesh, A., Dhariwal, P., Nichol, A., Chu, C., and Chen, M. Hierarchical text-conditional image generation with clip latents. arXiv preprint arXiv:2204.06125 , 1(2):3, 2022. Ren, Y., Chen, H., Rotskoff, G. M., and Ying, L. How discrete and continuous diffusion meet: Comprehensive analysis of discrete diffusion models via a stochastic inte-gral framework. arXiv preprint arXiv:2410.03601 , 2024. Ren, Y., Chen, H., Zhu, Y., Guo, W., Chen, Y., Rotskoff, G. M., Tao, M., and Ying, L. Fast solvers for discrete diffusion models: Theory and applications of high-order algorithms. arXiv preprint arXiv:2502.00234 , 2025a. Ren, Y., Rotskoff, G. M., and Ying, L. A unified approach to analysis and design of denoising markov models. arXiv preprint arXiv:2504.01938 , 2025b. Rojas, K., He, Y., Lai, C.-H., Takida, Y., Mitsufuji, Y., and Tao, M. Theory-informed improvements to classifier-free guidance for discrete diffusion models. arXiv preprint arXiv:2507.08965 , 2025a. Rojas, K., Tian, Y., Tao, M., Nevmyvaka, Y., and Deng, W. Variational schr ¨odinger momentum diffusion. arXiv preprint arXiv:2501.16675 , 2025b. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., and Ommer, B. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pp. 10684–10695, 2022. 12 Multimodal Diffusion on Arbitrary State Spaces 
+
+Ruan, L., Ma, Y., Yang, H., He, H., Liu, B., Fu, J., Yuan, N. J., Jin, Q., and Guo, B. Mm-diffusion: Learning multi-modal diffusion models for joint audio and video generation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 10219– 10228, 2023. Saharia, C., Chan, W., Saxena, S., Li, L., Whang, J., Denton, E. L., Ghasemipour, K., Gontijo Lopes, R., Karagol Ayan, B., Salimans, T., et al. Photorealistic text-to-image dif-fusion models with deep language understanding. Ad-vances in neural information processing systems , 35: 36479–36494, 2022. Sahoo, S., Arriola, M., Schiff, Y., Gokaslan, A., Marroquin, E., Chiu, J., Rush, A., and Kuleshov, V. Simple and effective masked diffusion language models. Advances in Neural Information Processing Systems , 37:130136– 130184, 2024. Schiff, Y., Sahoo, S. S., Phung, H., Wang, G., Boshar, S., Dalla-torre, H., de Almeida, B. P., Rush, A., Pierrot, T., and Kuleshov, V. Simple guidance mechanisms for dis-crete diffusion models. arXiv preprint arXiv:2412.10193 ,2024. Shi, J., Han, K., Wang, Z., Doucet, A., and Titsias, M. Simplified and generalized masked diffusion for discrete data. Advances in neural information processing systems ,37:103131–103167, 2024. Shi, Q., Bai, J., Zhao, Z., Chai, W., Yu, K., Wu, J., Song, S., Tong, Y., Li, X., Li, X., et al. Muddit: Liberating generation beyond text-to-image with a unified discrete diffusion model. arXiv preprint arXiv:2505.23606 , 2025. Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., and Ganguli, S. Deep unsupervised learning using nonequi-librium thermodynamics. In International conference on machine learning , pp. 2256–2265. PMLR, 2015. Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Er-mon, S., and Poole, B. Score-based generative modeling through stochastic differential equations. arXiv preprint arXiv:2011.13456 , 2020. Sriram, A., Miller, B. K., Chen, R. T., and Wood, B. M. Flowllm: Flow matching for material generation with large language models as base distributions. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. Swerdlow, A., Prabhudesai, M., Gandhi, S., Pathak, D., and Fragkiadaki, K. Unified multimodal discrete diffusion. 
+
+arXiv preprint arXiv:2503.20853 , 2025. Tschannen, M., Pinto, A. S., and Kolesnikov, A. Jetformer: An autoregressive generative model of raw images and text. arXiv preprint arXiv:2411.19722 , 2024. Van Den Oord, A., Vinyals, O., et al. Neural discrete rep-resentation learning. Advances in neural information processing systems , 30, 2017. Vincent, P. A connection between score matching and de-noising autoencoders. Neural computation , 23(7):1661– 1674, 2011. Wang, X., Zhang, X., Luo, Z., Sun, Q., Cui, Y., Wang, J., Zhang, F., Wang, Y., Li, Z., Yu, Q., et al. Emu3: Next-token prediction is all you need. arXiv preprint arXiv:2409.18869 , 2024a. Wang, X., Zheng, Z., Ye, F., Xue, D., Huang, S., and Gu, Q. Diffusion language models are versatile protein learners. In International Conference on Machine Learning , pp. 52309–52333. PMLR, 2024b. Watson, J. L., Juergens, D., Bennett, N. R., Trippe, B. L., Yim, J., Eisenach, H. E., Ahern, W., Borst, A. J., Ragotte, R. J., Milles, L. F., et al. De novo design of protein struc-ture and function with rfdiffusion. Nature , 620(7976): 1089–1100, 2023. Wu, C., Chen, X., Wu, Z., Ma, Y., Liu, X., Pan, Z., Liu, W., Xie, Z., Yu, X., Ruan, C., et al. Janus: Decoupling visual encoding for unified multimodal understanding and generation. arXiv preprint arXiv:2410.13848 , 2024. Xie, J., Mao, W., Bai, Z., Zhang, D. J., Wang, W., Lin, K. Q., Gu, Y., Chen, Z., Yang, Z., and Shou, M. Z. Show-o: One single transformer to unify multimodal understanding and generation. arXiv preprint arXiv:2408.12528 , 2024. Xu, X., Wang, Z., Zhang, G., Wang, K., and Shi, H. Versatile diffusion: Text, images and variations all in one diffusion model. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 7754–7765, 2023. Xu, Z., Qiu, R., Chen, Y., Chen, H., Fan, X., Pan, M., Zeng, Z., Das, M., and Tong, H. Discrete-state continuous-time diffusion for graph generation. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. Ye, H., Kevin, R., and Molei, T. What exactly does guidance do in masked discrete diffusion models. arXiv preprint arXiv:2506.10971 , 2025. Yim, J., Trippe, B. L., De Bortoli, V., Mathieu, E., Doucet, A., Barzilay, R., and Jaakkola, T. Se (3) diffusion model with application to protein backbone generation. In In-ternational Conference on Machine Learning , pp. 40001– 40039. PMLR, 2023. Zhang, H., Zhang, J., Srinivasan, B., Shen, Z., Qin, X., Faloutsos, C., Rangwala, H., and Karypis, G. Mixed-type tabular data synthesis with score-based diffusion in latent space. arXiv preprint arXiv:2310.09656 , 2023. 13 Multimodal Diffusion on Arbitrary State Spaces 
+
+Zhou, C., Yu, L., Babu, A., Tirumala, K., Yasunaga, M., Shamis, L., Kahn, J., Ma, X., Zettlemoyer, L., and Levy, O. Transfusion: Predict the next token and dif-fuse images with one multi-modal model. arXiv preprint arXiv:2408.11039 , 2024. Zhu, S., Zhu, Y., Tao, M., and Qiu, P. Diffusion gener-ative modeling for spatially resolved gene expression inference from histology images. In The Thirteenth International Conference on Learning Representations ,2025a. URL https://openreview.net/forum? id=FtjLUHyZAO .Zhu, Y., Chen, T., Kong, L., Theodorou, E., and Tao, M. Trivialized momentum facilitates diffusion gener-ative modeling on lie groups. In The Thirteenth In-ternational Conference on Learning Representations ,2025b. URL https://openreview.net/forum? id=DTatjJTDl1 .14 Multimodal Diffusion on Arbitrary State Spaces 
+
+## A. Proofs 
+
+A.1. Proof of Theorem 1 
+
+The following proof follows a similar idea as is presented Benton et al. (2024): 
+
+Proof. By Jensen’s inequality, we have: 
+
+log  E[f (x1, . . . , X iti , . . . , x n) Xi 
+
+> 0
+
+= xi] ≤ E[log( f )( x1, . . . , X iti , . . . , x n) Xi 
+
+> 0
+
+= xi]
+
+This implies the following inequality: 
+
+log  E[f (x1, . . . , X iti , . . . , x n) Xi 
+
+> 0
+
+= xi] − log f (x)
+
+ti
+
+| {z }
+
+> LHS
+
+≤ E[log( f )( x1, . . . , X iti , . . . x n) Xi 
+
+> 0
+
+= xi] − log f (x)
+
+ti
+
+| {z }
+
+> RHS
+
+where we denote x = ( x1, . . . , x n). Taking the limit as ti → 0, we notice that the limit of RHS equals LXi (log f )( x). On the other hand, if we consider the following function g:
+
+g(h) = E[f (x1, . . . , X ih, . . . , x n) Xi 
+
+> 0
+
+= xi], g(0) = f (x)
+
+We can calculate the limit of LHS as ti → 0,
+
+lim  
+
+> ti→0
+
+LHS = lim 
+
+> ti→0
+
+log( g(ti)) − log g(0)) 
+
+ti = (log( g)) ′(0) = 1
+
+g(0) g′(0) = LXi f (x)
+
+f (x)
+
+Combining them, we have that 
+
+LXi f (x)
+
+f (x) ≥ L (log f )( x)
+
+Applying this result by choosing f = p/β θ , we have that 
+
+LXi (p/β θ )( xt, t)(p/β θ )( xt, t) − L Xi log( p/β θ )( xt, t) ≥ 0 (9) This finishes the proof of IGESM ≥ 0. To see that IGESM is minimized when βθ (x, t) ∝ p(x, t), note that Jensen’s inequality holds the equality sign when the test function is constant. Therefore, (9) holds the equality sign for each LXi
+
+whenever p/β θ is identically constant, therefore IGESM is optimized when βθ is equivalent to p up to a multiplicative constant. 
+
+A.2. Proof of Theorem 2 
+
+Proof. We will start by showing the equivalence between IGDSM and IGISM , and then we will demonstrate the equivalence between IGISM and IGESM to finish the proof. We start with the definition of IGDSM ,
+
+IGDSM = E
+
+> t,p 0,p t|0
+
+" nX
+
+> i=1
+
+LXi (pt|0/β θ )( xt, t)(pt|0/β θ )( xt, t) − L Xi log( pt|0/β θ )( xt, t)
+
+#
+
+= E
+
+> t,p 0
+
+Z
+
+> X
+
+pt|0(xt, t)
+
+" nX
+
+> i=1
+
+LXi (pt|0/β θ )( xt, t)(pt|0/β θ )( xt, t) − L Xi log( pt|0/β θ )( xt, t)
+
+#
+
+dxt
+
+= E
+
+> t,p 0
+
+Z
+
+> X
+
+" nX
+
+> i=1
+
+βθ (xt, t)LXi (pt|0/β θ )( xt, t) − pt|0(xt, t )LXi log( pt|0/β θ )( xt, t)
+
+#
+
+dxt
+
+15 Multimodal Diffusion on Arbitrary State Spaces 
+
+Then, using the properties of the adjoint L∗ 
+
+> Xi
+
+, we can continue to simplify the objective as, 
+
+IGDSM = E
+
+> t,p 0
+
+Z
+
+> X
+
+" nX
+
+> i=1
+
+L∗ 
+
+> Xi
+
+βθ (xt, t) · pt|0(xt, t)/β θ (x, t) − pt|0(xt, t)LXi log( pt|0/β θ )( xt, t)
+
+#
+
+dxt
+
+= E
+
+> t,p 0
+
+Z
+
+> X
+
+pt|0(xt, t)
+
+" nX
+
+> i=1
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+β(xt, t) + LXi log βθ (xt, t) − L Xi log pt|0(xt, t)
+
+#
+
+dxt
+
+= E
+
+> t,p 0
+
+E
+
+> pt|0
+
+" nX
+
+> i=1
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+βθ (xt, t) + LXi log βθ (xt, t)
+
+#
+
++ const = E
+
+> t,p t
+
+" nX
+
+> i=1
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+βθ (xt, t) + LXi log βθ (xt, t)
+
+#
+
++ const = IGISM + const 
+
+This finishes the proof of equivalence between IGDSM and IGISM . To show the equivalence between IGISM and IGESM ,we start with the definition of IGESM ,
+
+IGESM = E
+
+> t,xt∼p(·,t)
+
+" nX
+
+> i=0
+
+LXi (p/β θ )( xt, t)(p/β θ )( xt, t) − L Xi log( p/β θ )( xt, t)
+
+#
+
+= E
+
+> t
+
+Z
+
+> X
+
+p(xt, t)
+
+" nX
+
+> i=0
+
+LXi (p/β θ )( xt, t)(p/β θ )( xt, t) − L Xi log( p/β θ )( xt, t)
+
+#
+
+dxt
+
+= E
+
+> t
+
+Z
+
+> X
+
+" nX
+
+> i=0
+
+βθ (xt, t)LXi (p/β θ )( xt, t) − p(xt, t)LXi log( p/β θ )( xt, t)
+
+#
+
+dxt
+
+Using again the properties of ajoint L∗ 
+
+> Xi
+
+, we have 
+
+IGESM = E
+
+> t
+
+Z
+
+> X
+
+" nX
+
+> i=0
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)( p/β θ )( xt, t) − p(xt, t)LXi log( p/β θ )( xt, t)
+
+#
+
+dxt
+
+= E
+
+> t
+
+Z
+
+> X
+
+p(xt, t)
+
+" nX
+
+> i=0
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+βθ (xt, t) − L Xi log( p/β θ )( xt, t)
+
+#
+
+dxt
+
+= E
+
+> t,xt∼pt
+
+" nX
+
+> i=0
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+βθ (xt, t) − L Xi log p(xt, t) + LXi log βθ (xt, t)
+
+#
+
+= E
+
+> t,xt∼pt
+
+" nX
+
+> i=0
+
+L∗ 
+
+> Xi
+
+βθ (xt, t)
+
+βθ (xt, t) + LXi log βθ (xt, t)
+
+#
+
++ const = IGISM + const 
+
+This finishes the proof of equivalence of IGDSM , IGISM , IGESM up to an additive, θ-independent constant. 
+
+A.3. Proof of Proposition 1 
+
+Proof. In the following, we derive IGDSM when choosing the forward process as in (6). Recall that IGDSM is given as, 
+
+IGDSM = E
+
+> t,p 0,p t|0
+
+" LX (pt|0/β θ )( xt, t)(pt|0/β θ )( xt, t) − L X log( pt|0/β θ )( xt, t)
+
+| {z }
+
+> JX
+
++ LY (pt|0/β θ )( xt, t)(pt|0/β θ )( xt, t) − L Y log( pt|0/β θ )( xt, t)
+
+| {z }
+
+> JY
+
+#
+
+where t = ( t, s ), xt = ( Xt, Y s), pt|0(xt, t) = p(Xt, Y s | X0 = x0, Y 0 = y0), LX and LY are generator of the following dynamics. (
+
+dXt = f (Xt, t )d t + g(t)d Bt
+
+Ys ∼ CTMC( Qs), (X0, Y 0) ∼ pdata (x, y )
+
+16 Multimodal Diffusion on Arbitrary State Spaces 
+
+See Lem. 1 for a detailed proof. We start by computing the score matching operators ΦX and ΦY for X and Y respectively. Note that LX and LY are given by the following expressions for a test function h = h(xt, y s, t, s ),
+
+LX h = f · ∇ h + 12 g(t)2∆h, LY h = X
+
+> y∈X
+
+h(xt, y, t, s )Qs(y, y s)
+
+Therefore, for the score matching operator associated with LX , it can be expressed as 
+
+ΦX (h) = LX hh − L X log h
+
+= f · ∇ hh + 12 g(t)2 ∆hh − f · ∇ log h − 12 ∆ log h
+
+= 12 g(t)2 · ∇ · (h∇ log h)
+
+h − 12 g(t)2∆ log h
+
+= 12 g(t)2∇ log h · ∇hh + 12 g(t)2∇ · ∇ log h − 12 g(t)2∆ log h
+
+Note that ∇hh = ∇ log h, ∇ · ∇ log h = ∆ log h, therefore we derive that 
+
+ΦX (h) = 12 g(t)2∥∇ log h∥2
+
+For the score matching operator associated with LY , it can be expressed as, 
+
+ΦY (h) = LY hh − L Y log h
+
+= X
+
+> y∈X
+
+Qs(y, y s)
+
+ h(xt, y, t, s )
+
+h(xt, y s, t, s ) − log h(xt, y, t, s )
+
+
+
+= X
+
+> y∈X
+
+Qs(y, y s)
+
+ h(xt, y, t, s )
+
+h(xt, y s, t, s ) − log h(xt, y, t, s )
+
+h(xt, y s, t, s )
+
+
+
+where the last line follows since P 
+
+> y∈X
+
+Qs(y, y s) = 0 .In this case, the LX related term JX in IGDSM can be simplified as, 
+
+JX = LX (pt|0/β θ )( xt, t)(pt|0/β θ )( xt, t) − L X log( pt|0/β θ )( xt, t)= E
+
+> t,p 0,p t|0
+
+"
+
+ΦX
+
+  pt|0
+
+βθ
+
+#
+
+= E
+
+> t,p 0,p t|0
+
+"
+
+12 g(t)2 ∇ log p(xt, y s, t, s | x0, y 0) − ∇ log βθ (xt, y s, t, s )
+
+> 2
+
+#
+
+Moreover, since (Xt, Y s) are conditionally independent given (X0, Y 0), we have that 
+
+∇ log p(xt, y s, t, s | x0, y 0) = ∇ log  p(xt, t | x0, y 0) · p(ys, s | x0, Y 0)
+
+= ∇ log p(xt, t | x0, y 0) + ∇ log p(ys, s | x0, y 0)= ∇ log p(xt, t | x0)
+
+which suggests that under our framework, the multimodal conditional score is identical to the unimodal conditional score. Using this, and set sXθ (xt, y s, t, s ) = ∇ log βθ (xt, y s, t, s ), we have 
+
+JX = E
+
+> t,s,x 0,y 0∼p0
+> xt,y s∼pt,s |0
+
+"
+
+12 g2(t) sXθ − ∇ log pt(xt|x0)
+
+> 2
+
+#
+
+17 Multimodal Diffusion on Arbitrary State Spaces 
+
+Similarly, the LY related term JY in IGDSM can be simplified as, 
+
+JY = E
+
+> t,p 0,p t|0
+
+"
+
+ΦY
+
+  pt|0
+
+βθ
+
+#
+
+= E
+
+> t,p 0,p t|0
+
+" X
+
+> y∈X
+
+Qs(y, y s)
+
+ p(xt, y, t, s | x0, y 0)
+
+p(xt, y s, t, s | x0, y 0) · βθ (xt, y s, t, s )
+
+βθ (xt, y, t, s ) − log p(xt, y, t, s | x0, y 0)
+
+p(xt, y s, t, s | x0, y 0) + log βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s )
+
+#
+
+= E
+
+> t,p 0
+
+" Z
+
+> Rd
+
+X
+
+> y,y s∈X
+
+Qs(y, y s)
+
+
+
+p(xt, y, t, s | x0, y 0) · βθ (xt, y s, t, s )
+
+βθ (xt, y, t, s ) + p(xt, y s, t, s | x0, y 0) · log βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s )
+
+!
+
+dxt
+
+#
+
++ const = E
+
+> t,p 0
+
+" X
+
+> ys∈X
+
+Z
+
+> Rd
+
+E
+
+> y∼p(xt,·,t,s |x0,y 0)
+
+Qs(y, y s) βθ (xt, y s, t, s )
+
+βθ (xt, y, t, s ) + p(xt, y s, t, s | x0, y 0)
+
+p(xt, y, t, s | x0, y 0) · log βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s )
+
+!! 
+
+dxt
+
+#
+
++ const 
+
+Now, we exchange variable ys and y, and thus the expression is rewritten to, 
+
+JY = E
+
+> t,p 0
+
+" X
+
+> y∈X
+
+Z
+
+> Rd
+
+E
+
+> ys∼p(xt,·,t,s |x0,y 0)
+
+Qs(ys, y ) βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s ) − p(xt, y, t, s | x0, y 0)
+
+p(xt, y s, t, s | x0, y 0) · log βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s )
+
+!! 
+
+dxt
+
+#
+
++ const = E
+
+> t,p 0,p t|0
+
+" X
+
+> y∈X
+
+Qs(ys, y ) βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s ) − p(xt, y, t, s | x0, y 0)
+
+p(xt, y s, t, s | x0, y 0) · log βθ (xt, y, t, s )
+
+βθ (xt, y s, t, s )
+
+!# 
+
++ const 
+
+Using again the conditional independence of (Xt, Y s) given (X0, Y 0), we have that 
+
+p(xt, y, t, s | x0, y 0)
+
+p(xt, y s, t, s | x0, y 0) = p(xt, t | x0, y 0)p(y, s | x0, y 0)
+
+p(xt, t | x0, y 0)p(ys, s | x0, y 0)= p(y, s | x0, y 0)
+
+p(ys, s | x0, y 0) = p(y, s | y0)
+
+p(ys, s | y0)
+
+which indicates again that the multimodal conditional score is identical to the unimodal conditional score. Set 
+
+sYθ (xt, y s, t, s )y = βθ (xt, y, t, s )/β θ (xt, y s, t, s ), we finally arrive at that 
+
+JY = E
+
+> t,s,x 0,y 0∼p0
+> xt,y s∼pt,s |0
+
+" X
+
+> y∈X
+
+Qs(ys, y ) sYθ (xt, y s, t, s )y − p(y, s | y0)
+
+p(ys, s | y0) · log sYθ (xt, y s, t, s )y
+
+!# 
+
++ const 
+
+Note that while the sum in JY is over y ∈ X, in fact when y = ys, the corresponding term is constant and has no contribution to the gradient of θ, therefore we can instead only summing over y ∈ X and y̸ = ys, recovering the presented expressions in Prop. 1. This concludes the proof. 
+
+A.4. Proof of Proposition 2 
+
+We start by considering the function u(x, y, t, s ) = E[h(Xt, Y s) X0 = x, Y 0 = y] as test functions. We start by computing the generator of the forward process. For notational convenience, we use LX and LY to denote the generators of Xt and Ys,respectively. 
+
+Lemma 1 (Generator of the forward process) . Given (Xt, Y s) following dynamic (6) , and a test function u : Rd × X, we have that: 
+
+LX u = ⟨∇ xu(x, y ), f (x, t )⟩ + 12 g2(t) · ⟨∇ 2
+
+> x
+
+u(x, y ), I ⟩ = f · ∇ u + 12 g2(t)∆ u (10) 
+
+LY u = X
+
+> ˆy∈X
+
+u(x, ˆy)Qs(ˆ y, y ) = Q⊤ 
+
+> s
+
+u(x, ·) (11) 18 Multimodal Diffusion on Arbitrary State Spaces 
+
+Proof. We start by computing the generator of Ys:
+
+LY u = lim 
+
+> ∆s→0
+
+1∆s · E
+
+h
+
+u(Xt, Y s+∆ s) − u(Xt, Y s) Xt = x, Y s = y
+
+i
+
+= lim 
+
+> ∆s→0
+
+1∆s · X
+
+> ˆy∈X
+
+u(x, ˆy) P(Ys+∆ s = ˆ y Ys = y) − P(Ys = ˆ y Ys = y)
+
+= X
+
+> ˆy∈X
+
+u(x, ˆy) lim 
+
+> ∆s→0
+
+1∆s
+
+ P(Ys+∆ s = ˆ y Ys = y) − P(Ys = ˆ y Ys = y)
+
+= X
+
+> ˆy∈X
+
+u(x, ˆy)Qs(ˆ y, y ) = Q⊤ 
+
+> s
+
+u(x, ·)
+
+Similarly, for the generator of Xt,
+
+LX u = lim 
+
+> ∆t→0
+
+1∆t E
+
+h
+
+u(Xt+∆ t, Y s) − u(Xt, Y s) Xt = x, Y s = y
+
+i
+
+= lim 
+
+> ∆t→0
+
+1∆t · E
+
+h Z t+∆ tt
+
+⟨f (Xτ , Y s), ∇xu(Xτ , , Y s)⟩ + 12 ⟨g2(τ )I, ∇2
+
+> x
+
+u(Xτ , Y s)⟩dτ Xt = x, Y s = y
+
+i
+
+= E
+
+h
+
+⟨f (Xt, Y s), ∇xu(Xt, , Y s)⟩ + 12 ⟨g2(t), ∇2u(Xt, Y s)⟩ Xt = x, Y s = y
+
+i
+
+= ( f · ∇ u)( x, y ) + 12 g2(t)∆ u(x, y )
+
+where we uses Ito’s lemma and the fact that the martingale vanishes under the expectation. We now compute the generator for the backward process: 
+
+
+
+d←−
+
+X t = −f (←−
+
+X t, T − t) + g2(T − t)∇x log ←−p t,s (←−
+
+X t, ←−
+
+Y s)d t + g(t)d ←−
+
+W t
+
+←−
+
+Y s ∼ CTMC  ←−
+
+Q (←−
+
+X t, t, s )
+
+(←−
+
+X 0, ←−
+
+Y 0) ∼ p(x, y, T, T )
+
+(12) where ←−p t,s = pT −t,T −s, ←−
+
+Q (Xt, t, s ) is a rate matrix with y′, y entry being ←−p t,s (Xt,y ′)  
+
+> ←−pt,s (Xt,y )
+
+(QT −s)yy ′ . We denote LX 
+
+> ←
+
+and LY
+
+> ←
+
+as the generator of backward process ←−
+
+X t, ←−
+
+Y s in (12) respectively. 
+
+Lemma 2 (Generator of the backward process) . Given Xt, Y s following (12) and a test function u : Rd × X, we have that: 
+
+LX
+
+> ←
+
+u = −⟨∇ xu(x, y ), f (x, T − t)⟩ + 12 g2(T − t)⟨∇ 2
+
+> x
+
+u(x, y ), I ⟩ − ⟨∇ xu(x, y ), g 2(T − t)∇x log ←−p t,s (x, y )⟩LY
+
+> ←
+
+u = ←−
+
+Q (x, t, s )⊤u = X
+
+> ˆy∈X
+
+u(x, ˆy) · ←−
+
+Q (x, t, s )(ˆ y, y )
+
+The proof is highly similar to that of Lem. 2, and thus we omit it here to avoid being repetitive. With LX , LY , LX 
+
+> ←
+
+and 
+
+LY 
+
+> ←
+
+being computed, we can now derive the Fokker Planck equation for both the forward process (Xt, Y s) and backward process (←−
+
+X t, ←−
+
+Y s), as is given in Lem. 3 and Lem. 4. 
+
+Lemma 3 (Fokker Planck Equation of Forward Process) . For Xt, Y s following (6) , let p(x, y, t, s ) denotes the density of 
+
+Xt, Y s) at Xt = x, Y s = y, we have that: 
+
+∂tp(x, y, t, s ) = LX, ∗p(x, y, t, s ), ∂sp(x, y, t, s ) = LY, ∗p(x, y, t, s ) (13) 
+
+Where LX, ∗, LY, ∗ represent the adjoint of LX , LY and: 
+
+LX, ∗p(x, y, t, s ) = −∇ · (f (x, t )p(x, y, t, s )) + 12 g2(t)∆ p(x, y, t, s )
+
+LY, ∗p(x, ·, t, s ) = Qsp(x, ·, t, s ) = X
+
+> ˆy∈X
+
+Qs(y, ˆy) · p(x, ˆy, t, s )
+
+19 Multimodal Diffusion on Arbitrary State Spaces 
+
+Lemma 4 (Fokker Planck Equation of Backward Process) . For ←−
+
+X t, ←−
+
+Y s following (6) , let p(x, y, t, s ) denotes the density of 
+
+←−
+
+X t, ←−
+
+Y s) at ←−
+
+X t = x, ←−
+
+Y s = y, we have that: 
+
+∂tp(x, y, t, s ) = LX, ∗← p(x, y, t, s ), ∂sp(x, y, t, s ) = LY, ∗← p(x, y, t, s ) (14) 
+
+where LX, ∗← , LY, ∗← represent the adjoint of LX
+
+> ←
+
+, LY 
+
+> ←
+
+and: 
+
+LX, ∗← p(x, y, t, s ) = ∇ · (f (x, T − t)p(x, y, t, s )) + 12 g2(T − t)∆ p(x, y, t, s ) − g2(T − t)∇ ·  p(x, y, t, s )∇x log ←−p t,s (x, y )
+
+LY, ∗← p(x, ·, t, s ) = ←−
+
+Q (x, t, s )p(x, ·, t, s ) = X
+
+> ˆy∈X
+
+←−
+
+Q (x, t, s )( y, ˆy)p(x, ˆy, t, s )
+
+The computation central to the proof of Lem. 3 and Lem. 4 is the calculation of the adjoint operator, which can be done with standard techniques, such as integration by parts. The derivation of the Fokker Planck equations directly follows from definitions. Therefore, we also omit the proof here. With these results, we are now ready to show that (Xt, Y s) and ←−
+
+X t, ←−
+
+Y s
+
+are time reversals of each other. 
+
+Lemma 5 (Time Reversal) . p(x, y, t, s ) = ←−p t,s (x, y ) = p(x, y, T − t, T − s), where p is the solution to the Fokker Planck equation of the forward process in (13) , p is the solution to the Fokker Planck equation of the backward process in (14) .Proof. We will prove the result by showing that p(x, y, t, s ) = p(x, y, T − t, T − s) satisfies the Fokker Planck equations given in (14). We start by showing the ←−
+
+X t related equation. Substituting in p(x, y, T − t, T − s), we have that 
+
+∂tp(x, y, t, s ) = ∂t(p(x, y, T − t, T − s)) = −∂tp(x, y, T − t, T − s) = −L X, ∗p(x, y, T − t, T − s)
+
+where the last equality holds due to (13). On the right side of the equation, the expression can be simplified to: 
+
+LX, ∗← p(x, y, t, s ) = LX, ∗← p(x, y, T − t, T − s)= ∇ · (f (x, T − t)p(x, y, T − t, T − s) + 12 g2(T − t)∆ p(x, y, T − t, T − s)
+
+− g2(T − t)∇ · (p(x, y, T − t, T − s)∇ log p(x, y, T − t, T − s)) = ∇ · (f (x, T − t)p(x, y, T − t, T − s) + 12 g2(T − t)∆ p(x, y, T − t, T − s)
+
+− g2(T − t)∇ · ∇ p(x, y, T − t, T − s)= ∇ · (f (x, T − t)p(x, y, T − t, T − s) − 12 g2(T − t)∆ p(x, y, T − t, T − s)= −L X, ∗p(x, y, T − t, T − s)
+
+Therefore, we show that ∂tp(x, y, t, s ) = LX, ∗← p(x, y, t, s ) when p(x, y, t, s ) = p(x, y, T − t, T − s). For the ←−
+
+Y s related equation, we have that 
+
+∂sp(x, y, t, s ) = ∂s(p(x, y, T − t, T − s)) = −∂sp(x, y, T − t, T − s) = −L Y, ∗p(x, y, T − t, T − s)
+
+Similarly, on the right size of the equation, we have, 
+
+LY, ∗← p(x, y, t, s ) = LY, ∗← p(x, y, T − t, T − s)= X
+
+> ˆy∈X
+
+←−
+
+Q (x, t, s )( y, ˆy)p(x, ˆy, T − t, T − s)= X 
+
+> ˆy∈X,ˆy̸=y
+
+←−
+
+Q (x, t, s )( y, ˆy)p(x, ˆy, T − t, T − s) + ←−
+
+Q (x, t, s )( y, y )p(x, y, T − t, T − s)= X 
+
+> ˆy∈X,ˆy̸=y
+
+←−
+
+Q (x, t, s )( y, ˆy)p(x, ˆy, T − t, T − s) − X 
+
+> ˆy∈X,ˆy̸=y
+
+←−
+
+Q (x, t, s )(ˆ y, y )p(x, y, T − t, T − s)
+
+20 Multimodal Diffusion on Arbitrary State Spaces 
+
+where in the last step, we use that ←−
+
+Q (x, t, s )( y, y ) = − P 
+
+> ˆy∈X,ˆy̸=y
+
+←−
+
+Q (x, t, s )(ˆ y, y ). We perform such a simplification since we can only relate ←−
+
+Q (x, t, s ) and QT −s on non-diagonal entries. Then, it holds that 
+
+LY, ∗← p(x, y, t, s ) = X 
+
+> ˆy∈X,ˆy̸=y
+
+QT −s(ˆ y, y ) · p(x, y, T − t, T − s)
+
+p(x, ˆy, T − t, T − s) p(x, ˆy, T − t, T − s)
+
+− QT −s(y, ˆy) · p(x, ˆy, T − t, T − s)
+
+p(x, y, T − t, T − s) p(x, y, T − t, T − s)
+
+X 
+
+> ˆy∈X,ˆy̸=y
+
+QT −s(ˆ y, y )p(x, y, T − t, T − s) − QT −s(y, ˆy)p(x, ˆy, T − t, T − s)= X
+
+> ˆy∈X
+
+QT −s(ˆ y, y )p(x, y, T − t, T − s) − QT −s(y, ˆy)p(x, ˆy, T − t, T − s)= p(x, y, T − t, T − s) ·   X 
+
+> ˆy∈X
+
+QT −s(ˆ y, y ) − X
+
+> ˆy∈X
+
+QT −s(y, ˆy)p(x, ˆy, T − t, T − s)= − X
+
+> ˆy∈X
+
+QT −s(y, ˆy)p(x, ˆy, T − t, T − s)= −L Y, ∗p(x, y, T − t, T − s)
+
+where in the derivation, we use the definition of ←−
+
+Q (x, t, s ) and the fact that P 
+
+> ˆy∈X
+
+QT −s(ˆ y, y ) = 0 . Therefore, we have also shown that ∂tp(x, y, t, s ) = LY, ∗← p(x, y, t, s ) when p(x, y, t, s ) = p(x, y, T − t, T − s). Together with the fact that the initial conditions are matched by construction, i.e., 
+
+p(x, y, 0, 0) = p(x, y, T, T )
+
+we conclude the proof of the time-reversal argument, as well as Prop. 2. 
+
+## B. Design choice for Continuous-Discrete Multimodal Diffusion Models 
+
+In this section, we go deeper into the design choices of the newly proposed continuous-discrete multimodal diffusion models, including the choice for forward process, score parameterization, and sampling algorithms for such diffusion models. 
+
+B.1. Choice of Forward Process 
+
+We consider the following specific choice of forward process for the Continuous-Discrete Diffusion Model, where we choose 
+
+Xt to be subjected to a time-rescaled Ornstein–Uhlenbeck process (Song et al., 2020) and Ys to be subjected to a masked discrete diffusion model (Ou et al., 2025; Sahoo et al., 2024; Shi et al., 2024). Both choices are effective when modeling unimodal distributions, prompting us to combine them for the design of multimodal diffusion models on their product space. 
+
+
+
+dXt = −βtXtdt + √2βtdBt
+
+Ys ∼ CTMC( σsQmask )(X0, Y 0) ∼ pdata (x, y )
+
+(15) To define masked discrete diffusion models, we need to introduce an additional mask token M into the state space X.Therefore, the transition rate matrix Qmask is a transition matrix defined on the extended state space ˜X = X ∪ { M}, given by 
+
+Qmask =
+
+
+
+−1 0 . . . 00 −1 . . . 0
+
+... ... . . . ...
+
+1 1 . . . 1 0
+
+
+
+where the last row corresponds to M.21 Multimodal Diffusion on Arbitrary State Spaces 
+
+Consider now the practical case, where Xt ∈ Rd, and Ys consists of a sequence of tokens, i.e., Ys ∈ Xn. We represent Ys as 
+
+Ys = y1 . . . y i . . . y n.For pure masked discrete diffusion, it has been shown that its score has a special factorization (Ou et al., 2025). This enables users to parameterize only the probability of the clean data distribution conditioned on unmasked tokens, thereby representing the score. In the following, we demonstrate that this special structure is inherited in the continuous-discrete diffusion model when the discrete part is a masked discrete diffusion, which enables a more effective score parameterization, as well as a variance-reduced version of the training objective. Now, consider y = y1 . . . y i . . . y n, and ˆy = y1 . . . ˆyi . . . y n, where y differs from ˆy only at the i-th position, ˆyi = M while 
+
+yi̸ = M
+
+Proposition 3. Let p(x, y, t, s ) be the density of (15) at Xt = x, Y s = ys, then the discrete score has the following form 
+
+p(Xt = xt, Y s = y, t, s )
+
+p(Xt = xt, Y s = ˆ y, t, s ) = e−σs
+
+1 − e−σs P(Y i 
+
+> 0
+
+= yi | yUM , X t, t ) (16) 
+
+where σs = R s 
+
+> 0
+
+σ(τ )d τ , yUM contains the unmasked tokens of y.Proof. We begin by noting that, given the forward process defined in (15). We can solve the forward process analytically as follows: 
+
+P(Y is = y | A) = 
+
+(
+
+e−σs · P(Y i 
+
+> 0
+
+= y | A), y̸ = M
+
+1 − e−σs , y = M (17) For any event A. We will use this fact several times in our proof. This is true since when y̸ = M,
+
+P(Y is = y | A) = P(Y is = y | Y i 
+
+> 0
+
+= y, A ) · P(Y i 
+
+> 0
+
+= y | A)
+
+Our proof consists of two steps. First, we demonstrate that the diffusion process can be factored into a conditional probability and a time-dependent term. Secondly, we demonstrate that we can further simplify this conditional probability to contain only probabilities in terms of the clean data distribution. 
+
+Step 1: The discrete score in (16) is given by: 
+
+P(Xt = xt, Y 1 
+
+> s
+
+= y1, . . . , Y is = yi, . . . , Y ns = yn)
+
+P(Xt = xt, Y 1 
+
+> s
+
+= y1, . . . , Y is = M, . . . , Y ns = yn)
+
+To simplify the notation, we define the following notation Ai = {Y ks = yk : k̸ = i} ∩ { Xt = xt}. Then, using Bayes’ rule, we can rewrite the discrete score as: 
+
+P(Y is = yi | Ai)P(Ai)
+
+P(Y is = M | Ai)P(Ai) = P(Y is = yi | Ai)
+
+P(Y is = M | Ai) = e−σs
+
+1 − e−σs · P(Y i 
+
+> 0
+
+= yi | Ai)
+
+Step 2: We now show that we can simplify Ai by removing the conditioning on tokens that are masked. But firstly we do a simple calculation that will come in handy, given events A, B, C one has that: 
+
+P(A | B ∩ C) = P(A ∩ B ∩ C)
+
+P(B ∩ C) = P(A ∩ B|C)P(C)
+
+P(B ∩ C) = P(C|A ∩ B)P(A ∩ B)P(C)
+
+P(C)P(B ∩ C)= P(A ∩ B)P(C|A ∩ B)
+
+P(B)) P(C|B) = P(A|B)P(C|A ∩ B)
+
+P(C|B)
+
+Now, assume that l is a position such that yl = M. We denote Ali = {Y ks = yk : k̸ = i, l } ∩ { Xt = xt} the event given by 22 Multimodal Diffusion on Arbitrary State Spaces 
+
+the remaining tokens. We can then use the calculation above to write: 
+
+P(Y i 
+
+> 0
+
+= yi | Ai) = P(Y i 
+
+> 0
+
+= yi | Ali, Y ls = M )= P({Y i 
+
+> 0
+
+= yi} ∩ Ali ∩ { Y ls = M })
+
+P(Ali ∩ { Y ls = M } )= P(Y i 
+
+> 0
+
+= yi | Ali) · P(Y ls = M | { Y i 
+
+> 0
+
+= yi} ∩ Ali)
+
+P(Y ls = M | Ali)= P(Y i 
+
+> 0
+
+= yi | Ali)
+
+where in the last step, we used (17). The computation above shows that we can remove any events relevant to masked tokens, and repeating this process yields the result that the event being conditioned on only contains the unmasked part. This finishes the proof. With Prop. 3, the score entropy in the training objective described in Prop. 1 can be further simplified to cross-entropy loss, as is widely discussed in the literature of masked discrete diffusion model training (Ou et al., 2025; Sahoo et al., 2024; Shi et al., 2024). Prop. 3 also implies that when designing the score network backbone, the discrete score does not need the input of time s. However, it’s still dependent on the time t of the continuous modality. This is a notable difference from the pure masked discrete diffusion models considered in the literature (Ou et al., 2025; Nie et al., 2025a). 
+
+B.2. Noisy Guidance 
+
+In Alg. 1, we present the detailed algorithm for using Noisy guidance for continuous score. In Alg. 2, we present the detailed algorithm for using Noisy guidance for discrete score, whose computation is not mentioned in the main text. Note that in Alg. 2, instead of directly doing geometric average of suncond ,y θ and scond ,y θ as is suggested in Nisonoff et al. (2024), we compute a arthimetic average of the corresponding logits, then use softmax to calculate the actual guided score. Such a practice is considered in Chang et al. (2022), and recently it has been shown to have theoretical advantages in Ye et al. (2025); Rojas et al. (2025a). 
+
+Algorithm 1 Noisy Guidance for continuous score 
+
+Require: xt, t : noisy image with noise level, model: sθ (xt, y s, t, s, ω ), y0 : clean text, ω : Guidance Strength, σ :Conditioning Noise Level 
+
+Ensure: sxθ : Guided continuous score 
+
+1: ynoisy  
+
+> σ
+
+∼ pσ|0(y|y0)
+
+2: suncond ,x θ ← sθ (x, y noisy  
+
+> σ
+
+, t, σ, ω t), scond ,x θ ← sθ (xt, y 0, t, 0, ω t)
+
+3: sxθ ← ω · scond ,x θ + (1 − ω) · suncond ,x θ
+
+4: return sxθ
+
+Algorithm 2 Noisy Guidance for discrete score 
+
+Require: ys, s : noisy text with noise level, model: sθ (xt, y s, t, s, ω ), x0 : clean image, ω : Guidance Strength, σ :Conditioning Noise Level 
+
+Ensure: syθ : Guided discrete score 
+
+1: xnoisy  
+
+> σ
+
+∼ pσ|0(x|x0)
+
+2: suncond ,y θ ← sθ (xnoisy  
+
+> σ
+
+, y s, σ, s, ω s), scond ,y θ ← sθ (x0, y s, 0, s, ω s)
+
+3: suncond ,y θ = softmax( ℓuncond ), scond ,y θ = softmax( ℓcond )
+
+4: syθ ← softmax  ω · ℓcond + (1 − ω) · ℓuncond 
+
+5: return syθ
+
+B.3. Samplers 
+
+For inference of continuous-discrete multimodal diffusion models, we consider the following samplers. For conditional generation of discrete or continuous modality, see Alg. 3 and Alg. 4. Among all the pseudo code, we set times =
+
+23 Multimodal Diffusion on Arbitrary State Spaces 
+
+(N − i)/N , i = 0 , 1, . . . , N as the inference times and dt = −1/N as the time steps, where N is the number of total inference/discretization steps. We use τ -leaping for discrete modality sampling and Heun’s method for continuous modality sampling. All the inference algorithms are written with the presence of guidance and guidance intervals. 
+
+Algorithm 3 Discrete Sampler with τ -leaping 
+
+Require: N : Number of steps, ω : Guidance Strength  
+
+> 1:
+
+[a, b ] : Guidance Interval, model : sθ (xt, y s, t, s, ω ) 
+
+> 2:
+
+x : a clean image condition 
+
+Ensure: y0 ∼ pdata (·| x) 
+
+> 3:
+
+yt ← [M, . . . , M] 
+
+> 4:
+
+for t in times do  
+
+> 5:
+
+ωt = ω if t ∈ [a, b ] else 1. 
+
+> 6:
+
+sxθ , s yθ ← sθ (x, y t, 0, t, ω t) 
+
+> 7:
+
+yt ← τ -leaping (syθ , y t, t, |dt|) 
+
+> 8:
+
+end for  
+
+> 9:
+
+return y0
+
+Algorithm 4 Continuous Sampler with Heun’s method 
+
+Require: N : Number of steps, ω : Guidance Strength  
+
+> 1:
+
+[a, b ] : Guidance Interval, model : sθ (xt, y s, t, s, ω ) 
+
+> 2:
+
+y : A clean text condition 
+
+Ensure: x0 ∼ pdata (·| y) 
+
+> 3:
+
+xt ← N (0 , I ) 
+
+> 4:
+
+for t in times do  
+
+> 5:
+
+ωt = ω if t ∈ [a, b ] else 1. 
+
+> 6:
+
+sxθ , s yθ ← sθ (xt, y, t, 0, ω t) 
+
+> 7:
+
+vold = f (xt, t ) − 12 g2(t)sxθ 
+
+> 8:
+
+ˆx ← xt + vold dt, ˆsxθ , ˆsyθ ← sθ (ˆ x, y, t + d t, 0, ω t) 
+
+> 9:
+
+vnew = f (ˆ xt, t ) − 12 g2(t)ˆ sxθ 
+
+> 10:
+
+xt ← xt + 12 · (vold + vnew )d t 
+
+> 11:
+
+end for  
+
+> 12:
+
+return x0
+
+We describe one multimodal sampler for the joint generation with a continuous-discrete multimodal diffusion model in Alg. 5. Essentially, Alg. 5 combines τ -leaping for discrete modality and Heun’s method for continuous modality, each depicted in Alg. 3 and Alg. 4. However, these choices are selected without being heavily optimized to tailor to this case, and potentially, there exist much more effective and efficient samplers. For example, note that Heun’s method is a second-order ODE sampler, while τ -leaping is usually considered to be a first-order CTMC sampling algorithm (Ren et al., 2024). This means that the discrete score obtained at the mid-point ˆx during the inference step of Heun’s method is not being used, which causes a waste of computation. A potential way to improve is to replace the first-order discrete sampler with a second-order variant, such as the θ-Trap algorithm introduced in Ren et al. (2025a). We leave this direction for future investigation. 
+
+Algorithm 5 Multimodal Sampler with τ -leaping and Heun’s Method 
+
+Require: N : Number of steps, ω : Guidance Strength, [a, b ] : Guidance Interval, model : sθ (xt, y s, t, s, ω )
+
+Ensure: x0, y 0 ∼ pdata  
+
+> 1:
+
+xt ← N (0 , I ), yt ← [M, . . . , M] 
+
+> 2:
+
+for t in times do  
+
+> 3:
+
+ωt = ω if t ∈ [a, b ] else 1. 
+
+> 4:
+
+sxθ , s yθ ← sθ (xt, y t, t, t, ω t), vold = f (xt, t ) − 12 g2(t)sxθ 
+
+> 5:
+
+ˆx ← xt + vold dt 
+
+> 6:
+
+ˆsxθ , ˆsyθ ← sθ (ˆ x, y t, t + d t, t, ω t), vnew = f (ˆ xt, t ) − 12 g2(t)ˆ sxθ 
+
+> 7:
+
+xt ← xt + 12 · (vold + vnew )d t, yt ← τ -leaping (syθ , y t, t, |dt|) 
+
+> 8:
+
+end for  
+
+> 9:
+
+return x0, y 0
+
+## C. Experimental Details on Text-Image Generation 
+
+C.1. Choice of Forward Process 
+
+We consider the same forward process discussed in App. B.1, with βt and σs given as 
+
+βt = 500 · (pβstart (1 − t) + tpβend )2
+
+σs = 1 − δ
+
+1 − (1 − δ)sβstart = 0 .00085 , βend = 0 .0120 , δ = 10 −5
+
+24 Multimodal Diffusion on Arbitrary State Spaces  
+
+> Table 4. Hyperparameters for inference of different tasks
+
+Parameter text to image image to text joint 
+
+Number of Steps 50 50 50 
+
+Guidance Scale 5.0 1.0 5.0
+
+Guidance Interval [0 .3, 0.8] - [0 .3, 0.8] 
+
+Condition Noise Level 0.77 - 1.0
+
+Early Stopping 10 −5 10 −5 10 −5 
+
+> Table 5. Model hyperparameters
+
+parameter value 
+
+patch size 2joint depth 8text depth 6image depth 6dim text 1024 dim image 1024 dim joint attention 1024 QK RMSnorm true dimension per head 64 number of heads 8 
+
+> Table 6. Training Hyperparameters
+
+Parameter Stage 1 Stage 2 Stage 3 
+
+Num Itr 600K 200K 140K EMA-β .99999 .9999 .9999 Batch Size 256 512 512 Optimizer AdamW AdamW AdamW Learning Rate 2e-4 2e-4 2e-4 Adam-β’s [.9, .9] [.9, .9] [.9, .9] Weight Decay 0.03 0.03 0.03 
+
+C.2. Training Strategy 
+
+We divide our training into several stages. This is a standard practice for training vision-language models. In text-to-image diffusion models, a pretrained text encoder is used to achieve alignment between the text semantics and the image features. Popular choices in the literature are using CLIP or T5 as text encoders (Esser et al., 2024). However, in our use case, we require training on masked text, for which the availability of pretrained encoders is limited. For this reason, we decided not to use a pretrained text encoder. This has the advantage that we don’t rely on any pretraining, which reduces the computational requirements of our model. 
+
+Stage 1: Text-image Alignment During this stage, we train both the joint embedding and the continuous decoder. We allow noisy text to be received as input to our model, meaning that we train on all possible combinations of s and t, but without worrying about the text prediction task. We present all training hyperparameters across all stages below. 
+
+Stage 2: Text prediction and Image Improvement In this second stage, we freeze the joint embedding. We found that by doing so, we can simplify the training. The joint embedding is now capable of generating meaningful latent representations, which can then be used to predict clean text from masked tokens and a latent image representation. 
+
+Stage 3: Multimodal Generation Finally, we train both the image and text decoders. This is useful because the image decoder hasn’t been trained specifically to predict from the frozen joint embeddings. Training the text decoder is not necessary, but we can get some extra training time by doing so. After this stage, our model is now capable of performing all tasks. 
+
+Optional - Stage 4: Fine-tuning on downstream Tasks When necessary, our models can be fine-tuned on downstream tasks to improve the performance. 
+
+C.3. Sampling 
+
+For sampling, we use the samplers described in Alg. 3, Alg. 4, and Alg. 5, where we do not use guidance for the discrete component. Our default values for sampling are presented in Table 4. 25 Multimodal Diffusion on Arbitrary State Spaces 
+
+C.4. Hyperparamters 
+
+We include the network and training hyperparameters in table 5 and 6 respectively. The total model contains 578 Mparameters and the joint embedding plus a single modality is about 481 M. 
+
+## D. Experimental Details on Mixed-type Tabular Data Synthesis 
+
+D.1. Choice of Forward Process 
+
+We consider the same forward process discussed in App. B.1, with βt and σs given as 
+
+βt = βstart (1 − t) + tβ end 
+
+σs = 1 − δ
+
+1 − (1 − δ)sβstart = 0 .1, βend = 20 δ = 10 −5
+
+D.2. Detailed description of datasets 
+
+We evaluate our model on six tabular datasets ( https://archive.ics.uci.edu/datasets ): Adult, Default, Shoppers, Magic, Beijing, and News. Beijing and News datasets are designed for regression task while the other four datasets are for the classification task.                                            
+
+> Table 7. Statistics for the tabular datasets.
+> Dataset #Rows #Numerical #Categorical #Training #Test Task Adult 48,842 6932,561 16,281 Classification Default 30,000 14 11 27,000 3,000 Classification Shoppers 12,330 10 811,097 1,233 Classification Magic 19,019 10 117,117 1,902 Classification Beijing 41,757 7537,581 4,176 Regression News 39,644 46 235,679 3,965 Regression
+
+D.3. Model architecture and training details 
+
+The embedding for every numerical feature in the data is a summation of its type embedding and scale embedding. All numerical values share the same type embedding, which is a look-up table of size number of numerical features by the hidden dimension. Each numerical value is passed through a 3-layer MLP that expands a single numerical value to an embedding vector with the size of the hidden dimension. Categorical features in the data are individually embedded through a list of look-up embedding tables. The look-up embedding table has the size of the number of categories + 1 (with one extra mask token) by the hidden dimension. Then all the categorical look-up embedding tables are concatenated and treated as the categorical embedding for this dataset. The building block of our model is adopted from DiT (Peebles & Xie, 2023). The sinusoidal timestep is passed through a 2-layer MLP before input into the DiT blocks. After adding the integer positional embedding to the embedding, numerical embeddings and categorical embeddings are concatenated and input into DiT blocks. We used 4 DiT blocks with hidden dimension = 24 and number of heads = 4. The final layer splits the output into the numerical latent and a list of individual categorical latent. The latent vectors are passed into 3-layer MLPs to obtain the corresponding scores. The noise perturbation is the variance preserving (VP) SDE. The training loss a weighted summation of the score matching loss for numerical features and score entropy loss for categorical features. The weighting parameter is chosen to balance the numerical and discrete loss. The optimizer is AdamW with learning rate = 10 −3, weight decay = 0.03, β = (0 .9, 0.9) . A linear rate warm-up scheduler is used with warmup steps = 200. The training batch size is 2048. We used EMA model for final evaluation. During sampling, we use Euler method for the continuous diffusion and tau-leaping for the discrete diffusion. 26 Multimodal Diffusion on Arbitrary State Spaces 
+
+D.4. Evaluation 
+
+We compare our model with five most recent generative models that are specifically designed to operate on tabular data: GOOGLE (Liu et al., 2023), StaSy (Kim et al., 2022), TabDDPM (Kotelnikov et al., 2023), CoDi (Lee et al., 2023), and TAB SYN (Zhang et al., 2023). GOOGLE is a VAE-based method while the other four are all diffusion-based methods. • Shape is a metric computed via the Kolmogorov-Smirnov Test between continuous distributions and Total Variation Distance between the probabilities for categorical values, measures, and compares the column-wise density between real and synthetic data. • Trend is a metric that captures pair-wise column correlation by computing Pearson correlation for numerical columns, contingency similarity for categorical columns, and contingency similarity between bucketed numerical values and categorical values. • MLE is the testing accuracy of the classification or regression task on real data after training an XGBoost Classifier or an XGBoost Regressor on the synthetic tabular data. For detailed training and optimization pipelines of MLE metric, please refer to the standardized pipeline proposed in Zhang et al. (2023). • α-precision evaluates if the synthetic data are from the same distribution as real-world data. • β-recall quantifies whether the synthetic data can cover the entire distribution of the real data. 
+
+Table 8. Performance on the Shape metric in percentage (%). Higher values indicate better performance. Best performance in bold .Second best in underline. 
+
+Methods #Parameters Adult Default Shoppers Magic Beijing News GOOGLE ∼ 5.6M 83.03 82.98 77.67 98.10 83.07 74.68 STaSy ∼ 10.3M 88.71 ±0.06 94.23 ±0.06 90.63 ±0.09 93.71 ±0.13 93.29 ±0.03 93.11 ±0.03 
+
+CoDi ∼ 25.0M 78.62 ±0.06 84.23 ±0.07 68.16 ±0.05 88.44 ±0.26 83.06 ±0.02 67.73 ±0.04 
+
+TabDDPM ∼ 11.7M 98.25 ±0.03 98.43 ±0.08 97.28 ±0.13 98.99 ±0.09 98.70 ±0.03 21.25 ±0.01 
+
+TAB SYN ∼ 10.7M 99.42 ±0.06 99.15 ±0.04 98.57 ±0.24 99.12 ±0.09 98.88 ±0.05 98.36 ±0.04 
+
+TAB SYN (reproduced) ∼ 10.7M 99.29 ±0.06 97.12 ±0.09 98.36 ±0.10 99.02 ±0.10 96.35 ±0.10 98.09 ±0.03 
+
+Our model ∼ 64K 99.47 ±0.04 99.36 ±0.09 98.50 ±0.07 98.96 ±0.16 97.94 ±0.06 96.80 ±0.05 
+
+Table 9. Performance on the α-precision metric in percentage (%). Higher values indicate better performance. Best performance in bold .Second best in underline. 
+
+Methods #Parameters Adult Default Shoppers Magic Beijing News GOOGLE ∼ 5.6M 50.68 68.89 86.95 90.88 88.81 86.41 STaSy ∼ 10.3M 82.87 ±0.26 90.48 ±0.11 89.65 ±0.25 86.56 ±0.19 89.16 ±0.12 94.76 ±0.33 
+
+CoDi ∼ 25.0M 77.58 ±0.45 82.38 ±0.15 94.95 ±0.35 85.01 ±0.36 98.13 ±0.38 87.15 ±0.12 
+
+TabDDPM ∼ 11.7M 96.36 ±0.20 97.59 ±0.36 88.55 ±0.68 98.59 ±0.17 97.93 ±0.30 0.00 ±0.00 
+
+TAB SYN ∼ 10.7M 99.52 ±0.10 99.26 ±0.27 99.16 ±0.22 99.38 ±0.27 98.47 ±0.10 96.80 ±0.25 
+
+TAB SYN (reproduced) ∼ 10.7M 99.32 ±0.22 95.57 ±0.33 99.22 ±0.31 99.21 ±0.27 98.87 ±0.15 96.30 ±0.28 
+
+Our model ∼ 64K 99.47 ±0.17 99.47 ±0.21 98.78 ±0.42 98.75 ±0.36 98.49 ±0.24 97.47 ±0.27 
+
+Table 10. Performance on the β-recall metric in percentage (%). Higher values indicate better performance. Best performance in bold .Second best in underline. 
+
+Methods #Parameters Adult Default Shoppers Magic Beijing News GOOGLE ∼ 5.6M 8.80 14.38 9.79 9.88 19.87 2.03 STaSy ∼ 10.3M 29.21 ±0.34 39.31 ±0.39 37.24 ±0.45 53.97 ±0.57 54.79 ±0.18 39.42 ±0.32 
+
+CoDi ∼ 25.0M 9.20 ±0.15 19.94 ±0.22 20.82 ±0.23 50.56 ±0.31 52.19 ±0.12 34.40 ±0.30 
+
+TabDDPM ∼ 11.7M 47.05 ±0.25 47.83 ±0.35 47.79 ±0.25 48.46 ±0.42 56.92 ±0.13 0.00 ±0.00 
+
+TAB SYN ∼ 10.7M 47.56 ±0.22 48.00 ±0.35 48.95 ±0.28 48.03 ±0.23 55.84 ±0.19 45.04 ±0.34 
+
+TAB SYN (reproduced) ∼ 10.7M 47.75 ±0.21 42.95 ±0.30 47.57 ±0.44 47.92 ±0.28 49.72 ±0.27 44.37 ±0.22 
+
+Our model ∼ 64K 49.65 ±0.26 48.29 ±0.32 51.25 ±0.50 47.66 ±0.38 57.44 ±0.20 44.58 ±0.27 
+
+27 Multimodal Diffusion on Arbitrary State Spaces     
+
+> Figure 5. Visual representation of ground truth labeled Riemannian data.
+> Figure 6. Peformance of inferring discrete label based on SO (3) data.
+
+## E. Additional Experiment on Riemannian-Discrete Multimodal Diffusion Model 
+
+In this section, we demonstrate another application of our proposed multimodal diffusion model framework by focusing on the combination of Riemannian and discrete diffusion models on the state space M × X, where M is a Riemannian manifold and X is a finite state space. We will introduce the method and validate it on a toy example consisting of synthetic data on SO (3) × X.
+
+E.1. Riemannian-Discrete Multimodal Diffusion Model 
+
+We consider the setting where the target data distribution pdata (x, y ) is defined on SO (3) × X, where x ∈ SO (3) and y is a discrete label in X. Since SO (3) is a compact manifold, we choose the following as the forward process, 
+
+
+
+dXt = d BM
+
+> t
+
+Ys ∼ CTMC( Qs)(X0, Y 0) ∼ pdata (x, y )
+
+(18) where Qs = σsQmask is the same design choice as in (15), dBM 
+
+> t
+
+is a Brownian Motion on SO (3) . Note that the stationary distribution of (18) is Haar( SO (3)) × δM, where Haar( SO (3)) is the Haar measure on SO (3) , a generalized notion of uniform distribution. Following a similar derivation as is presented in the paper, we can derive its backward process, 28 Multimodal Diffusion on Arbitrary State Spaces 
+
+(
+
+dXt = ∇ log p(Xt, Y s, T − t, T − s) + d BM
+
+> t
+
+Ys ∼ CTMC( Q(Xt, t, s ) (19) where the gradient ∇ is the Riemannian gradient, and Q(Xt, T − t, T − s) is defined for y̸ = ˆ y,
+
+Q(x, t, s )(ˆ y, y ) = p(x, ˆy, T − t, T − s)
+
+p(x, y, T − t, T − s) QT −s(y, ˆy)
+
+Axis-angle parametrization. We represent elements of SO (3) using the axis-angle parametrization. We introduce it briefly here. One can show that any element of SSO (3) can be written as exp( θK ) where: 
+
+K = a
+
+
+
+0 0 00 0 −10 1 0
+
+ + b
+
+
+
+0 0 10 0 0
+
+−1 0 0
+
+ + c
+
+
+
+0 −1 01 0 00 0 0
+
+
+
+and (a, b, c ) ∈ S2 is a vector on the sphere, θ ∈ R+. The representation (( a, b, c ), θ ) is called the axis-angle representation. 
+
+Dataset of the toy problem We consider a simple toy example of labeled data on SO (3) , consisting of Gaussian mixtures, where each mode corresponds to a unique label. To create the problem, we write elements (a, b, c ) ∈ S2 in spherical coordinates; in this way, only two angles need to be parameterized. We then generate a Gaussian mixture on the space of these angles. Additionally, we use a von Mises random variable for θ. We present the Python code used to generate the dataset in Listing E.1 and a visualization of the axis and angles in Figure 5. As observed in Fig. 5, we have assigned labels to different geographical locations and assigned them to distinct modes on the map. 
+
+Training strategy. We train a simple MLP using a similar strategy as the text-image model. We first train a label to 
+
+SO (3) model and add the discrete capabilities in a second phase. To achieve this, we utilize the generalized denoising score matching loss IGDSM , as described in the main paper, which is derived from the generator computed based on the chosen forward process. We find that this training strategy is generally robust. 
+
+Results. We present samples generated by our method using guidance w = 4 in Figure 6, we see that our method can properly recover the data distribution. We also show the unconditional generation in Figure 7. We demonstrate that our method and training strategy can generalize to other data modalities.  
+
+> Figure 7. Performance of joint generation of the labeled Riemannian data.
+
+29 Multimodal Diffusion on Arbitrary State Spaces  
+
+> 1
+
+def sample_continental_so3(n_samples, magnitude_kappa=9):  
+
+> 2
+
+continents = { 
+
+> 3
+
+'North_America': {'lat': 45, 'lon': -100, 'weight': 0.2},  
+
+> 4
+
+'South_America': {'lat': -20, 'lon': -60, 'weight': 0.15},  
+
+> 5
+
+'Europe': {'lat': 50, 'lon': 10, 'weight': 0.2},  
+
+> 6
+
+'Africa': {'lat': 0, 'lon': 20, 'weight': 0.15},  
+
+> 7
+
+'Asia': {'lat': 45, 'lon': 90, 'weight': 0.2},  
+
+> 8
+
+'Australia': {'lat': -25, 'lon': 135, 'weight': 0.1}  
+
+> 9
+
+} 
+
+> 10 11
+
+weights = np.array([cont['weight'] for cont in continents.values()])  
+
+> 12
+
+continent_choices = np.random.choice(len(continents), size=n_samples, p=weights)  
+
+> 13
+
+rotation_vectors = np.zeros((n_samples, 3))  
+
+> 14 15
+
+continent_list = list(continents.values())  
+
+> 16
+
+for i in range(n_samples):  
+
+> 17
+
+continent = continent_list[continent_choices[i]]  
+
+> 18
+
+theta = np.pi/2 - np.deg2rad(continent['lat'])  
+
+> 19
+
+phi = np.deg2rad(continent['lon'])  
+
+> 20 21
+
+theta += np.random.normal(0, 0.2)  
+
+> 22
+
+phi += np.random.normal(0, 0.2)  
+
+> 23 24
+
+axis = np.array([  
+
+> 25
+
+np.sin(theta) * np.cos(phi),  
+
+> 26
+
+np.sin(theta) * np.sin(phi),  
+
+> 27
+
+np.cos(theta)  
+
+> 28
+
+])  
+
+> 29 30
+
+magnitude = vonmises.rvs(magnitude_kappa, loc=np.pi/4)  
+
+> 31 32
+
+rotation_vectors[i] = axis * magnitude  
+
+> 33 34
+
+return rotation_vectors, continent_choices 
+
+Listing 1. Code for generating the dataset 
+
+## F. Additional Numerical Results for Text-Image Generation 
+
+CLIP Similarity We generate 5000 samples and evaluate the CLIP similarity between the text and image. For this evaluation, we use CLIP-ViT-large-patch14 and we limit the captions to 77 tokens. We use our sampling default values during this task. We obtain a CLIP score of 18.46 for text-to-image generation, 17.44 for image-to-text generation, and 
+
+17.57 for image-text joint generation. 
+
+Generated examples visualization We display non-cherry-picking generated examples in all three scenarios in Fig. 8, Fig. 9, Fig. 10. 30 Multimodal Diffusion on Arbitrary State Spaces 
+
+Figure 8. Visualization of texts generated conditioning on the images. 
+
+31 Multimodal Diffusion on Arbitrary State Spaces 
+
+Figure 9. Visualization of images generated conditioning on the text caption. 
+
+32 Multimodal Diffusion on Arbitrary State Spaces 
+
+Figure 10. Visualization of text-image pairs generated jointly and unconditionally. 
+
+33

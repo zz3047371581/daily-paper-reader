@@ -1,0 +1,3183 @@
+Title: Learning Optimal Multimodal Information Bottleneck Representations
+
+URL Source: https://openreview.net/pdf?id=5TUa2UXSpp
+
+Number of Pages: 39
+
+Markdown Content:
+# Learning Optimal Multimodal Information Bottleneck Representations 
+
+Qilong Wu * 1 Yiyang Shao 2 Jun Wang * 3 Xiaobo Sun * 4 
+
+## Abstract 
+
+Leveraging high-quality joint representations from multimodal data can greatly enhance model performance in various machine-learning based applications. Recent multimodal learning meth-ods, based on the multimodal information bot-tleneck (MIB) principle, aim to generate opti-mal MIB with maximal task-relevant information and minimal superfluous information via regu-larization. However, these methods often set ad hoc regularization weights and overlook imbal-anced task-relevant information across modali-ties, limiting their ability to achieve optimal MIB. To address this gap, we propose a novel multi-modal learning framework, Optimal Multimodal Information Bottleneck (OMIB), whose optimiza-tion objective guarantees the achievability of op-timal MIB by setting the regularization weight within a theoretically derived bound. OMIB further addresses imbalanced task-relevant infor-mation by dynamically adjusting regularization weights per modality, promoting the inclusion of all task-relevant information. Moreover, we es-tablish a solid information-theoretical foundation for OMIB’s optimization and implement it un-der the variational approximation framework for computational efficiency. Finally, we empirically validate the OMIB’s theoretical properties on syn-thetic data and demonstrate its superiority over the state-of-the-art benchmark methods in various downstream tasks. 
+
+## 1. Introduction 
+
+In the parable ” Blind men and an elephant ”, a group of blind men attempts to perceive the elephant’s shape through touch, 
+
+> *
+
+Equal contribution 1School of Statistics and Mathematics, Zhongnan University of Economics and Law 2School of Finance, Zhongnan University of Economics and Law 3iWudao 4School of Medicine, Department of Human Genetics, Emory University. Correspondence to: Xiaobo Sun <xsun28@emory.edu >.
+
+Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s). Anomalous Tissue  
+
+> Detection
+> Sentiment Analysis
+> -
+> Score
+> +
+> Happy
+> Angry
+> 
+> 
+> Emotion Recognition
+> Downstream Tasks
+> Optimal MIB
+> a) b)
+
+Figure 1: a) Venn diagrams for two data modalities ( v1 and 
+
+v2). The gridded area represents consistent information, while the non-gridded area denotes modality-specific infor-mation. Task-relevant information is highlighted in green, whereas superfluous information is shown in blue. b) An optimal MIB should exclusively contain task-relevant, non-superfluous information (i.e., a0, a 1 and a2) to be utilized in downstream tasks for enhanced performance. but each inspects only a single, distinct part (e.g., tusk, leg). Consequently, they deliver conflicting descriptions, as their judgments are based solely on the part they touch. In the context of machine learning, this parable underscores the significance of multimodal learning, which integrates and leverages multimodal data (akin to the elephant’s body parts) to grasp a holistic understanding, thereby enhancing inference and prediction accuracy. In multimodal learning, unimodal features are extracted from each modalities and fused with various fusion strategies, such as tensor-based (Zadeh et al., 2017; Liu et al., 2018), attention-based (Guo et al., 2020; Xiao et al., 2020; Zhang et al., 2023), and graph-based (Arun et al., 2022; Huang et al., 2021), to generate multimodal embeddings. However, a major limitation of these methods is their potential to include superfluous and redundant information from each modality, increasing em-bedding complexity and the risk of overfitting (Mai et al., 2023; Wan et al., 2021). From an information theory perspective, a comprehensive multimodal learning method should account for five fac-tors: consistency (Tian et al., 2021), specificity (Liu et al., 2024), complementarity (Wan et al., 2021), sufficiency 
+
+(Federici et al., 2020), and conciseness (a.k.a. nonredun-dacy) (Wang et al., 2019). As illustrated in Figure 1a, on the input side, consistency describes information shared 1Learning Optimal Multimodal Information Bottleneck Representations 𝑥 ଵ                    
+
+> 1st Modality ( 𝒗 𝟏 )
+> ଵ
+> 𝑥 ଶ
+> 𝒌 -th Modality ( 𝒗 𝒌 )
+> ௞
+> ଵ்ோ஻ భ
+> 𝑒 ଵ~𝑁 (0,𝐼 )
+> Cଵ
+> ௞௞
+> 𝑒 ௞~𝑁(0, 𝐼)
+> C்ோ஻ ೖ
+> ଵ
+> ௞
+> Cross-
+> Attention
+> Network ைெி
+> ௬
+> ைெி
+> ଵ
+> ைெி
+> ௞
+> OMF Block
+> Stochastic Gaussian Noise
+> Stochastic Gaussian Noise
+> 𝐾𝐿(𝑦 ොଵ||𝑦 ො)
+> 𝐾𝐿(𝑦 ො௞||𝑦 ො)
+> Warm-up only OMF Block loss: 𝐿 ைெி
+> ௬+ 𝛽(𝐿 ைெி
+> ଵ+∑𝑟 ௜ିଵ 𝐿 ைெி
+> ௜)௞
+> ௜ୀଶ 𝑻𝑹𝑩 loss: 𝐿 ்ோ஻ ೔
+> -th TRB
+> 1st TRB
+
+Figure 2: OMIB Framework. Here, ’C’ represents the con-catenation operation. For the definitions of other notations, refer to the Section 4 and Table 1. across input modalities (gridded area), while specificity 
+
+refers to the information unique to individual modalities (non-gridded area). Both consistent and modality-specific information may contain task-relevant (green area) or su-perfluous (gray area) components. Complementarity per-tains to modality-specific, task-relevant information ( a1 and 
+
+a2), enabling multimodal embeddings to surpass unimodal ones in downstream tasks. On the output side, an opti-mal multimodal embedding (as shown in Figure 1b and Definition 5.4 below) must be sufficient , capturing max-imal task-relevant information—both consistent ( a0) and complementary ( a1, a 2)—across modalities. Meanwhile, it should be concise , minimizing both cross-modality ( b0) and modality-specific superfluous information ( b1, b 2) to reduce complexity. This optimal multimodal embedding can then be applied to various downstream tasks, such as multimodal sentiment analysis (Mai et al., 2023) and pathological tis-sue detection using histology and gene expression data (Xu et al., 2024b)), for enhanced performance. To this end, multimodal learning methods based on the Mul-timodal Information Bottleneck (MIB) principle have been developed, which generally follow a common paradigm: modality-specific representations are extracted and fused into MIB via deep networks. The MIB is then optimized to balance two objectives: maximizing mutual information between the embeddings and task-relevant labels for suf-ficiency; and minimizing mutual information between the embeddings and the raw input to purge superfluous informa-tion and ensure conciseness (Wang et al., 2019; Wan et al., 2021; Zhang et al., 2023; Fang et al., 2024). This process is formalized as: 
+
+xi = Ei(vi),z = F (x1, x 2, ... ),
+
+O(vi, z, y ) := max  
+
+> z
+
+I(y; z) − X
+
+> i
+
+βiI(vi; z),
+
+(1) where Ei, F, I , and O represent the modality-specific en-coder, multimodal fusion function, mutual information func-tion, and optimization objective, respectively. vi, x i, z, and 
+
+y denote the raw data of the i-th modality, its extracted rep-resentation, the MIB, and task labels. Particularly, βi serves as the regularization parameter for constraining superfluous information between the MIB and the i-th modality. Despite their promising performance, these methods face three major limitations. First, the achievability of optimal MIB is not guaranteed. Since the regularization parame-ters (e.g., βs in Equation (1)) control the trade-off between sufficiency and conciseness, their values are critical for optimizing MIB (Tian et al., 2021). If the value is too small, superfluous information may be retained, leading to suboptimal MIB. Conversely, if too large, task-relevant information may be excluded due to an overemphasis on conciseness, compromising MIB’s sufficiency. However, existing MIB methods determine these parameter values in an ad hoc manner, limiting their ability to achieve an optimal MIB. Second, an ideal MIB method should dynami-cally adjust regularization weights based on the remaining task-relevant information in each modality. Specifically, a modality should receive a lower regularization weight if a significant portion of its task-relevant information is left out of the MIB, and vice versa. However, existing MIB methods typically assign fixed, ad hoc regularization weights to each modality during training. When task-relevant information is imbalanced across modalities, some modalities may contain minor but crucial task-relevant information (e.g., a2 in v2 in Figure 1). If such a modality is assigned an excessively large regularization weight, its task-relevant information may be inadvertently excluded from the MIB (Fan et al., 2023). Fi-nally, these methods lack theoretical comprehensiveness, as they either fail to incorporate all five aforementioned fac-tors into the optimization objective or do not acknowledge their distinct roles in guiding optimization. For instance, the study in (Tian et al., 2021) overlooks complementarity, while CMIB-Nets (Wan et al., 2021) does not account for consistent, superfluous information. Additionally, in the theoretical analyses of methods such as (Fang et al., 2024; Wan et al., 2021), the two types of task relevant informa-tion—consistent (e.g., a0 in Figure 1) and modality-specific (e.g., a1, a 2)— are not distinguished, despite their differing impacts on the optimization objective. To address these issues, we propose a novel MIB-based mul-timodal learning framework, termed Optimal Multimodal Information Bottleneck (OMIB) , to learn task-relevant optimal MIB representations from multi-modal data for enhanced downstream task performance. OMIB features theoretically grounded optimization objectives, explicitly linked to the dynamics of all five information-theoretical factors during optimization, ensuring a holistic and rigor-ous optimization framework. As illustrated in Figure 2, 2Learning Optimal Multimodal Information Bottleneck Representations 
+
+OMIB comprises two components, including task relevance branches (TRBs) that extract sufficient representations from individual modalities, and an optimal multimodal fusion block (OMF), where modality-specific representations are fused by a cross-attention network (CAN) into MIB and optimized using a computationally efficient variational ap-proximation (Alemi et al., 2017). Adhering to the MIB principle, the OMF block maximizes sufficiency while min-imizing redundancy in the MIB. Particularly, by setting the redundancy regularization parameter in OMIB’s objective function within a theoretically derived bound, OMIB guar-antees the achievability of optimal MIB upon convergence of the OMF block training. Furthermore, our approach dy-namically refines regularization weights per modality as per 
+
+the distribution of their remaining task-relevant information. In summary, our contributions include: • We propose OMIB, a novel framework for learning optimal MIB representations from multimodal data, with an explicit solution to address imbalanced task-relevant information across modalities. • We provide a rigorous theoretical foundation that un-derpins OMIB’s optimization procedure, establishing a clear connection between its objectives and the five information-theoretical factors: sufficiency, consis-tency, redundancy, complementarity, and specificity. • We mathematically derive the conditions for achieving optimal MIB, marking, to our knowledge, the first endeavor in proving its achievability under the MIB principle. • We validate OMIB’s effectiveness on synthetic data and demonstrate its superiority over state-of-the-art MIB methods in downstream tasks such as sentiment analysis, emotion recognition, and anomalous tissue detection across diverse real-world datasets. 
+
+## 2. Related Work 
+
+2.1. Multimodal Fusion 
+
+Multimodal fusion methods can be categorized according to the fusion stage and techniques. Architecturally, fu-sion can happen at three stages: (1) Early fusion, which combines data at the feature level (Snoek et al., 2005), (2) Late fusion, integrating data at the decision level (Morvant et al., 2014), and (3) Middle fusion, where data is fused at intermediate layers to allow early layers to specialize in learning unimodal patterns (Nagrani et al., 2021). From the technique perspective, fusion approaches include: (1) Operation-based, combining features through arithmetic operations (El-Sappagh et al., 2020; Lu et al., 2021), (2) Attention-based, using cross-modal attention to learn inter-action weights (Schulz et al., 2021; Cai et al., 2023), (3) Tensor-based, modeling high-order interactions (Chen et al., 2020; Zadeh et al., 2017), (4) Subspace-based, projecting modalities into shared latent spaces (Yao et al., 2017; Zhou et al., 2021), and (5) Graph-based, representing modalities as graph nodes and edges (Parisot et al., 2018; Cao et al., 2021). In addition, recent studies also discuss the issue of modality imbalance, where strong modalities tend to domi-nate the learning process, while weak modalities are often suppressed (Peng et al., 2022; Zhang et al., 2024). Though effective, these methods typically fail to account for super-fluous information and thus are prone to overfitting and sensitive to noisy modalities, limiting their practical robust-ness (Fang et al., 2024). MIB addresses these challenges by preserving task-relevant information while minimizing redundant content in the generated multimodal representa-tions. 
+
+2.2. Multimodal Information Bottleneck 
+
+The Information Bottleneck (IB) framework (Tishby et al., 2000) provides a principled approach for learning com-pressed, task-relevant representations. It was first applied to deep learning by (Tishby & Zaslavsky, 2015) and later extended through the Variational Information Bottleneck (VIB) (Alemi et al., 2017), which employs stochastic vari-ational inference for efficient approximations. Recently, IB has been adapted to more complex settings, such as multi-view (Wang et al., 2019; Federici et al., 2020) and multimodal learning (Tian et al., 2021). For example, L-MIB, E-MIB, and C-MIB (Mai et al., 2023) aim to learn effective multimodal representations by maximizing task-relevant mutual information, eliminating redundancy, and filtering noise, while exploring how MIB performs at dif-ferent fusion stages. Secondly, MMIB-Zhang (Zhang et al., 2022) improves multimodal representation learning by im-posing mutual information constraints between modality pairs, enhancing the model’s ability to retain relevant infor-mation. Additionally, DISENTANGLEDSSL (Wang et al., 2024) relaxes the restrictions on achieving minimal suffi-cient information, thereby enabling the disentanglement of modality-shared and modality-specific information and en-hancing interpretability. Lastly, DMIB (Fang et al., 2024) filters irrelevant information and noise, employing a suffi-ciency loss to preserve task-relevant data, ensuring robust-ness in noisy and redundant environments. However, these methods often rely on ad hoc regulariza-tion weights and overlook the imbalance of task-relevant information across modalities, limiting their ability to fully optimize the MIB framework. 
+
+## 3. Notations 
+
+Here, we list the mathematical notations (Table 1) used in this study. 3Learning Optimal Multimodal Information Bottleneck Representations 
+
+Table 1: Summary of notation.                   
+
+> Notation Description
+> yTask-relevant label.
+> viThe i-th modality.
+> ziThe sufficient encoding of vifor y.
+> ξMIB encoding.
+> NThe total number of observations.
+> H(∗)The entropy of variable ∗.
+> F(∗)The information set inherent to variable * (i.e., F(x) = H(x)).
+> IThe mutual information function.
+
+## 4. Method 
+
+To clearly illustrate OMIB’s framework, we start with the case of two data modalities (e.g., v1 and v2 in Figure 2), which can be readily extended to multiple modalities by adding additional modality branches (see Appendix D.1). We also provide a rigorous theoretical foundation for our methodology in Section 5. 
+
+Warm-up training. This phase consists of two task rele-vance branches ( TRB ) corresponding to v1 and v2, respec-tively. In the i-th TRB, vi is first encoded into a sufficient representation zi ∈ Rd for task-relevant labels y:
+
+zi = Enc i(vi; θEnc i ), s.t.I (zi; y) = I(vi; y), (2) where Enc i is an encoder, θEnc i denotes its parameters. To ensure maximal sufficiency of zi for y, we concatenate it with a stochastic Gaussian noise, ei ∈ Rk = N (0 , I ),before feeding it to a task-relevant prediction head Dec i
+
+(see Appendix H) to yield the predicted output ˆyi:
+
+ˆyi = Dec i([ zi, e i]) (3) Via this step, Enc i is optimized to extract maximal task-relevant information from vi, as it requires a higher signal-to-noise ratio in zi to yield accurate prediction from its corrupted version. The loss function for updating Enc i and 
+
+Dec i is: 
+
+LT RB i = Evi [− log p(ˆ yi|zi, e i)] = − 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+log p(ˆ yni |zni , e ni ). (4) Note that the implementation of log p(ˆ yi|zi, e i) is task-specific. For classification tasks, it is implemented as 
+
+CE (ˆ yi|| y), where CE is the cross-entropy function; for SVDD-based anomaly detection (Ruff et al., 2018), it is 
+
+|| ˆyi −c|| , where c is the unit sphere center of normal observa-tions (see Appendix H); for regression tasks, it is −|| ˆyi − y|| .The algorithmic workflow of the warm-up training is de-scribed in Appendix L. 
+
+Main Training. After the warm-up training, the model proceeds to main training, which includes an optimal multi-modal fusion ( OMF ) block in addition to the TRBs. In the OMF, zi, ∀i ∈ { 1, 2}, is used to generate the mean μi ∈ Rk
+
+and variance Σi ∈ Rk×k of a Gaussian distribution using a variational autoencoder ( V AE i): 
+
+μi, Σi = V AE i(zi, θ V AE i ), (5) where θV AE i represents the parameters of V AE i. For effi-cient training and direct gradient backpropagation, the repa-rameterization trick (Kingma, 2013) is applied to generate 
+
+ζi ∈ Rk:
+
+ζi = μi + Σ i × ϵi, where ϵi ∼ N (0 , I ). (6) 
+
+ζ1 and ζ2 are fused using a Cross-Attention Network (CAN) (Vaswani et al., 2017), whose architecture is detailed in Appendix H: 
+
+ξ = CAN (ζ1, ζ 2, θ CAN ), (7) where ξ is the post-fusion embedding, which is then passed to a task-relevant prediction head dDec to generate the final prediction ˆy:
+
+ˆy = dDec (ξ, θ dDec ). (8) Meanwhile, ξ replaces the stochastic noise ei in vi’s TRB to fuse with zi, yielding ˆyi for computing LT RB i and updating 
+
+Enc i and Dec i:
+
+ˆyi = Dec i([ zi, ξ ]) . (9) As established in Proposition 5.1, the loss function for up-dating the components in OMF (i.e., V AE i, CAN , and 
+
+dDec ) to achieve optimal MIB, ξ, is given by: 
+
+LOM F = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2 [− log q(yn|ξn)] + β (KL [p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+)||N (0 , I )] +r KL [p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+)||N (0 , I )]) .
+
+(10) where β is a hyper-parameter constraining redundancy be-tween ζi and zi, and r is a dynamically adjusted weight balancing the regularization of v2 relative to v1. The im-plementation of −log q (y|ξ) is task-specific, as previously stated. KL [p(ζi|zi)||N (0 , I )] represents the KL-divergence between ζi and the standard normal distribution. As shown in Proposition 5.2, r is explicitly computed during training as: 
+
+r = 1 −tanh 
+
+
+
+ln 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2
+
+h KL (p(ˆ yn 
+
+> 2
+
+|ξn, z n 
+
+> 2
+
+)|| p(ˆ yn|ξn)) 
+
+KL (p(ˆ yn 
+
+> 1
+
+|ξn, z n 
+
+> 1
+
+)|| p(ˆ yn|ξn)) 
+
+i 
+
+(11) 
+
+Furthermore, Proposition 5.7 provides a theoretical upper bound for setting β, ensuring that our methodology achieves optimal MIB. The algorithmic workflow of the main training procedure is detailed in Appendix L. 4Learning Optimal Multimodal Information Bottleneck Representations 
+
+Inference. During inference, the TRBs are disabled, and the trained modality-specific encoder ( Enc i) and OMF gen-erate optimal MIBs for test data to be used in downstream tasks. 
+
+## 5. Theoretical Foundation 
+
+Due to space constraints, we focus on the theoretical anal-ysis of two data modalities in this section and defer the analysis of multiple data modalities ( ≥ 3) to Appendix D.2. 
+
+5.1. Optimal Information Bottleneck for Multimodal Data with Imbalanced Task-Relevant Information 
+
+As proposed in (Alemi et al., 2017; Federici et al., 2020; Mai et al., 2023; Wang et al., 2019), the Information Bottleneck (IB) principle aims to optimize two key objectives: (1) maximize I (y; z) and (2) minimize I (v; z) (12) where y represents task-relevant labels, v the input data, 
+
+z the IB encoding. The first objective maximizes z’s ex-pressiveness for y, while the second objective enforces z’s conciseness. These objectives can be formulated as: 
+
+max  
+
+> z
+
+I(y; z) s.t. I (v; z) ≤ Ic, (13) where Ic is the information constraint that limits the amount of retained input information. Introducing a Langrange multiplier β > 0, the objective function is reformulated as: 
+
+max  
+
+> z
+
+I(y; z) − βI (v; z). (14) For two data modalities, we propose a modified objective function to account for imbalanced task-relevant informa-tion across modalities: 
+
+min  
+
+> ξ
+
+ℓ(ξ) = min  
+
+> ξ
+
+−I(ξ; y) + β(I(ξ; v1) + rI (ξ; v2)) , (15) where r > 0 is a dynamically adjusted parameter control-ling the relative regularization of v2 with respect to v1. In Equation (15), vi can be replaced with zi. To see this point, let ¯v1 denote the information in v1 that is not encoded in z1.Then, we have: 
+
+I(ξ; v1) = I(ξ; z1, ¯v1) = I(ξ; z1) + I(ξ; ¯ v1|z1)
+
+| {z }     
+
+> =0 ∵F(ξ)∩F(¯ v1) = ∅
+
+= I(ξ; z1).
+
+(16) Similarly, I(ξ; v2) = I(ξ; z2). Thus, the objective function in Equation (15) can be rewritten as: 
+
+min  
+
+> ξ
+
+ℓ(ξ) = min  
+
+> ξ
+
+−I(ξ; y) + β(I(ξ; z1) + rI (ξ; z2)) . (17) 
+
+Proposition 5.1 (Variational upper bound of OMIB’s objective function ). The loss function LOM F in Equa-tion (10) provides a variational upper bound for optimizing the objective function in Equation (17) and can be explicitly calculated during training. Proof. See Appendix B. Moreover, when a substantial portion of task-relevant infor-mation remains in v2 relative to v1, the value of r should be small to encourage incorporating more information from v2
+
+in subsequent training iterations. Simultaneously, r should be bounded to prevent over-regularizing information from 
+
+v2. Thus, r can be mathematically expressed as: 
+
+r ∝ I(y; v1|ξ)
+
+I(y; v2|ξ) , r ∈ (0 , u ), (18) where I(y; vi|ξ) represents the amount of task-relevant in-formation in vi not encoded in ξ, and u is an upper bound. In this study, u is set to 2, as it is implemented using a 
+
+tahn function as in Equation (11), which is justified by the following proposition. 
+
+Proposition 5.2 (Explicit formula for r). Equation (11) 
+
+satisfies Equation (18) , providing an explicit formula for computing r during training. Proof. See Appendix B. In the next section, we establish a theoretical bound for β,ensuring that ξ attains optimality during the optimization of the objective function in Equation (17). 
+
+5.2. Achievability of Optimal Multimodal Information Bottleneck Assumption 5.3. As illustrated in Figure 1, given two modalities, v1 and v2, the task-relevant information set {a}
+
+consists of three components: a0, a 1, and a2. Specifically, 
+
+a0 is shared between both modalities, while a1 and a2 are specific to v1 and v2, respectively. The task-relevant la-bels y are determined by {a}. Moreover, v1 and v2 contain modality-specific superfluous information b1 and b2, respec-tively, in addition to shared superfluous information b0.
+
+Definition 5.4 (Optimal multimodal information bottle-neck ). Under Assumption 5.3, the optimal MIB, ξopt , for 
+
+v1 and v2 satisfies: 
+
+F (ξopt ) = {a0, a 1, a 2}, (19) ensuring that ξopt encompasses all task-relevant information (a0, a 1, and a2) while exempting from superfluous informa-tion ( b0, b 1, and b2). 5Learning Optimal Multimodal Information Bottleneck Representations case i 𝑭 𝒓𝒆𝒍 (𝒗 𝟏 ) > 𝑭 𝒓𝒆𝒍 (𝒗 𝟐 )                       
+
+> 𝑑 11 (500 )>𝑑 21(100 )
+> 𝑣 1
+> 𝑣 2
+> 𝑎 0b0𝑎 1b1
+> 𝑎 0b0b2𝑎 2
+> case ii 𝑭 𝒓𝒆𝒍 (𝒗 𝟏 )<𝑭 𝒓𝒆𝒍 (𝒗 𝟐 )
+> 𝑑 11 (100 )<𝑑 21(500 )
+> 𝑣 1
+> 𝑣 2
+> 𝑎 0b0
+> 𝑎 2b2𝑎 0b0
+> b1𝑎 1
+> case iii 𝑭 𝒓𝒆𝒍 (𝒗 𝟏 )=𝑭 𝒓𝒆𝒍 (𝒗 𝟐 )
+> 𝑑 11 (300 )=𝑑 21(300 )
+> 𝑣 1
+> 𝑣 2
+> 𝑎 0b0
+> 𝑎 0b0
+> b1𝑎 1
+> b2𝑎 2
+> 𝑴 𝒖 𝑴 𝒖 𝑴 𝒖
+
+Figure 3: The impact of β values on classification accuracy on synthetic data. v1 and v2 represent sample vectors of two modalities, respectively. Frel (·) denotes task-relevant information. “ a” sub-vectors denote task-relevant information, while “b” superfluous information. d11 and d21 denote the dimensions of modality-specific a1 and a2. Mu is the computed β upper bound. .
+
+Lemma 5.5 (Inclusiveness of task-relevant information ).
+
+Under Assumption 5.3, the objective function in Equa-tion (17) guarantees: 
+
+F (ξ) ⊇ { a0, a 1, a 2}, (20) 
+
+provided that β ∈ (0 , M u], where Mu :=  
+
+> 1(1+ r)( H(v1)+ H(v2)−I(v1;v2))
+
+.
+
+Proof. See Appendix C Note that H(v1) + H(v2) − I(v1; v2) represents the to-tal information encompassed by the two data modalities. Intuitively, a larger total information content requires incor-porating more information from each modality into the MIB. This is achieved by setting a lower Mu, ensuring that all task-relevant information is included in the MIB. 
+
+Lemma 5.6 (Exclusiveness of superfluous information ).
+
+Under Assumption 5.3, the objective function in Equa-tion (17) ensures: 
+
+F (ξ) ⊆ { a0, a 1, a 2} (21) 
+
+Proof. See Appendix C 
+
+Proposition 5.7 (Achievability of optimal MIB ). Under Assumption 5.3, the optimal MIB ξopt is achievable through optimization of Equation (17) with β ∈ (0 , M u].Proof. Lemma 5.5 and Lemma 5.6 jointly demonstrate that 
+
+F (ξ) ⊇ { a0, a 1, a 2} and F (ξ) ⊆ { a0, a 1, a 2}, given β ∈
+
+(0 , M u]. Thus, F (ξ) = {a0, a 1, a 2}, which corresponds to 
+
+ξopt in Definition 5.4. This completes the proof. In this study, we set Mu := 13( H(v1)+ H(v2)−I(v1;v2)) < 
+
+> 1(1+ r)( H(v1)+ H(v2)−I(v1;v2))
+
+as a tighter upper bound for β
+
+given that r ∈ (0 , 2) , and Ml := 13( H(v1)+ H(v2)) ≤ Mu
+
+as a lower bound for β to accelerate training. Importantly, both Ml and Mu can be computed a priori from the training data using the Mutual Information Neural Estimator (MINE, (Belghazi et al., 2018)) to estimate H(·) and I(·; ·) (see Appendix E). 
+
+## 6. Experiment 
+
+Due to space constraints, we defer detailed task-specific experimental settings to Appendix I and implementations of network architectures to Appendix H. Detailed descriptions of the benchmark methods and evaluation metrics are pro-vided in Appendix J and Appendix K respectively. The best and second-best performing methods in each experiment are bolded and underlined, respectively. Table 2: Classification accuracy of synthetic features vs. OMIB-generated MIB on simulated datasets.               
+
+> Datasets Imbalanced (SIM-I) balanced(SIM-III) Consistent& relevant 0.707 0.686 Modality-specific& relevant 0.737 0.744 Unimodal 0.748 / 0.82 0.792 / 0.78 Authentic optimal MIB 0.909 0.908
+> Union of two modalities 0.858 0.866 OMIB-generated MIB 0.892 0.890
+
+6.1. Datasets 
+
+To facilitate the analysis of OMIB’s performance and validate Proposition 5.7, we simulate three Gaussian-based two-modality dataset, SIM-{I-III }, for classifica-6Learning Optimal Multimodal Information Bottleneck Representations 
+
+Table 3: Comparison of multimodal fusion methods for emotion recognition on the CREMA-D.              
+
+> Methods non-MIB-based MIB-based OMIB Concat BiGated MISA deep IB MMIB-Cui MMIB-Zhang E-MIB L-MIB C-MIB Acc 53.2 58.4 57.7 54.1 57.3 56.7 61.4 58.1 57.0 63.6
+
+tion (see Appendix F). Each dataset contains all four types of information ( {consistent , modality-specific } × {task-relevant , superfluous }). Moreover, they are synthe-sized with varying distributions of task-relevant information across modalities. The emotion recognition experiment is conducted on 
+
+CREMA-D (Cao et al., 2014), an audio-visual dataset in which actors express six basic emotions—happy, sad, anger, fear, disgust, and neutral—through both facial expressions and speech. The MSA experiment utilizes CMU-MOSI 
+
+(Zadeh et al., 2016), which encompasses visual, acoustic, and textual modalities, with sentiment intensity annotated on a scale from -3 to 3. The pathological tissue detection exper-iment involves eight datasets derived from healthy human breast tissues ( 10x-hNB-{A-H }) and human breast cancer tissues ( 10x-hBC-{A-H }) (Xu et al., 2024b), where each dataset comprises gene expression and histology modalities. OMIB is trained on the healthy datasets and applied to the cancer datasets for pathological tissue detection. Detailed descriptions of these datasets are provided in Appendix G and Table 7. Table 4: Comparison of multimodal fusion methods for sentiment analysis on the CMU-MOSI dataset.                                                             
+
+> Method Acc7 ( ↑)Acc2 ( ↑)F1( ↑)MAE( ↓)Corr( ↑)Concat 41.5 81.1 82.0 0.797 0.745 BiGated 41.8 82.1 83.2 0.787 0.738 MISA 42.3 83.4 83.6 0.783 0.761 deep IB 45.3 83.2 83.3 0.747 0.785 MMIB-Cui 45.7 84.3 84.4 0.726 0.782 MMIB-Zhang 46.3 85.0 85.0 0.713 0.788 DMIB 40.4 83.2 83.3 0.810 0.784 E-MIB 48.6 85.3 85.3 0.711 0.798 L-MIB 45.8 84.6 84.6 0.732 0.790 C-MIB 48.2 85.2 85.2 0.728 0.793 OMIB 48.6 86.9 87.1 0.709 0.802
+
+6.2. Empirical Analysis of OMIB Performance Using Synthetic Data 
+
+To empirically validate the effectiveness of our proposed β’s upper bound in achieving optimal MIB, we simulate three two-modality datasets ( SIM-{I-III }) corresponding to three experimental cases ( case i-iii ) (see Appendix F). Regarding task-relevant information, Modality I dominates Modality II in SIM-I, Modality II dominates Modality I in SIM-II, and both modalities contribute equally in SIM-III, thereby cover-ing the three primary cross-modal task-relevant information distributions observed in practice. Each dataset is designed for a binary classification task with labels y ∈ { 0, 1}. In each experimental case, β is gradually increased from 10 −6
+
+to 10, well exceeding the proposed upper bound Mu. The generated MIBs are fed into the trained OMF prediction head to predict y during testing. As shown in Figure 3, the prediction accuracy consistently peaks across all cases when using MIBs generated with β near or below Mu, but rapidly declines as β further increases. This observation aligns with our theoretical analysis, empirically confirming that optimal MIB is achievable when β ≤ Mu. Notably, since Mu is a tight upper bound, peak performance may still be observed for β values slightly above Mu.As detailed in Appendix F, let x1 = [ a0; b0; a1; b1] and 
+
+x2 = [ a0; b0; a2; b2] denote feature vectors of two obser-vations in Modality I and II, respectively. Here, a0 and b0
+
+correspond to the task-relevant and superfluous sub-vectors shared by both modalities. a1, a 2 are modality-specific, task-relevant sub-vectors, while b1, b 2 are modality-specific, superfluous sub-vectors. By design, the authentic optimal MIB is [a0; a1; a2], which is used to predict y and com-pared against the prediction using OMIB-generated MIB. Additionally, we evaluate prediction accuracy using other feature sub-vectors, including unimodal information ( x1
+
+or x2), consistent task-relevant information ( [a0]), modal-specific task-relevant information ( [a1; a2]), and complete information ( [a0; b0; a1; b1; a2; b2]). This experiment is con-ducted using SIM-I and SIM-II, corresponding to the cases of imbalanced and balanced task-relevant information, re-spectively. Table 2 demonstrates that OMIB-generated MIB achieves prediction accuracy most comparable to the au-thentic optimal MIB, surpassing all other feature sub-vector configurations that either omit task-relevant information or include superfluous information. These results further validate the optimality of OMIB-generated MIB. 
+
+6.3. Emotion Recognition 
+
+Here, we compare the accuracy of classifying actors’ emo-tion types in the CREMA-D dataset using OMIB and ten benchmark methods, including three non-MIB-based fusion methods (concatenation, FiLM (Perez et al., 2018), and BiGated (Kiela et al., 2018)) and seven MIB-based state-of-the-art (SOTA) methods (E-MIB, L-MIB, and C-MIB (Mai et al., 2023) ). The classification accuracy of each method is reported in Table 3. OMIB outperforms all other methods, achieving improvements of 8.9% and 3.6% over the best-performing non-MIB-based (concatenation) and MIB-based 7Learning Optimal Multimodal Information Bottleneck Representations 
+
+Table 5: Comparison of multimodal fusion methods for anomalous tissue detection performance on the 10x-hBC-{A-D }
+
+datasets                                                                                                                                 
+
+> Target Dataset Metric non-MIB-based MIB-based OMIB Concat BiGated MISA deep IB MMIB-Cui MMIB-Zhang DMIB E-MIB L-MIB C-MIB 10x-hBC-A AUC 0.537 0.489 0.498 0.522 0.623 0.626 0.423 0.511 0.598 0.496 0.728
+> F1 0.884 0.821 0.873 0.878 0.894 0.897 0.865 0.877 0.891 0.881 0.904
+> 10x-hBC-B AUC 0.866 0.518 0.499 0.379 0.818 0.817 0.849 0.643 0.770 0.481 0.903
+> F1 0.654 0.352 0.213 0.102 0.559 0.583 0.607 0.330 0.483 0.213 0.663
+> 10x-hBC-C AUC 0.638 0.563 0.586 0.433 0.765 0.662 0.743 0.598 0.659 0.511 0.743 F1 0.750 0.727 0.754 0.693 0.822 0.783 0.827 0.759 0.786 0.723 0.820 10x-hBC-D AUC 0.555 0.540 0.495 0.484 0.501 0.604 0.642 0.530 0.652 0.503 0.640 F1 0.509 0.494 0.450 0.443 0.465 0.524 0.540 0.483 0.564 0.465 0.561 Mean AUC 0.649 0.528 0.520 0.455 0.677 0.677 0.664 0.571 0.602 0.498 0.754
+> F1 0.699 0.599 0.573 0.529 0.685 0.697 0.710 0.612 0.681 0.571 0.737
+
+(E-MIB) fusion methods, respectively. These results under-score OMIB’s superiority in enhancing emotion recognition performance. 
+
+6.4. Multimodal Sentiment Analysis 
+
+To evaluate OMIB’s effectiveness in improving downstream tasks involving three modalities, we conduct MSA on the CMU-MOSI dataset, which includes visual, acoustic, and textual modalities. Specifically, OMIB and the same bench-mark methods from Section 6.3 are used to predict a real-valued sentiment intensity score for each utterance, ranging from -3 to 3. Evaluation metrics for this experiment are mentioned in Appendix K. Additionally, OMIB consistently outperforms all benchmark methods across all evaluation metrics, highlighting its ability to generate high-quality MIB in a three-modal setting for enhanced regression tasks such as the MSA. 
+
+6.5. Anomalous Tissue Detection 
+
+In this experiment, we aim to identify anomalous tissue regions from the eight human breast cancer datasets (10x-hBC-{A-D }), which include gene expression and histology modalities. Due to the scarcity of tissue region annotations, we adopt the SVDD strategy (Ruff et al., 2018) for anomaly detection. Specifically, the model is trained exclusively on the eight healthy datasets (10x-hNB-{A-H }) to learn a compact hypersphere in the latent space, confining the multimodal representations of inliers. The trained model is then applied to the four breast cancer target datasets, gen-erating multimodal representations whose distances to the center of the hypersphere serve as anomaly scores, based on which anomalous regions are identified. The benchmark methods are the same as those in Section 6.3 and modified to accommodate the SVDD strategy. The implementation details of OMIB for this task, are provided in Appendix H. The detection results are evaluated using the AUC and F1 scores, calculated based on the anomalous scores (see Ap-pendix K). Table 5 demonstrates that OMIB consistently surpasses the best-performing benchmark method by an av-erage leap of 11.4% in AUC and 3.8% in F1-score across the target datasets, confirming its superiority in anomaly detection in a multi-modal setting. Table 6: Ablation studies on the CREMA-D dataset.           
+
+> w/o Warm-up w/o cross-attn w/o OMF w/o rFull Acc 60.3 61.5 59.5 62.2 63.6
+
+6.6. Ablation Study 
+
+To gain deeper insight into the key components of OMIB, we conduct a series of ablation experiments on the CREMA-D dataset (Table 6). First, we examine the effect of removing the warm-up training (’w/o warm-up’), which leads to a 5.5% decline in accuracy. Next, we replace the CAN with simple concatenation fusion (’w/o cross-attn’), resulting in a 3.4% drop in accuracy. We also evaluate the effect of replacing the entire OMF block with simple concatenation fusion (’w/o OMF’), which significantly degrades model performance by 6.9% in accuracy. Finally, we assign equal regularization weights to I(ξ; z1) and I(ξ; z2) by omitting 
+
+r (’w/o r’) and observe a performance decline of 2.3% in accuracy. In a nutshell, the degraded performance observed after removing OMIB’s key components highlights their critical roles in ensuring model performance. 
+
+6.7. Complexity Analysis 
+
+We first provide a theoretical analysis of OMIB’s complex-ity. OMIB’s modality-specific encoder ( Enc ), task-relevant prediction head ( Dec and dDec ), and VAEs are implemented as Multilayer Perceptron (MLP), convolutional network, or graph convolutional network, each with a complexity of 
+
+O(N ), where N denotes the number of samples (He & Sun, 2015; LeCun et al., 2002; Wu et al., 2020). For the CAN network, our implementation (see Appendix H) has a time 8Learning Optimal Multimodal Information Bottleneck Representations 
+
+Figure 4: Runtime per epoch during warm-up and main training phase on synthetic data. complexity of O(N · M 2) (Vaswani et al., 2017), where M
+
+represents the number of modalities. Since M is typically small, M 2 can be treated as a constant. Thus, OMIB’s over-all theoretical complexity is O(N ). We also empirically evaluate OMIB’s scalability to input size using the SIM-III dataset. Explicitly, we sample six datasets with sizes: 
+
+1 × 10 5, 2 × 10 5, 4 × 10 5, 6 × 10 5, 8 × 10 5, and 1 × 10 6,while keeping the experimental settings identical to those of case iii in Section 6.2. We conduct separate analyses for the warm-up and main training phases, both of which demonstrate scalability to input size, as shown in Figure 4. 
+
+## 7. Conclusion 
+
+We have proposed the OMIB framework, designed to learn optimal MIB representations that effectively capture all task-relevant information. Through theoretical analysis, we demonstrate that adjusting the weights of the IB loss across different modalities facilitates the achievement of optimal MIB. Our experimental results show that OMIB outperforms existing MIB-based methods. Furthermore, our approach is robust, successfully achieving optimal MIB regardless of whether the SNRs between modalities are balanced or imbalanced. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+## Acknowledgments 
+
+We would like to thank Wenlin Li, Yan Lu, Zhengke Duan, and Junqi Li for their help with the experiments. 
+
+## References 
+
+Alemi, A. A., Fischer, I., Dillon, J. V., and Murphy, K. Deep variational information bottleneck. In International Conference on Learning Representations , 2017. Arun, P. V., Sadeh, R., Avneri, A., Tubul, Y., Camino, C., Buddhiraju, K. M., Porwal, A., Lati, R. N., Zarco-Tejada, P. J., Peleg, Z., et al. Multimodal earth observation data fusion: Graph-based approach in shared latent space. In-formation Fusion , 78:20–39, 2022. Belghazi, M. I., Baratin, A., Rajeshwar, S., Ozair, S., Ben-gio, Y., Courville, A., and Hjelm, D. Mutual information neural estimation. In Proceedings of the 35th Interna-tional Conference on Machine Learning , volume 80, pp. 531–540, 2018. Cai, G., Zhu, Y., Wu, Y., Jiang, X., Ye, J., and Yang, D. A multimodal transformer to fuse images and metadata for skin disease classification. The Visual Computer , 39(7): 2781–2793, 2023. Cao, H., Cooper, D. G., Keutmann, M. K., Gur, R. C., Nenkova, A., and Verma, R. Crema-d: Crowd-sourced emotional multimodal actors dataset. IEEE transactions on affective computing , 5(4):377–390, 2014. Cao, M., Yang, M., Qin, C., Zhu, X., Chen, Y., Wang, J., and Liu, T. Using deepgcn to identify the autism spectrum disorder from multi-site resting-state data. Biomedical Signal Processing and Control , 70:103015, 2021. Chen, R. J., Lu, M. Y., Wang, J., Williamson, D. F., Rodig, S. J., Lindeman, N. I., and Mahmood, F. Pathomic fu-sion: an integrated framework for fusing histopathology and genomic features for cancer diagnosis and prognosis. 
+
+IEEE Transactions on Medical Imaging , 41(4):757–770, 2020. Cover, T. M. Elements of information theory . John Wiley & Sons, 1999. Cui, S., Cao, J., Cong, X., Sheng, J., Li, Q., Liu, T., and Shi, J. Enhancing multimodal entity and relation extrac-tion with variational information bottleneck. IEEE/ACM Transactions on Audio, Speech, and Language Process-ing , 32:1274–1285, 2024. Du, Y., Hu, J., Hou, S., Ding, Y., and Sun, X. A methodolog-ical framework for measuring spatial labeling similarity. 
+
+arXiv preprint arXiv:2505.14128 , 2025. El-Sappagh, S., Abuhmed, T., Islam, S. R., and Kwak, K. S. Multimodal multitask deep learning model for alzheimer’s disease progression detection based on time series data. Neurocomputing , 412:197–215, 2020. Fan, Y., Xu, W., Wang, H., Wang, J., and Guo, S. Pmr: Prototypical modal rebalance for multimodal learning. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 20029–20038, 2023. 9Learning Optimal Multimodal Information Bottleneck Representations 
+
+Fang, Y., Wu, S., Zhang, S., Huang, C., Zeng, T., Xing, X., Walsh, S., and Yang, G. Dynamic multimodal infor-mation bottleneck for multimodality classification. In 
+
+2024 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , pp. 7681–7691, 2024. Federici, M., Dutta, A., Forr ´e, P., Kushman, N., and Akata, Z. Learning robust representations via multi-view in-formation bottleneck. In International Conference on Learning Representations , 2020. Guo, W., Zhang, Y., Cai, X., Meng, L., Yang, J., and Yuan, X. Ld-man: Layout-driven multimodal attention network for online news sentiment recognition. IEEE Transactions on Multimedia , 23:1785–1798, 2020. Hazarika, D., Zimmermann, R., and Poria, S. Misa: Modality-invariant and-specific representations for mul-timodal sentiment analysis. In Proceedings of the 28th ACM international conference on multimedia , pp. 1122– 1131, 2020. He, K. and Sun, J. Convolutional neural networks at con-strained time cost. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 5353– 5360, 2015. Huang, J., Lin, Z., Yang, Z., and Liu, W. Temporal graph convolutional network for multimodal sentiment analysis. In Proceedings of the 2021 International Conference on Multimodal Interaction , pp. 239–247, 2021. Kiela, D., Grave, E., Joulin, A., and Mikolov, T. Efficient large-scale multi-modal classification. In Proceedings of the AAAI Conference on Artificial Intelligence , vol-ume 32, 2018. Kingma, D. P. Auto-encoding variational bayes. arXiv preprint arXiv:1312.6114 , 2013. LeCun, Y., Bottou, L., Orr, G. B., and M ¨uller, K.-R. Effi-cient backprop. In Neural networks: Tricks of the trade ,pp. 9–50. Springer, 2002. Li, W., Xu, Y., Zheng, X., Han, S., Wang, J., and Sun, X. Dual advancement of representation learning and clustering for sparse and noisy images. In Proceedings of the 32nd ACM International Conference on Multimedia ,pp. 1934–1942, 2024. Liu, W., Cao, S., and Zhang, S. Multimodal consistency-specificity fusion based on information bottleneck for sentiment analysis. Journal of King Saud University -Computer and Information Sciences , 36(2):101943, 2024. ISSN 1319-1578. Liu, Z., Shen, Y., Lakshminarasimhan, V. B., Liang, P. P., Bagher Zadeh, A., and Morency, L.-P. Efficient low-rank multimodal fusion with modality-specific factors. In Gurevych, I. and Miyao, Y. (eds.), Proceedings of the 56th Annual Meeting of the Association for Computa-tional Linguistics (Volume 1: Long Papers) , pp. 2247– 2256, Melbourne, Australia, July 2018. Association for Computational Linguistics. Lu, M. Y., Chen, T. Y., Williamson, D. F., Zhao, M., Shady, M., Lipkova, J., and Mahmood, F. Ai-based pathology predicts origins for cancers of unknown primary. Nature ,594(7861):106–110, 2021. Mai, S., Zeng, Y., and Hu, H. Multimodal information bottleneck: Learning minimal sufficient unimodal and multimodal representations. IEEE Transactions on Multi-media , 25:4121–4134, 2023. Morvant, E., Habrard, A., and Ayache, S. Majority vote of diverse classifiers for late fusion. In Structural, Syntactic, and Statistical Pattern Recognition: Joint IAPR Inter-national Workshop, S+ SSPR 2014, Joensuu, Finland, August 20-22, 2014. Proceedings , pp. 153–162. Springer, 2014. Nagrani, A., Yang, S., Arnab, A., Jansen, A., Schmid, C., and Sun, C. Attention bottlenecks for multimodal fusion. In Proceedings of the International Conference on Neural Information Processing Systems , volume 34, pp. 14200– 14213, 2021. Parisot, S., Ktena, S. I., Ferrante, E., Lee, M., Guerrero, R., Glocker, B., and Rueckert, D. Disease prediction using graph convolutional networks: application to autism spec-trum disorder and alzheimer’s disease. Medical image analysis , 48:117–130, 2018. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al. Pytorch: An imperative style, high-performance deep learning library. In Proceedings of the International Conference on Neural Information Processing Systems ,volume 32, 2019. Peng, X., Wei, Y., Deng, A., Wang, D., and Hu, D. Balanced multimodal learning via on-the-fly gradient modulation. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pp. 8238–8247, 2022. Perez, E., Strub, F., De Vries, H., Dumoulin, V., and Courville, A. Film: Visual reasoning with a general con-ditioning layer. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 32, 2018. 10 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Ruff, L., Vandermeulen, R., Goernitz, N., Deecke, L., Sid-diqui, S. A., Binder, A., M ¨uller, E., and Kloft, M. Deep one-class classification. In Dy, J. and Krause, A. (eds.), In-ternational Conference on Machine Learning , volume 80 of Proceedings of Machine Learning Research , pp. 4393– 4402. PMLR, 10–15 Jul 2018. Schulz, S., Woerl, A.-C., Jungmann, F., Glasner, C., Stenzel, P., Strobl, S., Fernandez, A., Wagner, D.-C., Haferkamp, A., Mildenberger, P., et al. Multimodal deep learning for prognosis prediction in renal cancer. Frontiers in oncology , 11:788740, 2021. Snoek, C. G., Worring, M., and Smeulders, A. W. Early versus late fusion in semantic video analysis. In Proceed-ings of the 13th annual ACM international conference on Multimedia , pp. 399–402, 2005. Tian, X., Zhang, Z., Lin, S., Qu, Y., Xie, Y., and Ma, L. Farewell to mutual information: Variational distillation for cross-modal person re-identification. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 1522–1531, 2021. Tishby, N. and Zaslavsky, N. Deep learning and the infor-mation bottleneck principle. In 2015 ieee information theory workshop (itw) , pp. 1–5. IEEE, 2015. Tishby, N., Pereira, F. C., and Bialek, W. The informa-tion bottleneck method. arXiv preprint physics/0004057 ,2000. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., and Polosukhin, I. Atten-tion is all you need. In Proceedings of the International Conference on Neural Information Processing Systems ,volume 30, 2017. Wan, Z., Zhang, C., Zhu, P., and Hu, Q. Multi-view information-bottleneck representation learning. In Pro-ceedings of the AAAI conference on artificial intelligence ,volume 35, pp. 10085–10092, 2021. Wang, C., Gupta, S., Zhang, X., Tonekaboni, S., Jegelka, S., Jaakkola, T., and Uhler, C. An information criterion for controlled disentanglement of multimodal data. In 
+
+UniReps: 2nd Edition of the Workshop on Unifying Rep-resentations in Neural Models , 2024. Wang, Q., Boudreau, C., Luo, Q., Tan, P.-N., and Zhou, J. Deep multi-view information bottleneck. In Proceed-ings of the 2019 SIAM International Conference on Data Mining , pp. 37–45. SIAM, 2019. Wolf, F. A., Angerer, P., and Theis, F. J. Scanpy: large-scale single-cell gene expression data analysis. Genome biology , 19:1–5, 2018. Wu, Z., Pan, S., Chen, F., Long, G., Zhang, C., and Philip, S. Y. A comprehensive survey on graph neural networks. 
+
+IEEE transactions on neural networks and learning sys-tems , 32(1):4–24, 2020. Xiao, G., Tu, G., Zheng, L., Zhou, T., Li, X., Ahmed, S. H., and Jiang, D. Multimodality sentiment analysis in social internet of things based on hierarchical attentions and csat-tcn with mbm network. IEEE Internet of Things Journal , 8(16):12748–12757, 2020. Xu, K., Ding, Y., Hou, S., Zhan, W., Chen, N., Wang, J., and Sun, X. Domain adaptive and fine-grained anomaly detection for single-cell sequencing data and beyond. In 
+
+Proceedings of the Thirty-Third International Joint Con-ference on Artificial Intelligence , pp. 6125–6133, 2024a. Xu, K., Lu, Y., Hou, S., Liu, K., Du, Y., Huang, M., Feng, H., Wu, H., and Sun, X. Detecting anomalous anatomic regions in spatial transcriptomics with stands. Nature Communications , 15(1):8223, 2024b. Xu, K., Wu, Q., Lu, Y., Zheng, Y., Li, W., Tang, X., Wang, J., and Sun, X. Meatrd: Multimodal anomalous tissue region detection enhanced with spatial transcriptomics. In Proceedings of the AAAI Conference on Artificial In-telligence , volume 39, pp. 12918–12926, 2025. Xue, Z., Gao, Z., Ren, S., and Zhao, H. The modality focusing hypothesis: Towards understanding crossmodal knowledge distillation. In International Conference on Learning Representations , 2023. Yao, J., Zhu, X., Zhu, F., and Huang, J. Deep correlational learning for survival prediction from multi-modality data. In International Conference on Medical Image Comput-ing and Computer-Assisted Intervention , pp. 406–414. Springer, 2017. Zadeh, A., Zellers, R., Pincus, E., and Morency, L.-P. Mul-timodal sentiment intensity analysis in videos: Facial gestures and verbal messages. IEEE Intelligent Systems ,31(6):82–88, 2016. Zadeh, A., Chen, M., Poria, S., Cambria, E., and Morency, L.-P. Tensor fusion network for multimodal sentiment analysis. In Palmer, M., Hwa, R., and Riedel, S. (eds.), 
+
+Proceedings of the 2017 Conference on Empirical Meth-ods in Natural Language Processing , pp. 1103–1114, Copenhagen, Denmark, September 2017. Association for Computational Linguistics. Zhang, S., Yin, C., and Yin, Z. Multimodal sentiment recognition with multi-task learning. IEEE Transactions on Emerging Topics in Computational Intelligence , 7(1): 200–209, 2023. 11 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Zhang, T., Zhang, H., Xiang, S., and Wu, T. Information bottleneck based representation learning for multimodal sentiment analysis. In Proceedings of the 6th Interna-tional Conference on Control Engineering and Artificial Intelligence , pp. 7–11, 2022. Zhang, X., Yoon, J., Bansal, M., and Yao, H. Multimodal representation learning by alternating unimodal adapta-tion. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 27456– 27466, 2024. Zhou, J., Zhang, X., Zhu, Z., Lan, X., Fu, L., Wang, H., and Wen, H. Cohesive multi-modality feature learning and fusion for covid-19 patient severity prediction. IEEE Transactions on Circuits and Systems for Video Technol-ogy , 32(5):2535–2549, 2021. 12 Learning Optimal Multimodal Information Bottleneck Representations 
+
+# Appendix 
+
+## A. Proofs of Mutual Information Properties 
+
+Properties A.1. Properties of mutual information and entropy: 
+
+i) I(x; y) ≥ 0, I (x; y|z) ≥ 0.
+
+ii ) I(x; y, z ) = I(x; y) + I(x; z|y).
+
+iii ) I(x1; x2; · · · ; xn+1 ) = I(x1; · · · ; xn)
+
+− I(x1; · · · ; xn|xn+1 ).
+
+iv ) If F (x1) ∩ F (x2) = ∅ −→ I(x1; x3|x2) = I(x1; x3)
+
+v) If F (v2) ⊆ F (v1) −→ I(v1; v2) = H(v2),H(v1, v 2) = F (v1) ∪ F (v2) = F (v1) = H(v1)
+
+vi ) If H(v2) ∩ H(v1)̸ = ∅ −→ H(v1, v 2) = H(v1) + H(v2)
+
+− I(v1; v2)
+
+vii ) If H(v2) ∩ H(v1) = ∅ −→ H(v1, v 2) = H(v1) + H(v2)= F (v1) ∪ F (v2)
+
+Proof. The proofs of properties i, ii, and iii can be found in (Cover, 1999). For property iv , we first observe that: 
+
+F (y) ∩ F (z) = ∅ −→ p(y, z ) = p(y)p(z) (22) This implies that y and z are statistically independent. Consequently, we have 
+
+I(y; z) = X
+
+> y,z
+
+p(y, z )log p(y, z )
+
+p(y)p(z)= X
+
+> y,z
+
+p(y, z )log p(y)p(z)
+
+p(y)p(z)= X
+
+> y,z
+
+p(y, z )log 1= 0 
+
+(23) Given that I(y; z) = I(x; y; z) + I(x; z|y), and noting that I(x; y; z) ≥ 0 and I(x; z|y) ≥ 0, it follows that: 
+
+I(y; z) = 0 −→ I(x; y; z) = 0 and I(x; z|y) = 0 (24) Therefore, we obtain that: 
+
+I(x; y|z) = I(x; y) −
+
+> =0
+
+z }| {
+
+I(x; y; z) = I(x; y) (25) 13 Learning Optimal Multimodal Information Bottleneck Representations 
+
+For property v:
+
+H(v1; v2) = 
+
+x
+
+> v1,v 2
+
+p(v1, v 2)log ( p(v1, v 2)
+
+p(v1)p(v2) )=
+
+x
+
+> v1,v 2
+
+p(v1, v 2)log (    
+
+> =1 as F(v2)⊆F(v1)
+
+z }| {
+
+p(v2|v1) p(v1)
+
+p(v1)p(v2) )=
+
+Z
+
+> v2
+
+− p(v2)log (p(v2)) = H(v2).
+
+(26) In addition, for I(v1, v 2), we have: 
+
+H(v1, v 2) = F (v1) ∪ F (v2)=
+
+x
+
+> v1,v 2
+
+− p(v1, v 2)log (p(v1, v 2)) =
+
+x
+
+> v1,v 2
+
+− p(v1, v 2)log (p(v2|v1)p(v1)) =
+
+Z
+
+> v1
+
+− p(v1)log (p(v1)) = H(v1) = F (v1).
+
+(27) For property vi , we have: 
+
+H(v1) ∩ H(v2)̸ = ∅ −→ p(v1, v 2)̸ = p(v1)p(v2). (28) The mutual information I(v1; v2) is defined as: 
+
+I(v1; v2) = 
+
+x
+
+p(v1, v 2) log p(v1, v 2)
+
+p(v1)p(v2) dv 1 dv 2̸ = 0 =
+
+x
+
+p(v1, v 2) log p(v1, v 2) dv 1 dv 2 −
+
+x
+
+p(v1, v 2) log p(v1) dv 1 dv 2
+
+−
+
+x
+
+p(v1, v 2) log p(v2) dv 1 dv 2
+
+= −
+
+x
+
+p(v1, v 2) log p(v1) dv 1 dv 2 −
+
+x
+
+p(v1, v 2) log p(v2) dv 1 dv 2
+
++
+
+x
+
+p(v1, v 2) log p(v1, v 2) dv 1 dv 2
+
+= −
+
+Z
+
+p(v1) log p(v1) dv 1 −
+
+Z
+
+p(v2) log p(v2) dv 2
+
++
+
+x
+
+p(v1, v 2) log p(v1, v 2) dv 1 dv 2
+
+= H(v1) + H(v2) − H(v1, v 2)
+
+(29) Since H(v1) ∩ H(v2)̸ = ∅ −→ I(v1; v2)̸ = 0 , we have H(v1, v 2) = H(v1) + H(v2) − I(v1; v2).For property vii , we first clarified that: 
+
+F (v2) ∩ F (v1) = ∅ −→ p(v1, v 2) = p(v1)p(v2) (30) 14 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Therefore, we have: 
+
+H(v1, v 2) = 
+
+x
+
+> v1,v 2
+
+− p(v1, v 2)log (p(v1, v 2)) =
+
+x
+
+> v1,v 2
+
+− p(v1)p(v2)log (p(v1)p(v2)) =
+
+Z
+
+> v1
+
+− p(v1)log (p(v1)) + 
+
+Z
+
+> v2
+
+− p(v2)log (p(v2)) = H(v1) + H(v2)
+
+(31) 
+
+## B. Proofs of Proposition 5.1 and Proposition 5.2 
+
+For convenient reading, the equations used in the proofs are copied from the main text: 
+
+LOM F = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2 [− log q(yn|ξn)] + β (KL [p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+)||N (0 , I )] + r KL [p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+)||N (0 , I )]) . (32) which is copied from Equation (10). 
+
+r = 1 − tanh 
+
+
+
+ln 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2
+
+h KL (p(ˆ yn 
+
+> 2
+
+|ξn, z n 
+
+> 2
+
+)|| p(ˆ yn|ξn)) 
+
+KL (p(ˆ yn 
+
+> 1
+
+|ξn, z n 
+
+> 1
+
+)|| p(ˆ yn|ξn)) 
+
+i 
+
+, (33) which is copied from Equation (11). 
+
+min  
+
+> ξ
+
+ℓ(ξ) = min  
+
+> ξ
+
+−I(ξ; y) + β(I(ξ; z1) + rI (ξ; z2)) , (34) which is copied from Equation (17) 
+
+r ∝ I(y; v1|ξ)
+
+I(y; v2|ξ) , (35) which is copied from Equation (18). 
+
+Proposition B.1 (Proposition 5.1 restated ). The loss function, LOM F , in Equation (32) provides a variational upper bound for optimizing the objective function in Equation (34) , and can be explicitly calculated during training. Proof. For I(ξ; y), we have: 
+
+I(ξ; y) = 
+
+Z
+
+dydξp (y, ξ )log p(y, ξ )
+
+p(y)p(ξ)=
+
+Z
+
+dydξp (y, ξ )log p(y|ξ)
+
+p(y)
+
+(36) Let q(y|ξ) be a variational approximation to p(y|ξ), and we have: 
+
+KL [p(y|ξ)|| q(y|ξ)] ≥ 0 ⇒
+
+Z
+
+dyp (y|ξ) log p(y|ξ) ≥
+
+Z
+
+dyp (y|ξ) log q(y|ξ) (37) Based on the above inequality, we have (Alemi et al., 2017): 
+
+I(ξ; y) ≥
+
+Z
+
+dydξp (y, ξ )log q(y|ξ)
+
+p(y)=
+
+Z
+
+dydξp (y, ξ )log q (y|ξ) −
+
+Z
+
+dydξp (y, ξ )log p (y)=
+
+Z
+
+dydξp (y, ξ )log q (y|ξ) + H(Y )
+
+(38) 15 Learning Optimal Multimodal Information Bottleneck Representations 
+
+H(Y ) can be ignored as it is fixed during training. Therefore: 
+
+I(ξ; y) ≥
+
+Z
+
+dydξp (y, ξ )log q (y|ξ)=
+
+Z
+
+dydξdζ 1dζ 2dz 1dz 2p(z1, z 2, y, ζ 1, ζ 2, ξ )log q (y|ξ)
+
+(39) Furthermore, because ξ is a function of ζ1 and ζ2 (i.e., ξ = CAN (ζ1, ζ 2)), we have I(ξ; z1) ≤ I(ζ1, ζ 2; z1) and I(ξ; z2) ≤
+
+I(ζ1, ζ 2; z2). Using the Markov property, we have ζ1 ⊥ z2 and ζ2 ⊥ z1, which leads to: 
+
+I(ξ; z1) ≤ I(ζ1, ζ 2; z1) = I(ζ1; z1) + 
+
+> ζ2⊥z1
+
+z }| {
+
+I(ζ2; z1|ζ1) = I(ζ1; z1) (40) Similarly, I(ξ; z2) ≤ I(ζ2; z2). Therefore: 
+
+I(ξ; zi) ≤ I(ζi; zi) = 
+
+Z
+
+dζ idz ip(ζi, z i)log p(ζi|zi)
+
+p(ζi) , ∀i ∈ { 1, 2} (41) Let r(ζi) ∼ N (0 , I ) be a variational approximation to p(ζi), we have: 
+
+I(ξ; zi) ≤ I(ζi; zi) = 
+
+Z
+
+dζ idz ip(ζi, z i)log p (ζi|zi) −
+
+Z
+
+p(ζi) log p(ζi)dζ i
+
+≤
+
+Z
+
+dζ idz ip(ζi, z i)log p (ζi|zi) −
+
+Z
+
+p(ζi) log r(ζi)dζ i
+
+=
+
+Z
+
+dζ idz ip(ζi, z i)log p(ζi|zi)
+
+N (0 , I ) , ∀i ∈ { 1, 2}.
+
+(42) Put Equation (39) and Equation (42) together, we have: 
+
+L = − I(ξ; y) + β
+
+
+
+I(ξ; z1) + rI (ξ; z2)
+
+
+
+≤ − 
+
+Z
+
+dydz 1dz 2p(y, z 1, z 2)
+
+Z
+
+dξdζ 1dζ 2p(ξ|ζ1, ζ 2)p(ζ1|z1)p(ζ2|z2)log q (y|ξ)+ β
+
+Z
+
+dz 1p(z1)
+
+Z
+
+dζ 1p(ζ1|z1)log p(ζ1|z1)
+
+N (0 , I ) + r
+
+Z
+
+dz 2p(z2)
+
+Z
+
+dζ 2p(ζ2|z2)log p(ζ2|z2)
+
+N (0 , I )
+
+
+
+(43) Note that p(z1, z 2, y ), p (z1), and p(z2) can be approximated using the empirical data distribution (Alemi et al., 2017; Wang et al., 2019), which leads to the objective function: 
+
+L ≈ 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+h
+
+−
+
+Z
+
+dξdζ 1dζ 2 p(ξn|ζn 
+
+> 1
+
+, ζ n 
+
+> 2
+
+)p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+)p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+)log q (yn|ξn)+ β
+
+Z
+
+dζ 1p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+)log p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+)
+
+N (0 , I ) + r
+
+Z
+
+dζ 2p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+)log p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+)
+
+N (0 , I )
+
+i (44) Given ζi = μi + Σ i × ϵi in Equation (6), we have: 
+
+L = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2 [− log q(yn|ξn)] + β
+
+
+
+KL [p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+)||N (0 , I )] + r KL [p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+)||N (0 , I )] 
+
+
+
+= LOM F 
+
+(45) This completes the proof. 
+
+Proposition B.2 (Proposition 5.2 restated ). Equation (33) satisfies Equation (35) , thus providing an explicit formula for computing r during training. 
+
+16 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Proof. Firstly, z1 and z2 are sufficient encodings of modalities v1 and v2 for y, respectively. Let ¯vi represent the superfluous information in vi that is not encoded in zi. Then, we have: 
+
+I(y; vi|ξ) = I(y; zi, ¯vi|ξ)= I(y; zi|ξ) + I(y; ¯ vi|zi, ξ )
+
+| {z }    
+
+> =0 ∵F(y)∩F(¯ vi)= ∅
+
+= I(y; zi|ξ), ∀i ∈ { 1, 2}.
+
+(46) Let z4 = {z1, ξ } and z5 = {z2, ξ }, then we have: 
+
+I(y; v1|ξ) = I(y; z1|ξ) = I(z1, ξ ; y) − I(ξ; y) = I(z4; y) − I(ξ; y),I(y; v2|ξ) = I(y; z2|ξ) = I(z2, ξ ; y) − I(ξ; y) = I(z5; y) − I(ξ; y). (47) Then I(y; z1|ξ) can be expressed as: 
+
+I(y; z1|ξ) = I(z4; y) − I(ξ; y)= H(y) − H(y|z4) − H(y) + H(y|ξ)= H(y|ξ) − H(y|z4)= −
+
+Z
+
+p(ξ)dξ 
+
+Z
+
+p(y|ξ)log p (y|ξ)dy +
+
+Z
+
+p(z4)dz 4
+
+Z
+
+p(y|z4)log p (y|z4)dy 
+
+= −
+
+x
+
+p(ξ)p(y|ξ)log [p(y|z4) p(y|ξ)
+
+p(y|z4) ]dξdy 
+
++
+
+x
+
+p(z4)p(y|z4)log [p(y|ξ) p(y|z4)
+
+p(y|ξ) ]dz 4dy 
+
+= −
+
+x
+
+p(ξ)p(y|ξ)log p(y|ξ)
+
+p(y|z4) dξdy −
+
+x
+
+p(ξ)p(y|ξ)log p (y|z4)dξdy 
+
++
+
+x
+
+p(z4)p(y|z4)log p(y|z4)
+
+p(y|ξ) dz 4dy +
+
+x
+
+p(z4)p(y|z4)log p (y|ξ)dz 4dy 
+
+= −
+
+Z
+
+p(ξ)KL (p(y|ξ)|| p(y|z4)) dξ −
+
+Z
+
+p(y)log p (y|z4)dy 
+
++
+
+Z
+
+p(z4)KL (p(y|z4)|| p(y|ξ)) dz 4 +
+
+Z
+
+p(y)log p (y|ξ)dy 
+
+=
+
+Z
+
+p(z4)KL (p(y|z4)|| p(y|ξ)) dz 4 +
+
+Z
+
+p(y)log p(y|ξ)
+
+p(y|z4) dy 
+
+−
+
+Z
+
+p(ξ)KL (p(y|ξ)|| p(y|z4)) dξ 
+
+=
+
+Z
+
+p(z4)KL (p(y|z4)|| p(y|ξ)) dz 4 +
+
+Z
+
+p(ξ)p(y|ξ)log p(y|ξ)
+
+p(y|z4) dydξ 
+
+−
+
+Z
+
+p(ξ)KL (p(y|ξ)|| p(y|z4)) dξ 
+
+=
+
+Z
+
+p(z4)KL (p(y|z4)|| p(y|ξ)) dz 4 +
+
+Z
+
+p(ξ)KL (p(y|ξ)|| p(y|z4)) dξ 
+
+−
+
+Z
+
+p(ξ)KL (p(y|ξ)|| p(y|z4)) dξ 
+
+=
+
+Z
+
+p(z4)KL (p(y|z4)|| p(y|ξ)) dz 4
+
+= Ez4 [KL (p(y|z4)|| p(y|ξ))] 
+
+(48) 17 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Similarly, I(y; z2|ξ) = Ez5 [KL (p(y|z5)|| p(y|ξ))] , and I(y;v1|ξ) 
+
+> I(y;v2|ξ)
+
+can be calculated as: 
+
+I(y; v2|ξ)
+
+I(y; v1|ξ) = Ez5 [KL (p(y|z5) ∥ p(y|ξ))] 
+
+Ez4 [KL (p(y|z4) ∥ p(y|ξ))] = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2
+
+h KL (p(ˆ yn 
+
+> 2
+
+|ξn, z n 
+
+> 2
+
+)|| p(ˆ yn|ξn)) 
+
+KL (p(ˆ yn 
+
+> 1
+
+|ξn, z n 
+
+> 1
+
+)|| p(ˆ yn|ξn)) 
+
+i (49) Finally, we have: 
+
+r = 1 − tanh 
+
+
+
+ln 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2
+
+h KL (p(ˆ yn 
+
+> 2
+
+|ξn, z n 
+
+> 2
+
+)|| p(ˆ yn|ξn)) 
+
+KL (p(ˆ yn 
+
+> 1
+
+|ξn, z n 
+
+> 1
+
+)|| p(ˆ yn|ξn)) 
+
+i 
+
+= 1 − tanh (ln I(y; v2|ξ)
+
+I(y; v1|ξ) ) ∝ I(y; v1|ξ)
+
+I(y; v2|ξ)
+
+(50) This completes the proof. 
+
+## C. Proofs of Lemma 5.5 and Lemma 5.6 
+
+As proposed in Section 5.1, the objective function of MIB can be written as: 
+
+min  
+
+> ξ
+
+ℓ(ξ) = min  
+
+> ξ
+
+−I(ξ; y) + β(I(ξ; z1) + rI (ξ; z2)) (17) Based on Assumption 5.3 in Section 5.2, we have: 
+
+F (y) = {a} = {a0, a 1, a 2},F (v1) = {a0, a 1, b 1, b 0}, F (v2) = {a0, a 2, b 2, b 0},
+
+{a0} ∩ { a1} = ∅, {a0} ∩ { a2} = ∅, {a1} ∩ { a2} = ∅,
+
+{bi} ∩ { a0} = ∅, {bi} ∩ { a1} = ∅, {bi} ∩ { a2} = ∅, ∀i ∈ { 0, 1, 2}
+
+I(y; v1) = {a} ∩ F (v1) = {a0, a 1},I(y; v2) = {a} ∩ F (v2) = {a0, a 2}.
+
+Definition C.1. The relative mutual information between encoding z and task-relevant label y is defined as the ratio of their mutual information to their total information: 
+
+bI(z; y) = I(z; y)
+
+F (z) ∪ F (y) = I(z; y)
+
+F (z, y ) = I(z; y)
+
+H(z) + H(y) − I(z; y)
+
+Compared to mutual information, relative mutual information more accurately reflects the amount of task-relevant informa-tion (i.e., I(ξ; y)) in total information (i.e., F (ξ) ∪ F (y)), which aligns more with the objective of maximizing task-relevant information in MIB. Consequently, we replace I(ξ; y) with bI(ξ; y) in Equation (17) in the following analysis. 
+
+Lemma C.2 (Lemma 5.5 restated ). Under Assumption 5.3, the objective function in Equation (17) ensures: 
+
+F (ξ) ⊇ { a0, a 1, a 2}, (51) 
+
+when β ≤ Mu, where Mu := 1(1+ r)( H(v1)+ H(v2)−I(v1;v2)) .
+
+Proof. Let { ˇξ1} = ( {a0, a 1, a 2}/({a0, a 1, a 2} ∩ F (ξ))) ∩ { a1} represent the task-relevant information in a1 that is not included in ξ. It is obvious: 
+
+{ ˇξ1} ⊂ F (y), { ˇξ1} ∩ F (ξ) = ∅,
+
+{ ˇξ1} ∩ { a0} = ∅, { ˇξ1} ∩ { a2} = ∅,
+
+{ ˇξ1} ∩ F (v2) = ∅, { ˇξ1} ∩ F (z2) = ∅.
+
+(52) 18 Learning Optimal Multimodal Information Bottleneck Representations 
+
+If { ˇξ1}̸ = ∅, let ξ′ = {ξ, ˇξ1}. Using properties in Appendix A, we have: 
+
+I(ξ; v1) − I(ξ′; v1) = I(ξ; v1) − I(ξ, ˇξ1; v1)= I(ξ; v1) − I(ξ; v1) −  
+
+> {ˇξ1}∩ F(ξ)= ∅(52)
+
+z }| {
+
+I(v1; ˇξ1|ξ)= −I(v1; ˇξ1) < 0
+
+I(ξ; v2) − I(ξ′; v2) = I(ξ; v2) − I(ξ, ˇξ1; v2)= I(ξ; v2) − I(ξ; v2) −  
+
+> ∵{ˇξ1}∩ F(v2)= ∅(52)
+> ∴I(v2; ˇξ1|ξ)=0
+
+z }| {
+
+I(v2; ˇξ1 | ξ)= 0 
+
+bI(ξ′; y) − bI(ξ; y) = I(ξ, ˇξ1; y)
+
+F (ξ, ˇξ1, y ) − I(ξ; y)
+
+F (ξ, y )= I(ξ, ˇξ1; y)
+
+F (ξ, ˇξ1, y ) − I(ξ; y)
+
+F (ξ, y ) ∪ F ( ˇξ1)
+
+| {z }     
+
+> =F(ξ,y )as {ˇξ1}⊂ F(y)(52)
+
+=   
+
+> {ˇξ1}∩ F(ξ)= ∅(52)
+
+z }| {
+
+I(y; ˇξ1|ξ)
+
+F (ξ, ˇξ1, y )= I(y; ˇξ1)
+
+F (ξ, ˇξ1, y ) > 0
+
+For ℓ(ξ) − ℓ(ξ′), we have: 
+
+ℓ(ξ) − ℓ(ξ′) = bI(ξ′; y) − bI(ξ; y) + β(I(ξ; v1) − I(ξ′; v1) + rI (ξ; v2) − rI (ξ′; v2)) = I(y; ˇξ1)
+
+F (ξ, ˇξ1, y ) − βI (v1; ˇξ1)
+
+When β < I(y; ˇξ1)   
+
+> I(v1; ˇξ1)F(ξ, ˇξ1,y )
+
+, ℓ(ξ) − ℓ(ξ′) > 0, so optimizing the loss function will drive ξ toward ξ′ until { ˇξ1} = ∅,namely F (ξ) ⊇ { a1}. We further suppose { ˇξ2} = ( {a0, a 1, a 2}/({a0, a 1, a 2} ∩ F (ξ))) ∩ { a2} represent the task-relevant information in a2 that is not included in ξ. Similarly, if { ˇξ2}̸ = ∅ and β < I(y; ˇξ2)   
+
+> rI (v2; ˇξ2)F(ξ, ˇξ2,y )
+
+, the optimization will update ξ
+
+until { ˇξ2} = ∅, namely F (ξ) ⊇ { a2}.Moreover, let { ˇξ0} = ( {a0, a 1, a 2}/({a0, a 1, a 2} ∩ F (ξ))) ∩ { a0} represent the task-relevant information in a0 that is not included in ξ. If { ˇξ0}̸ = ∅, let ξ′ = {ξ, ˇξ0}. Then we have: 
+
+I(ξ; vi) − I(ξ′; vi) = I(ξ; vi) − I(ξ, ˇξ0; vi)= I(ξ; vi) − I(ξ; vi) −  
+
+> {ˇξ0}∩ F(ξ)= ∅
+
+z }| {
+
+I(vi; ˇξ0|ξ)= −I(vi; ˇξ0) < 0, ∀i ∈ { 1, 2}.
+
+19 Learning Optimal Multimodal Information Bottleneck Representations 
+
+bI(ξ′; y) − bI(ξ; y) = I(ξ, ˇξ0; y)
+
+F (ξ, ˇξ0, y ) − I(ξ; y)
+
+F (ξ, y )= I(ξ, ˇξ0; y)
+
+F (ξ, ˇξ0, y ) − I(ξ; y)
+
+F (ξ, y ) ∪ F ( ˇξ0)
+
+| {z }     
+
+> =F(ξ,y )as {ˇξ0}⊂ F(y)
+
+=  
+
+> {ˇξ0}∩ F(ξ)= ∅
+
+z }| {
+
+I(y; ˇξ0|ξ)
+
+F (ξ, ˇξ0, y )= I(y; ˇξ0)
+
+F (ξ, ˇξ0, y ) > 0
+
+For ℓ(ξ) − ℓ(ξ′), we have: 
+
+ℓ(ξ) − ℓ(ξ′) = bI(ξ′; y) − bI(ξ; y) + β(I(ξ; v1) − I(ξ′; v1) + rI (ξ; v2) − rI (ξ′; v2)) = I(y; ˇξ0)
+
+F (ξ, ˇξ0, y ) − β(I(v1; ˇξ0) + rI (v2; ˇξ0)) 
+
+Therefore, when β < I(y; ˇξ0)   
+
+> F(ξ, ˇξ0,y )( I(v1; ˇξ0)+ rI (v2; ˇξ0))
+
+, the optimization will update ξ until { ˇξ0} = ∅, namely F (ξ) ⊇ { a0} .Put together, the optimization procedure ensures F (ξ) ⊇ { a0, a 1, a 2} when: 
+
+β < U B β = min 
+
+ I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, ˇξ1, y ) , I(y; ˇξ2)
+
+rI (v2; ˇξ2)F (ξ, ˇξ2, y ) , I(y; ˇξ0)
+
+F (ξ, ˇξ0, y )( I(v1; ˇξ0) + rI (v2; ˇξ0)) 
+
+
+
+. (53) Finally, we prove in Lemma C.3 below that Mu = 1(1+ r)( H(v1)+ H(v2)−I(v1;v2)) is a lower bound of U B β . When β < M u,the optimization procedure guarantees F (ξ) ⊇ { a0, a 1, a 2}. This completes the proof. 
+
+Lemma C.3. U B β in Equation (53) satisfies: U B β > M u, where Mu = 1(1+ r)( H(v1)+ H(v2)−I(v1;v2)) .
+
+H(·) and I(·; ·) can be estimated using MINE (Belghazi et al., 2018) (see Appendix E). Proof. As shown in Equation (53) 
+
+U B β = min 
+
+ I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, ˇξ1, y ) , I(y; ˇξ2)
+
+rI (v2; ˇξ2)F (ξ, ˇξ2, y ) , I(y; ˇξ0)
+
+F (ξ, ˇξ0, y )( I(v1; ˇξ0) + rI (v2; ˇξ0)) 
+
+
+
+∵ { ˇξ1} ⊆ F (ξ, y ), we have F (ξ, ˇξ1, y ) = F (ξ, y ) so that: 
+
+I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, ˇξ1, y ) = I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, y )
+
+∵ { ˇξ1} ⊆ { a1}, {a1} ⊆ { v1}, and {a1} ⊆ { y}, ∴ { ˇξ1} ⊆ { v1} and { ˇξ1} ⊆ { y}. Then, according to property v in Properties A.1, I(y; ˇξ1) = H( ˇξ1) and I(v1; ˇξ1) = H( ˇξ1), which leads to: 
+
+I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, y ) = H( ˇξ1)
+
+H( ˇξ1)F (ξ, y )= 1
+
+F (ξ, y )
+
+Similarly, I(y; ˇξ2)   
+
+> rI (v2; ˇξ2)F(ξ, ˇξ2,y )
+
+is simplify to 1  
+
+> rF (ξ,y )
+
+. Moreover, F (ξ, ˇξ0, y ) = F (ξ, y ) since { ˇξ0} ⊆ F (ξ, y ). Then, it follows that: 
+
+I(y; ˇξ0)
+
+F (ξ, ˇξ0, y )( I(v1; ˇξ0) + rI (v2; ˇξ0)) = I(y; ˇξ0)
+
+F (ξ, y )( I(v1; ˇξ0) + rI (v2; ˇξ0)) 
+
+20 Learning Optimal Multimodal Information Bottleneck Representations 
+
+∵ { ˇξ0} ⊆ { a0}, {a0} ⊆ { v1}, {a0} ⊆ { v2}, and {a0} ⊆ { y}, ∴ { ˇξ0} ⊆ { v1}, { ˇξ0} ⊆ { v2}, and { ˇξ0} ⊆ { y}. Thus, by property v in Properties A.1, I(y; ˇξ0) = H( ˇξ0), I(v1; ˇξ0) = H( ˇξ0), and I(v2; ˇξ0) = H( ˇξ0), which collectively lead to: 
+
+I(y; ˇξ0)
+
+F (ξ, y )( I(v1; ˇξ0) + rI (v2; ˇξ0)) = H( ˇξ0)
+
+F (ξ, y )( H( ˇξ0) + rH ( ˇξ0)) = 1(1 + r)F (ξ, y )
+
+< min 
+
+ 1
+
+F (ξ, y ) , 1
+
+rF (ξ, y )
+
+
+
+, ∀r > 0= min 
+
+ I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, ˇξ1, y ) , I(y; ˇξ2)
+
+rI (v2; ˇξ2)F (ξ, ˇξ2, y )
+
+
+
+.
+
+Thus, we have: 
+
+U B β = I(y; ˇξ0)
+
+F (ξ, y )( I(v1; ˇξ0) + rI (v2; ˇξ0)) = 1(1 + r)F (ξ, y )
+
+> 1(1 + r) F (v1, v 2)
+
+| {z }  
+
+> ∵F(ξ,y )⊂F(v1,v 2)
+
+= 1(1 + r)( H(v1) + H(v2) − I(v1; v2)) = Mu
+
+This completes the proof. 
+
+Lemma C.4 (Lemma 5.6 restated ). Under Assumption 5.3, the objective function in Equation (34) is optimized when: 
+
+F (ξ) ⊆ { a0, a 1, a 2} (54) 
+
+Proof. Let ˆz1 represent superfluous information that is specific to v1 and not incorporated into ξ. Then, we have: 
+
+ˆz1 /∈ { a0, a 1, a 2}, {ˆz1} ⊂ F (v1), I (ˆ z1; v1) > 0,I(ˆ z1; y) = 0 , {ξ} ∩ { ˆz1} = ∅, {v2} ∩ { ˆz1} = ∅. (55) Let ¨ξ = {ξ, ˆz1}. The objective function becomes: 
+
+ℓ( ¨ξ) = −bI( ¨ξ; y) + β(I( ¨ξ; v1) + rI ( ¨ξ; v2)) = −bI(ξ, ˆz1; y) + β(I(ξ, ˆz1; v1) + rI (ξ, ˆz1; v2)) (56) Then we have the following equations: 
+
+I(ξ, ˆz1; v1) − I(ξ; v1) = 
+
+> {ˆz1}∩{ ξ}=∅
+
+z }| {
+
+I(v1; ˆ z1|ξ)= I(v1; ˆ z1) > 0
+
+(57) 
+
+I(ξ, ˆz1; v2) − I(ξ; v2) = 
+
+> {ˆz1}∩{ v2}=∅
+
+z }| {
+
+I(v2; ˆ z1|ξ)= 0 
+
+(58) 21 Learning Optimal Multimodal Information Bottleneck Representations 
+
+bI(ξ; y) − bI(ξ, ˆz1; y) = I(ξ; y)
+
+F (ξ, y ) − I(ˆ z1, ξ ; y)
+
+F (ˆ z1, ξ, y )= I(ξ; y) +  
+
+> =0 ∵I(ˆ z1;y)=0
+
+z }| {
+
+I(y; ˆ z1|ξ)
+
+F (ξ, y ) − I(ˆ z1, ξ ; y)
+
+F (ˆ z1, ξ, y )= I(ˆ z1, ξ ; y)
+
+F (ξ, y ) − I(ˆ z1, ξ ; y)
+
+F (ˆ z1, ξ, y )= I(ˆ z1, ξ ; y)
+
+F (ξ, y ) − I(ˆ z1, ξ ; y)
+
+F (ˆ z1) + F (ξ, y )
+
+| {z }
+
+> ∵ˆz1⊥{ ξ,y }
+
+> 0
+
+(59) Put together, we have: 
+
+ℓ( ¨ξ) − ℓ(ξ)= ( bI(ξ; y) − bI(ξ, ˆz1; y)) + β
+
+
+
+(bI(ˆ z1, ξ ; v1) − bI(ξ; v1)) + r(bI(ˆ z1, ξ ; v2) − bI(ξ; v2)) 
+
+
+
+> 0, if {ˆz1}̸ = ∅.
+
+(60) For superfluous information ˆz2 specific to v2, we arrive at the same conclusion. Finally, let ˆz0 represent superfluous information that is shared by the two modalities and not encoded in ξ. Then, we have: 
+
+ˆz0 /∈ { a0, a 1, a 2}, {ˆz0} ⊂ F (v1), {ˆz0} ⊂ F (v2),I(ˆ z0; v1) > 0, I (ˆ z0; v2) > 0,I(ˆ z0; y) = 0 , {ξ} ∩ { ˆz0} = ∅
+
+(61) Let ¨ξ = {ξ, ˆz0}. The objective function becomes: 
+
+ℓ( ¨ξ) = −bI( ¨ξ; y) + β(I( ¨ξ; v1) + rI ( ¨ξ; v2)) = −bI(ξ, ˆz0; y) + β(I(ξ, ˆz0; v1) + rI (ξ, ˆz0; v2)) (62) Then we have the following equations: 
+
+bI(ξ; y) − bI(ξ, ˆz0; y) = I(ξ; y)
+
+F (ξ, y ) − I(ˆ z0, ξ ; y)
+
+F (ˆ z0, ξ, y )= I(ξ; y) +  
+
+> =0 ∵I(ˆ z0;y)=0
+
+z }| {
+
+I(y; ˆ z0|ξ)
+
+F (ξ, y ) − I(ˆ z0, ξ ; y)
+
+F (ˆ z0, ξ, y )= I(ˆ z0, ξ ; y)
+
+F (ξ, y ) − I(ˆ z0, ξ ; y)
+
+F (ˆ z0, ξ, y )= I(ˆ z0, ξ ; y)
+
+F (ξ, y ) − I(ˆ z0, ξ ; y)
+
+F (ˆ z0) + F (ξ, y )
+
+| {z }
+
+> ∵ˆz0⊥{ ξ,y }
+
+> 0
+
+(63) 
+
+I(ξ, ˆz0; v1) − I(ξ; v1) = 
+
+> {ˆz0}∩{ ξ}=∅
+
+z }| {
+
+I(v1; ˆ z0|ξ)= I(v1; ˆ z0) > 0
+
+(64) 22 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Similarly, we have I(ξ, ˆz0; v2) − I(ξ; v2) = I(v2; ˆ z0) > 0.Put together, we have: 
+
+ℓ( ¨ξ) − ℓ(ξ)= ( bI(ξ; y) − bI(ξ, ˆz0; y)) + β
+
+
+
+(bI(ˆ z0, ξ ; v1) − bI(ξ; v1)) + r(bI(ˆ z0, ξ ; v2) − bI(ξ; v2)) 
+
+
+
+> 0, if {ˆz0}̸ = ∅.
+
+(65) In a nutshell, the optimization procedure continues until ξ does not encompass superfluous information, shared or modality specific, from v1, v2. That is, F (ξ) ⊆ { a0, a 1, a 2}. This completes the proof. 
+
+## D. Extension to Multiple Modalities 𝑏 !!
+
+# 𝑏 "" 
+
+# 𝑣 #
+
+# 𝑏 !$ 
+
+# 𝑏 !# 
+
+# 𝑎 !$ 
+
+# 𝑎 $$
+
+# 𝑎 ""
+
+# 𝑎 !!
+
+# 𝑏 ##
+
+# 𝑎 ##
+
+# 𝑣 !
+
+# 𝑎 #$
+
+# 𝑏 #$
+
+# 𝑏 $$ 
+
+# 𝑣 $
+
+# 𝑎 !#
+
+Figure 5: Venn diagrams for three data modalities ( v1, v2, and v3). The gridded area represents consistent information, while the non-gridded area denotes modality-specific information. Task-relevant information is highlighted in green, whereas superfluous information is shown in blue. The theoretical analysis of multiple modalities ( ≥ 3) is exemplified using three modalities, v1, v 2, and v3, which yet can be readily extended to more modalities. All mathematical notations remain consistent with those in Table 1 in Section 3. 
+
+Assumption D.1. Given three modalities, v1, v2, and v3, the task-relevant information set {a} consists of seven parts— a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 , as illustrated in Figure 5. Specifically, a00 is shared by all three modalities, while aij 
+
+is shared between modality pairs ( vi, v j ), ∀i, j ∈ { 1, 2, 3}, i < j . Meanwhile, aii is specific to vi, ∀i ∈ { 1, 2, 3}.The task-relevant labels y are determined by {a}. On the other hand, superfluous information is represented by 
+
+{b} = {b00 , b 11 , b 22 , b 33 , b 12 , b 13 , b 23 }. Here, b00 is shared by all three modalities, while bij is shared between modality pairs ( vi, v j ), ∀i, j ∈ { 1, 2, 3}, i < j . Meanwhile, bii is specific to vi, ∀i ∈ { 1, 2, 3}.Based on the above assumption, the optimal MIB has the following definition: 
+
+Definition D.2 (Optimal multimodal information bottleneck for three modalities ). The optimal MIB for three modalities is defined as the MIB that encompasses all task-relevant information and free of superfluous information. Let ξopt −three 
+
+23 Learning Optimal Multimodal Information Bottleneck Representations 
+
+denote the optimal MIB, and it can be explicitly expressed as: 
+
+F (ξopt −three ) = {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }. (66) In the following sections, we first demonstrate the method for achieving the optimal MIB, followed by a theoretical analysis to establish its theoretical foundation. 
+
+D.1. Method 
+
+The warm-up and main training phases follow those for two modalities in Section 4, except for an additional modality v3.The loss function LT RB remains the same for each modality as in Equation (4), while the loss function LOM F becomes: 
+
+LOM F = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2 Eϵ3 [−log q (yn|ξn)] + β
+
+
+
+KL (p(ζn 
+
+> 1
+
+|zn 
+
+> 1
+
+) ∥ N (0 , I )+ r1KL (p(ζn 
+
+> 2
+
+|zn 
+
+> 2
+
+) ∥ N (0 , I )) + r2KL (p(ζn 
+
+> 3
+
+|zn 
+
+> 3
+
+) ∥ N (0 , I )
+
+
+
+,
+
+(67) where ξ = CAN (ζ1, ζ 2, ζ 3, θ CAN ). Analogous to Equation (11) proved by Proposition 5.2 in Section 5.1, r1 and r2 are dynamic during training and explicitly calculated as: 
+
+r1 = 1 − tanh 
+
+
+
+ln 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ2
+
+h KL (p(ˆ yn 
+
+> 2
+
+|ξn, z n 
+
+> 2
+
+)|| p(ˆ yn|ξn)) 
+
+KL (p(ˆ yn 
+
+> 1
+
+|ξn, z n 
+
+> 1
+
+)|| p(ˆ yn|ξn)) 
+
+i 
+
+,r2 = 1 − tanh 
+
+
+
+ln 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Eϵ1 Eϵ3
+
+h KL (p(ˆ yn 
+
+> 3
+
+|ξn, z n 
+
+> 3
+
+)|| p(ˆ yn|ξn)) 
+
+KL (p(ˆ yn 
+
+> 1
+
+|ξn, z n 
+
+> 1
+
+)|| p(ˆ yn|ξn)) 
+
+i 
+
+.
+
+(68) 
+
+Moreover, as proposed in Lemma D.4 in Appendix D.2, when β in Equation (67) is upper-bounded by M 2 
+
+> u
+
+:=      
+
+> 1(1+ r1+r2)( P3
+> i=1 H(vi)−23
+> P
+> 1≤i<j ≤3I(vi;vj))
+
+, the optimization of LOM F ensures the achievability of ξopt .
+
+D.2. Theoretical Foundation 
+
+Under Assumption D.1, we have: 
+
+F (y) = {a} = {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 },F (v1) = {a00 , a 11 , a 12 , a 13 , b 1, b 12 , b 13 , b 0},F (v2) = {a00 , a 22 , a 12 , a 23 , b 2, b 12 , b 23 , b 0},F (v3) = {a00 , a 33 , a 13 , a 23 , b 3, b 13 , b 23 , b 0},
+
+{aij } ∩ { auv } = ∅, ∀aij , a uv ∈ { a}, where aij ̸ = auv 
+
+{bij } ∩ { auv } = ∅, ∀bij ∈ { b}, a uv ∈ { a}
+
+I(y; v1) = {a} ∩ F (v1) = {a00 , a 11 , a 12 , a 13 },I(y; v2) = {a} ∩ F (v2) = {a00 , a 22 , a 12 , a 23 }.I(y; v3) = {a} ∩ F (v3) = {a00 , a 33 , a 13 , a 23 }.
+
+Analogous to the analysis in Section 5.1, the objective function for obtaining optimal MIB can be formulated as: 
+
+max  
+
+> ξ
+
+ℓ(ξ) = max  
+
+> ξ
+
+I(ξ; y) − β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) , (69) which is equivalent to: 
+
+min  
+
+> ξ
+
+ℓ(ξ) = min  
+
+> ξ
+
+−I(ξ; y) + β(I(ξ; z1) + r1I(ξ; z2) + r2I(ξ; z3)) . (70) The Proposition 5.1 in Section 5.1 can be trivially modified by adding the r2I(ξ; z3) term and applied here to establish 
+
+LOM F in Equation (67) as a variational upper bound for Equation (70). 24 Learning Optimal Multimodal Information Bottleneck Representations 
+
+D.2.1. A CHIEVABILITY OF OPTIMA INFORMATION BOTTLENECK FOR THREE MODALITIES 
+
+Lemma D.3 (Inclusiveness of task-relevant information for three modalities ). Under Assumption D.1, the objective function in Equation (69) ensures: 
+
+F (ξ) ⊇ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }, (71) 
+
+when β ≤ M 2 
+
+> u
+
+, where M 2 
+
+> u
+
+:= 1(1+ r1+r2)( P3     
+
+> i=1 H(vi)−23
+> P
+> 1≤i<j ≤3I(vi;vj))
+
+.Proof. We first analyze under which condition ξ can include all the task-relevant information specific to single modality. Let 
+
+{ ˇξ1} = ( {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ I(ξ))) ∩ { a11 } represent the task-relevant information in a11 that is not included in ξ. It is obvious: 
+
+{ ˇξ1} ⊂ F (y), { ˇξ1} ∩ F (ξ) = ∅,
+
+{ ˇξ1} ∩ { aij } = ∅, ∀aij ∈ { a}/{a11 },
+
+{ ˇξ1} ∩ F (v2) = ∅, { ˇξ1} ∩ F (z2) = ∅,
+
+{ ˇξ1} ∩ F (v3) = ∅, { ˇξ1} ∩ F (z3) = ∅
+
+If { ˇξ1}̸ = ∅, let ξ′ = {ξ, ˇξ1} and we have: 
+
+ℓ(ξ) = −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) = −bI(ξ; y) + β
+
+
+
+I(ξ; v1) + r1(I(v2; ξ) +    
+
+> =0 ,∵{ˇξ1}∩ F(v2)= ∅
+
+z }| {
+
+I(v2; ˇξ1|ξ) ) + r2(I(v3; ξ) +    
+
+> =0 ,∵{ˇξ1}∩ F(v3)= ∅
+
+z }| {
+
+I(v3; ˇξ1|ξ) )
+
+
+
+= −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ, ˇξ1; v2) + r2I(ξ, ˇξ1; v3)) ,ℓ(ξ) − ℓ(ξ′) = −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ, ˇξ1; v2) + r2I(ξ, ˇξ1; v3)) 
+
+−
+
+
+
+−bI(ξ, ˇξ1; y) + β(I(ξ, ˇξ1; v1) + r1I(ξ, ˇξ1; v2) + r2I(ξ, ˇξ1; v3)) 
+
+
+
+= bI(ξ, ˇξ1; y) − bI(ξ; y) + β(I(ξ; v1) − I(ξ, ˇξ1; v1)) 
+
+Using properties in Appendix A, we have: 
+
+bI(ξ, ˇξ1; y) − bI(ξ; y) = I(ξ, ˇξ1; y)
+
+F (ξ) ∪ (F ( ˇξ1) ∪ F (y)) 
+
+| {z }     
+
+> =F(y)as {ˇξ1}⊂ F(y)
+
+− I(ξ; y)
+
+F (ξ) ∪ F (y)= I(ξ, ˇξ1; y)
+
+F (ξ, y ) − I(ξ; y)
+
+F (ξ, y )= 
+
+> {ˇξ1}∩{ ξ}=∅
+
+z }| {
+
+I(y; ˇξ1|ξ)
+
+F (ξ, y )= I(y; ˇξ1)
+
+F (ξ, y )
+
+I(ξ; v1) − I(ξ, ˇξ1; v1) = − 
+
+> {ˇξ1}∩{ ξ}=∅
+
+z }| {
+
+I(v1; ˇξ1|ξ)= −I(v1; ˇξ1)
+
+(72) 25 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Thus: 
+
+ℓ(ξ) − ℓ(ξ′) = bI(ξ, ˇξ1; y) − bI(ξ; y) + βI (ξ; v1) − βI (ξ, ˇξ1; v1)= I(y; ˇξ1)
+
+F (ξ, y ) − βI (v1; ˇξ1) (73) When β < I(y; ˇξ1)  
+
+> F(ξ,y )I(v1; ˇξ1)
+
+, ℓ(ξ)−ℓ(ξ′) > 0. Therefore, optimizing the loss function will drive ξ toward ξ′ until { ˇξ1} = ∅, such that F (ξ) ⊇ { a11 }. We further suppose { ˇξ2} = ( {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ 
+
+I(ξ))) ∩ {a22 } represent the task-relevant information in a22 that is not included in ξ, and { ˇξ3} =({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ I(ξ))) ∩ { a33 } represent the task-relevant infor-mation in a33 that is not included in ξ. Similarly, if { ˇξ2}̸ = ∅ and β < I(y; ˇξ2)   
+
+> r1I(v2; ˇξ2)F(ξ, ˇξ2,y )
+
+, the optimization will update ξ
+
+until { ˇξ2} = ∅, leading to F (ξ) ⊇ { a22 }; and if { ˇξ3}̸ = ∅ and β < I(y; ˇξ3)   
+
+> r2I(v3; ˇξ3)F(ξ, ˇξ3,y )
+
+, the optimization will update ξ until 
+
+{ ˇξ3} = ∅, leading to F (ξ) ⊇ { a33 }.We then analyze under which condition ξ can include all the task-relevant information shared by two modalities. Let 
+
+{ ˇξ12 } = ( {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ I(ξ))) ∩ { a12 } represent the task-relevant information in a12 that is not included in ξ. It is obvious: 
+
+{ ˇξ12 } ⊂ F (y), { ˇξ12 } ∩ F (ξ) = ∅,
+
+{ ˇξ12 } ∩ { aij } = ∅, ∀aij ∈ { a}/{a12 },
+
+{ ˇξ12 } ∩ F (v3) = ∅, { ˇξ12 } ∩ F (z3) = ∅
+
+If { ˇξ12 }̸ = ∅, let ξ′ = {ξ, ˇξ12 }, then we have: 
+
+ℓ(ξ) = −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) = −bI(ξ; y) + β
+
+
+
+I(ξ; v1) + r1I(v2; ξ) + r2(I(v3; ξ) +    
+
+> =0 ,∵{ˇξ12 }∩ F(v3)= ∅
+
+z }| {
+
+I(v3; ˇξ12 |ξ) )
+
+
+
+= −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ, ˇξ12 ; v3)) 
+
+Therefore, ℓ(ξ) − ℓ(ξ′) can be written as: 
+
+ℓ(ξ) − ℓ(ξ′) = −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ, ˇξ12 ; v3)) 
+
+−
+
+
+
+−bI(ξ, ˇξ12 ; y) + β(I(ξ, ˇξ12 ; v1) + r1I(ξ, ˇξ12 ; v2) + r2I(ξ, ˇξ12 ; v3)) 
+
+
+
+= bI(ξ, ˇξ12 ; y) − bI(ξ; y) + β
+
+
+
+I(ξ; v1) − I(ξ, ˇξ12 ; v1) + r1(I(ξ; v2) − I(ξ, ˇξ12 ; v2)) 
+
+
+
+Using properties in Appendix A, we have: 
+
+bI(ξ, ˇξ12 ; y) − bI(ξ; y) = I(ξ, ˇξ12 ; y)
+
+F (ξ) ∪ (F (y) ∪ F ( ˇξ12 )) 
+
+| {z }     
+
+> =F(y)as {ˇξ12 }⊂ F(y)
+
+− I(ξ; y)
+
+F (ξ) ∪ F (y)= I(ξ, ˇξ12 ; y)
+
+F (ξ, y ) − I(ξ; y)
+
+F (ξ, y )= 
+
+> {ˇξ12 }∩{ ξ}=∅
+
+z }| {
+
+I(y; ˇξ12 |ξ)
+
+F (ξ, y )= I(y; ˇξ12 )
+
+F (ξ, y ) > 0
+
+26 Learning Optimal Multimodal Information Bottleneck Representations 
+
+I(ξ; v1) − I(ξ, ˇξ12 ; v1) = − 
+
+> {ˇξ12 }∩{ ξ}=∅
+
+z }| {
+
+I(v1; ˇξ12 |ξ)= −I(v1; ˇξ12 ) < 0
+
+(74) Similarly, we obtain that I(ξ; v2) − I(ξ, ˇξ12 ; v2) = −I(v2; ˇξ12 ).Thus: 
+
+ℓ(ξ) − ℓ(ξ′) = bI(ξ, ˇξ12 ; y) − bI(ξ; y) + β
+
+
+
+I(ξ; v1) − I(ξ, ˇξ12 ; v1) + r1(I(ξ; v2) − I(ξ, ˇξ12 ; v2)) 
+
+
+
+= I(y; ˇξ12 )
+
+F (ξ, y ) − β(I(v1; ˇξ12 ) + r1I(v2; ˇξ12 )) 
+
+(75) When β < I(y; ˇξ12 )  
+
+> F(ξ,y )( I(v1; ˇξ12 )+ r1I(v2; ˇξ12 ))
+
+, ℓ(ξ) − ℓ(ξ′) > 0. Therefore, optimizing the loss function will drive ξ towards ξ′ until { ˇξ12 } = ∅, such that F (ξ) ⊇ {a12 }. Similarly, suppose that { ˇξ13 } =({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ I(ξ))) ∩ { a13 } represents the task-relevant informa-tion in a13 that is not included in ξ; and { ˇξ23 } = ( {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ 
+
+I(ξ))) ∩ { a23 } represents the task-relevant information in a23 that is not included in ξ. Following the above procedure, we conclude that if { ˇξ13 }̸ = ∅ and β < I(y; ˇξ13 )  
+
+> F(ξ,y )( I(v1; ˇξ13 )+ r2I(v2; ˇξ13 ))
+
+, the optimization will update ξ until { ˇξ13 } = ∅, leading to 
+
+F (ξ) ⊇ { a13 }; if { ˇξ23 }̸ = ∅ and β < I(y; ˇξ23 )  
+
+> F(ξ,y )( r1I(v1; ˇξ23 )+ r2I(v2; ˇξ23 ))
+
+, the optimization will update ξ until { ˇξ23 } = ∅, leading to F (ξ) ⊇ { a23 }.Finally, we analyze under which condition ξ can include all the task-relevant information shared by the three modalities. Let 
+
+{ ˇξ0} = ( {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }/({a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } ∩ I(ξ))) ∩ { a00 } represent the task-relevant information in a00 that is not included in ξ. It is obvious: 
+
+{ ˇξ0} ⊂ F (y), { ˇξ0} ∩ F (ξ) = ∅,
+
+{ ˇξ0} ∩ { aij } = ∅, ∀aij ∈ { a}/{a00 },
+
+{ ˇξ0} ∩ F (vl) = ∅, ∀l ∈ { 1, 2, 3}
+
+If { ˇξ0}̸ = ∅, let ξ′ = {ξ, ˇξ0}, and ℓ(ξ) − ℓ(ξ′) can be written as: 
+
+ℓ(ξ) − ℓ(ξ′) = −bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) 
+
+−
+
+
+
+−bI(ξ, ˇξ0; y) + β(I(ξ, ˇξ0; v1) + r1I(ξ, ˇξ0; v2) + r2I(ξ, ˇξ0; v3)) 
+
+
+
+= bI(ξ, ˇξ0; y) − bI(ξ; y) + β
+
+
+
+I(ξ; v1) − I(ξ, ˇξ0; v1)+ r1(I(ξ; v2) − I(ξ, ˇξ0; v2)) + r2(I(ξ; v3) − I(ξ, ˇξ0; v3)) 
+
+
+
+Using properties in Appendix A, we have: 
+
+bI(ξ, ˇξ0; y) − bI(ξ; y) = I(ξ, ˇξ0; y)
+
+F (ξ) ∪ (F (y) ∪ F ( ˇξ0)) 
+
+| {z }     
+
+> =F(y)as {ˇξ0}⊂ F(y)
+
+− I(ξ; y)
+
+F (ξ) ∪ F (y)= I(ξ, ˇξ0; y)
+
+F (ξ, y ) − I(ξ; y)
+
+F (ξ, y )= 
+
+> {ˇξ0}∩{ ξ}=∅
+
+z }| {
+
+I(y; ˇξ0|ξ)
+
+F (ξ, y )= I(y; ˇξ0)
+
+F (ξ, y ) > 0
+
+27 Learning Optimal Multimodal Information Bottleneck Representations 
+
+I(ξ; v1) − I(ξ, ˇξ0; v1) = − 
+
+> {ˇξ0}∩{ ξ}=∅
+
+z }| {
+
+I(v1; ˇξ0|ξ)= −I(v1; ˇξ0) < 0
+
+(76) Similarly, we obtain that I(ξ; v2) − I(ξ, ˇξ0; v2) = −I(v2; ˇξ0) and I(ξ; v3) − I(ξ, ˇξ0; v3) = −I(v3; ˇξ0).Thus: 
+
+ℓ(ξ) − ℓ(ξ′) = bI(ξ, ˇξ0; y) − bI(ξ; y) + β
+
+
+
+I(ξ; v1) − I(ξ, ˇξ0; v1)+ r1(I(ξ; v2) − I(ξ, ˇξ0; v2)) + r2(I(ξ; v3) − I(ξ, ˇξ0; v3)) 
+
+
+
+= I(y; ˇξ0)
+
+F (ξ, y ) − β(I(v1; ˇξ0) + r1I(v2; ˇξ0) + r2I(v3; ˇξ0)) 
+
+(77) When β < I(y; ˇξ0)  
+
+> F(ξ,y )( I(v1; ˇξ0)+ r1I(v2; ˇξ0)+ r2I(v3; ˇξ0))
+
+, ℓ(ξ) − ℓ(ξ′) > 0. Therefore, optimizing the loss function will drive ξ
+
+toward ξ′ until { ˇξ0} = ∅, such that F (ξ) ⊇ { a00 }.Put together, the optimization procedure ensures F (ξ) ⊇ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } when: 
+
+β < U B β := min (U B 1 
+
+> β
+
+, U B 2 
+
+> β
+
+, U B 3 
+
+> β
+
+, U B 4 
+
+> β
+
+, U B 5 
+
+> β
+
+, U B 6 
+
+> β
+
+, U B 7 
+
+> β
+
+). (78) where U B 1 
+
+> β
+
+= I(y; ˇξi)  
+
+> F(ξ,y )I(v1; ˇξi)
+
+, U B 2 
+
+> β
+
+= I(y; ˇξ2)  
+
+> r1F(ξ,y )I(v2; ˇξ2)
+
+, U B 3 
+
+> β
+
+= I(y; ˇξ3)  
+
+> r2F(ξ,y )I(v3; ˇξ3)
+
+, U B 4 
+
+> β
+
+=  
+
+> I(y; ˇξ12 )
+> F(ξ,y )( I(v1; ˇξ12 )+ r1I(v2; ˇξ12 ))
+
+, U B 5 
+
+> β
+
+= I(y; ˇξ13 )  
+
+> F(ξ,y )( I(v1; ˇξ13 )+ r2I(v2; ˇξ13 ))
+
+, U B 6 
+
+> β
+
+= I(y; ˇξ23 )  
+
+> F(ξ,y )( r1I(v1; ˇξ23 )+ r2I(v2; ˇξ23 ))
+
+, and 
+
+U B 7 
+
+> β
+
+= I(y; ˇξ0)  
+
+> F(ξ,y )( I(v1; ˇξ0)+ r1I(v2; ˇξ12 )+ r2I(v3; ˇξ0))
+
+.We complete the proof by proving that M 2 
+
+> u
+
+= 1(1+ r1+r2)( P3     
+
+> i=1 H(vi)−23
+> P
+> 1≤i<j ≤3I(vi;vj))
+
+is a lower bound of U B β in Lemma D.4 below. That is, when β < M 2 
+
+> u
+
+, the optimization procedure guarantees F (ξ) ⊇ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }.
+
+Lemma D.4. U B β in Equation (78) satisfies: U B β > M 2 
+
+> u
+
+, where M 2 
+
+> u
+
+= 1(1+ r1+r2)( P3     
+
+> i=1 H(vi)−23
+> P
+> 1≤i<j ≤3I(vi;vj))
+
+.
+
+H(·) and I(·; ·) can be estimated using MINE (Belghazi et al., 2018) (see Appendix E). Proof. As shown in Equation (78), U B 1 
+
+> β
+
+= I(y; ˇξ1)  
+
+> F(ξ,y )I(v1; ˇξ1)
+
+. By property v in Properties A.1, U B 1 
+
+> β
+
+can be simplified as: 
+
+U B 1 
+
+> β
+
+= I(y; ˇξ1)
+
+I(v1; ˇξ1)F (ξ, y )= 
+
+> =I(y; ˇξ1),∵{ˇξ1}⊆{ y}
+
+z }| { 
+
+H( ˇξ1)
+
+H( ˇξ1)
+
+| {z }  
+
+> =I(v1; ˇξ1),∵{ˇξ1}⊆{ v1}
+
+F (ξ, y )= 1
+
+F (ξ, y )
+
+Similarly, we have U B 2 
+
+> β
+
+= I(y; ˇξ2)  
+
+> r1F(ξ,y )I(v2; ˇξ2)
+
+= 1  
+
+> r1F(ξ,y )
+
+and U B 3 
+
+> β
+
+= I(y; ˇξ3)  
+
+> r3F(ξ,y )I(v3; ˇξ3)
+
+= 1  
+
+> r2F(ξ,y )
+
+.28 Learning Optimal Multimodal Information Bottleneck Representations 
+
+U B 4 
+
+> β
+
+can be simplified as: 
+
+U B 4 
+
+> β
+
+= I(y; ˇξ12 )
+
+F (ξ, y )( I(v1; ˇξ12 ) + r1I(v2; ˇξ12 )) = 
+
+> =I(y; ˇξ12 ),∵{ˇξ12 }⊆{ y}
+
+z }| { 
+
+H( ˇξ12 )
+
+F (ξ, y )( H( ˇξ12 )
+
+| {z }  
+
+> =I(v1; ˇξ12 ),∵{ˇξ12 }⊆{ v1}
+
++r1 H( ˇξ12 )
+
+| {z }  
+
+> =I(v2; ˇξ12 ),∵{ˇξ12 }⊆{ v2}
+
+)= 1(1 + r1)F (ξ, y )
+
+(79) Similarly, we have U B 5 
+
+> β
+
+= I(y; ˇξ13 )  
+
+> F(ξ,y )( I(v1; ˇξ13 )+ r2I(v2; ˇξ13 ))
+
+= 1(1+ r2)F (ξ,y ) , and U B 6 
+
+> β
+
+= I(y; ˇξ23 )  
+
+> F(ξ,y )( r1I(v1; ˇξ23 )+ r2I(v2; ˇξ23 ))
+
+=  
+
+> 1(r1+r2)F(ξ,y )
+
+.
+
+U B 7 
+
+> β
+
+can be simplified as: 
+
+U B 7 
+
+> β
+
+= I(y; ˇξ0)
+
+F (ξ, y )( I(v1; ˇξ0) + r1I(v2; ˇξ0) + r2I(v3; ˇξ0)) = 
+
+> =I(y; ˇξ0),∵{ˇξ0}⊆{ y}
+
+z }| { 
+
+H( ˇξ0)
+
+F (ξ, y )( H( ˇξ0)
+
+| {z }  
+
+> =I(v1; ˇξ0),∵{ˇξ0}⊆{ v1}
+
++r1 H( ˇξ0)
+
+| {z }  
+
+> =I(v2; ˇξ0),∵{ˇξ0}⊆{ v2}
+
++r2 H( ˇξ0)
+
+| {z }  
+
+> =I(v3; ˇξ0),∵{ˇξ0}⊆{ v3}
+
+)= 1(1 + r1 + r2)F (ξ, y )
+
+Therefore, for ∀r1, r 2 > 0, we have: 
+
+1(1 + r1 + r2)F (ξ, y ) < min( 1
+
+F (ξ, y ) , 1
+
+r1F (ξ, y ) , 1
+
+r2F (ξ, y ) , 1(1 + r1)F (ξ, y ) , 1(1 + r2)F (ξ, y ) , 1(r1 + r2)F (ξ, y ) ),
+
+= min( U B 1 
+
+> β
+
+, U B 2 
+
+> β
+
+, U B 3 
+
+> β
+
+, U B 4 
+
+> β
+
+, U B 5 
+
+> β
+
+, U B 6 
+
+> β
+
+, U B 7 
+
+> β
+
+)=⇒ U B β = 1(1 + r1 + r2)F (ξ, y )
+
+> 1(1 + r1 + r2)F (v1, v 2, v 3)= 1(1 + r1 + r2)( H(v1) + H(v2) + H(v3) − I(v1; v2) − I(v1; v3) − I(v2; v3) + I(v1; v2; v3)) 
+
+For the term I(v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2; v3), we have: 
+
+I(v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2; v3) < I (v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2) = I(v1; v3) + I(v2; v3),I(v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2; v3) < I (v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v3) = I(v1; v2) + I(v2; v3),I(v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2; v3) < I (v1; v2) + I(v1; v3) + I(v2; v3) − I(v2; v3) = I(v1; v2) + I(v1; v3).
+
+To calculate I(v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2; v3), we sum up the individual inequalities, yielding: 
+
+I(v1; v2) + I(v1; v3) + I(v2; v3) − I(v1; v2; v3) < 13 (I(v1; v3) + I(v2; v3) + I(v1; v2) + I(v2; v3) + I(v1; v2) + I(v1; v3)) = 23
+
+X
+
+> 1≤i<j ≤3
+
+I(vi; vj )
+
+29 Learning Optimal Multimodal Information Bottleneck Representations 
+
+We then have: 
+
+U B β > 1(1 + r1 + r2)( H(v1) + H(v2) + H(v3) − I(v1; v2) − I(v1; v3) − I(v2; v3) + I(v1; v2; v3)) 
+
+> 1(1 + r1 + r2)( P3 
+
+> i=1
+
+H(vi) − 23
+
+P 
+
+> 1≤i<j ≤3
+
+I(vi; vj )) = M 2
+
+> u
+
+This completes the proof. 
+
+Lemma D.5 (Exclusiveness of superfluous information for three modalities ). Under Assumption D.1, the objective function in Equation (69) is optimized when: 
+
+F (ξ) ⊆ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } (80) 
+
+Proof. We begin by analyzing the change in the loss function of our optimization after adding modality-specific superfluous information to ξ. Let ˆξ1 represent v1-specific superfluous information that is not incorporated into ξ. Obviously: 
+
+{ ˆξ1} /∈ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }, { ˆξ1} ⊂ F (v1), I ( ˆξ1; v1) > 0,I( ˆξ1; y) = 0 , {ξ} ∩ { ˆξ1} = ∅, {v2} ∩ { ˆξ1} = ∅, {v3} ∩ { ˆξ1} = ∅. (81) Let ¨ξ = {ξ, ˆξ1}. The difference in loss function between ξ and ¨ξ is computed as: 
+
+ℓ( ¨ξ) − ℓ(ξ) = −bI( ¨ξ; y) + β(I( ¨ξ; v1) + r1I( ¨ξ; v2) + r2I( ¨ξ; v3)) 
+
+−
+
+
+
+−bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) 
+
+
+
+= ( bI(ξ; y) − bI(ξ, ˆξ1; y)) + β
+
+bI( ˆξ1, ξ ; v1) − bI(ξ; v1)+ r1(bI( ˆξ1, ξ ; v2) − bI(ξ; v2)) + r2(bI( ˆξ1, ξ ; v3) − bI(ξ; v3)) 
+
+
+
+,
+
+(82) Here we have: 
+
+bI(ξ; y) − bI( ˆξ1, ξ ; y) = I(ξ; y)
+
+F (ξ, y ) − I( ˆξ1, ξ ; y)
+
+F ( ˆξ1, ξ, y )= I(ξ; y) +  
+
+> =0 ∵I( ˆξ1,y )=0
+
+z }| {
+
+I(y; ˆξ1|ξ)
+
+F (ξ, y ) − I( ˆξ1, ξ ; y)
+
+F ( ˆξ1, ξ, y )= I( ˆξ1, ξ ; y)
+
+F (ξ, y ) − I( ˆξ1, ξ ; y)
+
+F ( ˆξ1, ξ, y )= I( ˆξ1, ξ ; y)
+
+F (ξ, y ) − I( ˆξ1, ξ ; y)
+
+F ( ˆξ1) + F (ξ, y )
+
+| {z } 
+
+> ∵ˆξ1⊥{ ξ,y }
+
+> 0
+
+(83) 
+
+I( ˆξ1, ξ ; v1) − I(ξ; v1) =   
+
+> {ˆξ1}∩ F(ξ)= ∅
+
+z }| {
+
+I(v1; ˆξ1|ξ)= I(v1; ˆξ1) > 0
+
+(84) 30 Learning Optimal Multimodal Information Bottleneck Representations 
+
+I( ˆξ1, ξ ; v2) − I(ξ; v2) =   
+
+> {ˆξ1}∩ F(v2)= ∅
+
+z }| {
+
+I(v2; ˆξ1|ξ)= 0 
+
+(85) 
+
+I( ˆξ1, ξ ; v3) − I(ξ; v3) = 0 (86) Thus, we have ℓ( ¨ξ) − ℓ(ξ) > 0, if { ˆξ1}̸ = ∅. For superfluous information ˆξ2 specific to v2 and ˆξ3 specific to v3, we arrive at the same conclusion. Next, we analyze the change in the loss function of our optimization after adding superfluous information shared by two modalities to ξ. Specifically, let ˆξ12 represent the superfluous information that is shared between modalities v1 and v2, and not incorporated into ξ. We have: 
+
+ˆξ12 /∈ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }, { ˆξ12 } ⊂ F (v1), { ˆξ12 } ⊂ F (v2),I( ˆξ12 ; v1) > 0, I ( ˆξ12 ; v2) > 0,I( ˆξ12 ; y) = 0 , {ξ} ∩ { ˆξ12 } = ∅, {v3} ∩ { ˆξ12 } = ∅.
+
+(87) Let ¨ξ = {ξ, ˆξ12 }. The difference in loss function between ξ and ¨ξ is computed as: 
+
+ℓ( ¨ξ) − ℓ(ξ) = −bI( ¨ξ; y) + β(I( ¨ξ; v1) + r1I( ¨ξ; v2) + r2I( ¨ξ; v3)) 
+
+−
+
+
+
+−bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) 
+
+
+
+= ( bI(ξ; y) − bI(ξ, ˆξ12 ; y)) + β
+
+bI( ˆξ12 , ξ ; v1) − bI(ξ; v1)+ r1(bI( ˆξ12 , ξ ; v2) − bI(ξ; v2)) + r2(bI( ˆξ12 , ξ ; v3) − bI(ξ; v3)) 
+
+
+
+(88) Here we have: 
+
+bI(ξ; y) − bI( ˆξ12 , ξ ; y) = I(ξ; y)
+
+F (ξ, y ) − I( ˆξ12 , ξ ; y)
+
+F ( ˆξ12 , ξ, y )= I(ξ; y) +  
+
+> =0 ∵I( ˆξ12 ,y )=0
+
+z }| {
+
+I(y; ˆξ12 |ξ)
+
+F (ξ, y ) − I( ˆξ12 , ξ ; y)
+
+F ( ˆξ12 , ξ, y )= I( ˆξ12 , ξ ; y)
+
+F (ξ, y ) − I( ˆξ12 , ξ ; y)
+
+F ( ˆξ12 , ξ, y )= I( ˆξ12 , ξ ; y)
+
+F (ξ, y ) − I( ˆξ12 , ξ ; y)
+
+F ( ˆξ12 ) + F (ξ, y )
+
+| {z } 
+
+> ∵ˆξ12 ⊥{ ξ,y }
+
+> 0
+
+(89) 
+
+I( ˆξ12 , ξ ; v1) − I(ξ; v1) =   
+
+> {ˆξ12 }∩ F(ξ)= ∅
+
+z }| {
+
+I(v1; ˆξ12 |ξ)= I(v1; ˆξ12 ) > 0
+
+(90) 
+
+I( ˆξ12 , ξ ; v2) − I(ξ; v2) = I(v2; ˆξ12 ) > 0 (91) 31 Learning Optimal Multimodal Information Bottleneck Representations 
+
+I( ˆξ12 , ξ ; v3) − I(ξ; v3) =   
+
+> {ˆξ12 }∩ F(v3)= ∅
+
+z }| {
+
+I(v3; ˆξ12 |ξ)= 0 
+
+(92) Thus, we have ℓ( ¨ξ) − ℓ(ξ) > 0, if { ˆξ12 }̸ = ∅. For superfluous information ˆξ13 shared between modalities v1 and v3, as well as ˆξ23 shared between modalities v2 and v3 , we arrive at the same conclusion. Finally, we analyze the change in the loss function of our optimization after adding superfluous information shared by all three modalities to ξ. Let ˆξ0 represent the superfluous information shared by all three modalities and not incorporated into ξ. Then, we have: 
+
+ˆξ0 /∈ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 },
+
+{ ˆξ0} ⊂ F (v1), { ˆξ0} ⊂ F (v2), { ˆξ0} ⊂ F (v3),I( ˆξ0; v1) > 0, I ( ˆξ0; v2) > 0, I ( ˆξ0; v3) > 0,I( ˆξ0; y) = 0 , {ξ} ∩ { ˆξ0} = ∅.
+
+(93) Let ¨ξ = {ξ, ˆξ0}. The difference in loss function between ξ and ¨ξ is computed as: 
+
+ℓ( ¨ξ) − ℓ(ξ) = −bI( ¨ξ; y) + β(I( ¨ξ; v1) + r1I( ¨ξ; v2) + r2I( ¨ξ; v3)) 
+
+−
+
+
+
+−bI(ξ; y) + β(I(ξ; v1) + r1I(ξ; v2) + r2I(ξ; v3)) 
+
+
+
+= ( bI(ξ; y) − bI(ξ, ˆξ0; y)) + β
+
+bI( ˆξ0, ξ ; v1) − bI(ξ; v1)+ r1(bI( ˆξ0, ξ ; v2) − bI(ξ; v2)) + r2(bI( ˆξ0, ξ ; v3) − bI(ξ; v3)) 
+
+
+
+(94) Here we have: 
+
+bI(ξ; y) − bI( ˆξ0, ξ ; y) = I(ξ; y)
+
+F (ξ, y ) − I( ˆξ0, ξ ; y)
+
+F ( ˆξ0, ξ, y )= I(ξ; y) +  
+
+> =0 ∵I( ˆξ0,y )=0
+
+z }| {
+
+I(y; ˆξ0|ξ)
+
+F (ξ, y ) − I( ˆξ0, ξ ; y)
+
+F ( ˆξ0, ξ, y )= I( ˆξ0, ξ ; y)
+
+F (ξ, y ) − I( ˆξ0, ξ ; y)
+
+F ( ˆξ0, ξ, y )= I( ˆξ0, ξ ; y)
+
+F (ξ, y ) − I( ˆξ0, ξ ; y)
+
+F ( ˆξ0) + F (ξ, y )
+
+| {z } 
+
+> ∵ˆξ0⊥{ ξ,y }
+
+> 0
+
+(95) 
+
+I( ˆξ0, ξ ; v1) − I(ξ; v1) =   
+
+> {ˆξ0}∩ F(ξ)= ∅
+
+z }| {
+
+I(v1; ˆξ0|ξ)= I(v1; ˆξ0) > 0
+
+(96) 
+
+I( ˆξ0, ξ ; v2) − I(ξ; v2) = I(v2; ˆξ0) > 0 (97) 32 Learning Optimal Multimodal Information Bottleneck Representations 
+
+I( ˆξ0, ξ ; v3) − I(ξ; v3) = I(v3; ˆξ0) > 0 (98) Thus ℓ( ¨ξ)−ℓ(ξ) > 0, if { ˆξ0}̸ = ∅. Put together, the optimization procedure continues until ξ does not encompass superfluous information, specific to or shared by v1, v2, and v3. That is, F (ξ) ⊆ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }. This completes the proof. 
+
+Proposition D.6 (Achievability of optimal MIB for three modalities ). Lemma D.3, and Lemma D.5 jointly demonstrate that the optimal MIB ξopt −three is achievable through optimization of Equation (69) with β ∈ (0 , M 2 
+
+> u
+
+].Proof. From Lemma D.3 and Lemma D.5, we have F (ξ) ⊇ { a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 } if β ∈ (0 , M 2 
+
+> u
+
+], and F (ξ) ⊆{a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }, respectively. Thus, F (ξ) = {a00 , a 11 , a 22 , a 33 , a 12 , a 13 , a 23 }, which corresponds to 
+
+ξopt −three in Definition D.2. To expedite the training process, we can also set M 2 
+
+> u
+
+= 15( P3     
+
+> i=1 H(vi)−23
+> P
+> 1≤i<j ≤3I(vi;vj))
+
+as an upper bound and M 2 
+
+> l
+
+:=   
+
+> 15( P3
+> i=1 H(vi))
+
+as a lower bound for β, resulting in β ∈ [M 2 
+
+> l
+
+, M 2 
+
+> u
+
+].
+
+## E. Estimation of Mutual Information and Information Entropy 
+
+We apply the Mutual Information Neural Estimation (MINE) method (Belghazi et al., 2018) to estimate the information entropy of each data modality and the mutual information between data modalities. Given two modalities X and Z, MINE employs a neural network, implemented as a two-layer Multi-Layer Perceptron (MLP) network with ReLU activation function (Belghazi et al., 2018), to learn a set of functions {Tθ }θ∈Θ. Each function Tθ : X × Z → R maps sample pairs to real values, enabling mutual information estimation as: 
+
+I(X; Z) = sup 
+
+> θ∈Θ
+
+EPXZ [Tθ ] − log EPX ⊗PZ [eTθ ]. (99) Here, EPXZ [Tθ ] represents the expected value of Tθ calculated using sample pairs from the joint distribution PXZ , and 
+
+EPX ⊗PZ [eTθ ] represents the expected value of Tθ calculated using sample pairs from the product of marginal distribution 
+
+PX ⊗ PZ . The joint distribution PXZ is approximated using matched sample pairs (X, Z ), while PX ⊗ PZ is approximated using perturbed pairs (X, Z ′), where Z′ is obtained by shuffling Z. The information entropy H(X) is computed as the mutual information of X with itself: 
+
+H(X) = I(X; X) (100) Specifically, in this case, Z and Z′ are replaced by X and X′, where X′ is obtained by shuffling X.
+
+## F. Synthetic Data 
+
+Following (Xue et al., 2023), we simulate pairs of Gaussian observations and task labels, x1 ∈ Rd1 , x2 ∈ Rd2 ;y, where x1
+
+and x2 represent observations from two modalities with dimensionalities d1 and d2, respectively, and y ∈ { 0, 1} represents the corresponding binary label. The feature vectors of x1 and x2 are defined as: 
+
+x1 = [ b0; b1; a0; a1], x 2 = [ b0; b2; a0; a2], (101) where • a0 ∈ Rd0 ∼ N (0 , I d0 ) denotes consistent, task-relevant information shared between the modalities; • a1 ∈ Rd11 ∼ N (0 , I d11 ) and a2 ∈ Rd21 ∼ N (0 , I d21 ) represent modality-specific, task-relevant information; • b0 ∈ Rd′ 
+
+> 0
+
+∼ N (0 , I d′ 
+
+> 0
+
+) is consistent, superfluous information; • b1 ∈ Rd12 ∼ N (0 , I d12 ) and b2 ∈ Rd22 ∼ N (0 , I d22 ) are modality-specific, superfluous information. 33 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Here, N (0 , I d) denotes a multivariate Gaussian distribution with mean 0 and identity covariance matrix I of dimensionality 
+
+d. The dimensions satisfy: 
+
+d1 = d0 + d′ 
+
+> 0
+
++ d11 + d12 , d 2 = d0 + d′ 
+
+> 0
+
++ d21 + d22 (102) The label y ∈ { 0, 1} is generated using a Dirac function ∆, which depends solely on the task-relevant information a0, a 1,and a2:
+
+y := ∆( ⟨δ, [a0; a1; a2]⟩ > 0) (103) where δ ∈ Rd0+d11 +d21 ∼ N (0 , I d0+d11 +d21 ) is a randomly sampled vector serving as a separating hyperplane, and ⟨· , ·⟩ 
+
+denotes the inner product operation. By adjusting d0, d11 , and d21 , we can control the distribution of task-relevant information across the two modalities, enabling the simulation of imbalanced task-relevant information. Specifically, as illustrated in Figure 3, we simulate three SIM datasets (SIM-{I-III }) to be used in three experimental cases, respectively (see Section 6.2). Firstly, for all cases, we set 
+
+d0 = d′ 
+
+> 0
+
+= 200 . For SIM-I used in case i , we set d11 (500) ≫ d21 (100) so that a1 has a significantly greater impact on determining y, compared to a2. This configuration implies that Modality I dominates Modality II in terms of task-relevant information. For SIM-II used in case ii , we switch the setting of d11 and d12 , making Modality II dominant over Modality I. Finally, for SIM-III used in case iii , we set d11 = d12 = 300 to ensure both modalities contribute equally to task-relevant information. 
+
+## G. Detailed Dataset Description 
+
+SIM. See Appendix F. 
+
+CREMA-D. CREMA-D is an audio-visual dataset designed to study multimodal emotional expression and perception (Cao et al., 2014). It captures actors portraying six basic emotional states—happy, sad, anger, fear, disgust, and neutral—through facial expressions and speech. 
+
+CMU-MOSI. CMU-MOSI (Zadeh et al., 2016) consists of 93 videos, from which 2,199 utterance are generated, each containing an image, audio, and language component. Each utterance is labeled with sentiment intensity ranging from -3 to 3. 
+
+10x-hNB-{A-H }& 10x-hBC-{A-D }. The 10x-hNB-{A-H } datasets comprises eight datasets derived from healthy human breast tissues, while the 10x-hBC-{A-D } datasets contain four datasets from human breast cancer tissues (Xu et al., 2024b). As shown in Figure 6, each dataset corresponds to a tissue section and include gene expression and histology modalities. For each tissue section, gene expression profiles (i.e., gene read counts) are measured at fixed spatial spots across the section. During data preprocessing, genes detected in fewer than 10 spots are excluded, and raw gene expression counts are normalized by library size, log-transformed, and reduced to the 3,000 highly variable genes (HVGs) using the SCANPY package (Wolf et al., 2018; Li et al., 2024; Xu et al., 2024a; Du et al., 2025). The corresponding histology image is segmented into 32 × 32 region patches centered around each spatial spot, from which pathological patches are identified for anomaly detection. OMIB and baseline models are trained on the 10x-hBC-{A-H } datasets to learn multimodal representations of normal tissue regions within a compact hypersphere in the latent space. The trained models are then applied to the 10x-hBC-{A-D } datasets during inference. 
+
+## H. Detailed Network Architecture Implementation 
+
+Modality-specific encoder. We implement the encoder as follows: • The SIM datasets: A two-layer MLP with the GELU activation function, outputting 256-dimensional embeddings. • The CREMA-D dataset: Both video and audio encoders use ResNet-18, producing 512-dimensional outputs. • The CMU-MOSI dataset: Conv1D is employed for both the audio and visual modalities, while BERT is utilized for the textual modality, with all three encoders producing 512-dimensional embeddings. • The 10x-hNB-{A-H }& 10x-hBC-{A-D } datasets: ResNet-18 and a two-layer graph convolutional network are used for the histology and gene expression modalities, respectively, with both encoders producing 256-dimensional embeddings. 34 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Table 7: Overview of the experimental datasets.                                       
+
+> Dataset Type Number of samples (Anomaly proportion) SIM-{I-III }Training 9000 SIM-{I-III }Test 1000 CREMA-D Training 6,698 CREMA-D Test 744 MOSI Training 1281 MOSI Test 685 10x-hNB-A Training 2364 10x-hNB-B Training 2504 10x-hNB-C Training 2224 10x-hNB-D Training 3037 10x-hNB-E Training 2086 10x-hNB-F Training 2801 10x-hNB-G Training 2694 10x-hNB-H Training 2473 10x-hBC-A Test 346 (12.43%) 10x-hBC-B Test 295 (78.64%) 10x-hBC-C Test 176 (27.84%) 10x-hBC-D Test 306 (54.58%)
+
+Task-relevant prediction head. We implement task-relevant prediction head as follows: • The SIM and CREMA-D datasets: The prediction head is implemented as a single linear layer (input X 512 X 100) followed by a softmax layer for classification, producing a k-dimensional output, where k is the number of classification types. The TRB loss LT RB is cross-entropy; • The CMU-MOSI dataset: The prediction head is implemented as a single linear layer MLP (input X 50 X 1), outputting a single real value. LT RB is mean squared error; • The 10x-hNB-{A-H } and 10x-hBC-{A-D } datasets: The prediction head is implemented under the SVDD framework (Ruff et al., 2018; Xu et al., 2025) as a two-layer MLP (input X 256 X 256) with LeakyReLU activation functions, producing 256-dimensional latent multimodal representations. LT RB is defined as: 
+
+LT RB = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥ˆy − c∥2 + λ · R (Θ) ,c = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ˆy, 
+
+(104) where ˆy denotes the output of the prediction head, c the center of the hypersphere, R(Θ) the function that regularizes model parameters Θ for reducing model complexity and preventing model collapse, λ is the regularization weight. 
+
+Variational Autoencoder. The VAE is implemented as two-layer MLP with two heads, outputting the μ and Σ, respectively. 
+
+Cross-Attention Network. For datasets with two modalities, the cross-attention is implemented as: 
+
+ξ = Attn ([ ζ1∥ζ2]; WQ, W K , W V ) (105) where Attn represents the standard attention block, WQ, WK , and WV denote learnable projection matrices for queries, keys, and values respectively. The operator ∥ represents concatenation along the feature dimension. 35 Learning Optimal Multimodal Information Bottleneck Representations 
+
+For datasets with three modalities, the cross-attention is extended as: 
+
+ξ = Attn ([ ζ1∥ζ2∥ζ3]; WQ, W K , W V ) (106) Finally, a Linear layer is applied to map ξ back to the same dimensions as ζ1 and ζ2.
+
+## I. Experimental Settings 
+
+All experiments are implemented using PyTorch (Paszke et al., 2019), with the following settings: 
+
+SIM. We use the Adam optimizer with a learning rate of 1e-4 and train the model for 100 epochs. The dataset consists of 10,000 samples, split into training and test sets with a 9:1 ratio. 
+
+CREMA-D. The model is trained using the SGD optimizer with a batch size of 64, momentum of 0.9, and weight decay of 1e-4. The learning rate is initialized at 1e-3 and decays by a factor of 0.1 every 70 epochs, reaching a final value of 1e-4. The dataset is divided into a training set containing 6,698 samples and a test set of 744 samples. 
+
+CMU-MOSI. We employ the Adam optimizer with a learning rate of 1e-5. All other hyperparameters and settings follow (Mai et al., 2023). 2,199 utterances are extracted from the dataset, which are split into a training set (1,281 samples) and a test set (685 samples). 
+
+10x-hNB-{A-H }& 10x-hBC-{A-D }. We use the Adam optimizer with a learning rate of 1e-4 and a weight decay of 0.1. The training batch size is set to 128. The final multimodal representation has a dimensionality of 256. Gene    
+
+> expression
+> vector
+> ··· 010
+> Histology modality Gene expression modality
+> Abnormal tissue
+> detection
+> Detected
+> pathology region
+
+Figure 6: Genomic multi-modal applications. Genomic data can be divided into two modalities: the histology modality and the gene expression modality. The histology modality comprises tissue image, while the gene expression modality consists of gene expression vectors, where each spot corresponds to a vector composed of multiple gene expression values. These two modalities are spatially aligned through shared spatial information. By integrating and analyzing both modalities, abnormal regions within the tissue can be effectively detected. 
+
+## J. Benchmark Methods 
+
+Here, we briefly describe the eight benchmark methods used in this study. For non-MIB-based methods: • Concat refers to simple concatenation of multi-modal features, which yet is the most widely used fusion approach. • BiGated (Kiela et al., 2018) flexibly integrates information from different modalities through a gating mechanism. • MISA (Hazarika et al., 2020) decomposes data into modality-invariant and modality-specific representations, using alignment and divergence constraints for better multimodal representation. 36 Learning Optimal Multimodal Information Bottleneck Representations 
+
+For MIB-based methods: • deep IB (Wang et al., 2019) extends VIB to a multi-view setting, maximizing mutual information between labels and the joint representation while minimizing mutual information between each view’s latent representation and the original data; • MMIB-Cui (Cui et al., 2024) addresses the issues of modality noise and modality gap in multimodal named entity recognition (MNER) and multimodal relation extraction (MRE) by integrating the information bottleneck principle, thereby enhancing the semantic consistency between textual and visual information; • MMIB-Zhang (Zhang et al., 2022) effectively controls the learning of multimodal representations by imposing mutual information constraints between different modality pairs, removing task-irrelevant information within single modalities while retaining relevant information, significantly improving performance in multimodal sentiment analysis; • DMIB (Fang et al., 2024) effectively filters out irrelevant information and noise, while introducing a sufficiency loss to retain task-relevant information, demonstrating significant robustness in the presence of redundant data and noisy channels. • E-MIB, L-MIB, and C-MIB (Mai et al., 2023) aim to learn effective multimodal and unimodal representations by maximizing task-relevant mutual information, eliminating modality redundancy, and filtering noise, while exploring the effects of applying MIB at different fusion stages. 
+
+## K. Evaluation Metrics 
+
+In Emotion Recognition, we use accuracy (Acc) as the evaluation metric. For Multimodal Sentiment Analysis, we use the mean absolute error (MAE) and Pearson’s correlation coefficient (Corr) to evaluate the predicted scores against the true scores. Additionally, as sentiment intensity scores can be divided into positive and negative categories, F1-score and polarity accuracy (Acc-2) are also utilized to evaluate prediction results as a binary classification task. Additionally, the interval of 
+
+[−3, 3] contains seven integer scores to which each predicted score is neared to. This allows the using of categorical accuracy (Acc-7) to evaluate the prediction results. Finally, for the Anomalous Tissue Detection task, we evaluate performance using AUC score and F1-score. The AUC score is calculated by varying the anomaly threshold over all tissue regions’ anomalous scores. To compute the F1-score, a threshold is first identified such that the number of regions exceeding it matches the true number of anomalous regions, after which the F1-score is computed for regions whose scores are above this threshold. 37 Learning Optimal Multimodal Information Bottleneck Representations 
+
+## L. Algorithmic workflow of OMIB 
+
+Algorithm 1 Warm-up training 
+
+Input: Modality vk, k ∈ { 1, 2}, Maximum epochs Emax , Batch size N .
+
+Notation: Enc k: Unimodal encoder for modality vk; Dec k: Task-relevant prediction head for modality vk; zk: Latent representation of modality vk; ek: Stochastic Gaussian noises; 
+
+Output: Enc k and Dec k.
+
+1: Initialize Enc k and Dec k, ∀k ∈ { 1, 2};
+
+2: while epoch < E max do 
+
+3: Sample a batch {vik | i ∈ { 1, 2, . . . , N }} from each modality k ∈ { 1, 2};
+
+4: for each i ∈ { 1, 2, . . . , N } do 
+
+5: for each modality k ∈ { 1, 2} do 
+
+6: zik = Enc ik(vik);
+
+7: eik ∼ N (0 , I );
+
+8: ˆyik = Dec k([ zik, e ik]) ;
+
+9: end for 
+
+10: end for 
+
+11: Compute LT RB k as in Equation (4) for each modality k ∈ { 1, 2};
+
+12: Update Enc k and Dec k using gradient descent; 
+
+13: end while 
+
+14: return Enc k and Dec k
+
+38 Learning Optimal Multimodal Information Bottleneck Representations 
+
+Algorithm 2 Main training 
+
+Input: Modality vk, Unimodal encoder Enc k, Task-relevant prediction head Dec k, ∀k ∈ { 1, 2}, Maximum epochs Emax ,Batch size N .
+
+Notation: V AE k: Variational encoder for modality vk; ζk: Latent representation of modality vk after reparameterization; 
+
+CAN : Cross-attention network; dDec : OMF task-relevant prediction head; MINE : Mutual Information Neural Estima-tion (MINE); ϵk: Standard Gaussian samples. 
+
+Output: Enc k, ∀k ∈ { 1, 2}, OMF ( V AE k, ∀k ∈ { 1, 2}, CAN , and dDec ). 
+
+1: for each modality k ∈ { 1, 2} do 
+
+2: H(vk) = MINE (vk, v k);
+
+3: end for 
+
+4: I(v1; v2) = MINE (v1, v 2);
+
+5: Sample β from the range [Ml, M u], where Ml := 13( H(v1)+ H(v2)) , Mu := 13( H(v1)+ H(v2)−I(v1;v2)) ;
+
+6: while epoch < E max do 
+
+7: Sample a batch {vik | i ∈ { 1, 2, . . . , N }} from each modality k ∈ { 1, 2};
+
+8: for each i ∈ { 1, 2, . . . , N } do 
+
+9: for each modality k ∈ { 1, 2} do 
+
+10: zik = Enc k(vik);
+
+11: μik, Σik = V AE i(zik);
+
+12: ζik = μik + Σ ik × ϵi;
+
+13: end for 
+
+14: ξi = CAN (ζi
+
+> 1
+
+, ζ i
+
+> 2
+
+);
+
+15: for each modality i ∈ { 1, 2} do 
+
+16: ˆyik = Dec i([ zik, ξ i]) ;
+
+17: end for 
+
+18: ˆyi = dDec (ξi);
+
+19: Adjust r as defined in Equation (11); 
+
+20: end for 
+
+21: Compute LOM F as in Equation (10), and LT RB k as in Equation (4) for each modality i ∈ { 1, 2};
+
+22: L = LOM F + LT RB 1 + LT RB 2 ;
+
+23: Update parameters of Enc k, V AE k, CAN , Dec k, and dDec using gradient descent; 
+
+24: end while 
+
+25: return Enc k, ∀k ∈ { 1, 2}, OMF ( V AE k, ∀k ∈ { 1, 2}, CAN , and dDec )39
