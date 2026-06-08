@@ -1,0 +1,412 @@
+Title: DynaTok: Temporally Adaptive and Positional Bias-Aware Token Compression for Video-LLMs
+
+URL Source: https://arxiv.org/pdf/2605.19322v1
+
+Published Time: Wed, 20 May 2026 00:37:07 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# DynaTok: Temporally Adaptive and Positional Bias-Aware Token Compression for Video-LLMs 
+
+## Minyoung Park Taehun Kong Sangjun Ahn *
+
+## LG Electronics, Seoul, South Korea 
+
+minyoung5.park@lge.com th.kong@lge.com sangjun.ahn@lge.com 
+
+## Abstract 
+
+Recent advances in Video Large Language Models (Video-LLMs) have greatly expanded multimodal reasoning capa-bilities. However, the massive number of visual tokens ex-tracted from long video sequences incurs prohibitive com-putational costs, limiting their deployment in real-world scenarios. Existing training-free token compression meth-ods select tokens based on attention magnitude as a proxy for semantic importance, but often overlook positional bias and rely only on short-term temporal locality, leading to redundant spatio-temporal coverage and inefficient token usage. We present DynaTok, a training-free, temporally adaptive and bias-aware token compression framework that allocates token budgets across both temporal and spatial dimensions. Through a lightweight exponential moving average (EMA) memory, the Temporal Budget Allocation (TBA) module dynamically assigns fewer tokens to redun-dant frames and more to novel frames, capturing long-term temporal variation. The Spatial Budget Allocation (SBA) module complements this by selecting spatially diverse and semantically important features using activation-based at-tention maps, while leveraging a spatial memory to reduce redundancy from previously selected regions and mitigate positional bias. DynaTok integrates seamlessly with ex-isting Video-LLMs such as LLaVA-OneVision and LLaVA-Video without retraining, and effectively preserves seman-tic coverage under aggressive compression. Experiments on four representative VideoQA benchmarks—MVBench, LongVideoBench, MLVU, and VideoMME—show that Dy-naTok retains over 95% of baseline accuracy even with a 90% token reduction, surpassing recent training-free ap-proaches. These results demonstrate that DynaTok provides a principled foundation for efficient and robust video rea-soning, paving the way toward real-time streaming video understanding with future Video-LLMs. 
+
+> *Corresponding author. LGE Internal Use Only
+> FastV
+> [ECCV’ 24]
+> DynaTok
+> Rel. Accuracy with 10% Tokens
+> VisionZip
+> [CVPR’ 25]
+
+Figure 1. Relative accuracy (%) of token compression meth-ods under a 10% token budget on LLaVA-OneVision 7B. We re-port performance across MVBench [12], LongVideoBench [26], MLVU [36], and VideoMME [7]. Relative accuracy is computed with respect to the base model’s performance when using 100% of input tokens. Compared to existing methods such as FastV [3] and VisionZip [28], which experience performance degradation un-der aggressive compression, DynaTok demonstrates consistently higher robustness and achieves the best relative accuracy across all benchmarks. 
+
+## 1. Introduction 
+
+Recent advances in video large language models (Video-LLMs) have significantly enhanced multimodal reasoning capabilities, enabling models to process long and com-plex video sequences [1, 10, 14, 17, 22, 24, 32]. How-ever, the large number of visual tokens extracted from video frames imposes severe computational costs [16, 20, 25, 31]. Because the attention complexity grows quadrat-ically with the token count, efficient token compression is essential for achieving practical real-time or on-device Video-LLMs. While FlashAttention [4, 5] has alleviated the quadratic cost of attention by reducing it to linear complex-ity, the overhead of processing a large number of video in-       
+
+> arXiv:2605.19322v1 [cs.CV] 19 May 2026 LGE Internal Use Only
+> Stage 1: Temporal Budget Allocation
+> Time
+> Token
+> Budget
+> Stage 2: Spatial Budget Allocation
+> Drop
+> Select
+> Large Language Model
+> Visual
+> Encoder
+> Video
+> DynaTok
+> 010 20 30
+> Video
+> Time
+> Frame
+> Tokens
+> Dropped
+> Token
+> Selected
+> Token
+> T-4T-3T-1T-2TT+1
+> Save
+> EMA
+> Memory
+> Global Pooling
+> ∆𝒇 𝒈
+> ∆𝒇 𝒔
+> DynaTok
+
+Figure 2. Overview of the proposed DynaTok framework for training-free and efficient token compression in Video-LLMs. The framework operates in two stages: (1) Temporal budget allocation (TBA) uses an exponential moving average (EMA)-based global temporal memory to estimate frame-wise novelty. It allocates fewer tokens to redundant frames and more to frames with dynamic or novel content based on global feature differences. (2) Spatial budget allocation (SBA) then performs intra-frame token selection using activation-based attention maps and a spatial memory that reduces the influence of previously selected redundant regions. This promotes the selection of semantically informative and spatially diverse tokens. Together, these stages enable DynaTok to achieve high compression ratios while preserving critical spatio-temporal information for robust video-language understanding. 
+
+put tokens—particularly during key-value (KV) cache pre-filling—remains a bottleneck. As a result, several recent works [3, 9, 28, 29] have explored training-free token com-pression methods that aim to reduce redundancy without re-quiring model retraining. Recent approaches such as FastV [3], DyCoke [21], and VisionZip [31] leverage attention magnitude as a proxy for semantic importance, offering plug-and-play solutions for accelerating inference. However, these methods often overlook positional bias inherent to the vision encoders in Video-LLMs, which can significantly affect the quality of token selection. Although attention scores are commonly interpreted as indicators of semantic relevance, prior studies [15, 19, 23, 37] have demonstrated that vision encoders in Video-LLMs inherit strong positional bias. This phenomenon arises from the joint training of visual and textual tokens using unified attention mechanisms in large language models. In the text modality, positional information is frequently aligned with semantic importance (e.g., key verbs or subjects appear in particular positions), and such position-based biases can be transferred to the visual modality during cross-modal train-ing. As a result, certain spatial locations—such as image boundaries or bottom corners—tend to receive dispropor-tionately high attention scores regardless of their actual se-mantic content. We also empirically confirm the presence of such positional bias in Video-LLMs (Fig. 3). Consequently, relying solely on attention magnitude for token pruning can be problematic—especially under ag-gressive compression—since attention-biased regions may dominate token retention, potentially leading to significant performance degradation. To address this, we propose a 
+
+bias-aware token selection strategy that not only considers semantic importance but also promotes spatio-temporal di-versity in the selected tokens. Another key challenge lies in handling temporal lo-cality. In video-language modeling, redundancy across consecutive frames is often unevenly distributed. Recent approaches [8, 18] attempt to reduce tokens by exploit-ing short-term temporal similarity among adjacent frames. However, these methods typically operate within a limited temporal window, making it difficult to incorporate infor-mation from earlier frames beyond that range. This limita-tion becomes particularly problematic in streaming or real-time settings, where long-term context is critical. To overcome this limitation, we propose a lightweight exponential moving average (EMA) memory module that incrementally aggregates spatio-temporal features from pre-viously observed frames. This design enables our frame-work to estimate long-range frame novelty and adaptively allocate token budgets over time. To address both positional and temporal inefficiencies, we introduce DynaTok, a temporally adaptive and bias-aware token compression framework that dynamically allo-cates token budgets across both the temporal and spatial di-mensions, without requiring any retraining or architectural modification. DynaTok operates in two complementary stages: • Temporal Budget Allocation (TBA) : A lightweight tem-poral memory updated via an exponential moving averag estimates frame-wise novelty and dynamically allocates fewer tokens to redundant frames and more to frames with new or rapidly changing content. • Spatial Budget Allocation (SBA) : Within each frame, DynaTok leverages activation-based attention maps and a spatial memory to select tokens that are both semanti-cally informative and spatially diverse, while reducing the influence of previously selected redundant regions. This two-stage design enables flexible token allocation across time and space, allowing DynaTok to retain key se-mantics and long-term temporal information while signifi-cantly reducing computational cost. As shown in Fig. 1, Dy-naTok achieves the highest relative accuracy under a 10% token budget across all benchmarks, consistently outper-forming training-free methods such as FastV [3] and Vi-sionZip [28]. In summary, DynaTok provides a simple yet effec-tive solution for training-free video token compression by explicitly addressing two fundamental sources of ineffi-ciency—positional bias and temporal redundancy. Its tem-porally adaptive and bias-aware design enables efficient to-ken selection while reducing redundancy without severely compromising semantic fidelity, offering a scalable and practical foundation for Video-LLM inference. 
+
+## 2. Related Work 
+
+2.1. Token Efficiency for Video-LLMs 
+
+Recent advances in Video-LLMs [1, 11, 16, 22, 24, 31, 32] have significantly expanded the capabilities of large lan-guage models for video understanding tasks, including video question answering, captioning, and temporal reason-ing. To capture the rich spatio-temporal structure of video inputs, these models typically tokenize each frame into hun-dreds of patches, resulting in thousands to tens of thousands of visual tokens per video. This leads to substantial compu-tational and memory overhead, often exceeding the context length limitations of LLMs. Although methods like FlashAttention [4, 5] improve the efficiency of attention computation by reducing its com-plexity from quadratic to near-linear, they do not miti-gate the overhead associated with processing and caching a large number of visual tokens—particularly during key-value (KV) cache pre-filling. As a result, token quantity remains a critical bottleneck, especially in latency-sensitive or resource-constrained scenarios. To address this challenge, recent works have proposed token compression strategies aimed at reducing visual re-dundancy and improving inference efficiency. In parallel, there is growing interest in adapting Video-LLMs for real-time and streaming scenarios [2, 6, 13], where low-latency inference and efficient context reuse be-come essential. In such settings, key-value caches must of-ten be reused across turns, and any token compression strat-egy must be capable of reducing temporal redundancy while supporting long-form interaction. TimeChat-Online [29] further suggests that a large portion of visual tokens in streaming video are naturally redundant, reinforcing the im-portance of compression techniques that preserve semantic fidelity while reducing input volume over time. In this work, we propose a training-free, model-agnostic token compression framework that significantly reduces the number of visual tokens while maintaining robust perfor-mance across multiple Video-LLM architectures and bench-marks. By leveraging a lightweight EMA memory to accu-mulate longer temporal context, our approach is naturally extendable to real-time streaming applications where effi-cient token management is crucial. 
+
+2.2. Training-Free Compression with Spatio-Temporal Diversity 
+
+Recent studies have explored training-free token compres-sion strategies for Video-LLMs. FastV [3] removes visual tokens with low attention weights using a plug-and-play ap-proach. SparseVLM [34] identifies a subset of text tokens that are highly related to the image and uses their cross-attention to score visual tokens. DyCoke [21] extends this line of work to video-language models, dynamically prun-ing redundant visual tokens during decoding based on atten-tion scores across temporal frames. However, these meth-ods rely on internal attention matrices from the LLM back-bone, which restricts their compatibility with FlashAtten-tion [4, 5], as the required attention weights are not di-rectly accessible due to fused computations. Our method avoids this limitation by leveraging activation-based atten-tion maps to score token importance. This enables a fully model-agnostic and FlashAttention-compatible token selec-tion process that does not depend on internal attention ma-trices. In contrast, VisionZip [28] selects dominant vi-sual tokens and merges semantically redundant ones us-ing visual attention scores from the visual encoder, mak-ing it compatible with FlashAttention. While this de-sign improves scalability, relying solely on attention mag-nitude has limitations—especially under aggressive com-LLaVA -OneVision 
+
+> Width Patches
+> Height Patches
+
+LLaVA -Video 
+
+> Width Patches
+> Height Patches
+> 0.0
+> 1.0
+
+Figure 3. Visualization of accumulated activation-based attention maps on the VideoMME dataset. While these maps reflect seman-tic importance, they also reveal strong positional bias, where cer-tain spatial regions consistently receive higher responses regard-less of semantic content. This indicates that attention magnitude alone is insufficient for token selection, motivating the need to also preserve feature diversity in DynaTok. 
+
+pression. One key reason is the positional bias inherently present in the visual encoders of Video-LLMs. Recent stud-ies [15, 19, 23, 27, 37] show that vision encoders in vi-sion language models inherit strong positional bias, which is shifted from the text modality due to shared attention lay-ers in joint training. This results in spatially biased atten-tion patterns—e.g., consistently favoring certain image re-gions—regardless of semantic content. As a result, methods that depend only on attention scores may perform subopti-mally under high compression. To address this, we propose a bias-aware token selection strategy that reduces the influ-ence of previously selected redundant regions. In addition to spatial bias, another key inefficiency arises from tem-poral redundancy. While several recent works [8, 18, 21] attempt to exploit temporal locality by comparing adja-cent frames, their reliance on short-term context limits per-formance in long-horizon or streaming scenarios. These models typically apply redundancy reduction within a fixed temporal window, making it difficult to adaptively budget tokens across varying temporal dynamics. To overcome this, we introduce a lightweight EMA memory that main-tains spatio-temporal summaries of previously seen frames. This allows our method to detect novelty over longer time spans and allocate more tokens to novel or fast-changing frames—without requiring future frame access. In sum-mary, DynaTok combines a bias-aware spatial selection strategy with temporally adaptive token budgeting, yielding a model-agnostic compression framework that retains se-mantic and temporal fidelity under strict token budgets. Our approach is also scalable to streaming video understanding tasks. 
+
+Algorithm 1 DynaTok: Two-Stage Dynamic Token Com-pression 
+
+Require: Video tokens X ∈ RT ×N ×D , number of patches P ,retention ratio R, weights α, β
+
+# 1. Temporal Budget Allocation (TBA)  
+
+> 1:
+
+Initialize temporal memory Mg ← GlobalPool (X0) 
+
+> 2:
+
+for t = 1 to T do  
+
+> 3:
+
+global diff. ∆fg ← ∥ GlobalPool (Xt) − Mg ∥2 
+
+> 4:
+
+Update Mg ← (1 − α)Mg + α GlobalPool (Xt) 
+
+> 5:
+
+end for  
+
+> 6:
+
+Normalize {∆fg } to obtain frame-wise weights wt 
+
+> 7:
+
+Assign token budget for each frame: Bt = wt · T · N · R
+
+# 2. Spatial Budget Allocation (SBA)  
+
+> 8:
+
+Initialize spatial memory Ms ← zeros like (X0) 
+
+> 9:
+
+for each frame t do  
+
+> 10:
+
+Divide Xt into patches {pi}Pi=1  
+
+> 11:
+
+Activation-based attention map: At = norm  P  
+
+> D
+
+|Xt| 
+
+> 12:
+
+Patch importance: si = mean (At[pi])  
+
+> 13:
+
+Normalize {si} to assign token counts ni s.t. P 
+
+> i
+
+ni = Bt 
+
+> 14:
+
+for each token x in Xt do  
+
+> 15:
+
+Redundancy ∆fs[x] = cosine (x, M s[x])  
+
+> 16:
+
+Combined score (x) = At[x] − β ∆fs[x] 
+
+> 17:
+
+end for  
+
+> 18:
+
+for each patch pi do  
+
+> 19:
+
+Select top-ni tokens within pi based on score (x) 
+
+> 20:
+
+end for  
+
+> 21:
+
+Ms[Kt] ← (1 − α)Ms[Kt] + αX t[Kt]
+
+(Kt: selected token mask)  
+
+> 22:
+
+end for  
+
+> 23:
+
+return Compressed tokens X′ = X[K]
+
+## 3. Method 
+
+3.1. Overview 
+
+We propose DynaTok, a training-free two-stage framework that operates under a fixed token budget and efficiently al-locates tokens across spatial and temporal dimensions to reduce redundancy in video inputs for Video-LLMs. As illustrated in Fig. 2, DynaTok comprises two stages: (1) Temporal Budget Allocation (TBA) and (2) Spatial Budget Allocation (SBA). In the first stage, DynaTok dynamically distributes the overall token budget across frames based on frame-wise novelty, estimated using a temporal memory up-dated via an exponential moving average. In the second stage, it selects semantically informative yet spatially di-verse tokens within each frame, guided by activation-based attention maps and a spatial memory that reduces the influ-ence of previously selected redundant regions. This two-stage design ensures effective token utilization under strict retention constraints, while preserving essential semantic and temporal cues—achieving a strong balance between compression efficiency and reasoning accuracy. 3.2. Stage 1: Temporal Budget Allocation 
+
+The first stage allocates token budgets along the temporal axis. Since consecutive frames in a video often contain re-dundant visual information, DynaTok assigns fewer tokens to such redundant frames and redistributes the saved budget to frames containing novel or dynamic content. Let the input video tokens be X ∈ RT ×N ×D , where T is the number of frames, N is the number of tokens per frame, and D is the feature dimension. We maintain a tempo-ral memory Mg that captures long-term temporal dynamics through an exponential moving average (EMA). For each frame t, the global feature difference is computed as: 
+
+∆fg = ∥GlobalPool (Xt) − Mg ∥2 , (1) and the temporal memory is updated as: 
+
+Mg ← (1 − α)Mg + α · GlobalPool (Xt). (2) Here, α is a smoothing factor that controls the update rate. This EMA update emphasizes recent frame features while still retaining a cumulative summary of past observations. The differences ∆fg are normalized across frames to obtain frame-wise weights wt, and the corresponding token budget for each frame is assigned as: 
+
+Bt = wt · T · N · R, (3) where R denotes the global retention ratio. Consequently, frames exhibiting higher temporal variation (larger ∆fg ) re-ceive more tokens, promoting temporal diversity and im-proving compression efficiency. 
+
+3.3. Stage 2: Spatial Budget Allocation 
+
+After distributing the token budget temporally, DynaTok performs spatial selection within each frame to determine which tokens to retain. This stage focuses on identifying semantically important yet spatially diverse regions while avoiding redundant coverage. To estimate token importance, we compute an activation-based attention map: 
+
+At = norm X
+
+> D
+
+|Xt|
+
+!
+
+, (4) which serves as a model-agnostic measure of semantic saliency. Unlike prior approaches [3, 37] that rely on in-ternal attention weights or CLS tokens, this formulation is compatible with modern encoders (e.g., SigLIP [30]) and FlashAttention implementations. However, relying solely on semantic saliency can lead to positional bias, as certain spatial regions tend to receive consistently high activations due to cross-modal alignment during pretraining [37]. As shown in Fig. 3, accumulated activation-based attention maps illustrate this phenomenon: while attention magnitude correlates with semantic impor-tance, it also exhibits strong positional bias. This motivates the need for a diversity-aware selection strategy. To ensure spatial diversity, we divide each frame Xt ∈
+
+RN ×D into P = N/k non-overlapping patches {pi}Pi=1 ,each containing k tokens. The semantic importance of each patch is computed as: 
+
+si = mean (At[pi]) , (5) and the token budget ni for patch pi is assigned by normal-izing importance across patches: 
+
+ni = si
+
+P 
+
+> j
+
+sj
+
+× Bt, with X
+
+> i
+
+ni = Bt. (6) To reduce the influence of previously selected redundant tokens, we introduce a spatial memory Ms that stores to-kens retained from earlier frames. Redundancy is penalized via cosine similarity with the spatial memory: 
+
+∆fs[x] = cosine (x, M s[x]) , (7) where x denotes a token in Xt.A combined score is then computed for each token: score (x) = At[x] − β∆fs[x], (8) where β controls the trade-off between semantic saliency and redundancy. From each patch pi, we select the top-ni
+
+tokens based on this score. Finally, selected tokens are used to update the spatial memory: 
+
+Ms[Kt] ← (1 − α)Ms[Kt] + αX t[Kt], (9) where Kt is the binary mask indicating the selected tokens in frame t. This memory-guided selection promotes spatial diversity across frames while suppressing repeated focus on previously observed regions. Together with the Temporal Budget Allocation stage, this spatial selection mechanism enables DynaTok to effi-ciently compress tokens while preserving semantic cover-age and temporal reasoning performance. 
+
+## 4. Experiments 
+
+4.1. Experimental Setup 
+
+We evaluate DynaTok on two recent Video-LLMs: LLaVA-OneVision 7B [10] and LLaVA-Video 7B [31]. We conduct experiments on four representative Video Question Answer-ing benchmarks: MVBench [12], LongVideoBench [26], MLVU [36] and VideoMME [7]. Each model is evalu-ated under multiple token retention ratios ( R) to analyze Table 1. Comparison of video token compression methods on LLaVA-OneVision 7B [10]. All methods are evaluated across multiple benchmarks, including MVBench, LongVideoBench, MLVU, and VideoMME. The retention ratio R denotes the proportion of visual tokens preserved before compression. DynaTok maintains competitive performance even under extremely low token budgets, showing strong robustness against aggressive compression while achieving the best overall accuracy across all settings. 
+
+Method Retention Ratio R MVBench LongVideo Bench MLVU VideoMME Avg. Acc. Overall Short Medium Long Score %Duration 16s 1∼60min 3∼120min 1∼60min 1∼3min 3∼30min 30 ∼60min LLaVA-OV 7B 100% 56.9 56.4 65.2 58.6 70.3 56.6 48.8 59.3 100 DyCoke [21] CVPR’25 32.5% 56.3 56.6 62.1 57.1 68.1 56.7 46.7 58.0 97.8 FastV [3] ECCV’24 100%/25% 54.7 55.5 61.5 56.2 68.0 54.6 46.0 57.0 96.1 VisionZip [28] CVPR’25 25% 53.7 51.2 58.5 54.1 61.6 53.4 47.2 54.4 91.7 DyCoke [21] CVPR’25 25% 49.5 48.1 55.8 51.0 61.1 48.6 43.2 51.1 86.2 
+
+DynaTok 25% 57.0 56.3 62.5 57.8 69.3 55.1 49.0 58.4 98.6 
+
+FastV [3] ECCV’24 100%/20% 54.1 56.6 61.2 56.2 66.8 54.6 47.2 57.0 96.1 VisionZip [28] CVPR’25 19.9% 53.0 50.0 57.1 53.0 60.8 51.0 47.1 53.3 90.0 
+
+DynaTok 19.9% 56.7 55.7 62.1 57.3 68.7 55.4 47.8 58.0 97.9 
+
+FastV [3] ECCV’24 100%/15% 53.2 54.9 59.8 54.7 65.1 53.4 45.7 55.7 93.9 VisionZip [28] CVPR’25 14.8% 50.3 46.9 54.4 49.5 55.8 49.3 43.3 50.3 84.8 
+
+DynaTok 14.8% 56.6 55.4 62.1 55.7 67.0 53.8 46.4 57.5 97.0 
+
+FastV [3] ECCV’24 100%/10% 51.7 52.1 57.7 52.4 60.9 51.4 45.0 53.5 90.2 VisionZip [28] CVPR’25 9.7% 44.4 43.5 51.5 46.0 50.4 45.8 41.8 46.4 78.3 
+
+DynaTok 9.7% 55.4 55.4 60.4 55.0 64.8 52.7 47.4 56.6 95.5 
+
+Table 2. Comparison of video token compression methods on LLaVA-Video 7B [35]. All methods are evaluated on MVBench, LongVideoBench, MLVU, and VideoMME benchmarks. The retention ratio R denotes the proportion of visual tokens preserved be-fore compression. DynaTok consistently maintains stable and high accuracy across all benchmarks and token budgets, demonstrating robustness and model-agnostic generalization on the LLaVA-Video backbone. 
+
+Method Retention Ratio R
+
+# Newline Tokens M MVBench LongVideo Bench MLVU VideoMME Avg. Acc. Overall Short Long Score %LLaVA-Video 7B 100% 832 60.4 59.6 70.3 64.1 76.9 53.4 63.6 100 DyCoke [21] CVPR’25 32.1% 256 59.3 57.9 65.7 61.6 74.6 51.1 61.1 96.1 FastV [3] ECCV’24 100%/25% 832/568.7 58.0 58.3 63.9 61.0 71.3 51.0 60.3 94.8 VisionZip [28] CVPR’25 24.9% 64 56.4 54.1 62.1 58.6 66.3 51.2 57.8 90.9 DyCoke [21] CVPR’25 25% 208 50.8 53.0 56.9 56.1 65.8 48.9 54.2 85.2 DynaTok 24.9% 832 58.6 57.0 64.6 62.1 74.1 51.6 60.6 95.4 
+
+FastV [3] ECCV’24 100%/10% 832/311.8 55.8 55.4 58.9 57.9 67.6 48.6 57.0 89.6 VisionZip [28] CVPR’25 9.5% 64 46.3 46.6 52.2 49.5 54.2 44.3 48.7 76.6 DynaTok 9.5% 832 55.9 55.2 63.2 59.0 70.6 49.7 58.3 91.8 
+
+the trade-off between performance and computational effi-ciency, using the LMMS-Eval [33] framework for standard-ized and reproducible evaluation. 
+
+Baselines. We compare DynaTok against recent training-free token compression methods: FastV [3], Vi-sionZip [28], and DyCoke [21]. 
+
+Metrics. We report the absolute accuracy on each bench-mark, as well as the relative performance (%) compared to the base Video-LLM using the full 100% token budget. 
+
+4.2. Results on LLaVA-OneVision 7B 
+
+Tab. 1 compares training-free video token compression methods under various token budgets, using LLaVA-OneVision 7B [10] as the base model. DynaTok achieves consistently strong performance across all compression levels. Notably, even under an ex-tremely low retention ratio of R = 10% , DynaTok main-tains a high average accuracy of 95.5%, outperforming all other methods under equivalent or even higher budgets. In the medium compression regime ( R = 25% ), it further boosts accuracy to 98.6%, again ranking highest in overall accuracy. Compared to FastV [3] and VisionZip [28], Dyna-Tok demonstrates superior robustness under aggressive compression. While FastV suffers notable degradation below 25% retention, and VisionZip underperforms in long-duration scenarios (e.g., LongVideoBench and Long VideoMME), DynaTok retains both short- and long-term video reasoning capability with minimal accuracy loss. These results highlight DynaTok’s ability to preserve se-Table 3. Ablation study on the effectiveness of each stage in DynaTok. When both TBA and SBA are disabled ( i.e ., ✗ ✗ ), the model performs frame-wise uniform token compression based solely on semantic importance. Enabling either stage improves performance, and combining both ( ✓ ✓ ) yields the best results, demonstrating that temporal and spatial budget allocation are com-plementary for efficient video token compression.                                            
+
+> R(%) TBA SBA VideoMME Short Medium Long
+> 25 ✗✗56.9 68.4 55.3 46.9 25 ✓✗57.2 68.3 56.1 47.2 25 ✓✓57.8 69.3 55.1 49.0 9.7 ✗✗54.8 63.8 53.6 47.1 9.7 ✓✗54.5 63.8 53.6 46.2 9.7 ✓✓55.0 64.8 52.7 47.4
+
+mantic fidelity and temporal coherence under extreme token budget constraints, making it a practical and scalable solu-tion for real-world, resource-constrained video understand-ing systems. 
+
+4.3. Results on LLaVA-Video 7B 
+
+Tab. 2 presents the evaluation results of token compression methods on LLaVA-Video 7B [35] across multiple video-language benchmarks. While the vanilla model achieves an upper-bound accuracy of 100% using all tokens, the focus of this comparison is on assessing how well each method balances compression efficiency with performance robust-ness across varying tasks and video durations. DynaTok demonstrates strong and consistent perfor-mance across all benchmarks and compression levels. Even under an aggressive 9.5% retention ratio, it achieves the highest average accuracy (91.8%), significantly outper-forming other methods such as FastV [3] (89.6%) and Vi-sionZip [28] (76.6%) under the same token budget. At moderate compression levels (e.g., 25%), Dyna-Tok maintains overall strong accuracy across benchmarks. While its performance on LongVideoBench is slightly lower than FastV, it still demonstrates robust and stable results. In particular, DynaTok achieves higher scores on MLVU (64.6) and VideoMME-Long (51.6), both of which require long-term temporal understanding, underscoring its effectiveness on extended video content. 
+
+4.4. Ablation Study 
+
+Tab. 3 presents the quantitative results of our ablation study. When both TBA and SBA are disabled, the model performs uniform token compression across frames based solely on attention scores, which serve as a proxy for semantic im-portance but overlook positional bias. Under a moderate compression setting ( R = 25% ), en-abling either TBA or SBA yields noticeable improvements across overall score, validating the individual effectiveness Newly   
+
+> Covered
+> Previously
+> Covered
+> Fully Covered!
+> w/o
+> SBA
+> w/
+> SBA
+> Time flo w
+> Figure 4. Visualization of token selection with and without the proposed Spatial Budget Allocation (SBA). Without SBA, token selection retains only the most semantically important regions at each frame, causing redundant focus on the same areas over time. With SBA (which reduces the influence of previously selected re-dundant regions), DynaTok prioritizes tokens that have not been previously covered, allowing the model to capture more diverse information across frames.
+
+of temporal and spatial guidance in token allocation. In con-trast, under an aggressive compression setting ( R = 9 .7% ), combining both TBA and SBA achieves the best perfor-mance, demonstrating their complementary roles in main-taining performance under extreme token constraints. 
+
+4.5. Qualitative Analysis of Temporal and Spatial Coverage 
+
+Fig. 5 and Fig. 4 provide a qualitative analysis of how the proposed Temporal Budget Allocation (TBA) and Spatial Budget Allocation (SBA) influence token selection over time. These visualizations illustrate how DynaTok adap-tively balances token allocation across frames and regions, achieving both temporal efficiency and spatial diversity. Fig. 5 illustrates the impact of TBA. In the absence of TBA (i.e., with uniform token allocation across frames), each frame receives an equal number of tokens, regardless of its temporal redundancy, resulting in inefficient token utilization. With TBA, DynaTok dynamically adjusts the number of retained tokens according to frame-wise tempo-ral variation— allocating fewer tokens to redundant frames and more to those containing novel or motion-rich content. This adaptive allocation enables the model to concentrate computation on temporally informative regions, resulting in more efficient token utilization and improved capture of temporal dynamics across video sequences. Fig. 4 visualizes the effect of the proposed SBA. Without SBA, token selection is dominated by the most semantically salient regions in each frame, leading to repetitive focus on LGE Internal Use Only 
+
+> w/o
+> TBA
+> w/
+> TBA
+> w/o
+> TBA
+> w/
+> TBA
+> Time flow Figure 5. Visualization of the effect of Temporal Budget Allocation (TBA). Without TBA (frame-wise uniform token compression), an equal number of tokens is assigned to every frame, regardless of temporal redundancy. With TBA, DynaTok can dynamically allocate token budgets across frames — assigning fewer tokens to redundant frames and more tokens to frames containing novel or dynamic content — thereby utilizing the token budget more efficiently and focusing computation on temporally informative regions.
+
+similar spatial areas across time and limited scene cover-age. With SBA, which incorporates a redundancy penalty through spatial memory, previously selected regions are de-prioritized while new and complementary areas are encour-aged. This promotes spatial diversity and allows DynaTok to capture a broader range of visual cues across frames, re-sulting in richer and more comprehensive scene understand-ing. Together, these qualitative observations are consistent with the quantitative results, demonstrating that jointly modeling temporal and spatial redundancy is key to achiev-ing efficient yet informative video token compression. By dynamically allocating tokens across both time and space, DynaTok provides temporally adaptive and bias-aware to-ken selection, ensuring rich spatio-temporal coverage while maintaining strong reasoning performance even under tight token constraints. 
+
+## 5. Conclusion 
+
+We introduced DynaTok, a training-free and model-agnostic token compression framework for Video-LLMs operating under constrained token budgets. Unlike prior methods that rely solely on attention magnitude—often suf-fering from positional bias and being limited to short tem-poral windows—DynaTok employs a two-stage compres-sion strategy: Temporal Budget Allocation and Spatial Bud-get Allocation. By integrating lightweight memory mod-ules that track both global and local token distributions over time, our method achieves temporally adaptive and bias-aware token selection, allocating more tokens to novel and informative regions while reducing redundancy across both space and time. DynaTok consistently outperforms recent training-free baselines across different Video-LLM archi-tectures and benchmarks, including LLaVA-OneVision and LLaVA-Video, demonstrating strong generalization across diverse video understanding tasks. It remains robust even under extreme compression settings (e.g., 9.7% token reten-tion), maintaining high reasoning accuracy without requir-ing any retraining or architectural modification. This high-lights the practical usability of DynaTok as a plug-and-play component in existing Video-LLM pipelines. These results highlight the effectiveness of our approach and its potential for real-time applications under resource constraints. References 
+
+[1] Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. Qwen-vl: A frontier large vision-language model with versatile abilities. arXiv preprint arXiv:2308.12966 , 1(2):3, 2023. 1, 3 [2] Joya Chen, Zhaoyang Lv, Shiwei Wu, Kevin Qinghong Lin, Chenan Song, Difei Gao, Jia-Wei Liu, Ziteng Gao, Dongxing Mao, and Mike Zheng Shou. Videollm-online: Online video large language model for streaming video. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 18407–18418, 2024. 3 [3] Liang Chen, Haozhe Zhao, Tianyu Liu, Shuai Bai, Junyang Lin, Chang Zhou, and Baobao Chang. An image is worth 1/2 tokens after layer 2: Plug-and-play inference acceleration for large vision-language models. In European Conference on Computer Vision , pages 19–35. Springer, 2024. 1, 2, 3, 5, 6, 7[4] Tri Dao. Flashattention-2: Faster attention with bet-ter parallelism and work partitioning. arXiv preprint arXiv:2307.08691 , 2023. 1, 3 [5] Tri Dao, Dan Fu, Stefano Ermon, Atri Rudra, and Christo-pher R´ e. Flashattention: Fast and memory-efficient exact attention with io-awareness. Advances in neural information processing systems , 35:16344–16359, 2022. 1, 3 [6] Xin Ding, Hao Wu, Yifan Yang, Shiqi Jiang, Qianxi Zhang, Donglin Bai, Zhibo Chen, and Ting Cao. Streammind: Un-locking full frame rate streaming video dialogue through event-gated cognition. In Proceedings of the IEEE/CVF In-ternational Conference on Computer Vision , pages 13448– 13459, 2025. 3 [7] Chaoyou Fu, Yuhan Dai, Yongdong Luo, Lei Li, Shuhuai Ren, Renrui Zhang, Zihan Wang, Chenyu Zhou, Yunhang Shen, Mengdan Zhang, et al. Video-mme: The first-ever comprehensive evaluation benchmark of multi-modal llms in video analysis. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 24108–24118, 2025. 1, 5 [8] Jeongseok Hyun, Sukjun Hwang, Su Ho Han, Taeoh Kim, Inwoong Lee, Dongyoon Wee, Joon-Young Lee, Seon Joo Kim, and Minho Shim. Multi-granular spatio-temporal token merging for training-free acceleration of video llms. arXiv preprint arXiv:2507.07990 , 2025. 2, 4 [9] Ahmadreza Jeddi, Negin Baghbanzadeh, Elham Dolatabadi, and Babak Taati. Similarity-aware token pruning: Your vlm but faster. arXiv preprint arXiv:2503.11549 , 2025. 2 [10] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Zi-wei Liu, et al. Llava-onevision: Easy visual task transfer. 
+
+arXiv preprint arXiv:2408.03326 , 2024. 1, 5, 6 [11] KunChang Li, Yinan He, Yi Wang, Yizhuo Li, Wenhai Wang, Ping Luo, Yali Wang, Limin Wang, and Yu Qiao. Videochat: Chat-centric video understanding. arXiv preprint arXiv:2305.06355 , 2023. 3 [12] Kunchang Li, Yali Wang, Yinan He, Yizhuo Li, Yi Wang, Yi Liu, Zun Wang, Jilan Xu, Guo Chen, Ping Luo, et al. Mvbench: A comprehensive multi-modal video understand-ing benchmark. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 22195– 22206, 2024. 1, 5 [13] Wei Li, Bing Hu, Rui Shao, Leyang Shen, and Liqiang Nie. Lion-fs: Fast & slow video-language thinker as online video assistant. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 3240–3251, 2025. 3 [14] Bin Lin, Yang Ye, Bin Zhu, Jiaxi Cui, Munan Ning, Peng Jin, and Li Yuan. Video-llava: Learning united visual repre-sentation by alignment before projection. In Proceedings of the 2024 Conference on Empirical Methods in Natural Lan-guage Processing , pages 5971–5984, 2024. 1 [15] Zikang Liu, Longteng Guo, Yepeng Tang, Tongtian Yue, Junxian Cai, Kai Ma, Qingbin Liu, Xi Chen, and Jing Liu. Vrope: Rotary position embedding for video large language models. arXiv preprint arXiv:2502.11664 , 2025. 2, 4 [16] Muhammad Maaz, Hanoona Rasheed, Salman Khan, and Fahad Khan. Video-chatgpt: Towards detailed video un-derstanding via large vision and language models. In Pro-ceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 12585–12602, 2024. 1, 3 [17] Shuhuai Ren, Linli Yao, Shicheng Li, Xu Sun, and Lu Hou. Timechat: A time-sensitive multimodal large lan-guage model for long video understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition , pages 14313–14323, 2024. 1 [18] Leqi Shen, Guoqiang Gong, Tao He, Yifeng Zhang, Pengzhang Liu, Sicheng Zhao, and Guiguang Ding. Fastvid: Dynamic density pruning for fast video large language mod-els. arXiv preprint arXiv:2503.11187 , 2025. 2, 4 [19] Leqi Shen, Tao He, Guoqiang Gong, Fan Yang, Yifeng Zhang, Pengzhang Liu, Sicheng Zhao, and Guiguang Ding. Llava-mlb: Mitigating and leveraging attention bias for training-free video llms. arXiv preprint arXiv:2503.11205 ,2025. 2, 4 [20] Enxin Song, Wenhao Chai, Guanhong Wang, Yucheng Zhang, Haoyang Zhou, Feiyang Wu, Haozhe Chi, Xun Guo, Tian Ye, Yanting Zhang, et al. Moviechat: From dense token to sparse memory for long video understanding. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 18221–18232, 2024. 1 [21] Keda Tao, Can Qin, Haoxuan You, Yang Sui, and Huan Wang. Dycoke: Dynamic compression of tokens for fast video large language models. In Proceedings of the Com-puter Vision and Pattern Recognition Conference , pages 18992–19001, 2025. 2, 3, 4, 6 [22] Gemini Team, Petko Georgiev, Ving Ian Lei, Ryan Burnell, Libin Bai, Anmol Gulati, Garrett Tanzer, Damien Vincent, Zhufeng Pan, Shibo Wang, et al. Gemini 1.5: Unlocking multimodal understanding across millions of tokens of con-text. arXiv preprint arXiv:2403.05530 , 2024. 1, 3 [23] Xinyu Tian, Shu Zou, Zhaoyuan Yang, and Jing Zhang. Iden-tifying and mitigating position bias of multi-image vision-language models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 10599–10609, 2025. 2, 4 [24] Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024. 1, 3 [25] Yuetian Weng, Mingfei Han, Haoyu He, Xiaojun Chang, and Bohan Zhuang. Longvlm: Efficient long video understand-ing via large language models. In European Conference on Computer Vision , pages 453–470. Springer, 2024. 1 [26] Haoning Wu, Dongxu Li, Bei Chen, and Junnan Li. Longvideobench: A benchmark for long-context interleaved video-language understanding. Advances in Neural Informa-tion Processing Systems , 37:28828–28857, 2024. 1, 5 [27] Hou Xia, Zheren Fu, Fangcan Ling, Jiajun Li, Yi Tu, Zhen-dong Mao, and Yongdong Zhang. Video-levelgauge: Inves-tigating contextual positional bias in large video language models. arXiv preprint arXiv:2508.19650 , 2025. 4 [28] Senqiao Yang, Yukang Chen, Zhuotao Tian, Chengyao Wang, Jingyao Li, Bei Yu, and Jiaya Jia. Visionzip: Longer is better but not necessary in vision language models. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference , pages 19792–19802, 2025. 1, 2, 3, 6, 7 [29] Linli Yao, Yicheng Li, Yuancheng Wei, Lei Li, Shuhuai Ren, Yuanxin Liu, Kun Ouyang, Lean Wang, Shicheng Li, Sida Li, et al. Timechat-online: 80% visual tokens are natu-rally redundant in streaming videos. In Proceedings of the 33rd ACM International Conference on Multimedia , pages 10807–10816, 2025. 2, 3 [30] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF international conference on computer vision , pages 11975–11986, 2023. 5 [31] Boqiang Zhang, Kehan Li, Zesen Cheng, Zhiqiang Hu, Yuqian Yuan, Guanzheng Chen, Sicong Leng, Yuming Jiang, Hang Zhang, Xin Li, et al. Videollama 3: Frontier multi-modal foundation models for image and video understand-ing. arXiv preprint arXiv:2501.13106 , 2025. 1, 2, 3, 5 [32] Hang Zhang, Xin Li, and Lidong Bing. Video-llama: An instruction-tuned audio-visual language model for video un-derstanding. arXiv preprint arXiv:2306.02858 , 2023. 1, 3 [33] Kaichen Zhang, Bo Li, Peiyuan Zhang, Fanyi Pu, Joshua Adrian Cahyono, Kairui Hu, Shuai Liu, Yuanhan Zhang, Jingkang Yang, Chunyuan Li, et al. Lmms-eval: Re-ality check on the evaluation of large multimodal models. In 
+
+Findings of the Association for Computational Linguistics: NAACL 2025 , pages 881–916, 2025. 6 [34] Yuan Zhang, Chun-Kai Fan, Junpeng Ma, Wenzhao Zheng, Tao Huang, Kuan Cheng, Denis Gudovskiy, Tomoyuki Okuno, Yohei Nakata, Kurt Keutzer, et al. Sparsevlm: Vi-sual token sparsification for efficient vision-language model inference. arXiv preprint arXiv:2410.04417 , 2024. 3 [35] Yuanhan Zhang, Jinming Wu, Wei Li, Bo Li, Zejun Ma, Zi-wei Liu, and Chunyuan Li. Video instruction tuning with synthetic data. arXiv preprint arXiv:2410.02713 , 2024. 6, 7 [36] Junjie Zhou, Yan Shu, Bo Zhao, Boya Wu, Shitao Xiao, Xi Yang, Yongping Xiong, Bo Zhang, Tiejun Huang, and Zheng Liu. Mlvu: A comprehensive benchmark for multi-task long video understanding. arXiv e-prints , pages arXiv– 2406, 2024. 1, 5 [37] Xin Zou, Di Lu, Yizhou Wang, Yibo Yan, Yuanhuiyi Lyu, Xu Zheng, Linfeng Zhang, and Xuming Hu. Don’t just chase” highlighted tokens” in mllms: Revisiting visual holistic con-text retention. arXiv preprint arXiv:2510.02912 , 2025. 2, 4, 5DynaTok: Temporally Adaptive and Positional Bias-Aware Token Compression for Video-LLMs 
+
+# Supplementary Material 
+
+This supplementary document provides additional anal-ysis and results supporting our main submission. Unless otherwise stated, all experiments are conducted on LLaVA-OneVision 7B. 
+
+## S.6. Hyperparameters 
+
+Table S4 summarizes the hyperparameters used for integrat-ing DynaTok into Video-LLM architecture. The EMA de-cay factor α controls the temporal smoothing in the memory update, while β regulates the spatial redundancy penalty in the spatial budget allocation module. Parameter Value 
+
+α 0.9 
+
+β 0.1 Patch size k 14 tokens Input frames 32 Hardware 1×H100 80GB      
+
+> Table S4. Hyperparameters used for DynaTok integration in Video-LLM. The parameters αand βcorrespond to the tempo-ral EMA decay and spatial redundancy penalty, respectively.
+
+## S.7. TBA Sensitivity to EMA Decay 
+
+We sweep α ∈ { 0.70 , 0.90 , 0.95 } across four Video-LLM benchmarks at a 25% token retention ratio, as shown in Ta-ble S5. 
+
+α MVBench LVB MLVU VideoMME 0.70 57.4 57.0 62.2 58.1 0.90 56.7 55.7 62.1 57.3 0.95 57.2 57.0 62.0 58.0   
+
+> Table S5. TBA sensitivity to EMA decay αat 25% retention.
+
+Lower α values preserve longer-term temporal history, whereas larger α values place more emphasis on short-term frame differences. Across all benchmarks, performance varies within 1.3%, indicating that DynaTok does not re-quire fine-grained tuning of α and remains robust over a wide temporal smoothing range. 
+
+## S.8. Latency and TTFT Efficiency 
+
+We report end-to-end latency changes (including prefill and TTFT) as a function of the retention ratio. At 100% reten-tion, the average latency is 1.94 s on our hardware. Table S6 shows the absolute reduction in milliseconds when applying DynaTok at lower retention ratios, measured relative to this 100% baseline. Retention Latency Savings (ms) ↑
+
+25% 110 10% 360  
+
+> Table S6. End-to-end latency reduction relative to the 100% re-tention baseline (1.94 s). Reported values indicate the absolute amount of latency saved.
+
+## S.9. Visualizing Positional Bias Mitigation 
+
+To validate that DynaTok mitigates the positional bias in-herent in the vision encoder of Video-LLMs, we measure how often the model selects a known bias position across a 32-frame sequence. As shown in Fig. S6 (left), the baseline model (w/o TBA, SBA) repeatedly selects the biased spa-tial location, causing the cumulative selection curve to rise almost linearly. In contrast, Fig. S6 (left) also shows that DynaTok sub-stantially suppresses selections at the biased position. By adaptively redistributing the token budget across both time and space, DynaTok de-emphasizes tokens from biased regions and allocates more capacity to informative, non-biased areas. This results in a noticeably flatter cumulative curve. Fig. S6 (right) presents the activation map used to iden-tify the positional bias region. The highlighted area corre-sponds to a consistently high-activation hotspot, matching the positional bias pattern observed previously in Fig. 3 of the main paper. Overall, Fig. S6 demonstrates that DynaTok effectively reduces positional bias over time. Both temporal budget allocation and redundancy-aware spatial budget allocation jointly prevent repeated selection of biased regions, even under the same global token budget. 
+
+## S.10. Full 32-Frame Visualizations 
+
+For clarity, we provide the full 32-frame token compres-sion visualizations corresponding to the qualitative exam-ples shown in Fig. 5 of the main paper. Due to space con-straints, only a subset of frames was shown in the main manuscript. The complete sequences are provided here in Figs. S7 and S8. LGE Internal Use Only 
+
+Bias  Position 
+
+Activation Map 
+
+> 0.0
+> 1.0
+
+Bias Position Selection over Time (Cumulative View) 
+
+> Token Selections
+
+Figure S6. Positional bias analysis on LLaVA-OneVision. (Left) Cumulative token-selection curves at the known bias position across 32 frames. Without TBA/SBA (red), the model repeatedly selects the biased location, resulting in a steadily increasing selection count. With DynaTok (blue), the number of selections at the same position grows much more slowly, indicating reduced reliance on the biased region over time. (Right) Example activation map with the high-bias region highlighted (red box), consistent with the positional bias observed in Fig. 3 of the main paper. LGE Internal Use Only (a) Original Frames 
+
+(b) Token Budget Allocation 
+
+(c) Spatial Budget Allocation Figure S7. Full 32-frame token compression visualization corresponding to the example in Fig. 5. LGE Internal Use Only (a) Original Frames 
+
+(b) Token Budget Allocation 
+
+(c) Spatial Budget Allocation Figure S8. Full 32-frame token compression visualization corresponding to the example in Fig. 5.

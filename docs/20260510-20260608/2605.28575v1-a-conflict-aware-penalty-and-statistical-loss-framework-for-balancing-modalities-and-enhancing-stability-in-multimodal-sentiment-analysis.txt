@@ -1,0 +1,383 @@
+Title: A Conflict-Aware Penalty and Statistical Loss Framework for Balancing Modalities and Enhancing Stability in Multimodal Sentiment Analysis
+
+URL Source: https://arxiv.org/pdf/2605.28575v1
+
+Published Time: Thu, 28 May 2026 01:25:31 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+# A Conflict-Aware Penalty and Statistical Loss Framework for Balancing Modalities and Enhancing Stability in Multimodal Sentiment Analysis 
+
+## Jianheng Dai 1, Jiazhang Liang 1, Sijie Mai 1,∗∗ 
+
+1 School of Computer Science, South China Normal University, Guangzhou, Guangdong, China 
+
+20232131081@m.scnu.edu.cn, 20232132016@m.scnu.edu.cn, sijiemai@m.scnu.edu.cn 
+
+## Abstract 
+
+Multimodal Sentiment Analysis (MSA) fuses text, acoustic, and visual streams to infer sentiment. Because pre-trained text en-coders are far more expressive than their acoustic and visual counterparts, the text modality tends to dominate optimization, suppressing weaker modalities and inducing gradient norm con-flicts that destabilize training. To address this, we propose a Conflict-aware Penalty (CP) that detects and penalizes gradi-ent norm conflicts at each training step, and a Statistical Loss (SL) that aligns predicted distribution statistics with empiri-cal input statistics. Crucially, CP prevents dominant modal-ity gradients from interfering with the SL objective, enabling synergistic training within a unified framework incorporating adaptive modality encoding, gated cross-modal fusion, and uni-modal auxiliary heads. Experiments on CMU-MOSI demon-strate state-of-the-art performance, with ablation studies con-firming the effectiveness of each component. 
+
+Index Terms : Multimodal Sentiment Analysis, Modality Im-balance, Gradient Norm Conflict, Conflict-aware Penalty, Sta-tistical Loss, Gradient Modulation, Cross-modal Fusion 
+
+## 1. Introduction 
+
+Multimodal Sentiment Analysis (MSA) aims to infer hu-man sentiment by jointly modeling text, acoustic, and visual streams [1, 2]. Pre-trained language models such as BERT [3] and DeBERTa [4] have dramatically raised the ceiling for text-based understanding, and a wave of fusion architectures— ranging from tensor-based methods [5, 6] and cross-modal transformers [7] to contrastive and generative approaches [8, 9]—have exploited these backbones to push benchmark scores on CMU-MOSI and CMU-MOSEI to new heights. Despite this progress, two fundamental challenges continue to limit the reli-ability and generalisability of MSA models. 
+
+Challenge 1: Modality imbalance. Because pre-trained text encoders are far more expressive than their acoustic and visual counterparts, the text modality tends to dominate the op-timisation process and suppress the gradient signal of weaker encoders, a phenomenon termed modality laziness [10]. This imbalance has been observed broadly in multimodal learning: dominant modalities converge faster and subsequently crowd out others, preventing the model from exploiting complemen-tary cross-modal information [11, 12]. On-the-Fly Gradient Modulation (OGM) [12, 13] mitigates this by scaling each modality’s gradient according to its relative training error. How-ever, OGM operates on performance ratios alone and cannot de-tect a subtler failure mode: a modality whose prediction error is already lower than its peers may still impose a disproportion-
+
+> **
+
+indicates the corresponding author. 
+
+ately large gradient norm on the shared parameters, continuing to suppress weaker modalities even after OGM has intervened. We call this a gradient norm conflict , and argue that resolv-ing it requires explicit monitoring and penalisation of gradient magnitudes—something no prior method addresses directly. 
+
+Challenge 2: Instability of distributional regularisation. 
+
+Aligning the predicted latent statistics with the empirical input statistics (mean and variance) provides a useful inductive bias that encourages encoders to preserve the distributional structure of raw features, analogous in spirit to moment-matching objec-tives in domain adaptation [14] and variational inference [15]. In MSA, such a Statistical Loss (SL) can act as a strong regu-lariser, as our ablation confirms (row B3 in Table 2). However, when combined with gradient modulation, the dominant modal-ity’s gradient pressure interferes with the moment-matching ob-jective, driving the optimisation into an unstable regime and causing a dramatic performance collapse (rows A5 and C4). This coupling between gradient modulation and distributional regularisation has not previously been identified or addressed in the MSA literature. 
+
+Proposed solution. We introduce a Conflict-aware Penalty (CP) that detects gradient norm conflicts at each train-ing step and applies a multiplicative penalty to the offending modality’s gradient coefficient. CP is lightweight, architecture-agnostic, and operates within a scheduled epoch window to stabilise early training while permitting unconstrained conver-gence later. Crucially, CP resolves both challenges simultane-ously: it directly suppresses gradient norm conflicts (Challenge 1) and, by keeping gradient pressure balanced, prevents the dominant modality from destabilising the SL objective (Chal-lenge 2). We build CP into a unified multimodal framework that also incorporates Adaptive Modality Encoding (AME) with reparameterisation [15], gated cross-modal fusion [16], uni-modal auxiliary heads [17], and reconstruction regularisation. The resulting model achieves 89.31% Acc-2 and 0.638 MAE 
+
+on CMU-MOSI, outperforming the previous state of the art, ITHP [18], by a clear margin, while also attaining the highest Pearson correlation on CMU-MOSEI. 
+
+Contributions. 
+
+• We identify and formalise the gradient norm conflict prob-lem in multimodal optimisation and introduce a Conflict-aware Penalty (CP) to resolve it. • We show that Statistical Loss (SL) is a powerful regulariser for MSA but collapses without CP; together, CP+SL yield stable, mutually reinforcing training dynamics. • We integrate CP and SL into a unified MSA framework that achieves state-of-the-art results on CMU-MOSI and competi-tive results on CMU-MOSEI. Code and hyperparameter con-figurations will be released upon publication. 
+
+> arXiv:2605.28575v1 [cs.AI] 27 May 2026
+
+## 2. Method 
+
+We design a multimodal fusion model (Fig. 1) that processes text, acoustic, and visual inputs through the following pipeline: (i) adaptive modality encoding with reparameterization, (ii) gated cross-modal fusion with residual injection into the text backbone, (iii) final prediction via a task head, and (iv) auxiliary supervision via reconstruction and unimodal heads. Our two core contributions— Conflict-aware Penalty (CP) and Statisti-cal Loss (SL) —are inserted into steps (i) and (iv) respectively to balance modality optimization and regularize feature distribu-tions. Given token-level text features T ∈ RB×L×dt , acoustic features A ∈ RB×L×da , and visual features V ∈ RB×L×dv ,the model produces fused representations for downstream pre-diction. Step 1: Adaptive Modality Encoding (AME). We encode each non-text modality m ∈ { a, v } into a mean and variance, and sample latent features using the reparameterization trick: 
+
+μm = f (μ) 
+
+> m
+
+(Xm),
+
+σ2 
+
+> m
+
+= f (σ2) 
+
+> m
+
+(Xm),
+
+Zm = μm + ϵ ⊙ pσ2 
+
+> m
+
++ ε, (1) where Xa = A, Xv = V, and ϵ ∼ N (0, I).Step 2: Gated Cross-Modal Fusion and Residual Injection. The sampled features Za and Zv are fused by a configurable fu-sion block (e.g., gated) to obtain Fav ∈ RB×L×df . We project 
+
+Fav to the text hidden size and inject it through a residual shift: 
+
+Pav = tanh( WpFav ),
+
+H = T + β · Pav , (2) where β controls the contribution of the multimodal signal. The fused sequence H is subsequently normalized, pooled, and fed to the task head for final prediction. Step 3: Auxiliary Supervision and Statistical Loss (SL). To prevent unimodal information loss, we reconstruct the original acoustic and visual inputs from the sampled latents ( ˆA, ˆV) and compute unimodal auxiliary predictions. The reconstruction loss Lrecon penalizes reconstruction errors of ˆA and ˆV, and the unimodal loss Luni is computed from unimodal heads. The Statistical Loss (SL) regularizes the encoder outputs by aligning their predicted distribution statistics with the em-pirical input statistics. Let ˆμm, ˆσ2 
+
+> m
+
+denote the empirical mean and variance of input modality m ∈ { a, v } computed along the feature dimension, and ˜μm, ˜σ2 
+
+> m
+
+the corresponding statistics averaged from the encoder outputs μm, σ2
+
+> m
+
+:
+
+Lstat = 14
+
+ MSE(˜ μa, ˆμa) + MSE(˜ σ2
+
+> a
+
+, ˆσ2
+
+> a
+
+)+ MSE(˜ μv , ˆμv ) + MSE(˜ σ2 
+
+> v
+
+, ˆσ2 
+
+> v
+
+), (3) where MSE( X, Y ) = 1 
+
+> BL
+
+∥X − Y ∥22. The feature diversity loss Ldiv encourages maximizing information entropy to avoid redundant representations. The overall objective is: 
+
+L = Ltask + λrecon Lrecon + λuni Luni 
+
++ λdiv Ldiv + λstat Lstat , (4) where Lrecon = 12
+
+ ∥A − ˆA∥22 + ∥V − ˆV∥22
+
+ and Luni aggre-gates the sentiment regression losses from the unimodal heads of each modality. Step 4: Gradient Modulation with Conflict-aware Penalty (CP). During training, we balance modality learning via performance-driven gradient modulation. We compute uni-modal errors (MAE) and define inverse-error scores; the better-performing modality receives a smaller gradient scale: 
+
+sa = 1MAE a + ε , sv = 1MAE v + ε ,ca =
+
+(
+
+1 − tanh 
+
+
+
+α ReLU 
+
+ sa 
+
+> sv+ε
+
+ 
+
+, sa > s v ,
+
+1, otherwise , (5) and cv is defined symmetrically. To mitigate cases where a modality is already superior but still imposes a dispro-portionately large gradient norm on shared parameters, the 
+
+Conflict-aware Penalty (CP) applies an additional multiplica-tive penalty when this condition is detected: 
+
+conflict =  MAE a < MAE v
+
+ ∧  ga > g v
+
+,ca ← ca · η if conflict , (6) where ga and gv denote the average gradient norms over the corresponding modality encoders, and η ∈ (0 , 1) is a fixed penalty factor. Crucially, CP keeps gradient pressure balanced across modalities, which also prevents the dominant modality from destabilizing the Lstat objective—as confirmed by the col-lapse observed when SL is used without CP (rows A5 and C4 in Table 2). In practice, modulation is applied only within a scheduled epoch range to stabilize early training while allowing unconstrained convergence later. 
+
+## 3. Experiments 
+
+3.1. Settings 
+
+We evaluate on CMU-MOSI [1] and CMU-MOSEI [2]. CMU-MOSI comprises 2,199 opinion video clips annotated with sen-timent intensity on a continuous [−3, 3] scale, covering aligned text, acoustic, and visual streams. CMU-MOSEI is a larger benchmark of 23,500 sentence-level utterances from over 1,000 YouTube speakers across 250 topics, annotated with the same sentiment scale. We follow the standard train/validation/test splits and report Acc-2, F1, MAE, and Pearson correlation as in prior work.The text encoder is DeBERTa-v3-base; acoustic and visual streams are aligned to subword tokens, truncated/padded to length 50, and min–max normalized per mini-batch. We train for 30 epochs with AdamW (lr = 1 × 10 −5, warmup ra-tio 0.1) and a training batch size of 8 on 4 × NVIDIA GeForce RTX 3090 GPUs. The intermediate and fusion dimensions are 256 and 512, with dropout 0.3 (encoders) and 0.5 (classifier). Loss weights are λrecon =1 .0, λuni =0 .5, λdiv =0 .1, λstat =0 .1, and residual weight β=1 .0. Gradient modulation is applied during epochs 0–25 with α=1 .0 and conflict penalty factor η=0 .5.
+
+3.2. Results 
+
+Table 1 presents the comparison between our method and rep-resentative baselines on CMU-MOSI and CMU-MOSEI. On CMU-MOSI, our model achieves the best results across all four metrics, reaching 89.31% binary accuracy, 89.23 F1, 0.638 MAE, and 0.864 Pearson correlation, outperforming the previ-ous best ITHP by a clear margin. On CMU-MOSEI, our model attains the highest Pearson correlation (0.820) and second-best binary accuracy (87.32%), trailing UniMSE on Acc-2 and F1 while surpassing it on Corr. The consistent improvements on MOSI demonstrate that our adaptive modality encoding and gradient modulation effectively capture complementary cross-modal signals, while the MOSEI results indicate that the pro-posed framework generalizes well to larger and more diverse Video( V)Audio( A)Encoder 
+
+μ
+
+σ
+
+ε~N(0,1) 
+
+μ
+
+σ
+
+ε~N(0,1) 
+
+... 
+
+... 
+
+Gate 
+
+Fusion 
+
+ⓧ
+
+“Great!” 
+
+Text( T)PAV⊕β· PAVH
+
+g
+
+gEncoder 
+
+c
+
+cAV
+
+Reconstruction 
+
+Head 
+
+Unimodal 
+
+Prediction Head 
+
+Â
+
+V̂ Lrecon Luni Lstat Ldiv 
+
+Task Head Ltask Lrecon  Luni  Lstat  Ldiv ZAZVFAVProjection 
+
++Tanh Conf ict-
+
+> Aware
+> Penalty
+
+MAE 
+
+MAE AVAV
+
+T
+
+Variational  Encoder AV Sampled Latents 
+
+LayerNorm 
+
+Pooling 
+
+Gradient 
+
+Modulation Figure 1: Overview of the Multimodal Fusion Method with Gradient Modulation and Conflict-Aware Penalty 
+
+Table 1: Comparison on CMU-MOSI and CMU-MOSEI. Best and 2nd best results are highlighted. 
+
+CMU-MOSI 
+
+Method Acc-2 ↑ F1 ↑ MAE ↓ Corr ↑
+
+Self-MM b [19] 84.0 84.4 0.713 0.798 MMIM b [20] 84.1 84.0 0.700 0.800 MAG b [21] 84.2 84.1 0.712 0.796 Self-MM d [19] 55.1 53.5 1.440 0.158 MMIM d [20] 85.8 85.9 0.649 0.829 MAG d [21] 86.1 86.0 0.690 0.831 UniMSE [22] 85.9 85.8 0.691 0.809 MIB [23] 85.3 85.3 0.711 0.798 BBFN [24] 84.3 84.3 0.776 0.755 ITHP [18] 88.7 88.6 0.643 0.852 
+
+Ours 89.31 89.23 0.638 0.864 
+
+CMU-MOSEI 
+
+Method Acc-2 ↑ F1 ↑ MAE ↓ Corr ↑
+
+Self-MM b [19] 85.0 85.0 0.529 0.767 MMIM b [20] 86.0 86.0 0.526 0.772 MAG b [21] 84.8 84.7 0.543 0.755 Self-MM d [19] 65.3 65.4 0.813 0.208 MMIM d [20] 85.2 85.4 0.568 0.799 MAG d [21] 85.8 85.9 0.636 0.800 ITHP [18] 87.30 87.40 0.564 0.813 
+
+Ours 87.32 87.22 0.552 0.820 0 5 10 15 20 25 30                               
+
+> Epoch
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> Loss
+> (a) Total Loss
+> Training
+> Validation
+> 0510 15 20 25 30
+> Epoch
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Loss
+> (b) Main Loss (Regression MSE)
+> 0510 15 20 25 30
+> Epoch
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> Loss
+> (c) Reconstruction Loss
+> 0510 15 20 25 30
+> Epoch
+> 2.275
+> 2.300
+> 2.325
+> 2.350
+> 2.375
+> 2.400
+> 2.425
+> 2.450
+> Loss
+> (d) Unimodal Auxiliary Loss
+> 0510 15 20 25 30
+> Epoch
+> 1840
+> 1845
+> 1850
+> 1855
+> 1860
+> 1865
+> Loss
+> (e) Feature Diversity Loss
+> 0510 15 20 25 30
+> Epoch
+> 0.30
+> 0.31
+> 0.32
+> 0.33
+> 0.34
+> Loss
+> (f) Statistical Fitting Loss
+> Training Loss Analysis - Modality Balance
+
+Figure 2: Training loss trajectories across primary and auxil-iary objectives on the CMU-MOSI dataset. 
+
+speaker conditions. Overall, the results confirm that our method is competitive with or superior to recent state-of-the-art ap-proaches across both benchmarks. 0 5 10 15 20 25 30       
+
+> Epoch
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Modulation Coefficient
+> (a) Gradient Modulation Coefficients
+> Audio Modality
+> Visual Modality
+> Baseline (No Modulation)
+> 0510 15 20 25 30
+> Epoch
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> Coefficient Difference |Audio - Visual|  (b) Modality Imbalance Degree
+> Perfect Balance
+
+Gradient Modulation Analysis - Modality Balance 
+
+Figure 3: Dynamics of gradient modulation coefficients and the resulting modality imbalance degree. 
+
+3.3. Ablation study 
+
+We conduct an ablation study on CMU-MOSI to evaluate the contributions of each component, as shown in Table 2. 
+
+Group A shows incremental improvements. Adding Adaptive Modality Encoding (AME) improves Acc-2 and F1 (A0 →A1). Gradient Modulation (GM) further enhances MAE and Corr (A2), and Gradient Enhancement (GE) improves Acc-2, F1, and MAE (A3), with a marginal decrease in Corr, in-dicating GE primarily benefits classification-oriented metrics. Including CP improves Acc-2, F1, and MAE (A4), with a trade-Table 2: Ablation study results on CMU-MOSI. Best and 2nd best per column are highlighted.                                                                                               
+
+> ID Configuration Acc-2 ↑F1 ↑MAE ↓Corr ↑
+> A0 Baseline 85.34 85.38 0.6773 82.95 A1 +AME 86.87 86.84 0.6771 83.14 A2 +AME+GM 86.41 86.39 0.6653 85.38 A3 +AME+GM+GE 87.48 87.48 0.6613 85.11 A4 +AME+GM+GE+CP 87.63 87.64 0.6560 84.78 A5 +AME+GM+GE+SL 79.24 79.32 1.1268 72.92 A6 Full Model (Ours) 89.31 89.23 0.6379 86.44 B1 AME Only 86.87 86.84 0.6771 83.14 B2 GM Only 87.18 87.11 0.6690 83.79 B3 SL Only 88.09 88.07 0.6599 85.23 B4 GM+GE 88.24 88.22 0.6938 83.29 B5 GM+CP 86.87 86.83 0.6808 84.11 C1 GM+GE+CP 83.05 83.11 0.8646 75.23 C2 AME+SL 84.89 84.96 0.7362 81.04 C3 AME+GM 86.41 86.39 0.6653 85.38 C4 Full −CP 79.24 79.32 1.1268 72.92 C5 Full −GE 87.48 87.37 0.6478 85.38
+
+off in Corr at this intermediate stage, but Statistical Loss (SL) without CP causes a collapse (A5), as the dominant modality’s gradient pressure interferes with distributional regularization. The full model (A6) achieves the best results, demonstrating the need for both CP and SL. 
+
+Group B tests each module alone. SL alone (B3) gives strong results, particularly for MAE and Corr. GM+GE (B4) provides the best Acc-2 and F1, while GM+CP (B5) improves Corr, highlighting the complementary roles of GE and CP. No-tably, SL alone (B3) performs well precisely because no gradi-ent modulation is active to destabilize it; collapse occurs only when GM is present without CP (A5, C4). 
+
+Group C explores critical combinations. Removing CP (C4) causes performance collapse, as seen in A5. Removing GE (C5) leads to minimal degradation, indicating GE’s incremen-tal benefit. Critically, GM+GE+CP without AME (C1) severely underperforms (MAE: 0.8646), despite B5 (GM+CP, no AME) achieving MAE: 0.6808. This reveals that GE amplifies gra-dient signals indiscriminately without AME’s stable latent rep-resentations; AME is thus a prerequisite for GE to contribute constructively rather than amplify noise. Overall, the full model benefits from synergistic interaction: AME stabilizes features, GM optimizes modalities, and SL+CP stabilize and regularize the training. 
+
+3.4. Analysis of Training Dynamics 
+
+Fig.2 shows the loss trajectories over 30 epochs on the MOSI dataset. The Total Loss (a) and Main Regression Loss (b) con-verge quickly, followed by a stable plateau, indicating stable optimization. The Reconstruction Loss (c) and Statistical Fit-ting Loss (f) decline smoothly, demonstrating that SL aligns distribution statistics without instability. The Feature Diversity Loss (e) increases, indicating the model maximizes informa-tion entropy to avoid redundant representations. The alignment between training and validation loss suggests that CP and SL effectively regularize against overfitting. 
+
+3.5. Gradient Modulation and Modality Balance 
+
+Fig.3 shows the behavior of the Conflict-aware Penalty (CP) and gradient modulation during training. In plot (a), the modu-lation coefficients for audio and visual modalities stay below the baseline ( 1.0), indicating active gradient suppression to balance their influence. The visual modality receives a lower coefficient (around 0.45 -0.55 ) compared to the audio modality (around 
+
+0.7-0.8), suggesting that the CP successfully mitigated the vi-sual modality’s excessive gradient pressure. In plot (b), the Modality Imbalance Degree oscillates between 0.15 and 0.25 ,reflecting the dynamic, real-time adjustments that prevent any modality from dominating the optimization process, ensuring a balanced multimodal inference for sentiment prediction. 
+
+## 4. Conclusion 
+
+In this paper, we address modality imbalance and optimiza-tion instability in MSA by introducing a Conflict-aware Penalty (CP) and Statistical Loss (SL). CP mitigates gradient norm conflicts to balance modality optimization, while SL regular-izes training by aligning distribution statistics. Experiments on CMU-MOSI demonstrate state-of-the-art performance across all metrics. On the more diverse CMU-MOSEI, the proposed framework achieves the highest Pearson correlation, with re-maining metrics competitive with the current best. 
+
+## 5. Generative AI Use Disclosure 
+
+In the preparation of this manuscript, the authors used gener-ative AI tools (e.g., large language models) solely for the pur-pose of refining the language and improving the fluency of cer-tain sentences. All research ideas, experimental designs, pro-posed methods, data analysis, and conclusions were indepen-dently conceived and completed by the authors. Generative AI tools were not used to produce any substantive content of this paper. 
+
+## 6. References              
+
+> [1] A. Zadeh, R. Zellers, E. Pincus, and L.-P. Morency, “MOSI: Mul-timodal corpus of sentiment intensity and subjectivity analysis in online opinion videos,” arXiv preprint arXiv:1606.06259 , 2016, arXiv:1606.06259. [2] A. B. Zadeh, P. P. Liang, S. Poria, E. Cambria, and L.-P. Morency, “Multimodal language analysis in the wild: CMU-MOSEI dataset and interpretable dynamic fusion graph,” in Proceedings of the 56th Annual Meeting of the Association for Computational Lin-guistics (Volume 1: Long Papers) .Association for Computa-tional Linguistics, 2018, pp. 2236–2246. [3] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “BERT: Pre-training of deep bidirectional transformers for language under-standing,” in Proceedings of NAACL-HLT , 2019, pp. 4171–4186. [4] P. He, X. Liu, J. Gao, and W. Chen, “DeBERTa: Decoding-enhanced BERT with disentangled attention,” in International Conference on Learning Representations (ICLR) , 2021. [5] A. Zadeh, M. Chen, S. Poria, E. Cambria, and L.-P. Morency, “Tensor fusion network for multimodal sentiment analysis,” in
+> Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing .Association for Computational Linguistics, 2017, pp. 1103–1114, arXiv:1707.07250. [6] Z. Liu, Y. Shen, V. B. Lakshminarasimhan, P. P. Liang, A. Zadeh, and L.-P. Morency, “Efficient low-rank multimodal fusion with
+
+modality-specific factors,” in Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Vol-ume 1: Long Papers) . Association for Computational Linguis-tics, 2018, pp. 2247–2256, arXiv:1806.00064. [7] Y.-H. H. Tsai, S. Bai, P. P. Liang, J. Z. Kolter, L.-P. Morency, and R. Salakhutdinov, “Multimodal transformer for unaligned multi-modal language sequences,” in Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics . As-sociation for Computational Linguistics, 2019, pp. 6558–6569, arXiv:1906.00295. [8] J. Yang, Y. Yu, D. Niu, W. Guo, and Y. Xu, “Contrastive feature decomposition for multimodal sentiment analysis,” in Proceed-ings of the 61st Annual Meeting of the Association for Compu-tational Linguistics (Volume 1: Long Papers) . Association for Computational Linguistics, 2023, pp. 7617–7630. [9] Z. Wu, Q. Zhang, D. Miao, K. Yi, W. Fan, and L. Hu, “A hybrid distributed cgan for audio-visual privacy preservation in multi-modal sentiment analysis,” in Proceedings of the Thirty-Third In-ternational Joint Conference on Artificial Intelligence , 2024, pp. 6550–6558, arXiv:2404.11938. [10] Y. Huang, J. Lin, C. Zhou, H. Yang, and L. Huang, “Modality competition: What makes joint training of multi-modal network fail in deep learning ? (Provably),” in Proceedings of the 39th In-ternational Conference on Machine Learning , ser. Proceedings of Machine Learning Research, vol. 162. PMLR, 2022, pp. 9226– 9259. [11] W. Wang, D. Tran, and M. Feiszli, “What makes training multi-modal classification networks hard ?” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) , 2020, pp. 12 695–12 705. [12] X. Peng, Y. Wei, A. Deng, D. Wang, and D. Hu, “Balanced mul-timodal learning via on-the-fly gradient modulation,” in Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition , 2022, pp. 8228–8237. [13] Y. Wei, D. Hu, H. Du, and J.-R. Wen, “On-the-fly modulation for balanced multimodal learning,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024, arXiv:2410.11582. [14] B. Sun and K. Saenko, “Deep CORAL: Correlation alignment for deep domain adaptation,” in European Conference on Computer Vision Workshops (ECCVW) , 2016, pp. 443–450. [15] D. P. Kingma and M. Welling, “Auto-encoding variational Bayes,” in International Conference on Learning Representations (ICLR) ,2014. [16] J. Arevalo, T. Solorio, M. Montes-y G´ omez, and F. A. Gonz´ alez, “Gated multimodal units for information fusion,” in International Conference on Learning Representations Workshop (ICLR-W) ,2017. [17] W. Yu, H. Xu, Z. Yuan, and J. Wu, “Learning modality-specific representations with self-supervised multi-task learning for multi-modal sentiment analysis,” in Proceedings of the 35th AAAI Con-ference on Artificial Intelligence . AAAI Press, 2021, pp. 10 790– 10 797. [18] X. Xiao, G. Liu, G. Gupta, D. Cao, S. Li, Y. Li, T. Fang, M. Cheng, and P. Bogdan, “Neuro-inspired information-theoretic hierarchical perception for multimodal learning,” 2024. [Online]. Available: https://arxiv.org/abs/2404.09403 [19] W. Yu, H. Xu, Z. Yuan, and J. Wu, “Learning modality-specific representations with self-supervised multi-task learning for mul-timodal sentiment analysis,” in Proceedings of the AAAI Confer-ence on Artificial Intelligence , 2021. [20] W. Han, H. Chen, and S. Poria, “Improving multimodal fusion with hierarchical mutual information maximization for multi-modal sentiment analysis,” in Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing , 2021, pp. 9180–9192. [21] W. Rahman, M. K. Hasan, S. Lee, A. Zadeh, C. Mao, L.-P. Morency, and E. Hoque, “Integrating multimodal information in large pretrained transformers,” in Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics , 2020, pp. 2359–2369. [22] G. Hu, T.-E. Lin, Y. Zhao, G. Lu, Y. Wu, and Y. Li, “UniMSE: To-wards unified multimodal sentiment analysis and emotion recog-nition,” in Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing . Association for Com-putational Linguistics, 2022, pp. 7837–7851, arXiv:2211.11256. [23] S. Mai, H. Hu, and S. Xing, “Multimodal information bottleneck: Learning minimal sufficient unimodal and multimodal represen-tations,” IEEE Transactions on Multimedia , 2022. [24] W. Han, H. Chen, A. Gelbukh, A. Zadeh, L.-P. Morency, and S. Poria, “Bi-bimodal modality fusion for correlation-controlled multimodal sentiment analysis,” in Proceedings of the 2021 Inter-national Conference on Multimodal Interaction , 2021, pp. 6–15.

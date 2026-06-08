@@ -1,0 +1,426 @@
+Title: Multimodal Hidden Markov Models for Persistent Emotional State Tracking
+
+URL Source: https://arxiv.org/pdf/2605.12838v1
+
+Published Time: Thu, 14 May 2026 00:24:58 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+Anamika Ragu 1 Aneesh Jonelagadda 1
+
+## Abstract 
+
+Tracking an interpretable emotional arc of a con-versation via the sentiment of individual utter-ances processed as a whole is central to both un-derstanding and guiding communication in ap-plied, especially clinical, conversational contexts. Existing approaches to emotion recognition oper-ate at the utterance level, obscuring the persistent phases that characterize real conversational dy-namics. We propose a lightweight framework that models conversational emotion as a sequence of latent emotional regimes using sticky factorial HDP-HMMs over multimodal valence-arousal representations derived from simultaneous video, audio and textual input. We evaluate the quality of regime prediction using LLM-as-a-Judge, geo-metric, and temporal consistency metrics, demon-strating that the sticky HDP-HMM produces more interpretable regime sequences than the baseline Gaussian HMM at a fraction of the computational cost of LLM-based dialogue state tracking meth-ods. In addition, Question-Answer experiments in a clinical dataset suggest that meaningful emo-tional phases can reliably be recovered from mul-timodal valence-arousal trajectories and used to improve the quality of LLM responses in unsta-ble affective regimes via context augmentation. This framework thus opens a path toward inter-pretable, lightweight, and actionable analysis of conversational emotion dynamics at scale. 
+
+## 1. Introduction 
+
+In conversational settings, being able to address a speaker’s emotional needs in a timely and nuanced manner is strongly linked to effective communication; in clinical contexts, this is further associated with improved care outcomes and ther-apeutic alliance. As such, research interest in dialogue state tracking and emotion recognition within conversational ap-plications has grown substantially over the past decade,    
+
+> 1Kaliber AI, San Mateo, California, USA. Correspondence to: Aneesh Jonelagadda <a.jonelagadda@kaliber.ai>.
+> Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s).
+
+especially in the clinical context (Poria et al., 2019b). Real-istically, clinicians are responding more to evolving patterns of distress, reassurance, and engagement over the course of an interaction, rather than single utterances. Thus, when emotion is computationally inferred at the level of short utterances, producing sequences of labels that lack an ex-plicit notion of persistence (as is the prevailing convention), the temporal-structural property of real conversations is obscured (Lee, 2022). This motivates our first research question: to what extent can we detect stable and persistent regimes of emotion over the course of a conversation? Moreover, emotion recognition systems have largely relied on discrete categorical labels (e.g. happy, sad, angry), re-flecting annotative convenience rather than the underlying continuity of affect (Lee, 2022). While valence-arousal (VA) representations offer a more psychologically grounded alter-native, there has been comparatively little work on modeling the higher-level temporal dynamics of these representations using purely numerical methods. This raises our second research question: to what extent can continuous emotional trajectories be modeled and interpreted in a way that is both temporally coherent and useful for a conversational agent? In this work, we address these questions by framing con-versation in time-series as a sequence of latent emotional regimes. We propose a lightweight, multimodal framework that segments continuous VA trajectories into persistent states, leveraging Hidden Markov Models (HMMs), which are well-suited for modeling sequential data with underlying latent structural and temporal dependencies. While standard Gaussian HMMs provide a natural baseline for such classi-fication tasks, they tend to over-segment emotional trajec-tories, producing unrealistically rapid switching between states. To address this, we employ a truncated sticky facto-rial HDP-HMM, which introduces an explicit bias toward self-transitions, allows the number of active regimes in a conversation to be inferred from data rather than fixed apriori , and flexibly merges simultaneous multimodal inputs into coherent regimes. We show that continuous multimodal emotion trajecto-ries can be segmented into stable, interpretable emotional regimes using sticky factorial HDP-HMMs (Figure 1), yield-ing coherent conversational structure without a reliance on large language model (LLM) inference at runtime. Cru-cially, our approach operates directly on numerical VA rep-resentations derived from audio, visual, and textual signals, 1   
+
+> arXiv:2605.12838v1 [cs.AI] 13 May 2026 Multimodal Hidden Markov Models for Persistent Emotional State Tracking
+> Figure 1. Comparison of conversational textual Valence-Arousal regimes identified by Gaussian HMMs (top) vs. Sticky HDP-HMMs (bottom). Regimes denoted by shading different colors across respective utterance indices. HMM specified to have 4 regimes (n=4), and Sticky-HDP-HMMs set to 8 maximum regimes (K=8), with 3 effective regimes identified.
+
+enabling efficient inference without reliance on expensive LLM calls at runtime. Beyond this computational efficiency, we emphasize in-terpretability in dialogue state tracking. By aligning in-ferred regimes with intuitive & labeled interpretations of the dynamics in a given dataset, we move toward structured representations and guidance of conversational dynamics. We further explore mapping these regimes as higher-level communication strategies for use by an LLM to guide the conversation, providing a meaningful application leap from low-level affective signals to conversationally meaningful interaction patterns. Responses from an LLM in a clinical Question-Answer setting are compared with and without access to the interpretable regimes, and we find that aug-menting the LLM context with the calculated regime with interpretable states improves response quality. Since our method for inferring these regimes is lightweight and "on-line", we thus contribute an efficient method leveraging multimodal signals for enhancing question-answer dynam-ics. 
+
+## 2. Background & Related Works 
+
+2.1. Emotion Recognition Models 
+
+As the field of multimodal emotion recognition has ex-panded, speech and text became central modalities. A major reason is that emotion is often carried not only in facial cues but also in prosody, lexical choice, and discourse con-text; more recent multimodal systems fuse these signals to improve robustness, but the dominant pipeline still often per-forms utterance-level prediction over independently scored segments rather than modeling longer-range affective struc-ture (Ramaswamy & Palaniswamy, 2024). Further, as an improvement from discrete representation of emotions, mod-eling emotion as continuous coordinates (Ong et al., 2006) is especially useful to our study because it preserves graded differences between nearby states and creates a structured numeric space that is well suited to downstream sequential models. For agentic conversational applications in particu-lar, such nuance is critical: distinguishing between different types and intensities of negative affect can directly inform response strategies and interventions (Ong et al., 2006). 
+
+2.2. Modern Limitations of Dialogue State Tracking 
+
+More recently in Dialogue-State-Tracking (DST), schema-driven and LLM-based DST has become the dominant high-performance paradigm, especially in open-domain and zero-shot settings, because LLMs can generate slot values or state descriptions directly from dialogue history. However, this gain in flexibility comes at a substantial computational cost, and it does not fully solve the underlying robustness problem: multimodal and noisy dialogues still require a principled way to map heterogeneous inputs into stable state estimates (Carranza & Rojas, 2025). This is why DST is increasingly treated as a problem of robust state inference under uncertainty, especially when the dialogue’s crucial signals have important temporal dimensions and are only partially observable in the presence of noisy data (Balara-man et al., 2021). 
+
+2.3. Hidden Markov Models 
+
+Hidden Markov Models (HMMs) provide a natural frame-work for modeling sequential data with latent structure, and their conceptual appeal lies in their establishment of unob-served states that govern the behavior of observed phenom-ena over time. The notion of inferring the internal states of time-series data from noisy observations allows us to treat conversational emotion as contiguous regimes with persistent affective dynamics and not as independent signals. Standard Gaussian HMMs, however, exhibit significant lim-itations when applied to granular sequential data such as utterance-level emotions. Maximum likelihood estimation in the model tends to favor rapid switching between states, leading to the over-segmentation of utterances, in which regimes fluctuate wildly at nearly every timestep. Attempts to stabilize these models by manually fixing the number of states or regularizing transitions often introduce rigidity, collapsing the probabilistic model into a more determinis-tic system and limiting its ability to adapt to the natural variability of conversational structure (Fox et al., 2008). These limitations have motivated our development of more flexible models which can effectively adapt to real-world conversations. 2Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+## 3. Methods 
+
+3.1. Utterance-level Emotion extraction 
+
+Representing emotional state across two continuous dimen-sions capturing polarity (positive vs. negative) and activa-tion (high vs. low energy) respectively (Russell, 1980), the VA estimates produced at the utterance level serve as the foundational observations for subsequent temporal model-ing and multimodal analysis of a given conversation. We consider text, audio, and video-based multimodal emotion detection from the textual sentiment, facial expressions, and aural tone of voice respectively. VA scores for written transcripts are produced by a fine-tuned DistilBERT model adapted for continuous regression (Mavdol, 2025). Specifically, the model maps each utterance to a two-dimensional Valence–Arousal space following Rus-sell’s circumplex framework (Russell, 1980). Transcripts fed to the model are segmented at the utterance level using time-aligned boundaries; additionally, we remove disflu-encies and non-speech artifacts within the text. After this preprocessing step, each cleaned segment is passed indepen-dently to the model for inference. VA scores for aural data are produced by a pruned Wav2Vec 2.0 model fine-tuned for dimensional speech emotion recog-nition (Wagner et al., 2023) on MSP-Podcast (Busso et al., 2025), a large collection of natural conversational speech that is richly annotated with continuous VA-dominance scores. With raw 16 kHz audio as input, a regression head is applied to pooled transformer representations to gener-ate these continuous outputs. Wav2Vec2.0 is particularly well-suited for this task because it captures prosodic and acoustic features—such as pitch, energy, and temporal dy-namics—that carry affective information independently of lexical content. VA scores for visual data are produced by EmoNet, a fa-cial affect model trained to estimate continuous valence and arousal from face images captured in naturalistic conditions (Toisoul et al., 2021). In our pipeline, video is first seg-mented at the utterance level and represented as a sequence of extracted frames. 
+
+3.2. Multimodal feature construction 
+
+For each utterance t, let xtxt  
+
+> t
+
+= ( vtxt  
+
+> t
+
+, a txt  
+
+> t
+
+) ∈ R2 and xaud  
+
+> t
+
+=(vaud  
+
+> t
+
+, a aud  
+
+> t
+
+) ∈ R2 denote the text and audio VA estimates, respectively. Rather than concatenating these features into a single observation vector, we treat each modality as a distinct observation channel generated by a shared latent emotional regime. Formally, at each time step t, the observation is represented as a collection of modality-specific variables: 
+
+Xt = xtxt  
+
+> t
+
+, xaud  
+
+> t
+
+. (1) Given a latent regime zt, we assume that modalities are conditionally independent: 
+
+p(Xt | zt) = p(xtxt  
+
+> t
+
+| zt) p(xaud  
+
+> t
+
+| zt). (2) Where each modality is modeled with its own Gaussian emission distribution. This factorized emission model allows for each modality to exhibit distinct noise characteristics and variability within the same latent regime, avoiding the need to model a poten-tially complex joint distribution over linearly concatenated features. The overall log-likelihood decomposes additively across modalities: 
+
+log p(Xt | zt) = log p(xtxt  
+
+> t
+
+| zt) + log p(xaud  
+
+> t
+
+| zt). (3) This formulation also naturally extends directly to additional modalities. We incorporate visual affect by introducing a third modality xvid  
+
+> t
+
+= ( vvid  
+
+> t
+
+, a vid  
+
+> t
+
+) ∈ R2, computed from frame-level estimates and aggregated at the utterance level. The observation at time t becomes 
+
+Xt = xtxt  
+
+> t
+
+, xaud  
+
+> t
+
+, xvid  
+
+> t
+
+, (4) and the conditional independence assumption extends as 
+
+p(Xt | zt) = Y  
+
+> m∈{ txt ,aud ,vid }
+
+p(x(m) 
+
+> t
+
+| zt). (5) All modality streams are standardised independently to zero mean and unit variance prior to modeling to ensure compa-rable scaling across modalities. 
+
+3.3. Temporal regime modeling 
+
+3.3.1. G AUSSIAN HMM BASELINE 
+
+A standard Gaussian Hidden Markov Model (Rabiner, 1989) provides a tractable baseline for latent regime de-tection. Given a conversation represented as a sequence of T utterance-level observations X = {x1, . . . , xT }, the model assumes that each observation is generated by a dis-crete latent state zt ∈ { 1, . . . , K } evolving according to a first-order Markov process: 
+
+z1 ∼ π, (6) 
+
+zt | zt−1 ∼ Categorical( Azt−1 ), (7) 
+
+xt | zt = k ∼ N (μk, Σk), (8) where π is the initial state distribution, A ∈ [0 , 1] K×K
+
+is the transition matrix, and (μk, Σk) are the mean and covariance of the Gaussian emission for state k.Model parameters are estimated via Expectation-Maximization, and the most probable latent sequence is recovered by Viterbi decoding. The number of states K
+
+is fixed as a hyperparameter. We use a tied covariance structure ( Σk = Σ ∀k) to reduce overfitting given the limited number of utterances per consultation. 3Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+3.3.2. S TICKY HDP-HMM The standard Gaussian HMM requires K to be specified in advance and imposes no prior preference for temporal persistence, leaving the model free to switch states at every step, as VA scores are independent across utterances with no temporal dimension. We address both limitations with a sticky Hierarchical Dirichlet Process HMM (sticky HDP-HMM) (Fox et al., 2008), which infers the effective number of states from data and places an explicit self-transition bias that encourages temporally coherent regime occupancy. 
+
+HDP prior over transition distributions. The HDP-HMM places a hierarchical nonparametric prior over the rows of the transition matrix. A global mixing measure 
+
+β ∼ GEM( γ) is drawn from a stick-breaking process with concentration γ, and each state-specific transition distribu-tion is drawn as: 
+
+πk ∼ DP( α, β) , k = 1 , 2, . . . (9) where α is a per-state concentration parameter. Because all rows share the same base measure β, states that are never visited receive negligible probability mass, and the effective number of active states is inferred rather than presupposed. 
+
+Sticky self-transition bias. The standard HDP-HMM does not penalize rapid state switching. The sticky exten-sion (Fox et al., 2008) augments each transition distribution with an additional mass κ > 0 on the self-transition: 
+
+πk ∼ DP 
+
+
+
+α + κ, αβ + κek
+
+α + κ
+
+
+
+, (10) where ek is the unit vector on state k. Increasing κ raises the prior probability of remaining in the current state, directly encoding the assumption that emotional regimes are persis-tent rather than fleeting. This is particularly appropriate for clinical conversation, where affective phases typically span multiple consecutive utterances. 
+
+Truncated inference. Exact inference under the HDP-HMM is intractable. We employ a truncated weak-limit approximation (Blei & Jordan, 2004; Ishwaran & James, 2001), fixing an upper bound Kmax on the state space while allowing the posterior to concentrate on a smaller active subset. Kmax is informed by the number of states at which the quality of Gaussian HMM modeling degrades, as deter-mined by hyperparameter tuning (see Appendix-B). Inference proceeds via collapsed Gibbs sampling, alter-nating between sampling the latent state sequence z1: T
+
+via the forward-backward algorithm and resampling the model hyperparameters (α, κ, γ ) and emission parameters 
+
+{(μk, Σk)}Kmax  
+
+> k=1
+
+from their conjugate posteriors. The most probable state sequence for reporting is taken as the Viterbi path under the posterior mean parameters. 
+
+Emission model. As with the Gaussian HMM baseline, each active state k is associated with a Gaussian emission 
+
+N (μk, Σk) over the d-dimensional observation space. Be-cause the emission structure is otherwise identical to the baseline, any differences in regime quality between the two models are attributable solely to the nonparametric prior and the sticky self-transition mechanism. 
+
+3.4. Evaluation 
+
+Evaluating unsupervised temporal segmentation quality is non-trivial in the absence of ground-truth regime anno-tations. We employ an LLM-as-a-Judge to evaluate our methodology by constructing a reference label using a large language model (LLM) prompted to segment each conversa-tion into coherent emotional phases and assign a descriptive label to each. Formally, given a conversation comprising 
+
+T utterances u = ( u1, u 2, . . . , u T ), the LLM assigns each utterance a regime label, producing a reference label se-quence r ∈ 1, . . . , K T over K distinct labels, where K is not fixed in advance. The prompt provides the full utterance-level transcript and instructs the model to identify utterances sharing a consistent affective character; labels may recur freely across the sequence, permitting regimes to alternate and re-emerge. The prompt instructs the model to identify transitions significant enough to require a clinician to mean-ingfully change their therapeutic approach, with regimes consolidated to a maximum of 8 distinct labels per con-sultation. Reference labels were generated using GPT-5.4 via the OpenAI API, and the full prompt is available in Appendix-C.1. These LLM-derived labels are treated as approximate ground truth for the purposes of quantitative evaluation; our sticky HDP-HMM independently produces a predicted label sequence p ∈ 1, . . . , M T , where the number of pre-dicted regimes M need not equal K. Because both labels are produced independently, their cluster indices are arbitrary — predicted label i carries no semantic correspondence to reference label j. This is the label permutation problem. Predicted regime sequences are therefore aligned to refer-ence labels via the Hungarian algorithm (Kuhn, 1955) to resolve this, with details in Appendix-A. We report segment-level F1, boundary F1 (within a toler-ance of ±1 utterance), and normalized mutual information (NMI) between predicted and reference label sequences. In addition, we evaluate regime stability directly via the mean regime duration (in utterances) and the proportion of single-utterance regimes, both of which should be low for a temporally coherent model. For Question-Answer augmentation evaluation, we con-struct a paired evaluation over mid-conversation prompts drawn from the PriMock57 dataset (Papadopoulos Korfiatis et al., 2022). For each consultation, the first half of the 4Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+dialogue is provided as context, and the LLM is tasked with generating the next response in the interaction. We compare two conditions: (1) Baseline : The LLM is prompted with the conversation history only. (2) Regime-augmented : The LLM is prompted with the same conver-sation history, along with a compact structured summary of the current inferred emotional regime (valence, arousal, regime label, persistence, and consultation phase), derived from the multimodal sticky HDP-HMM. No additional task-specific instructions are introduced be-yond this structured signal. The generation model is GPT-5.4, with three candidate responses generated per condi-tion and a canonical response selected via a separate model call. Evaluation uses an LLM-as-a-judge framework (Zheng et al., 2023) also implemented with GPT-5.4, comprising two complementary judgment types: pairwise A/B prefer-ence (with randomized condition-to-label assignment to con-trol for position bias) and absolute rubric scoring across four dimensions. Ground truth is defined as the next three actual clinician turns in the transcript, used as a reference anchor for the judge. For each prompt, the judge model is asked to select the better response between baseline and regime-augmented across multiple criteria: Contextual Appropri-ateness, Emotional Attunement, Helpfulness, and Conver-sational Coherence. Full prompts for all LLM calls are provided in Appendix C.2. 
+
+## 4. Results 
+
+The results are organized around five claims: that HMMs can segment clinical conversations into coherent emotional regimes (Section 4.1); that the sticky HDP-HMM produces meaningfully better regime structure than the Gaussian HMM baseline (Section 4.2); that the framework extends to multimodal observation spaces (Section 4.3); that these recovered regimes are interpretable in affective and clinical terms (Section 4.4); and that downstream augmentation of a QnA task LLM with the current interpreted regime sig-nificantly improves the quality of generated conversational responses (Section 4.5). 
+
+4.1. HMM Regime Segmentation Baseline 
+
+As a prerequisite for all subsequent claims, latent state models must recover structured regime sequences from utterance-level VA trajectories. The key question is whether the resulting segmentation reflects genuine conversational structure rather than noise. Across all 57 PriMock57 consultation transcripts alone, both the Gaussian HMM and the sticky HDP-HMM re-cover regime sequences with sustained occupancy. The Gaussian HMM produces a mean regime duration of 3.04 utterances, while the sticky HDP-HMM produces that of 9.66 utterances. Both are substantially above the duration of 1.0 expected under random assignment. Representative decoded sequences show that latent states persist across contiguous conversational spans. The emission means re-covered by both models occupy distinct and interpretable regions of the VA plane. Across consultations, states par-tition the VA space into recognizable affective quadrants, indicating that the latent states capture meaningful affective modes. The positive mean inter-regime centroid (Euclidean) distance of 0.469 with the Gaussian HMM and 0.339 with the sticky HDP-HMM further supports this separation, in-dicating that both models identify geometrically distinct affective clusters. 
+
+4.2. Sticky HDP-HMM Comparison to Gaussian HMM 
+
+Both models recover non-trivial regime structure, but differ in how realistically they represent temporal dynamics. The sticky HDP-HMM captures temporally coherent phases that reflect persistent affective structure, whereas the Gaussian HMM over-segments what may be real emotional states in conversation, generating more noise than interpretable insights. Table 1 summarizes temporal coherence metrics across all consultations. The sticky HDP-HMM reduces single-utterance regimes by nearly one full order of mag-nitude and reduces regime shifts by a factor of four, while achieving substantially longer regime durations. These dif-ferences indicate a strong improvement in temporal coher-ence. 
+
+Table 1. Quantitative metrics averaged across 57 PriMock57 con-sultations. Better values are bolded .                               
+
+> Metric Gaussian HMM Sticky HDP-HMM
+> Mean regime duration (utterances) ↑3.04 9.66
+> Single-utterance regime fraction ↓0.561 0.061
+> Regime shifts per consultation ↓21.11 5.33
+> Mean temporal purity ↑0.384 0.850
+> Intra-regime VA variance ↑0.0318 0.0619
+> Inter-regime centroid distance 0.469 0.339 Mean log-likelihood ↑45.61 44.19 LLM-as-a-Judge: Mean Segment-Level F1 ↑0.0434 0.0770
+> LLM-as-a-Judge: Mean Boundary F1 ↑0.266 0.302
+> LLM-as-a-Judge: Mean NMI ↑0.229 0.431
+
+Notably, the Gaussian HMM achieves marginally higher mean log-likelihood (45.61 vs. 44.19), suggesting a higher accuracy upon first glance. This is expected due to the ob-jective of log-likelihood optimizing the observation space without temporal regularization. The difference is small relative to the large gains in temporal coherence, and log-likelihood alone is not a reliable indicator of regime quality in this setting. For this reason, we extend our evaluation methodology to include LLM-as-a-Judge, and find that the sticky HDP-HMM substantially outperforms the Gaussian HMM across all three reference-based metrics. The LLM judge assigned a mean of 3.61 distinct regimes per con-sultation with an average duration of 14.18 utterances, a granularity considerably closer to the sticky model’s behav-5Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+ior than the Gaussian’s. The most compelling result is Normalized Mutual Informa-tion (NMI), where the sticky model scores 0.431 against 0.229, winning on 48 of 57 consultations — indicating that its regime assignments are substantially more aligned with the LLM judge’s partition of the affective space. Boundary F1 corroborates this, with the sticky model scoring 0.302 against 0.266. Segment-level F1 is low for both models, which is expected given the metric’s requirement for exact coincidence of both boundaries and labels; we therefore treat NMI and boundary F1 as the primary judge-based metrics. Taken together, these results confirm that the Gaussian HMM’s lack of a temporal persistence prior causes it to over-segment. The sticky HDP-HMM, in contrast, recovers sustained affective structure, and we conclude that temporal regularization via the sticky prior is essential for detecting clinically meaningful regime shifts in this setting. 
+
+4.3. Extension to multimodal observation spaces 
+
+We first establish the collinearity of the two streams before evaluating the combined model to assert our assumption of conditional independence of modalities’ emission channels (Section-3.2), and find the Pearson correlation between text valence and audio valence to be r = 0 .361 , and between text arousal and audio arousal to be r = 0 .188 . These val-ues indicate a weak relationship; this divergence reflects the known phenomenon of semantic-prosodic decoupling in clinical speech, where patients frequently describe dis-tressing content in a controlled vocal register (Cummins et al., 2015; Schuller & Batliner, 2014). Table 2 summarizes regime statistics across all three configurations of the sticky HDP-HMM. 
+
+Table 2. Sticky HDP-HMM regime statistics by modality configu-ration. Best values are bolded .                          
+
+> Metric Text (2D) Audio (2D) Combined (4D)
+> Effective regimes ↑4.46 3.25 3.53 Regime shifts ↓5.33 4.00 8.05 Dominant regime share 0.48 0.57 0.49 Transition entropy ↓0.61 0.59 0.49
+> Mean regime duration ↑9.66 12.82 7.50 Single-utterance fraction ↓0.06 0.03 0.09
+
+The results reveal a clear modality-specific trade-off. The text-only model recovers the richest affective structure, with the highest effective regime count (4.46) and a compara-tively balanced dominant regime share (0.48), suggesting it captures a wider repertoire of emotional states. The audio-only model, by contrast, favors temporal stability: it pro-duces the fewest regime shifts (4.00), the longest mean regime duration (12.82 utterances), and the lowest single-utterance fraction (0.03), consistent with the smoothly-varying nature of prosodic signals in clinical conversa-tion. The combined 4D model presents a mixed picture. It achieves the lowest transition entropy (0.49), indicating that its between-regime dynamics are the most structured and predictable of the three configurations, yet it also exhibits the highest regime-shift rate (8.05) and shortest mean dura-tion (7.50), and the largest single-utterance fraction (0.09). This apparent tension is interpretable: when text and au-dio disagree — as the low inter-modal correlations suggest they frequently do — the model must resolve conflicting emission signals, which can induce brief excursions into transient regimes that would not arise under either unimodal model alone. As we know, the model scales transparently to an arbitrary number of modality channels, where adding a new modality requires only the specification of an additional emission dis-tribution p(x(m) 
+
+> t
+
+| zt) for that channel; the HDP prior over the transition matrix and the inference procedure remain unchanged. We exploit this flexibility to extend the evalua-tion to a trimodal setting using MELD (Poria et al., 2019a), a multimodal corpus of emotionally labeled dialogue seg-ments drawn from the television series Friends , where text, audio, and video valence-arousal streams are all available. Table 3 summarizes regime statistics across all four con-figurations on MELD. The unimodal models are broadly comparable in effective regime count (2.00–2.30) and show near-zero single-utterance fractions, indicating stable, per-sistent affective states within each modality. The combined 6D model highlights the framework’s flexibility to integrate richer multimodal signals, yielding a more expressive af-fective decomposition (2.70 effective regimes, dominant regime share of 0.60). This added granularity comes with brief transitions that capture transient disagreements be-tween modalities. Consistent with the 4D setting, this be-havior demonstrates adaptive segmentation, where increased input complexity leads to finer-grained, but not noisy, affec-tive structure. 
+
+Table 3. Sticky (Factorial) HDP-HMM regime statistics by modal-ity configuration on MELD.                                  
+
+> Metric Text (2D) Audio (2D) Video (2D) Combined (6D)
+> Effective regimes ↑2.00 2.10 2.30 2.70 Regime shifts ↓0.90 1.10 1.10 2.70 Dominant regime share 0.75 0.66 0.74 0.60 Transition entropy ↓0.40 0.43 0.47 0.73 Mean regime duration ↑5.07 4.49 4.52 2.80 Single-utterance fraction ↓0.05 0.00 0.00 0.33
+
+4.4. Interpretation of Regimes 
+
+Statistical coherence alone is insufficient; the recovered regimes must also correspond to meaningful affective states. We therefore analyze the geometry of emission means, their consistency across modalities, and their temporal realization in case studies. 6Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+Across both PriMock-57 and MELD, the learned regimes organize into a structured trajectory in VA space rather than forming arbitrary clusters. The elliptical structure visible in the text and audio emission plots as seen in Figure 2 supports this interpretation: individual modalities exhibit elongated, overlapping distributions, while the combined emissions collapse these into intermediate, interpretable dis-tributions. The combined VA means lie between modalities, indicating that the factorial emission model resolves these discrepancies into a consensus representation rather than privileging a single modality. This behavior is critical for interpretability: regimes reflect shared affective structure while retaining modality-specific nuance. Temporal structure further reinforces this interpretation. In PriMock-57 (day2_cons10), the combined sticky HDP-HMM is dominated by the lowest-valence regime, with R0
+
+occupying 61.3% of utterances, compared with 21.0% for 
+
+R1 and 17.7% for R2. The sequence begins with a brief high-valence segment ( R2), then settles into a long dwell in the dominant negative regime ( R0), before shifting to an intermediate-valence regime ( R1) and ending with a short return to the highest-valence regime ( R2). In MELD (dialogue 0), the early interaction is likewise governed by a single high-occupancy regime, but here that regime is the highest-valence state: R2 occupies 71.4% of the clip, whereas R1 accounts for 21.4% and R0 only 7.1%. Af-ter this extended R2 segment, the clip transitions briefly into a low-valence, high-arousal state ( R0) and then ends in a short intermediate-valence state ( R1). These transi-tions occur in contiguous blocks of utterances, consistent with temporally extended affective phases. Importantly, regime-specific variance provides additional evidence that these states are meaningful. In PriMock-57, lower-valence regimes (R0, R1) exhibit tighter variance, while more pos-itive regimes (R2) show increased dispersion, suggesting greater heterogeneity in affective expression. In MELD, high-arousal regimes are both extreme in mean VA and rela-tively stable within modalities, indicating distinct emotional peaks rather than noise-driven outliers. Taken together, these findings show that the sticky factorial HDP-HMM recovers regimes that are geometrically struc-tured, temporally persistent, and consistent across modali-ties. The factorized emission model is central to this inter-pretability: by explicitly modeling modality-specific con-tributions, it exposes systematic cross-modal differences while producing unified regime representations that align with coherent phases of interaction. 
+
+4.5. Multimodal QnA Augmentation with Regimes 
+
+We evaluate whether inferred emotional regimes can serve as a compact conditioning signal for large language models (LLMs) in clinical question-answer (QnA) settings. Figure 3 shows a representative comparison. Regime-augmented re-sponses tend to incorporate brief affective acknowledgments calibrated to the inferred emotional state before continuing the clinical thread, whereas baseline responses proceed di-rectly to clinical content without tonal modulation. 
+
+Inferred regime: negative valence with slightly ele-vated arousal (prolonged fatigue/frustration), stable for 5 consecutive turns. 
+
+Baseline: “Yes, that can happen with this sort of ill-ness. Have you noticed feeling mentally slower than usual? And how’s your sleep been?” 
+
+Regime-augmented: “That sounds really uncomfort-able, especially with it keeping you up at night. Can you tell me whether the itch is worse at any particular time of day?”                                              
+
+> Figure 3. Representative comparison of baseline and regime-augmented responses. The augmented response adds a brief affec-tive acknowledgment and manageable clinical inquiry.
+> Table 4. Absolute rubric scores (mean, scale 1—5) under baseline and regime-augmented conditions across N= 57 PriMock57 consultations. p-values from two-sided paired t-tests. Stratified results show regime-dependent effects. Better values are bolded .
+> Overall Dimension Baseline Augmented ∆p
+> Affective Attunement 1.87 2.07 +0 .20 0.104 Clinical Appropriateness 4.04 4.02 −0.02 0.866 Contextual Coherence 3.95 4.10 +0 .15 0.106 Specificity 4.00 3.88 −0.12 0.082 Ground Truth Alignment 2.09 2.28 +0 .19 0.076
+> Stratified by Regime Persistence Condition nWin Rate p
+> Unstable regimes ( ≤5turns) 28 0.714 0.036
+> Stable regimes ( >5turns) 11 0.636 0.549
+
+Table 4 summarizes absolute rubric scores across all N =57 consultations. Each dimension captures a distinct aspect of response quality: Affective Attunement measures sensitiv-ity to the patient’s emotional state; Clinical Appropriateness 
+
+reflects adherence to plausibly sound medical practice; Con-textual Coherence assesses logical consistency with the pre-ceding dialogue; Specificity captures the precision and detail of the response; and Ground Truth Alignment measures agreement with the reference clinician response. Across dimensions, the regime-augmented condition exhibits con-sistent directional improvements in affective attunement, contextual coherence , and ground truth alignment, though none reach conventional significance thresholds at this sam-ple size. Clinical appropriateness remains unchanged, and specificity shows a small negative shift. Overall, these re-sults suggest modest but consistent gains in affective and contextual alignment without degradation of core clinical 7Multimodal Hidden Markov Models for Persistent Emotional State Tracking   
+
+> Figure 2. Multimodal regime emission structure (Gaussian) across datasets. Each point denotes the mean VA centroid of an inferred regime, and each ellipse shows the corresponding 1-σemission covariance, representing the spread of utterance-level observations assigned to that regime. Regime labels (R0, R1, R2) are assigned in ascending order of valence. PriMock57 regimes cluster near neutral valence with low arousal, consistent with the affective range of primary care consultations. MELD regimes show greater separation and higher arousal, reflecting the more expressive emotional range of scripted TV dialogue.
+
+quality. Despite the lack of significance at the aggregate conver-sation level, stratified analysis by regime persistence and stability localizes the effect. Under rubric-based evaluation, augmentation yields a significant improvement in emotion-ally unstable consultations, but not in stable ones. This pat-tern is consistent with the hypothesis that regime summaries are most informative when the patient’s emotional state is shifting and not yet fully inferable from local context. These results provide qualified support for emotional regimes as a useful intermediate representation for conditioning LLM behavior in specific segments of conversational dialogues. In addition, unstable regimes are often when the criticality of giving an appropriate responses is high; steady-state con-versation segments are lower complexity and often handled well by both the baseline and augmented models. 
+
+## 5. Conclusion 
+
+In this work, we presented a lightweight framework for modeling conversational emotion as a sequence of persis-tent latent regimes. By applying truncated sticky factorial HDP-HMMs to multimodal valence–arousal representations derived from audio and textual signals, we showed that it is possible to recover temporally coherent and interpretable affective structure that is obscured by standard utterance-level approaches. Relative to Gaussian HMM baselines, the proposed model produces substantially more stable regime sequences while retaining meaningful structure in the under-lying affective space. Beyond modeling, we explored the use of inferred regimes as a compact representation of conversational states for downstream systems. Using a clinical question-answer set-ting, we find that while incorporating regime-level sum-maries into LLM context has no significant impact on response quality for steady-state affective conversational trajectories, it does significantly lead to better aligned re-sponses in unstable affective regimes where the user is emo-tionally fluctuating. This suggests a broader view of regime inference as a form of state compression, where it serves as a low-dimensional, persistent signal that allows LLMs to respond in alignment with conversational dynamics without repeatedly processing the full dialogue history. Such representations offer a prac-tical pathway toward more efficient and stable multimodal question-answer systems. Future work will focus on strengthening both evaluation and interpretability. On the evaluation side, replacing the LLM-as-a-Judge with human raters and developing datasets with regime annotations grounded in real cognition would enable more rigorous benchmarking of the proposed frame-work. On the interpretability side, projecting continuous VA trajectories as defined by regimes’ emission distributions onto discrete emotion representations may yield regime se-quences that are more directly legible to both clinicians and downstream sequences. Taken together, these directions build towards a broader vision of conversational emotion analysis that is simultaneously lightweight, interpretable across fields, and clinically actionable. 
+
+## References 
+
+Balaraman, V., Sheikhalishahi, S., and Magnini, B. Re-cent neural methods on dialogue state tracking for task-oriented dialogue systems: A survey. In Li, H., Levow, G.-A., Yu, Z., Gupta, C., Sisman, B., Cai, S., Vandyke, 8Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+D., Dethlefs, N., Wu, Y., and Li, J. J. (eds.), Proceedings of the 22nd Annual Meeting of the Special Interest Group on Discourse and Dialogue , pp. 239–251, Singapore and Online, July 2021. Association for Computational Lin-guistics. doi: 10.18653/v1/2021.sigdial-1.25. Blei, D. M. and Jordan, M. I. Variational methods for the dirichlet process. In Proceedings of the Twenty-First International Conference on Machine Learning , ICML ’04, pp. 12, New York, NY, USA, 2004. Association for Computing Machinery. ISBN 1581138385. doi: 10.1145/ 1015330.1015439. Busso, C., Lotfian, R., Sridhar, K., Salman, A. N., Lin, W.-C., Goncalves, L., Parthasarathy, S., Naini, A. R., Leem, S.-G., Martinez-Lucas, L., et al. The msp-podcast corpus. 
+
+arXiv preprint arXiv:2509.09791 , 2025. Carranza, R. and Rojas, M. A. Interpretable and robust dia-logue state tracking via natural language summarization with llms. arXiv preprint arXiv:2503.08857 , 2025. Cummins, N., Scherer, S., Krajewski, J., Schnieder, S., Epps, J., and Quatieri, T. F. A review of depression and suicide risk assessment using speech analysis. Speech Commun. , 71(C):10–49, July 2015. ISSN 0167-6393. doi: 10.1016/j.specom.2015.03.004. Fox, E. B., Sudderth, E. B., Jordan, M. I., and Willsky, A. S. An hdp-hmm for systems with state persistence. In Proceedings of the 25th International Conference on Machine Learning , ICML ’08, pp. 312–319, New York, NY, USA, 2008. Association for Computing Machinery. ISBN 9781605582054. doi: 10.1145/1390156.1390196. Ishwaran, H. and James, L. F. Gibbs sampling meth-ods for stick-breaking priors. Journal of the Ameri-can Statistical Association , 96(453):161–173, 2001. doi: 10.1198/016214501750332758. Kuhn, H. W. The hungarian method for the assignment problem. Naval Research Logistics Quarterly , 2(1-2):83– 97, 1955. doi: https://doi.org/10.1002/nav.3800020109. Lee, J. The emotion is not one-hot encoding: Learning with grayscale label for emotion recognition in conversation. 
+
+arXiv preprint arXiv:2206.07359 , 2022. Mavdol. Valence and arousal annotations for interactive characters, 2025. URL 
+
+https://huggingface.co/Mavdol/ NPC-Valence-Arousal-Prediction . Based on Russell’s Circumplex Model of Affect for NPC emotion recognition. Ong, A. D., Bergeman, C. S., Bisconti, T. L., and Wallace, K. A. Psychological resilience, positive emotions, and successful adaptation to stress in later life. Journal of Personality and Social Psychology , 91(4):730–749, 2006. doi: 10.1037/0022-3514.91.4.730. Papadopoulos Korfiatis, A., Moramarco, F., Sarac, R., and Savkov, A. PriMock57: A dataset of primary care mock consultations. In Muresan, S., Nakov, P., and Villavicen-cio, A. (eds.), Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers) , pp. 588–598, Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-short.65. Poria, S., Hazarika, D., Majumder, N., Naik, G., Cambria, E., and Mihalcea, R. Meld: A multimodal multi-party dataset for emotion recognition in conversations. In Pro-ceedings of the 57th annual meeting of the association for computational linguistics , pp. 527–536, 2019a. Poria, S., Majumder, N., Mihalcea, R., and Hovy, E. Emo-tion recognition in conversation: Research challenges, datasets, and recent advances. IEEE access , 7:100943– 100953, 2019b. Rabiner, L. R. A tutorial on hidden markov models and selected applications in speech recognition. Proceedings of the IEEE , 77(2):257–286, 1989. doi: 10.1109/5.18626. Ramaswamy, M. P. A. and Palaniswamy, S. Multimodal emotion recognition: A comprehensive review, trends, and challenges. WIREs Data Mining and Knowledge Discovery , 14(6):e1563, 2024. doi: https://doi.org/10. 1002/widm.1563. Russell, J. A. A circumplex model of affect. Journal of Per-sonality and Social Psychology , 39(6):1161–1178, 1980. doi: 10.1037/h0077714. Schuller, B. and Batliner, A. Computational Paralinguistics: Emotion, Affect and Personality in Speech and Language Processing . Wiley, 2014. Toisoul, A., Kossaifi, J., Bulat, A., Tzimiropoulos, G., and Pantic, M. Estimation of continuous valence and arousal levels from faces in naturalistic conditions. Na-ture Machine Intelligence , 3(1):42–50, 2021. doi: 10. 1038/s42256-020-00280-0. Wagner, J., Triantafyllopoulos, A., Wierstorf, H., Schmitt, M., Burkhardt, F., Eyben, F., and Schuller, B. W. Dawn of the transformer era in speech emotion recognition: Closing the valence gap. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(9):10745–10759, 2023. doi: 10.1109/TPAMI.2023.3263585. Zheng, L., Chiang, W.-L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E., Zhang, H., Gonzalez, J. E., and Stoica, I. Judging LLM-as-a-judge with MT-bench and chatbot arena. In Thirty-seventh 
+
+9Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2023. 
+
+## A. Hungarian Algorithm for Label Alignment 
+
+To match the LLM-as-Judge regime indices with our model prediction indices, we first construct an M × K cost matrix 
+
+C whose entries measure the utterance-level disagreement between each pair of predicted and reference labels: 
+
+Cij = −
+
+> T
+
+X
+
+> t=1
+
+[pt = i]·[rt = j], i ∈ 1, . . . , M , j ∈ 1, . . . , K 
+
+(11) so that −Cij counts the number of utterances on which predicted cluster i and reference label j co-occur. Setting 
+
+n = max( M, K ), we zero-pad C to an n × n matrix and find the optimal permutation π∗ ∈ Sn minimizing total assignment cost: 
+
+π∗ = arg min 
+
+> π∈Sn
+> n
+
+X
+
+> i=1
+
+Ci,,π (i) (12) where assignments involving padded dummy rows or columns incur zero cost and are discarded after solving. When M̸ = K, π∗ therefore constitutes a partial assignment, matching each label in the smaller set to its most overlap-ping counterpart in the larger. The optimal π∗ equivalently maximizes total utterance-level overlap between predicted and reference labels. Applying π∗ to p yields a remapped prediction sequence ˜p defined by ˜pt = π(pt), which now shares a common label space with r.
+
+## B. Selection of Kmax from Hyperparameter Tuning Gaussian HMM 
+
+Figure 4 shows model behavior as the number of states increases, evaluated via log-likelihood, mean utterances per regime, and transition matrix entropy. While log-likelihood improves monotonically with additional states, this gain is accompanied by diminishing structural coherence: mean regime duration drops sharply beyond K ≈ 4, and transition entropy remains high, indicating increasingly diffuse and less interpretable dynamics. Notably, beyond K = 8 , additional states primarily capture short-lived or singleton regimes rather than stable affective structure, reflecting over-fragmentation of the observation space. Additionally, transition entropy rebounds after that point to increase. This aligns with the point at which im-provements in Gaussian HMM fit are driven more by hy-perparameter flexibility than by meaningful structure in the          
+
+> Figure 4. Model selection behavior across different numbers of hidden states. Log-likelihood increases monotonically with K,but structural metrics such as mean regime duration and transition entropy indicate reduced interpretability beyond K≈6. Beyond
+> K= 8 , regimes become increasingly short-lived and fragmented, motivating the choice of Kmax = 8 as a balance between fit and temporal coherence.
+
+data. Accordingly, we set Kmax = 8 as a balance between representational richness and temporal coherence. 
+
+## C. LLM Prompts 
+
+C.1. For comparison between Gaussian & sticky HDP-HMMs: 
+
+This prompt is used to obtain LLM-based regime annota-tions for comparison with Gaussian and sticky HDP-HMM segmentations. All calls use GPT-5.4 with temperature 
+
+= 0 .0 to encourage deterministic, consistent labeling.                                                                                                  
+
+> You are an expert clinical supervisor reviewing apatient’s utterances from atherapy session. You will be given anumbered list of the patient’s utterances. Your task is to segment the conversation into emotional regimes. Aregime is asustained affective state that persists across multiple utterances. Anew regime only begins when the patient’s emotional state shifts so substantially that aclinician would need to meaningfully change their approach to meet the patient’s needs --for example, shifting from active listening to crisis intervention, or from psychoeducation to emotional validation. Minor variations in wording, topic, or intensity within the same underlying emotional state do NOT constitute anew regime. Apatient venting about different topics while remaining equally distressed is in
+
+10 Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+one regime. A patient who moves from distress into flat detachment has crossed into a new one. Rules: - Use a STRICT MAXIMUM of 8distinct regime labels total. - Label each regime with a short phrase (2-5 words) describing the dominant affective character, e.g. "acute distress", "guarded withdrawal", "calm reflection", "resigned hopelessness". - The same label may recur if the patient returns to a prior state. - Every utterance must receive alabel. First, write 2-3 sentences describing the overall emotional arc of the conversation and identifying the major regime transitions you observe. Then output a JSON array, one object per utterance, in this exact format: ["t": <utterance index>, "label": "<regime label>", ...] Output only the reasoning followed by the JSON. No other commentary. Transcript: {transcript} 
+
+C.2. QnA Task/Evaluation Prompts: 
+
+This section documents all prompts used in the QnA evalu-ation pipeline (Section 4.5). All generation and evaluation calls use GPT-5.4. Judge calls use temperature = 0 .0; gen-eration calls use temperature = 0 .7.A.2.1 R ESPONSE GENERATION — B ASELINE SYSTEM 
+
+PROMPT 
+
+You are an experienced primary care clinician conducting amedical consultation. Given the conversation history, generate the next clinician response. Be concise, empathetic, and clinically appropriate. Respond with one turn only. 
+
+A.2.2 R ESPONSE GENERATION —REGIME -A UGMENTED SYSTEM PROMPT 
+
+The augmented system prompt appends the following block to the baseline prompt above, where {regime_block} 
+
+is instantiated per consultation: 
+
+During history-taking phases, use the following regime signal to calibrate empathic acknowledgment only. Reserve diagnostic and management responses for assessment phases.: {regime_block} 
+
+The regime block itself is structured as follows, with fields derived from the multimodal sticky HDP-HMM at the con-sultation midpoint: 
+
+[Emotional Regime Summary] Consultation phase: {history-taking | assessment/management} Current regime: {label} (valence: {v}, arousal: {a}) Regime persistence: {n} consecutive turns ({stable | unstable}) Regime shifts so far: {k} 
+
+Consultation phase is assigned as history-taking when the midpoint turn index falls below 60% of the total turn count, and assessment/management otherwise. Stability is defined as persistence > 5 consecutive turns. A.2.3 R ESPONSE GENERATION — U SER PROMPT 
+
+(B OTH CONDITIONS )The user prompt is identical for both conditions: 
+
+## Consultation Context {context} 
+
+where {context} is the interleaved patient—clinician transcript up to and including the midpoint clinician turn, formatted as: 
+
+Clinician: {utterance} Patient: {utterance} ... 
+
+A.2.4 C ANONICAL RESPONSE SELECTION PROMPT 
+
+Three candidate responses are generated per condition. A separate model call selects the most representative candidate for downstream evaluation: 
+
+You are choosing the most representative candidate response for downstream evaluation. Select the single candidate that best represents the set as a typical output for the task. Return exact JSON only: {"choice": 1 | 2 | 3, "reasoning": "<1 sentence>"} 
+
+A.2.5 P AIRWISE PREFERENCE JUDGMENT PROMPT 
+
+You are an expert evaluator of clinical consultation quality. ## Consultation Context (first half of consultation) {context} ## Ground Truth Next Three Clinician Turns {ground_truth} 
+
+11 Multimodal Hidden Markov Models for Persistent Emotional State Tracking 
+
+## Response A{response_a} ## Response B{response_b} Which response better reflects the patient’s current emotional state and is more clinically appropriate as the next turn in this consultation? Respond in this exact JSON format: {"preference": "A" | "B" | "TIE", "confidence": 1 | 2 | 3, "reasoning": "<2-3 sentences>" }Use the full scale of judgments. Do not treat ties or extremely strong preferences as defaults. Do not include any text outside the JSON. 
+
+Condition-to-label assignment (A/B) is randomized per con-sultation using a deterministic seed combining a global seed and the consultation identifier, ensuring reproducibility while balancing assignment across the dataset. The ground truth is presented as a reference anchor representing the actual clinician’s next three turns; judges are not instructed to prefer responses closer to ground truth, but rather to use it as contextual scaffolding for assessing clinical appropri-ateness. A.2.6 A BSOLUTE RUBRIC SCORING PROMPT 
+
+Each response is scored independently on four dimensions via separate model calls (one call per dimension per re-sponse): 
+
+You are an expert evaluator of clinical consultation quality. ## Consultation Context {context} ## Ground Truth Next Three Clinician Turns {ground_truth} ## Response to Evaluate {response} Rate the response on the following dimension only: Dimension: {dimension_name} Description: {dimension_description} Scoring guidance: - Use the full 1-5 scale. - A score of 5 should be reserved for responses that satisfy the dimension exceptionally well with little or no meaningful room for improvement. - Strong but imperfect responses should usually receive a 4 rather than a 5. - Do not avoid giving a 5 when it is clearly warranted. Respond in this exact JSON format: {"score": <integer 1-5>, "reasoning": "<1-2 sentences>"} Do not include any text outside the JSON. 
+
+The four dimensions and their descriptions are given in Table 5. 
+
+Table 5. Rubric dimensions used in absolute scoring.      
+
+> Dimension Description
+> Affective Attunement Does the response accurately acknowledge the patient’s current emotional state? Clinical Appropriateness Is this a response a competent clinician would give at this point in the consultation? Contextual Coherence Does the response follow naturally from the conversation history? Specificity Is the response specific to this patient, or generic and templated?
+
+A.2.7 G ROUND TRUTH ALIGNMENT SCORING PROMPT 
+
+Rate how closely Response [{label}] matches the Ground Truth in terms of communicative intent and emotional attunement, on a scale of 1-5. You are not evaluating whether the ground truth is optimal--only measuring alignment with it. Treat the ground truth as a short reference trajectory across the next three clinician turns, not as aword-for-word target. ## Ground Truth {ground_truth} ## Response {response} Scoring guidance: - Use the full 1-5 scale. - Reserve a 5 for near-matches in communicative intent and emotional attunement. - Good but not especially close matches should usually receive a4 rather than a 5. - Do not avoid giving a 5 when the match is truly very close. Respond in this exact JSON format: {"score": <integer 1-5>, "reasoning": "<1 sentence>"} 
+
+12

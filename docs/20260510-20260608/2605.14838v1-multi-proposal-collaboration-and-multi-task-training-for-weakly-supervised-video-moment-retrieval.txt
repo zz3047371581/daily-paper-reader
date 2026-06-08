@@ -1,0 +1,875 @@
+Title: Multi-proposal Collaboration and Multi-task Training for Weakly-supervised Video Moment Retrieval
+
+URL Source: https://arxiv.org/pdf/2605.14838v1
+
+Published Time: Fri, 15 May 2026 01:10:23 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# Multi-proposal Collaboration and Multi-task Training for Weakly-supervised Video Moment Retrieval 
+
+## Bolin Zhang 1,2 , Chao Yang 1* , Bin Jiang 1, Takahiro Komamizu 3,Ichiro Ide 41College of Computer Science and Electronic Engineering, Hunan University, Changsha, 410082, Hunan, China. 
+
+2Faculty of Electronic Engineering and Computer Science, Ningbo University, Ningbo, 315211, Zhejiang, China. 
+
+3Mathematical and Data Science Center, Nagoya University, Nagoya, 464-8601, Aichi, Japan. 
+
+4Graduate School of Informatics, Nagoya University, Nagoya, 464-8601, Aichi, Japan. *Corresponding author(s). E-mail(s): yangchaoedu@hnu.edu.cn; Contributing authors: onlyou@hnu.edu.cn; jiangbin@hnu.edu.cn; taka-coma@acm.org; ide@i.nagoya-u.ac.jp; 
+
+Abstract 
+
+This study focuses on weakly-supervised Video Moment Retrieval (VMR), aiming to identify a moment semantically similar to the given query within an untrimmed video using only video-level correspondences, without relying on temporal anno-tations during training. Previous methods either aggregate predictions for all instances in the video, or indirectly address the task by proposing reconstruc-tions for the query. However, these methods often produce low-quality temporal proposals, struggle with distinguishing misaligned moments in the same video, or lack stability due to a reliance on a single auxiliary task. To address these limitations, we present a novel weakly-supervised method called Multi-proposal 
+
+Collaboration and Multi-task Training (MCMT). Initially, we generate multiple proposals and derive corresponding learnable Gaussian masks from them. These masks are then combined to create a high-quality positive sample mask, high-lighting video clips most relevant to the query. Concurrently, we classify other clips in the same video as the easy negative sample and the entire video as the 
+
+1 
+
+> arXiv:2605.14838v1 [cs.CV] 14 May 2026 hard negative sample. During training, we introduce forward and inverse masked query reconstruction tasks to impose more substantial constraints on the network, promoting more robust and stable retrieval performance. Extensive experiments on two standard benchmarks affirm the effectiveness of the proposed method in VMR. ∗†
+> Keywords: Video moment retrieval, multi-proposal collaboration, multi-task training
+
+# 1 Introduction 
+
+Video Moment Retrieval (VMR) is a critical and challenging task that has numer-ous potential applications, such as video surveillance [1, 2] and robot manipulation [3]. The objective is to automatically identify the start and end boundaries of a tar-get moment encompassing successive clips within an untrimmed video. This moment should be semantically akin to a provided sentence query. To illustrate, when given a query like “The man adds oil and salt to a pot on the stove.” along with a correspond-ing video, the goal is to retrieve the most suitable matching moment, as depicted in Figure 1. Despite remarkable progress recently made in fully-supervised VMR [4–8], its applicability to real-world large-scale scenarios is hindered by the labor-intensive and time-consuming process of annotating ground-truth temporal boundaries for each query sentence. Additionally, annotations are prone to inaccuracies in determining activity boundaries in videos due to their subjective nature and inconsistencies across different annotators. Consequently, the research community is increasingly drawn towards weakly-supervised settings [9–12] that rely only on video-level descriptions during training, making it a more practical method. Presently, strategies employed for addressing the weakly-supervised VMR task primarily fall into two categories: multi-instance learning methods [13–16] and reconstruction-based methods [17–20]. In the former methods, the input video is com-monly treated as an assortment of instances, accompanied by bag-level annotations. Here, the predictions made for instances (referred to as proposal candidates) are combined to establish an overall bag-level prediction. In spite of their efficacy, these methods primarily focus on learning visual-text alignment on a video-level basis. They achieve this by maximizing the matching scores between associated queries and videos, while simultaneously attenuating the scores pertaining to unpaired instances. They also disregard the reality that distinguishing mismatched moments within the same video can present greater difficulty in the context of activity temporal localization. This is attributed to the presence of comparable backgrounds and video styles, making these instances more challenging to differentiate as negative samples. To address this issue, CNM [20] generates one positive proposal and applies a Gaussian mask to extract both positive and negative samples from the same video. 
+
+> ∗This work was completed during the joint doctoral program at Nagoya University.
+> †Preprint version. The Version of Record has been published in International Journal of Machine Learning and Cybernetics. DOI: 10.1007/s13042-024-02520-w.
+
+2However, since different video clips within the same video often share similar back-grounds, generating only a single proposal is vulnerable to redundant information from nearby video clips, especially when there is high similarity between them, which leads to inaccurate retrieval results. Moreover, existing reconstruction-based methods that indirectly address the task by producing proposals that match the query and using these proposals to reconstruct the query also have limitations. While these methods are intuitively designed and show promising results, they typically rely on reconstruct-ing the query as a single auxiliary task, which limits the learning capability of the model and provides insufficient constraints, making the model less stable in complex scenarios. To overcome these challenges, we present a novel Multi-mask Collaboration and 
+
+Multi-task Training (MCMT) method for the weakly-supervised VMR task. Unlike the CNM method, MCMT generates multiple Gaussian mask proposals to reduce the impact of redundant information, using a mask aggregation module to improve the quality of positive samples, ensuring more accurate moment localization. MCMT dynamically generates informative positive samples and mines negative samples from within the same video by leveraging the temporal structure of events (start, climax, end) with Gaussian masks. The most relevant clips to the query are highlighted as pos-itive samples, while unhighlighted clips are treated as easy negatives, and the entire video, containing substantial redundant information, is treated as a hard negative. By integrating multiple learnable Gaussian masks through an aggregation module, MCMT enhances the confidence in positive and negative sample mining. Addition-ally, MCMT introduces dual-masked reconstruction tasks, including both forward and inverse query reconstructions, to guide model training from different perspectives, providing stronger multi-angle constraints and significantly improving model stability and retrieval performance in complex scenarios. To sum up, the main contributions of our work are: 
+
+• We propose a mask aggregation module to aggregate the information of multiple Gaussian masks to generate the final robust mask to mine high-quality positive, easy negative, and hard negative samples. 
+
+• We introduce a dual-task training mechanism. In addition to the forward reconstruc-tion masked query task, we also introduce a new task: the inverse reconstruction masked query task. During the training process, these two tasks cooperate with each other to guide the model training from different perspectives to enhance the model performance. 
+
+• In contrast to recent methods evaluated on two benchmark datasets, the proposed MCMT method attains competitive results. As an additional contribution, we will release the codes and models to promote the development of the community 1.
+
+# 2 Related Work 
+
+In the weakly-supervised setting, VMR methods do not require annotations on start and end time stamps, relying only on video-query pairs. These methods aim to 
+
+> 1https://github.com/onlyouzbl/MCMT
+
+3Query : The man adds oil and salt to a pot on the stove. 
+
+# 濷 濷 
+
+> 26.56s 38.32s
+
+# 濷濷 濷Fig. 1 Example of video moment retrieval given a query. 
+
+achieve outcomes by employing a shared multi-modal feature space or by utilizing a reconstruction-based strategy. In a general sense, current weakly-supervised VMR methods can be classified into three main groups [21, 22]: multi-instance learning, reconstruction-based, and other weakly-supervised methods. 
+
+## 2.1 Multi-instance Learning Methods 
+
+In the context of multi-instance learning methods, the input video is regarded as a collection of instances, with annotations assigned at the level of the entire bag. Subse-quently, predictions for individual instances are aggregated to yield a comprehensive prediction for the entire bag. Text-Guided Attention (TGA) [13] first solves the weakly-supervised VMR task via multi-instance learning with a text-guided attention mechanism, achieving video-text alignment by maximizing matching positive samples and minimizing negative ones. Weakly Supervised Language Localization Networks (WSLLN) [23] measure moment-text consistency with segment selection based on text. Video-Language Alignment Network (VLANet) [24] refines attention through the removal of redundant propos-als and the incorporation of multi-directional attention, coupled with fine-grained query representation. Weakly-Supervised Temporal Grounding (WSTG) [25] proposes a two-stage model. Weakly Supervised Temporal Adjacent Network (WSTAN) [26] achieves cross-modal semantic alignment using a self-discriminating loss along with additional branch. Latent Graph Co-Attention Network (LoGAN) [14] captures frame-word interactions through a latent graph co-attention mechanism, and Cross-Sentence Relations Mining (CRM) [15] examines inter-sentence connections to refine video moment proposal selections. Despite their effectiveness, such methods focus on video-text alignment at the video level by maximizing matching scores, while overlooking the difficulty of distinguishing mismatched moments within the same video because of similar backgrounds and video styles. Inspired by CNM [20], we use the Gaussian mask to fit the temporal structure of the event (start, climax, end). To generate a more robust mask, we first generate multiple learnable Gaussian masks and then inte-grate these masks together by the proposed aggregation module to mine high-quality positive and negative samples with higher confidence in the same video. 
+
+## 2.2 Reconstruction-based Methods 
+
+Reconstruction-based methods indirectly tackle the task by generating proposals that match the query from the video input. These proposals are subsequently employed to reconstruct the query, with the intermediate proposals serving as retrieval results. 4Inverse Query (IQ):    
+
+> .shoes on puts person
+> Forward Query (FQ):
+> person puts on shoes.
+> Word Embedding
+> Word Embedding
+> Backbone
+> Transformer
+> FQ-Video Feature
+> IQ-Video Feature
+> Aggregation Module
+> Mask Conditioned Reconstructor
+> Forward Masked Query:
+> person <MASK> on <MASK>.
+> Word Embedding
+> Word Embedding
+> Negative Sample Mining
+> Inverse Masked Query:
+> . <MASK> on <MASK> person
+> Cross Entropy Loss
+> >>
+> >>
+
+Mask Conditioned Reconstruction Module 
+
+Positive Sample Mask Generation Module                        
+
+> Concatenation
+> FC Addition Attention
+> FC
+> OR
+> Multimodal Information Fusion
+> Clip index
+> Weight
+> Weight
+> Clip index
+> Weight
+> Target Forward Query:
+> person puts on shoes.
+> Target Inverse Query:
+> .shoes on puts person
+> w qd n
+>  
+> wqdn
+> v vd n
+>  
+> v vd n
+>  
+> 1hvdnh
+> 1hvdnh
+> Proposal 1
+> Proposal 2
+> Proposal 3
+> Proposal k
+> Weight
+> Clip index
+> …
+> Multiple proposal masks
+> vnk
+> Positive mask
+> ˆvn
+> pm
+> Easy negative mask
+> ˆvn
+> em
+> Clip index
+> Hard negative mask
+> ˆvn
+> hm
+> ˆwqdn
+> ˆ w qd n
+>  
+> CE-f
+> p
+> CE-f
+> h
+> CE-f
+> e
+> 
+> Rec-f 
+> CE-f
+> p
+> CE-f
+> h
+> CE-f
+> e
+> 
+> IVC-f 
+> CE-i
+> p
+> CE-i
+> h
+> CE-i
+> e
+> 
+> Rec-i IVC-i 
+> CE-i
+> p
+> CE-i
+> h
+> CE-i
+> e
+> 
+
+Fig. 2 Overview of the proposed MCMT model. It mainly includes a positive sample mask generation module (Section 3.1), and a mask conditioned reconstruction module (Section 3.2). The former fuses information from queries and video modalities and generates multiple candidate proposals, followed by using the proposed aggregation module to generate the final high-quality positive sample mask. The latter first mines high-quality hard negative and easy negative masks using the positive mask and then reconstructs the forward and inverse masked queries to measure the similarity of positive and negative samples and queries. Forward Reconstruction loss LRec-f , Inverse Reconstruction loss 
+
+LRec-i , forward Intra-Video Contrastive loss LIVC-f and inverse Intra-Video Contrastive loss LIVC-i 
+
+jointly guide the model training. 
+
+Weakly Supervised Dense Event Captioning (WS-DEC) [17] proposes weakly supervised dense event captioning by decomposing the problem into event caption-ing and sentence localization. Semantic Completion Network (SCN) [18] selects top-k
+
+video proposals, computes rewards based on reconstruction loss, and refines proposal generation. Multi-level Attentional Reconstruction Network (MARN) [27] learns a language-driven attention map by using intra-proposal and inter-proposal interac-tion. Event Captioner and Sentence Localizer (EC-SL) [19] introduces an Induced Set Attention Block to establish a connection between the event captioner and the sen-tence localizer. CNM [20] generates the positive sample by using a learnable Gaussian mask that highlights video clips most relevant to the query, and treats other clips and the whole video as easy and hard negative samples, respectively. The Intra-Video Contrastive (IVC) loss is used to train the network and improve the discriminative ability of the positive and negative samples. These methods achieve some good results but may lack sufficient constraints by only reconstructing the masked query as a sin-gle auxiliary task during training, resulting in less stable outcomes. We propose a dual-task training mechanism that involves both forward and inverse reconstruction masked query tasks to guide model training from different perspectives and enhance the model performance. 5Table 1 Acronyms and Symbols 
+
+Acronym/Symbol Definition 
+
+W Sentence query 
+
+F Untrimmed video 
+
+nq Number of words in the query 
+
+wi Word in the sentence 
+
+qi Word feature vector 
+
+Q Word embeddings 
+
+fi Video frame 
+
+nf Number of frames in the video 
+
+vi Video clip 
+
+nv Number of video clips 
+
+vi Video clip feature vector 
+
+V Visual features 
+
+H Fused forward query-video features ¯H Fused inverse query-video features 
+
+E(·) Transformer encoder function 
+
+D(·) Transformer decoder function 
+
+c Center of k proposal candidates 
+
+w Width of k proposal candidates 
+
+M Matrix containing k Gaussian masks 
+
+ˆmp Positive sample mask 
+
+ˆme Easy negative mask 
+
+ˆmh Hard negative mask ˆQ Masked forward query embedding ˆ¯Q Masked inverse query embedding ˆH Forward cross-modal semantic representation ˆ¯H Inverse cross-modal semantic representation 
+
+Lp 
+
+> CE-f
+
+Forward cross-entropy loss of positive mask 
+
+Lp 
+
+> CE-i
+
+Inverse cross-entropy loss of positive mask 
+
+LRec Reconstruction loss 
+
+LIVC Intra-Video Contrastive loss 
+
+## 2.3 Other Weakly-supervised Methods 
+
+In addition to the above two method categories, Regularized Two-Branch Pro-posal Networks (RTBPN) [28] consider both inter- and intra-sample confrontments to address the difficulty of distinguishing the target moment from plausible neg-ative moments that current standard multi-instance learning methods face due to their focus on inter-sample confrontment only. Pseudo-Supervised Video Localization (PSVL) [29] introduces a novel zero-shot natural language video localization task that requires no paired annotation cost and proposes a pseudo-supervised method, that generates pseudo-supervision for training. Without using any textual annotations of videos, Unpaired Video Moment Retrieval (U-VMR) [30] employs a pre-trained image-sentence embedding space and utilizes established visual concept detectors for VMR. 63 Proposed Method 
+
+In this section, we detail the proposed Multi-proposal Collaboration and Multi-task Training method (MCMT) from two components, positive sample mask generation module and mask conditioned reconstruction module, as illustrated in Figure 2. In addition, the acronym and symbol table is as shown in Table 1, providing clear definitions for each variable and acronym to enhance readability. 
+
+## 3.1 Positive Sample Mask Generation Module 
+
+Based on the content of the video and the query, this module fully incorporates infor-mation from both modalities to generate a high-quality positive mask. To characterize the inherent temporal structure of the event (start, climax, end), following CNM [20], we use Gaussian masks as the proposals. Considering that CNM only generates a single Gaussian mask as the positive proposal, it becomes susceptible to redundant infor-mation from nearby video clips with similar backgrounds. This susceptibility leads to less stable retrieval performance. To address this limitation, the proposed method predicts multiple Gaussian masks simultaneously. Subsequently, the information from these masks is aggregated to generate a final high-quality positive mask. This final mask serves to highlight video clips that are semantically similar to the query. Due to the operation of aggregating multiple masks, the proposed method can detect video clips that are semantically similar to the query in a more efficient and stable way, resulting in more accurate localization. 
+
+3.1.1 Feature Extraction 
+
+Let W denote a sentence query, and F denote a corresponding untrimmed video. The query W = [ wi]nq −1 
+
+> i=0
+
+contains nq words, with wi representing a word in the sentence. For words in W, following previous methods [16, 18–20, 24], we also apply GloVe [31] to encode word embeddings as Q = [ qi]nq −1 
+
+> i=0
+
+∈ Rdw ×nq , where qi represents the word feature vector, dw is the word feature dimension. We have chosen GloVe as the text feature extraction tool primarily because of its ability to capture semantic relationships and similarities between words. By pre-training on large-scale corpora in an unsupervised manner, GloVe effectively captures the global semantics of words. Compared to randomly initialized word embeddings, GloVe provides more semanti-cally representative word vectors, which is especially beneficial in weakly-supervised video moment retrieval tasks, where it enhances the alignment of semantic information between text queries and video moments. The video F = [ fi]nf −1 
+
+> i=0
+
+contains a total sequence of nf frames, with each frame denoted as fi. Each video F is divided into clip units, each consisting of T frames. Subsequently, nv video clips are sampled at a constant interval, resulting in F =[vi]nv −1 
+
+> i=0
+
+, which are then input to a pre-trained feature extractor [32, 33] for feature extraction. The extracted features are forwarded to a fully connected layer with dv
+
+channels to acquire a compact feature representation. In conclusion, the visual features 
+
+V = [ vi]nv −1 
+
+> i=0
+
+∈ Rdv ×nv are generated, where dv denotes the dimension of the visual features. VMR is posed as an objective to retrieve the optimal corresponding video moment m∗ = {vi | i = is, · · · , i e}, which initiates at clip index is and concludes at 7ie. This video moment is selected based on its capacity to convey the same semantic content as the provided sentence query W.
+
+3.1.2 Positive Mask Generation 
+
+Following CNM, we use Gaussian masks to characterize the inherent temporal struc-ture (start, climax, end). We use transformer [34] to perform cross-modal interactions and obtain the fused forward query-video features H and inverse query-video features ¯H by: 
+
+H = [ hi]nv −1 
+
+> i=0
+
+= D(V, E(Q)) ∈ Rdh×nv ,
+
+¯H = ¯hj
+
+nv −1 
+
+> j=0
+
+= D(V, E( ¯Q)) ∈ Rdh×nv , (1) where E(·) is the transformer encoder, D(·) is the transformer decoder, dh is the hidden feature dimension. Specifically, since hnv −1 ∈ Rdh and ¯hnv −1 ∈ Rdh fuse all clip and word features, we design two mechanisms to perform cross-modal feature fusion: vector concatenation and additive attention [35]. 
+
+Vector Concatenation Mechanism. We use vector concatenation ( || ) followed by a Fully Connected (FC) layer to fuse information of all modalities and finally predict the center c and width w of k proposal candidates by the Sigmoid function: (c, w ) = Sigmoid    hnv −1|| ¯hnv −1
+
+ · W p
+
+ ∈ R2k,
+
+c ∈ Rk, w ∈ Rk, (2) where W p ∈ R2dh×2k is the weight for the FC prediction layer. 
+
+Additive Attention Mechanism. We apply additive attention mechanism [35] to compute the attention scores of hnv −1 ∈ Rdh and ¯hnv −1 ∈ Rdh . The scores com-puted are utilized to aggregate the information of eh = hnv −1, ¯hnv −1
+
+ to compute the modularized fused vector ˆh:
+
+β = Softmax 
+
+
+
+W h · eh
+
+
+
+∈ R2, ˆh =
+
+> 1
+
+X
+
+> i=0
+
+βi × eh ∈ Rdh , (3) where W h ∈ R1×dh is the weight for the modularized feed-forward layer, β represents the attention weights computed through the additive attention mechanism. These weights are derived by applying a softmax function to the vector ˆh, which consists of the fused forward and inverse query-video features. The attention weights β are used to determine the contribution of each modality to the final fused feature ˆh, where the sum of all attention weights equals 1, ensuring a weighted balance between different components. Then we also use an FC layer and predict the center c and width w of 
+
+k proposal candidates by the Sigmoid function: (c, w ) = Sigmoid( ˆh · W p) ∈ R2k, c ∈ Rk, w ∈ Rk, (4) where W p ∈ Rdh×2k is the weight for the FC prediction layer. 8We explore these two separate multi-modal fusion strategies, each applied indepen-dently to compute the center and width of the proposal candidates. Based on these predicted k proposal candidates, we generate the corresponding k Gaussian masks: 
+
+M =
+
+h
+
+[mij ]nv −1
+
+> j=0
+
+ik−1
+
+> i=0
+
+= exp 
+
+
+
+− α(( j + 1) /n v − ci)2
+
+w2
+
+> i
+
+
+
+∈ Rnv ×k, (5) where mij signifies the weight attributed to the j-th video clip within the i-th Gaussian mask, while α is a hyperparameter governing the variance of the Gaussian function. 
+
+3.1.3 Mask Aggregation Module 
+
+To generate a high-quality positive sample mask, we propose a mask aggregation mod-ule to aggregate the information of the generated k Gaussian masks. Specifically, we also apply an additive attention mechanism [35] to calculate the attention scores for each Gaussian mask. These computed scores are employed to consolidate the informa-tion from M = [ m0, m 1, · · · , m k−1] and compute the modularized mask vector ˆmp,serving as a positive mask: 
+
+β = Softmax ( W m · M )) ∈ Rk, ˆmp = 
+
+> nv−1
+
+X
+
+> i=0
+
+βi × mi ∈ Rnv , (6) where W m ∈ R1×nv is the weight for the modularized mask feed-forward layer. 
+
+## 3.2 Mask Conditioned Reconstruction Module 
+
+In order to empower the introduced model with the capability to differentiate intricate scenes effectively, we initially mine the negative mask from within the same video as the positive mask. Then, mask conditioned reconstruction module reconstructs the forward and inverse queries based on an arbitrary mask, and the reconstructed results are used as a measure of the semantic similarity between clips highlighted by positive/negative masks and the query. In addition to reconstruction query losses 
+
+LRec-f and LRec-i , following CNM, we also introduce the Intra-Video Contrastive (IVC) losses LIVC-f and LIVC-i to optimize the generated masks in an end-to-end manner. 
+
+3.2.1 Negative Sample Mining 
+
+Unlike CNM [20] that directly uses the generated single Gaussian mask as a positive mask, the proposed method aggregates the information of multiple predicted Gaussian masks to generate a robust positive mask, and mine negative masks based on this high-quality positive mask. To enable the proposed model to discriminate highly complex scenes, following CNM, instead of simply using other mismatched videos as negative samples, we mine two types of negative samples within the same video: easy negative and hard negative. 9Specifically, we regard the video clips suppressed by the positive sample mask ˆmp
+
+as an easy negative sample ˆme as: 
+
+ˆme = 1 − ˆmp ∈ Rnv . (7) In addition, since the entire video contains a lot of redundant information that is not relevant to the query, we treat the entire video as a hard negative sample ˆmh, denoted as: 
+
+ˆmh = [1 , 1, . . . , 1] ∈ Rnv . (8) By discriminating between positive and hard/easy negative samples, we can improve the performance of the proposed model in highly complex scenes. Given that the entire video encompasses a considerable amount of redundant information alongside the ground-truth clips, and an easy negative sample does not encompass any correct clips. In this context, the semantic similarity between these samples and the query is expected to fulfill: 
+
+R ( ˆmp, Q) > R   ˆmh, Q > R ( ˆme, Q) , (9) where R(·) is a function that computes the semantic similarity between the query and the video clip represented by mask ˆm.
+
+3.2.2 Mask Conditioned Semantic Completion 
+
+We assume that given a forward or a inverse masked query, the sample most relevant to the original query should be able to reconstruct the entire query better. To contrast positive and negative samples, following SCN [18] and CNM [20], we introduce the masked query reconstruction task to measure the semantic similarity of queries and positive and negative samples. In addition, we also introduce the inverse masked query reconstruction task to measure the similarity between inverse queries and positive and negative samples. These two tasks collaborate with each other to better compare positive and negative samples, thus achieving better performance. First, we use a special symbol to randomly mask 1/3 of the words of the original forward and inverse queries, where nouns, verbs, and adjectives have a higher probabil-ity of being replaced. The purpose is to balance learning efficiency and computational burden. If too few words are masked, the model may not face enough semantic infer-ence challenges, whereas masking too many words might lead to excessive information loss, hindering the training process. The 1/3 masking ratio provides sufficient infer-ence space for the model while retaining enough contextual information, ensuring that the model can effectively learn the semantic relationships between words during the training process. Then, we use GloVe [31] to encode the masked forward and inverse queries and pass an FC layer to obtain the masked forward and inverse query embedding ˆQ ∈ Rdw ×nq
+
+and ˆ¯Q ∈ Rdw ×nq , respectively. To prevent leakage of video features located outside the mask and to make the entire module differentiable to the mask, we use the mask conditioned transformer proposed by CNM [20] to reconstruct the original forward and inverse queries. Specifically, it multiplies the positive mask ˆmp by the attention 10 map before aggregating contextual information, and finally, we obtain the forward and inverse cross-modal semantic representations ˆH and ˆ¯H:ˆH = Dm
+
+ ˆQ, E m (V, ˆmp) , ˆmp
+
+
+
+∈ Rd×nq ,
+
+ˆ¯H = Dm
+
+ ˆ¯Q, E m (V, ˆmp) , ˆmp
+
+
+
+∈ Rd×nq ,
+
+(10) where d is the cross-modal feature dimension. Then, ˆH and ˆ¯H are fed into the FC prediction layer, and finally, given the first i − 1 words, we obtain the probability distribution of the i-th word: 
+
+P ˆH
+
+eqi | V , ˆQ0: i−1
+
+
+
+= Softmax 
+
+
+
+FC 
+
+ ˆH
+
+ 
+
+∈ RNq ×nq ,
+
+P ˆ¯H
+
+e¯qi | V , ˆ¯Q0: i−1
+
+
+
+= Softmax 
+
+
+
+FC 
+
+ ˆ¯H
+
+ 
+
+∈ RNq ×nq ,
+
+(11) where Nq is the vocabulary size. Finally, we can calculate the forward and inverse cross-entropy losses Lp 
+
+> CE-f
+
+and 
+
+Lp 
+
+> CE-i
+
+of the positive sample by: 
+
+Lp 
+
+> CE-f
+
+= − 
+
+> nq−1
+
+X
+
+> i=0
+
+log P ˆH
+
+eqi | V , ˆQ0: i−1
+
+
+
+,
+
+Lp 
+
+> CE-i
+
+= − 
+
+> nq−1
+
+X
+
+> i=0
+
+log P ˆ¯H
+
+e¯qi | V , ˆ¯Q0: i−1
+
+
+
+.
+
+(12) Similarly, by replacing ˆmp with ˆme and ˆmh, we can compute Le 
+
+> CE-f
+
+, Le
+
+> CE-i
+
+, Lh 
+
+> CE-f
+
+,and Lh
+
+> CE-i
+
+. We discard Le 
+
+> CE-f
+
+and Le 
+
+> CE-i
+
+because an easy sample does not contain query-related clips to reconstruct the original forward and inverse queries, so the cross-entropy loss of positive and hard negative samples (the entire video) is retained to participate in the optimization of the mask. The reconstruction loss is: 
+
+LRec = Lp 
+
+> CE-f
+
++ Lp 
+
+> CE-i
+
++ Lh 
+
+> CE-f
+
++ Lh
+
+> CE-i
+
+. (13) As shown in Eq.9, the semantic similarity of positive, hard negative, and easy negative samples to the query needs to satisfy a relationship from large to small. Following CNM, we use the IVC loss of two tasks to compare positive and negative samples: 
+
+LIVC-f = max  Lp 
+
+> CE-f
+
+− L h 
+
+> CE-f
+
++ β1, 0 +max ( Lp 
+
+> CE-f
+
+− L e 
+
+> CE-f
+
++ β2, 0) , (14) 
+
+LIVC-i = max  Lp 
+
+> CE-i
+
+− L h 
+
+> CE-i
+
++ β3, 0 +max ( Lp 
+
+> CE-i
+
+− L e 
+
+> CE-i
+
++ β4, 0) , (15) where β1 and β2 are hyperparameters satisfying β1 < β 2. The condition imposed by 
+
+LIVC −f mandates that the loss associated with the positive sample must be a minimum 11 Table 2 Summary of each dataset.               
+
+> Dataset #Videos #Anno. (train/val/test) Lvid Lmom
+> Charades 6,672 12,408 / — / 3,720 30.59s 8.22s ActivityNet 19,207 37,417 / 17,505 / 17,031 117.61s 36.18s
+> 1#Anno.: Number of query-moment pairs in different datasets.
+> 2Lvid and Lmom : Average lengths of videos and moments, respectively.
+
+of β1 lower than that of the hard negative sample, and at least β2 lower than the loss of the easy negative sample. Similarly, β3 < β 4. The final IVC loss LIVC is: 
+
+LIVC = LIVC-f + LIVC-i . (16) 
+
+## 3.3 Model Training and Inference 
+
+3.3.1 Training 
+
+The reconstruction loss LRec optimizes the mask conditioned reconstruction module to predict the query related to the given mask. The IVC loss LIVC enhances the optimization of the mask generation module, aiming to increase the distinctiveness between positive and negative samples. Following CNM [20], the proposed method sequentially updates the reconstructor with LRec while freezing the mask generator, followed by updating the mask generator with LIVC while freezing the reconstructor. 
+
+3.3.2 Inference 
+
+First, the center c and width w in Eq.2 are calculated for the predicted k proposals, as well as the attention scores β in Eq.6 which indicate the reliability of each pro-posal’s contribution to the positive mask ˆmp. Next, the proposals are sorted by their corresponding scores in descending order to obtain the top-k predictions. Specifically, to select the top-1 prediction from the k proposals, we adopt a vote-based strategy [36, 37] and use the k proposals to vote with each other and select the one with the highest number of votes as the final top-1 prediction, where the IoU is calculated between each proposal and the remaining k − 1 proposals to determine the number of votes each proposal gains. Ultimately, the temporal boundaries ( s, e) of the top-k
+
+propsals can be obtained by: 
+
+s = max( c − w/2, 0) × d, 
+
+e = min( c + w/2, 1) × d, (17) where d denotes the duration of the corresponding untrimmed video. 
+
+# 4 Experiments 
+
+In this section, we mainly evaluate the efficiency of the proposed MCMT, verify the impact of the different components, and finally perform the quantitative analysis. 12 Table 3 Hyperparameters on each dataset.                                           
+
+> Hyperparameter Charades ActivityNet Description Learning rate 4×10 −44×10 −4—Batch size 128 64 —
+> nv200 200 Number of sampled clips
+> nq20 20 Number of words
+> dv1,024 512 Visual feature dimension
+> dw300 300 Word feature dimension
+> Nq1,111 8,000 Vocabulary size
+> dh256 256 Hidden feature dimension
+> β1, β 30.1 0.1 Hyperparameters of LIVC
+> β2, β 40.15 0.15 Hyperparameters of LIVC
+> α5.5 5.0 Generating Gaussian masks
+
+## 4.1 Datasets and Experimental Setting 
+
+4.1.1 Datasets. 
+
+Following prior works[15, 16, 18, 20, 25, 27], the proposed MCMT method is evaluated on two publicly available datasets: Charades-STA (Charades) [5] and ActivityNet-Captions (ActivityNet) [38]. Charades includes 6.7k videos primarily showcasing everyday indoor activities. It stands as the preeminent dataset for the VMR task and was initially extended and named by [5]. On the other hand, ActivityNet centers on more intricate human activities within daily life, constituting a substantial dataset for the VMR task with 20k videos. These datasets adhere to the standard partitioning established in prior research [18, 20, 28]. Detailed statistics of each dataset are shown in Table 2. 
+
+4.1.2 Metrics. 
+
+To ensure impartial and rigorous comparisons, we employ the evaluation metrics “Rank@1, IoU = m” and “mIoU” in line with previous studies [15, 19, 20, 25]. Specif-ically, “Rank@1, IoU = m” is defined as the percentage of natural language queries where the top-1 retrieved video moment achieves an Intersection over Union (IoU) greater than m. On the other hand, “mIoU” represents the average IoU score of the top-1 retrieved video moments across all testing queries. 
+
+4.1.3 Implementation Details. 
+
+Following CNM [20], we use Contrastive Language-Image Pre-training (CLIP) [32] to pre-extract visual clip features for each video in ActivityNet and Inflated 3D ConvNet (I3D) [33] in Charades. As for the query terms, we utilize GloVe embeddings [31] to serve as the feature extractor for the textual data. Hyperparameters are provided in Table 3. The transformer in the mask generator and mask conditioned reconstructor is composed of 4 attention heads and 3 layers. Note that for Charades, we limit the maximum width of the prediction to 0.45 (multiplied by Eq. 4) due to the shorter ground-truth length. We use Adam [39] as the optimizer, and all experiments are conducted on dual NVIDIA GeForce RTX 2080Ti GPUs using PyTorch 1.12.1 with CUDA 11.7 and cuDNN 8.4.1. 13 Table 4 Rank@1 (%) on the ActivityNet dataset. Con: vector concatenation, Att: additive attention mechanism. k: number of proposals. Values highlighted in bold , underlined and italic 
+
+> indicate the top-3 methods, respectively.
+
+Type Model IoU = 0 .1 IoU = 0 .3 IoU = 0 .5 mIoU MI WSLLN [23] 75.40 42.80 22.70 32.20 WSTG [25] 74.20 44.30 23.60 32.20 WSTAN [26] 79.78 52.45 30.01 —CRM [15] 81.61 55.26 32.19 —LCNet [16] 78.58 48.49 26.33 34.29 RB WS-DEC [17] 62.71 41.98 23.34 28.23 SCN [18] 71.48 47.23 29.22 —MARN [27] — 47.01 29.95 —EC-SL [19] 68.48 44.29 24.16 —ACN [40] 78.78 57.66 34.18 —MARN(SA) [41] — 48.52 31.37 —CNM [20] 78.13 55.68 33.33 37.14 
+
+OW RTBPN [28] 73.73 49.77 29.63 —RB Proposed (Con, k = 12) 81.45 57.54 33.56 37.99 Proposed (Att, k = 7) 82.07 58.82 33.97 38.49 
+
+4.1.4 Comparison Methods 
+
+The performance of the newly proposed MCMT method is evaluated across two bench-mark datasets. Furthermore, a comparative analysis is conducted, pitting it against recently introduced methods, which encompass: 
+
+• Multi-Instance Learning Methods (MI): TGA [13], WSLLN [23], VLANet [24], WSTG [25], WSTAN [26], LoGAN [14], CRM [15], LCNet [16], 
+
+• Reconstruction-based Methods (RB): WS-DEC [17], SCN [18], MARN [27], EC-SL [19], ACN [40], MARN(SA) [41], CNM, 
+
+• Other Weakly-supervised Method (OW): RTBPN [28]. The results on each dataset are presented in Tables 4-5. 
+
+## 4.2 Experimental Analysis 
+
+4.2.1 Overall Performance Comparison 
+
+We first compare the proposed MCMT on the ActivityNet dataset with the recent methods in Table 4. MCMT achieves the best results across all metrics. Specifically, it outperforms the recent multi-instance learning methods consistently. Notably, CRM introduces additional paragraph annotation information during training, while MCMT achieves superior performance without such information. For reconstruction-based and other weakly-supervised methods, MCMT also shows better results, particularly com-pared to the baseline reconstruction-based method CNM, , which is of the same type as MCMT. MCMT surpasses CNM with improvements of 3.94%, 3.14%, 0.64%, and 1.35% across various metrics. These results suggest that the multi-proposal collab-oration and multi-task training mechanisms are highly effective in scenarios where complex activities with diverse temporal structures need to be captured. 14 Table 5 Rank@1 (%) on the Charades dataset. 
+
+Type Model IoU = 0 .3 IoU = 0 .5 IoU = 0 .7 mIoU MI TGA [13] 32.14 19.94 8.84 —VLANet [24] 45.24 31.83 14.17 —WSTG [25] 39.80 27.30 12.90 27.30 WSTAN [26] 43.39 29.35 12.28 —LoGAN [14] 48.04 31.74 13.71 —CRM [15] 53.66 34.76 16.37 —LCNet [16] 59.60 39.19 18.87 38.94 
+
+RB SCN [18] 42.96 23.58 9.97 —MARN [27] 48.55 31.94 14.81 —ACN [40] 62.95 37.02 15.26 —MARN(SA) [41] 48.05 33.87 15.54 —CNM [20] 60.04 35.15 14.95 38.11 OW RTBPN [28] 60.04 32.36 13.24 —RB Proposed (Con, k = 1) 61.21 35.24 15.17 38.59 Proposed (Att, k = 1) 60.35 36.23 15.29 38.47 
+
+Proposed (Con, k = 10 ) 55.07 37.65 18.46 36.74 
+
+Table 6 Rank@1 (%) of different variants on the ActivityNet dataset. MT: Multi-task Training, MC: Multi-proposal Collaboration, Con: vector concatenation, Att: additive attention mechanism, 
+
+k: number of proposals, ∗: the vote-based strategy during inference. Values highlighted in bold 
+
+indicate the best variant.                                                             
+
+> Row# Variant ActivityNet
+> kIoU = 0 .1IoU = 0 .3IoU = 0 .5mIoU 1Baseline 178.13 55.68 33.33 37.14 2Baseline +M T 180.38 57.51 33.87 37.84 3Baseline +M T +M C ∗(Con )12 81.45 57.54 33.56 37.99 4Baseline +M T +M C ∗(Att )782.07 58.82 33.97 38.49
+> 5Baseline +M T +M C (Con )12 82.70 57.52 30.06 36.57 6Baseline +M T +M C (Att )783.32 59.52 28.69 37.18
+
+To further elaborate on these improvements, MCMT’s advantage is particularly noticeable when dealing with long-duration videos containing multiple activities, as is common in the ActivityNet dataset. The multi-task training mechanism allows MCMT to maintain better alignment between queries and video moments through forward and inverse query reconstruction tasks, effectively constraining the model from mul-tiple perspectives. This dual-constraint strategy strengthens the model’s robustness and ability to generalize across various video lengths and complexities, resulting in improved temporal localization accuracy. Additionally, MCMT’s multiple proposals improve performance, especially at chal-lenging IoU thresholds like IoU = 0.3 and IoU = 0.5. This indicates that the model can handle finer temporal localization with higher precision, particularly in videos with complex temporal dynamics. Compared to single-proposal methods, MCMT reduces the likelihood of redundant information from neighboring video segments influencing the retrieval results, thereby enhancing its capability in both coarse and fine retrieval tasks. 15 Table 7 Rank@1 (%) of different variants on the Charades dataset.                                                             
+
+> Row# Variant Charades
+> kIoU = 0 .3IoU = 0 .5IoU = 0 .7mIoU 1Baseline 160.04 35.15 14.95 38.11 2Baseline +M T 161.21 35.24 15.17 38.59
+> 3Baseline +M T +M C ∗(Con )10 55.07 37.65 18.46 36.74 4Baseline +M T +M C ∗(Att )955.64 37.11 17.00 36.96 5Baseline +M T +M C (Con )10 54.72 37.65 18.08 36.68 6Baseline +M T +M C (Att )954.84 36.89 16.72 36.64
+
+For the Charades dataset, MCMT ranks among the top-3 across all metrics (Table 5). While it demonstrates minor deviations from other methods in some metrics, these differences are not substantial. Specifically, MCMT achieves the second-best result on the IoU = 0 .3 metric, with a 1.17% improvement over both the baseline reconstruction-based method CNM and the other weakly-supervised method RTBPN [28]. This shows that MCMT is particularly strong in coarse retrieval tasks. However, as we increase the number of proposals, we observe slight improvements at higher IoU thresholds (IoU = 0 .5, IoU = 0 .7), though still falling short of the LCNet [16] method. The reason for this may be attributed to LCNet’s multi-instance learning strategy, which focuses on fine-grained correspondences between video and text via self-supervised learning. In contrast, MCMT is a reconstruction-based method. These two methods guide model training from different perspectives, leading to the observed performance differences. Nonetheless, MCMT still outperforms other reconstruction-based methods on nearly all metrics, emphasizing the effectiveness of the proposed method. Upon closer examination, we observe that MCMT encounters challenges in dis-tinguishing fine-grained actions within highly similar indoor environments, such as those in the Charades dataset. When activities share overlapping backgrounds and objects, the multi-proposal mechanism can struggle to differentiate subtle temporal transitions between actions, leading to slightly lower scores at higher IoU thresholds (e.g., IoU = 0.5). This issue is particularly prominent in the Charades dataset, where background similarity poses a significant challenge for proposal-based models. Despite this limitation, MCMT remains competitive across a wide range of IoU thresholds, which demonstrates the model’s robustness in handling coarse-level moment retrieval, especially in scenes with diverse activity types and temporal structures. Moreover, considering the different data sources in the two datasets, the Activ-ityNet dataset contains more diverse and flexible human activities, while Charades focuses on daily indoor activities with similar backgrounds, making the latter dataset more challenging. These differences cause the model to perform differently on each dataset. In ActivityNet, the diversity in temporal structures and activity types pro-vides a broader range for MCMT to fully utilize its multi-proposal mechanism. In contrast, the similarity in Charades limits the model’s ability to exploit this mech-anism to its fullest extent. Nevertheless, the strong performance in both datasets, especially in coarse-grained retrieval tasks, highlights the robustness of the MCMT model in handling various video types. 16 5 6 7 8              
+
+> Proposal Number k
+> 26
+> 28
+> 30
+> 32
+> 34
+> 36
+> 38
+> Rank@1(%)
+> 36.3 36.65
+> 38.49
+> 37.81
+> 30.5
+> 31.64
+> 33.97
+> 31.18
+> mIoU
+> IoU=0.5 (a) ActivityNet (Att: Additive attention mecha-nism) 8910 11 12
+> Proposal Number k
+> 15
+> 20
+> 25
+> 30
+> 35
+> Rank@1(%)
+> 32.06
+> 37.17 36.74 36.24
+> 35.24
+> 17.48 17.19
+> 18.46 18.21
+> 16.72
+> mIoU
+> IoU=0.7
+> (b) Charades (Con: Vector concatenation)
+
+Fig. 3 Effect of the proposal number k on each dataset. 
+
+4.2.2 Discussion 
+
+We systematically analyze the limitations of our study and their impact on the interpretation of the results. Specifically, experimental results show that at an IoU threshold of 0.5, the Rank@1 of MCMT on the Charades dataset is 37.65%, slightly below LCNet’s [16] 39.19% in Table 5. This performance difference can primarily be attributed to the inherent characteristics of the dataset and the design of the method: the Charades dataset features a large number of highly similar indoor activities, mak-ing fine-grained action distinctions particularly challenging. For example, actions like “picking up a book” and “putting down a book” differ only slightly in temporal sequence, with nearly identical backgrounds. Additionally, while the model utilizes multi-proposal collaboration to generate candidate proposals, the impact of increas-ing the proposal quantity on performance at higher IoU thresholds (e.g., IoU=0.7) is limited in the Charades dataset. This highlights how redundant information and back-ground similarity constrain the precision of the proposal module. Nevertheless, the method still outperforms other reconstruction-based methods (e.g., CNM [20]) across several metrics, demonstrating the robustness and generalizability of MCMT in the weakly-supervised video moment retrieval task. By integrating these findings, we have provided a detailed analysis of the performance gaps and cautiously interpreted the applicability of the results. 
+
+## 4.3 Ablation Studies 
+
+Furthermore, we undertake ablation studies to explore the influence of various factors on the performance of the proposed MCMT. 
+
+4.3.1 Efficiency of the Proposed Components 
+
+Tables 6-7 show the evaluation results of the different variants on the two datasets. Since CNM [20] is trained and generates a single proposal under the guidance of the forward masked query reconstruction task, we treat it as the Baseline. As can be seen from Rows 1–2 in Tables 6-7, after introducing the Multi-task Training ( M T ) mech-anism, Baseline + M T performs significantly better than Baseline on both datasets, 17 which validates the effectiveness of M T by imposing substantial constraints and guid-ance on the model. However, the performance of the variants on the two datasets is inconsistent when the Multi-proposal Collaboration ( M C ) mechanism is intro-duced. Observing Rows 2–4 of Table 6 on the ActivityNet dataset, the performance of 
+
+Baseline + M T + M C ∗(Con ) and Baseline + M T + M C ∗(Att ) is better than that of 
+
+Baseline + M T . In particular, the variant with M C (Att ) shows the best performance, which validates the effectiveness of the M C mechanism on this dataset. Meanwhile, observing Rows 2–4 of Table 7 on the Charades dataset, when we introduce the M C 
+
+mechanism, the evaluation results of the corresponding variants decrease on IoU = 0 .3and mIoU, but improve greatly on IoU = 0 .5 and IoU = 0 .7, which indicates that the 
+
+M C mechanism enables the model to achieve finer localization of video moments. In conclusion, these experiments verify the effectiveness of the M T and M C mechanisms. 
+
+4.3.2 Vector Concatenation v.s. Additive Attention Mechanism 
+
+Vector concatenation and additive attention mechanism are two ways used for multi-modal information fusion in our method. We compare their performance on the two datasets, as shown in Tables 4-5 (Proposed (Con) v.s. Proposed (Att)). We observe that additive attention mechanism (Att) performs better than vector concatenation (Con) on the ActivityNet dataset while comparable on the Charades dataset. We recommend adopting additive attention operation since it achieves better performance with fewer parameters. 
+
+4.3.3 Attention Score Strategy v.s. Vote-based Strategy 
+
+Two strategies during inference are compared. Observing Rows 3–6 of Tables 6-7, we notice that the variants employing the two strategies show similar performance in the coarser evaluation metrics, but the variants with the vote-based strategy significantly outperform the variants with the attention score strategy on the finer evaluation met-rics. In particular, the variant based on the voting strategy improves at least 3.5% on IoU = 0 .5 on the ActivityNet dataset. In summary, we recommend the use of the vote-based strategy. 
+
+4.3.4 Number of Generated Proposals 
+
+We further explore the effect of the number of generated proposals on model retrieval performance. We vary the number of generated proposals and report the experimental results in Figure 3. We select mIoU as the model’s global performance evaluation met-ric on both datasets, and choose IoU = 0 .5 and IoU = 0 .7 as more stringent evaluation metrics on the ActivityNet and Charades datasets, respectively. We notice that on the ActivityNet dataset, with the rise of k, the model’s performance first increases and then decreases, and it is optimal when k = 7. Meanwhile, on the Charades dataset, when we continue to increase the number of proposals, the overall performance of the model (mIoU) also shows a trend of increasing first and then decreasing. As for the more stringent retrieval performance (IoU = 0 .7), when k = 10, the performance of the model is optimal. Moreover, the impact trend shows that the number of generated 18 Table 8 Impact of Hard Negative Masks vs. Easy Negative Masks on Charades dataset. Row# Hard Easy IoU=0.3 IoU=0.5 IoU=0.7 mIoU 1 ✓ ✓ 55.07 37.65 18.46 36.74                                        
+
+> 2×✓52.28 32.96 15.58 33.90 3✓×54.65 36.26 16.69 35.75 4××40.69 29.58 14.19 27.90
+> Table 9 Impact of Forward Queries vs. Inverse Queries on Charades dataset. Row# Variant IoU=0.3 IoU=0.5 IoU=0.7 mIoU 1MCMT w/ Forward Queries 52.34 36.67 17.76 35.01 2MCMT w/ Inverse Queries 55.13 37.21 17.70 36.34 3MCMT w/ All Queries 55.07 37.65 18.46 36.74
+
+proposals has different impacts on different datasets due to the different specific data distributions. 
+
+4.3.5 Impact of Hard Negative Masks vs. Easy Negative Masks 
+
+From the results in Table 8, it is clear that the model with both hard and easy negative samples (Row 1) achieves the best performance in almost all metrics. This indicates that the combination of hard and easy negative samples enables the model to learn more diverse negative examples, which in turn improves its ability to distinguish between positive and negative samples. Hard negatives provide more challenging exam-ples, while easy negatives help the model quickly learn basic discriminative abilities. The combination of both types maximizes the model’s learning capacity, especially in complex scenarios requiring higher generalization. In contrast, models using only easy negatives (Row 2) or only hard negatives (Row 3) show inferior performance, although hard negatives slightly outperform easy nega-tives at these metrics, but the overall performance still lags behind the combination of both types. Notably, at IoU=0.7, the model with hard negatives slightly outperforms the one with easy negatives (16.69 vs. 15.58). Furthermore, the model without any negative samples (Row 4) performs the worst, with an mIoU of only 27.90, highlighting the critical role of negative samples in improving the model’s discriminative power. 
+
+4.3.6 Impact of Forward Queries vs. Inverse Queries 
+
+From the results in Table 9, the model with both forward and inverse queries combined (Row 3) achieves the highest mIoU of 36.74 and the best performance at IoU=0.5 and IoU=0.7, with scores of 37.65 and 18.46, respectively. This demonstrates that combining both forward and inverse queries provides the model with richer training signals, enhancing its contrastive learning from multiple perspectives and improving overall performance. This multi-view training signal is particularly important for the model’s performance in complex scenarios, especially at higher IoU thresholds. 19 In comparison, the model using only forward queries (Row 1) shows a slight decline in performance, indicating that forward queries alone may not provide enough con-straint for the model in some cases. The model using only inverse queries (Row 2) achieves the best IoU=0.3 score (55.13) but lags behind in other metrics, particularly at IoU=0.7 (17.70). Overall, the combination of both forward and inverse queries offers a more comprehensive supervision signal, resulting in improved overall performance. 
+
+4.3.7 Impact of Different Loss Functions 
+
+Regarding the exploration of different loss functions, we have already addressed this in previous ablation studies. For example, in Table 9, Row 1 shows the retrieval per-formance of the model using only Lp 
+
+> CE-f
+
+, Lh 
+
+> CE-f
+
+, and LIVC-f , focusing specifically on the contribution of these loss functions. Similarly, Table 8 presents the results related to Hard and Easy Negatives. Row 2 in Table 8 illustrates the model’s performance when the hard negative reconstruction loss and hard intra-video loss are excluded, leaving only the easy intra-video loss. These analyses already cover the impact of different loss functions in various scenarios. We encourage you to review these sections for fur-ther details. Overall, the proposed method has demonstrated its effectiveness through these ablation studies. 
+
+## 4.4 Qualitative Results 
+
+In order to qualitatively confirm the effectiveness of the proposed MCMT method, we present some typical examples illustrating moment retrieval guided by natural language. Figure 4 shows the retrieval results achieved by the MCMT method as well as the Baseline CNM [20] on the Charades and ActivityNet datasets, respec-tively. Through intuitive comparison, MCMT is closer to the ground truth than CNM. Unlike CNM which directly generates only a Gaussian mask as the positive mask and introduces a single task to guide model training, MCMT aggregates the infor-mation of multiple predicted Gaussian masks to generate a robust positive mask and mine negative masks based on this high-quality positive mask. In addition to the for-ward reconstruction masked query task, MCMT introduces the inverse reconstruction masked query task to impose more substantial constraints on the model to guide model training. All these initiatives make our models more efficient and stable. 
+
+## 4.5 Lessons Learned 
+
+We further analyze and summarize the findings revealed by the experimental results. First, comparing Table 4 and Table 5, we find that the proposed MCMT achieves optimal values on all metrics in the ActivityNet dataset, while it achieves competitive results in the Charades dataset. Considering the distinct data sources between the two datasets, the videos within the ActivityNet dataset record flexible human activi-ties, exhibiting diversity and openness. On the other hand, the videos in the Charades dataset focus on recording indoor daily activities, with similar backgrounds. This vari-ance in data distributions contributes to different performances. Specifically, this is the main reason that the proposed method is less effective on Charades compared to 20 Query: person puts on shoes. 
+
+GT : 
+
+CNM : 
+
+MCMT : 
+
+4.30s  12.00s 
+
+3.98s  12.31s 
+
+Query: person pours the contents into a glass. 
+
+GT: 
+
+CNM : 
+
+MCMT : 
+
+9.60s  21.60s 
+
+9.31s  22.50s 
+
+8.89s  23.21s 
+
+4.24s  12.80s 
+
+GT: 
+
+CNM : 
+
+MCMT : 
+
+7.60s  17.50s 
+
+7.11s  18.08s 
+
+6.87s  18.38s 
+
+Query: person puts it on a shelf. (a) Charades Query: man cleans a square from a really deep snow.   
+
+> GT:
+> CNM :
+> : MCMT
+> 3.03s 121.16s
+> 0s 119.73s
+
+Query: men are skateboarding in street going on squares and streets.        
+
+> GT:
+> : CNM
+> MCMT :
+> 6.14s 151.12s
+> 9.85s 151.12s
+> 0s 138.86s
+> 26.20s 121.16s
+> GT:
+> CNM:
+> MCMT :
+> 29.61s 150.32s
+> 27.33s 150.32s
+> 50.40s 150.32s
+
+Query: She is grooming the horse. 
+
+(b) ActivityNet 
+
+Fig. 4 Qualitative examples of each dataset. 
+
+21 ActivityNet. Second, comparing the closest method CNM [20] as the Baseline, observ-ing Rows 1–2 of Tables 6-7, the method variant outperforms CNM across the board when the M T mechanism is introduced. Comparing Rows 1 and 3, the performance of the variant improves on the ActivityNet dataset when the M C mechanism is intro-duced, and interestingly on the Charades dataset, IoU = 0 .3 and mIoU decrease while IoU = 0 .5 and IoU = 0 .7 improve, which indicates that the M C mechanism makes the model focus on more accurate moment retrieval. Taken together, experiments and ablation studies as well as quantitative results show the effectiveness of the proposed MCMT. 
+
+# 5 CONCLUSION 
+
+This paper presents a novel approach, called Multi-proposal Collaboration and Multi-task Training (MCMT), for the weakly-supervised Video Moment Retrieval (VMR) task. MCMT generates multiple Gaussian masks and uses a mask aggregation module to create a robust final positive sample mask, effectively mining high-quality positive, easy negative, and hard negative samples. In addition, MCMT introduces a dual-task mechanism, where the forward and reverse masked query reconstruction tasks impose stronger constraints on the model, enhancing performance during training. Experi-mental results on two widely-used datasets, Charades and ActivityNet, demonstrate the superiority of MCMT, where it achieves significant performance improvements. In the future, we plan to incorporate more flexible cross-modal attention mecha-nisms to improve the model’s ability to capture fine-grained actions. Additionally, we aim to optimize the proposal generation module by integrating clustering strategies to enhance proposal quality and reduce redundancy. To further improve the model’s generalization, we will explore data augmentation techniques to create more diverse training samples. These directions are expected to further enhance the model’s per-formance and applicability, offering more possibilities for the weakly-supervised video moment retrieval task. 
+
+# Acknowledgments 
+
+This work was supported in part by the China Scholarship Council under No.202206130025, Postgraduate Scientific Research Innovation Project of Hunan Province under Grant QL20220096, National Natural Science Foundation of China under Grant 62072169, 62172156, Natural Science Foundation of Hunan Province under Grant 2021JJ30152. 
+
+# Declarations 
+
+Authors contribution statement. Mr.Zhang designed the framework, performed the experiments and wrote the manuscript. Ms.Yang assisted with the implementation of the research, verification of the experimental results and revised the manuscript. Mr.Jiang, Mr.Komamizu and Mr.IDE provided critical feedback and contributed to the final manuscript. 22 Data availability and access. The raw data elaborated during the current research are publicly available. 
+
+Competing Interests. The authors declare that they have no competing interests. 
+
+Ethical and informed consent for data used. Not applicable. 
+
+# References 
+
+[1] Collins, R.T., Lipton, A.J., Kanade, T., Fujiyoshi, H., Duggins, D., Tsin, Y., Tolliver, D., Enomoto, N., Hasegawa, O., Burt, P., Wixson, L.: A system for video surveillance and monitoring. VSAM Final Report 2000 , 1–68 (2000) [2] He, Q., Shi, R., Chen, L., Huo, L.: Video anomaly detection based on multi-scale optical flow spatio-temporal enhancement and normality mining. International Journal of Machine Learning and Cybernetics, 1–16 (2024) [3] Kemp, C.C., Edsinger, A., Torres-Jara, E.: Challenges for robot manipulation in human environments [grand challenges of robotics]. IEEE Robotics & Automation Magazine 14 , 20–29 (2007) [4] Anne Hendricks, L., Wang, O., Shechtman, E., Sivic, J., Darrell, T., Russell, B.: Localizing moments in video with natural language. In: Proceedings of the 16th IEEE International Conference on Computer Vision, pp. 5803–5812 (2017) [5] Gao, J., Sun, C., Yang, Z., Nevatia, R.: Tall: Temporal activity localization via language query. In: Proceedings of the 16th IEEE International Conference on Computer Vision, pp. 5267–5275 (2017) [6] Zhang, B., Jiang, B., Yang, C., Pang, L.: Dual-channel localization networks for moment retrieval with natural language. In: Proceedings of the 2022 International Conference on Multimedia Retrieval, pp. 351–359 (2022) [7] Zhang, B., Yang, C., Jiang, B., Zhou, X.: Video moment retrieval with hierarchical contrastive learning. In: Proceedings of the 30th ACM International Conference on Multimedia, pp. 346–355 (2022) [8] Liu, M., Wang, X., Nie, L., He, X., Chen, B., Chua, T.-S.: Attentive moment retrieval in videos. In: The 41st International ACM SIGIR Conference on Research & Development in Information Retrieval, pp. 15–24 (2018) [9] Wang, Y., Liu, M., Wei, Y., Cheng, Z., Wang, Y., Nie, L.: Siamese alignment network for weakly supervised video moment retrieval. IEEE Transactions on Multimedia 25 , 3921–3933 (2022) [10] Yoon, S., Koo, G., Kim, D., Yoo, C.D.: Scanet: Scene complexity aware network for weakly-supervised video moment retrieval. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 13576–13586 (2023) 23 [11] Huang, Y., Yang, L., Sato, Y.: Weakly supervised temporal sentence ground-ing with uncertainty-guided self-training. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 18908–18918 (2023) [12] Lv, Z., Su, B., Wen, J.-R.: Counterfactual cross-modality reasoning for weakly supervised video moment localization. In: Proceedings of the 31st ACM Interna-tional Conference on Multimedia, pp. 6539–6547 (2023) [13] Mithun, N.C., Paul, S., Roy-Chowdhury, A.K.: Weakly supervised video moment retrieval from text queries. In: Proceedings of the 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 11592–11601 (2019) [14] Tan, R., Xu, H., Saenko, K., Plummer, B.A.: Logan: Latent graph co-attention network for weakly-supervised video moment retrieval. In: Proceedings of the 2021 IEEE/CVF Winter Conference on Applications of Computer Vision, pp. 2083–2092 (2021) [15] Huang, J., Liu, Y., Gong, S., Jin, H.: Cross-sentence temporal and semantic relations in video activity localisation. In: Proceedings of the 18th IEEE/CVF International Conference on Computer Vision, pp. 7199–7208 (2021) [16] Yang, W., Zhang, T., Zhang, Y., Wu, F.: Local correspondence network for weakly supervised temporal sentence grounding. IEEE Transactions on Image Processing 
+
+30 , 3252–3262 (2021) [17] Duan, X., Huang, W., Gan, C., Wang, J., Zhu, W., Huang, J.: Weakly supervised dense event captioning in videos. Advances in Neural Information Processing Systems 31 , 1–11 (2018) [18] Lin, Z., Zhao, Z., Zhang, Z., Wang, Q., Liu, H.: Weakly-supervised video moment retrieval via semantic completion network. In: Proceedings of the AAAI Conference on Artificial Intelligence, pp. 11539–11546 (2020) [19] Chen, S., Jiang, Y.-G.: Towards bridging event captioner and sentence localizer for weakly supervised dense event captioning. In: Proceedings of the 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 8425–8435 (2021) [20] Zheng, M., Huang, Y., Chen, Q., Liu, Y.: Weakly supervised video moment local-ization with contrastive negative sample mining. In: Proceedings of the AAAI Conference on Artificial Intelligence, pp. 3517–3525 (2022) [21] Zhang, H., Sun, A., Jing, W., Zhou, J.T.: Temporal sentence grounding in videos: A survey and future directions. IEEE Transactions on Pattern Analysis and Machine Intelligence 45 , 10443–10465 (2023) [22] Liu, M., Nie, L., Wang, Y., Wang, M., Rui, Y.: A survey on video moment 24 localization. ACM Computing Surveys 55 , 1–37 (2023) [23] Gao, M., Davis, L.S., Socher, R., Xiong, C.: Wslln: Weakly supervised natural language localization networks. Computing Research Repository arXiv Preprint, arXiv:1909.00239 (2019) [24] Ma, M., Yoon, S., Kim, J., Lee, Y., Kang, S., Yoo, C.D.: Vlanet: Video-language alignment network for weakly-supervised video moment retrieval. In: Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XXVIII, pp. 156–171 (2020) [25] Chen, Z., Ma, L., Luo, W., Tang, P., Wong, K.-Y.K.: Look closer to ground better: Weakly-supervised temporal grounding of sentence in video. Computing Research Repository arXiv Preprint, arXiv:2001.09308 (2020) [26] Wang, Y., Deng, J., Zhou, W., Li, H.: Weakly supervised temporal adjacent network for language grounding. IEEE Transactions on Multimedia 24 , 3276–3286 (2022) [27] Song, Y., Wang, J., Ma, L., Yu, Z., Yu, J.: Weakly-supervised multi-level atten-tional reconstruction network for grounding textual queries in videos. Computing Research Repository arXiv Preprint, arXiv:2003.07048 (2020) [28] Zhang, Z., Lin, Z., Zhao, Z., Zhu, J., He, X.: Regularized two-branch proposal networks for weakly-supervised moment retrieval in videos. In: Proceedings of the 28th ACM International Conference on Multimedia, pp. 4098–4106 (2020) [29] Nam, J., Ahn, D., Kang, D., Ha, S.J., Choi, J.: Zero-shot natural language video localization. In: Proceedings of the 18th IEEE/CVF International Conference on Computer Vision, pp. 1470–1479 (2021) [30] Gao, J., Xu, C.: Learning video moment retrieval without a single annotated video. IEEE Transactions on Circuits and Systems for Video Technology 32 ,1646–1657 (2021) [31] Pennington, J., Socher, R., Manning, C.D.: Glove: Global vectors for word rep-resentation. In: Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing, pp. 1532–1543 (2014) [32] Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., Sutskever, I.: Learning transferable visual models from natural language supervision. In: Proceedings of the 38th International Conference on Machine Learning, pp. 8748–8763 (2021) [33] Carreira, J., Zisserman, A.: Quo vadis, action recognition? a new model and the kinetics dataset. In: Proceedings of the 2017 IEEE Conference on Computer Vision and Pattern Recognition, pp. 6299–6308 (2017) 25 [34] Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, L., Polosukhin, I.: Attention is all you need. Advances in Neural Information Processing Systems 30 , 1–11 (2017) [35] Bahdanau, D., Cho, K.H., Bengio, Y.: Neural machine translation by jointly learn-ing to align and translate. In: Proceedings of the 3rd International Conference on Learning Representations, pp. 1–10 (2015) [36] Zhou, Z.-H.: Ensemble learning. Encyclopedia of Biometrics, 270–273 (2009) [37] Zheng, M., Huang, Y., Chen, Q., Peng, Y., Liu, Y.: Weakly supervised temporal sentence grounding with gaussian-based contrastive proposal learning. In: Pro-ceedings of the 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 15555–15564 (2022) [38] Krishna, R., Hata, K., Ren, F., Fei-Fei, L., Carlos Niebles, J.: Dense-captioning events in videos. In: Proceedings of the 16th IEEE International Conference on Computer Vision, pp. 706–715 (2017) [39] Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. Computing Research Repository arXiv Preprint, arXiv:1412.6980 (2014) [40] Wu, H., Lyu, Y., Shen, X., Zhao, X., Wang, M., Zhang, X., Luo, Z.: Atomic-action-based contrastive network for weakly supervised temporal language grounding. In: 2023 IEEE International Conference on Multimedia and Expo (ICME), pp. 1523–1528 (2023) [41] Song, Y., Wang, J., Ma, L., Yu, J., Liang, J., Yuan, L., Yu, Z.: MARN: Multi-level attentional reconstruction networks for weakly supervised video temporal grounding. Neurocomputing 554 , 126625 (2023) 26
