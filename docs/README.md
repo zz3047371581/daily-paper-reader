@@ -6,85 +6,77 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-08
-- 运行时间：2026-06-08 21:58:52 UTC
+- 最新运行日期：2026-06-02 ~ 2026-06-11
+- 运行时间：2026-06-11 08:09:49 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：9
-- 速读区：12
+- 本次总论文数：18
+- 精读区：7
+- 速读区：11
 
 ### 今日简报（AI）
-今日从21篇前沿论文中精选9篇精读，聚焦视频与情感计算的跨文化适应、低资源场景下的时间上下文取舍等硬核切入。  
-最值得关注的是《Beyond Universality》揭示面部表情识别在不同文化间泛化失效的本质，以及《Where Do We (Not) Need Temporal Context》精确刻画何时该抛弃时序信息的反直觉结论。  
-建议读者从这两篇入手，重新审视自己模型中的“普遍性”假设与数据效率边界。
-- 详情：[/202606/08/README](/202606/08/README)
+- 今日共生成 18 篇推荐（精读 7 篇，速读 11 篇）
+- 精读：《Teaching Video Generators to Remember: Eliciting Dynamic Memory for Out-of-Sight State Evolution》（8.0/10）, 《From Contrast to Consistency: Rethinking Event-based Continuous-Time Optical Flow Estimation》（8.0/10）
+- 速读：《Fewer Steps, Better Performance: Efficient Cross-Modal Clip Trimming for Video Moment Retrieval Using Language》（8.0/10）, 《LVSA: Training-Free Sparse Attention for Long Video Diffusion》（8.0/10）, 《Reason, Retrieve, Re-rank: A Zero-Shot Reasoning-Aware Framework for Composed Video Retrieval》（8.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/20260602-20260611/README](/20260602-20260611/README)
 
 ### 精读区论文标签
-1. [Beyond Universality: The GCC-FER Dataset and Culture-Aware Adaptation for Dynamic Facial Expression Recognition](/202606/08/2606.07063v1-beyond-universality-the-gcc-fer-dataset-and-culture-aware-adaptation-for-dynamic-facial-expression-recognition)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：为动态面部表情识别引入跨文化数据集，属于情感计算核心任务
-2. [Where Do We (Not) Need Temporal Context in Low-Resource Video Task Adaptation?](/202606/08/2606.03837v1-where-do-we-not-need-temporal-context-in-low-resource-video-task-adaptation)  
-   标签：评分：9.0/10、query:long-video
-   evidence：研究视频任务适应中时序上下文应如何在模型组件间分布。
-3. [VideoKR: Towards Knowledge- and Reasoning-Intensive Video Understanding](/202606/08/2606.05259v1-videokr-towards-knowledge--and-reasoning-intensive-video-understanding)  
-   标签：评分：9.0/10、query:long-video
-   evidence：构建知识密集型视频推理语料，增强深层视频语义理解。
-4. [DRIFT: A Residual Flow Adapter for Decoding Continuous Outputs in Vision-Language Models](/202606/08/2606.05758v1-drift-a-residual-flow-adapter-for-decoding-continuous-outputs-in-vision-language-models)  
-   标签：评分：9.0/10、query:long-video
-   evidence：使VLMs能够定位事件的时间边界，适用于视频中重要事件的检测。
-5. [Emotion-Aware Image Generation from Korean Diary Text via LLM-based Prompt Translation and LoRA Fine-Tuning](/202606/08/2606.05816v1-emotion-aware-image-generation-from-korean-diary-text-via-llm-based-prompt-translation-and-lora-fine-tuning)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：使用大语言模型情感分析和扩散模型的情感感知图像生成管线
-6. [SVHighlights: Towards Extremely Long Sport Video Highlight Detection](/202606/08/2606.06926v1-svhighlights-towards-extremely-long-sport-video-highlight-detection)  
-   标签：评分：9.0/10、query:long-video
-   evidence：首个面向超长体育视频精彩镜头检测的基准
-7. [Don't Pause: Streaming Video-Language Synchrony for Online Video Understanding](/202606/08/2606.06991v1-dont-pause-streaming-video-language-synchrony-for-online-video-understanding)  
-   标签：评分：9.0/10、query:long-video
-   evidence：实现实时视频语言同步，支撑对视频流的持续语义理解。
-8. [TEVI: Text-Conditioned Editing of Visual Representations via Sparse Autoencoders for Improved Vision-Language Alignment](/202606/08/2606.07451v1-tevi-text-conditioned-editing-of-visual-representations-via-sparse-autoencoders-for-improved-vision-language-alignment)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：通过文本条件编辑视觉表示改进视觉-语言对齐，推进跨模态表示学习。
-9. [MemDreamer: Decoupling Perception and Reasoning for Long Video Understanding via Hierarchical Graph Memory and Agentic Retrieval Mechanism](/202606/08/2606.07512v1-memdreamer-decoupling-perception-and-reasoning-for-long-video-understanding-via-hierarchical-graph-memory-and-agentic-retrieval-mechanism)  
-   标签：评分：9.0/10、query:long-video
-   evidence：通过分层图记忆和代理式检索解耦感知与推理，实现长视频理解
+1. [Teaching Video Generators to Remember: Eliciting Dynamic Memory for Out-of-Sight State Evolution](/20260602-20260611/2605.25333v1-teaching-video-generators-to-remember-eliciting-dynamic-memory-for-out-of-sight-state-evolution)  
+   标签：评分：8.0/10、query:long-video
+   evidence：视频序列建模中的动态记忆用于长程状态演化
+2. [From Contrast to Consistency: Rethinking Event-based Continuous-Time Optical Flow Estimation](/20260602-20260611/2605.25570v1-from-contrast-to-consistency-rethinking-event-based-continuous-time-optical-flow-estimation)  
+   标签：评分：8.0/10、query:long-video
+   evidence：基于事件视频的连续时间光流估计，精细刻画时序动态
+3. [O-MARC: Omni Memory-Augmented Compression Distillation for Efficient Video Understanding](/20260602-20260611/2605.26584v1-o-marc-omni-memory-augmented-compression-distillation-for-efficient-video-understanding)  
+   标签：评分：8.0/10、query:long-video
+   evidence：提出面向全模态大模型的压缩蒸馏方法，保留关键音视频证据以实现高效视频理解。
+4. [R^3: Composed Video Retrieval via Reasoning-Guided Recalling and Re-ranking](/20260602-20260611/2606.01113v2-r3-composed-video-retrieval-via-reasoning-guided-recalling-and-re-ranking)  
+   标签：评分：8.0/10、query:affective-ai
+   evidence：组合视频检索需推理视频与文本编辑的跨模态对齐
+5. [When Chatbots Accommodate: What AI Companions Optimize for in Vulnerable Conversations](/20260602-20260611/2606.04431v1-when-chatbots-accommodate-what-ai-companions-optimize-for-in-vulnerable-conversations)  
+   标签：评分：8.0/10、query:affective-ai
+   evidence：分析AI伴侣在脆弱对话中的响应策略，构建脆弱性与响应分类体系
+6. [Query-based Cross-Modal Projector Bolstering Mamba Multimodal LLM](/20260602-20260611/2606.04719v1-query-based-cross-modal-projector-bolstering-mamba-multimodal-llm)  
+   标签：评分：8.0/10、query:affective-ai
+   evidence：基于查询的跨模态投影器，用于Mamba LLM的高效视觉语言建模
+7. [M2S-AVSR: Modality-aware Multi-view Self-supervised Representation for Robust Audio-Visual Speech Recognition](/20260602-20260611/2606.05763v1-m2s-avsr-modality-aware-multi-view-self-supervised-representation-for-robust-audio-visual-speech-recognition)  
+   标签：评分：8.0/10、query:affective-ai
+   evidence：提出模态感知多视角自监督表示，用于鲁棒视听语音识别，推进跨模态表示学习。
 
 ### 速读区论文标签
-1. [Head Forcing: Long Autoregressive Video Generation via Head Heterogeneity](/202606/08/2605.14487v1-head-forcing-long-autoregressive-video-generation-via-head-heterogeneity)  
+1. [Fewer Steps, Better Performance: Efficient Cross-Modal Clip Trimming for Video Moment Retrieval Using Language](/20260602-20260611/2605.29793v1-fewer-steps-better-performance-efficient-cross-modal-clip-trimming-for-video-moment-retrieval-using-language)  
    标签：评分：8.0/10、query:long-video
-   evidence：记忆头实现长程上下文聚合与一致性
-2. [LATERN: Test-Time Context-Aware Explainable Video Anomaly Detection](/202606/08/2605.15054v1-latern-test-time-context-aware-explainable-video-anomaly-detection)  
+   evidence：高效片段裁剪用于视频时刻检索，直接检测长视频中的查询相关事件
+2. [LVSA: Training-Free Sparse Attention for Long Video Diffusion](/20260602-20260611/2605.31057v1-lvsa-training-free-sparse-attention-for-long-video-diffusion)  
    标签：评分：8.0/10、query:long-video
-   evidence：利用时序证据聚合的上下文感知视频异常检测
-3. [Modeling Emotional Dynamics in Agent-to-Agent Interactions on Moltbook](/202606/08/2605.20442v1-modeling-emotional-dynamics-in-agent-to-agent-interactions-on-moltbook)  
+   evidence：稀疏注意力处理视频生成中的长程时序依赖
+3. [Reason, Retrieve, Re-rank: A Zero-Shot Reasoning-Aware Framework for Composed Video Retrieval](/20260602-20260611/2606.00910v1-reason-retrieve-re-rank-a-zero-shot-reasoning-aware-framework-for-composed-video-retrieval)  
+   标签：评分：8.0/10、query:long-video
+   evidence：利用多模态大语言模型推理的零样本组合视频检索融合视频与文本
+4. [A Systematic Evaluation of Positional Bias in Multi-Video Summarization with MLLMs](/20260602-20260611/2606.04596v1-a-systematic-evaluation-of-positional-bias-in-multi-video-summarization-with-mllms)  
+   标签：评分：8.0/10、query:long-video
+   evidence：评估多模态大语言模型在多视频摘要中的位置偏差
+5. [Mechanistic Insights into Functional Sparsity in Multimodal LLMs via CoRe Heads](/20260602-20260611/2606.05843v1-mechanistic-insights-into-functional-sparsity-in-multimodal-llms-via-core-heads)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：构建情感感知框架，将文本交互映射到细粒度情感类别，分析多智能体交互中的情感动态
-4. [Weierstrass Positional Encoding for Vision Transformers](/202606/08/2605.23719v1-weierstrass-positional-encoding-for-vision-transformers)  
+   evidence：识别多模态LLM中专门的跨模态检索头
+6. [Adaptive Tokenisation Via Temporal Redundancy Masking And Latent Inpainting](/20260602-20260611/2606.06158v1-adaptive-tokenisation-via-temporal-redundancy-masking-and-latent-inpainting)  
+   标签：评分：8.0/10、query:long-video
+   evidence：引入基于视频时间冗余的无参数自适应令牌分配方法，以降低计算量实现高效视频理解。
+7. [Towards One-to-Many Temporal Grounding](/20260602-20260611/2606.06294v1-towards-one-to-many-temporal-grounding)  
+   标签：评分：8.0/10、query:long-video
+   evidence：提出一对多时间定位，为查询检测视频中多个重要片段。
+8. [VideoSEG-O3: A Multi-turn Reinforcement Learning Framework for Reasoning Video Object Segmentation](/20260602-20260611/2606.06819v1-videoseg-o3-a-multi-turn-reinforcement-learning-framework-for-reasoning-video-object-segmentation)  
+   标签：评分：8.0/10、query:long-video
+   evidence：多轮强化学习捕捉细粒度时空思维链进行视频对象分割
+9. [MotionEnhancer: Leveraging Video Diffusion for Motion-Enhanced Vision-Language Models](/20260602-20260611/2606.06853v1-motionenhancer-leveraging-video-diffusion-for-motion-enhanced-vision-language-models)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：面向视觉Transformer的新型位置编码保留二维空间结构
-5. [TempRet: Temporal Enhancement and Two-Stage Reranking for CVPR 2026 EPIC-KITCHENS-100 Multi-Instance Retrieval Challenge](/202606/08/2605.24470v1-tempret-temporal-enhancement-and-two-stage-reranking-for-cvpr-2026-epic-kitchens-100-multi-instance-retrieval-challenge)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：TempRet通过显式建模视频中的时序动态增强跨模态视频文本检索。
-6. [An Open-Source Benchmark and Baseline for Multi-temporal Referring Segmentation](/202606/08/2606.00987v1-an-open-source-benchmark-and-baseline-for-multi-temporal-referring-segmentation)  
-   标签：评分：7.0/10、query:affective-ai
-   evidence：多时序指称分割结合视觉与语言进行变化检测
-7. [Don't Read Everything: A Curvature-Conditioned Query for Linear Attention](/202606/08/2606.01294v1-dont-read-everything-a-curvature-conditioned-query-for-linear-attention)  
-   标签：评分：7.0/10、query:long-video
-   evidence：曲率条件查询降低注意力成本，实现高效长上下文处理
-8. [Multi-modal Video Representation Alignment for Robust Self-supervised Driver Distraction Detection](/202606/08/2606.02352v1-multi-modal-video-representation-alignment-for-robust-self-supervised-driver-distraction-detection)  
-   标签：评分：7.0/10、query:affective-ai
-   evidence：自监督多模态视频对齐用于鲁棒表示学习
-9. [Explainable Forensics of Manipulated Segments in Untrimmed Long Videos](/202606/08/2606.02402v1-explainable-forensics-of-manipulated-segments-in-untrimmed-long-videos)  
-   标签：评分：7.0/10、query:long-video
-   evidence：提出长视频中AI操纵片段的检测与解释任务，与事件检测相关。
-10. [Community-Aware Assessment of Social Textual Engagement and Resonance: A Human-Centric Perspective on User-Generated Content Evaluation](/202606/08/2606.01897v2-community-aware-assessment-of-social-textual-engagement-and-resonance-a-human-centric-perspective-on-user-generated-content-evaluation)  
-   标签：评分：6.0/10、query:affective-ai
-   evidence：多模态架构评估社交参与度，与情感分析相关
-11. [Spectral-Progressive Thought Flow for Lightweight Multimodal Reasoning](/202606/08/2606.02842v1-spectral-progressive-thought-flow-for-lightweight-multimodal-reasoning)  
-   标签：评分：6.0/10、query:affective-ai
-   evidence：使用离散余弦变换的轻量级多模态空间推理降低开销
-12. [Fine-grained Fragment Retrieval in Multi-modal Long-form Dialogues](/202606/08/2606.04591v1-fine-grained-fragment-retrieval-in-multi-modal-long-form-dialogues)  
-   标签：评分：6.0/10、query:affective-ai
-   evidence：多模态长对话中的片段检索推进跨模态表示学习
+   evidence：利用视频扩散模型的运动先验增强视觉-语言模型
+10. [Hierarchical Semantic-Constrained Heterogeneous Graph for Audio-Visual Event Localization](/20260602-20260611/2606.07033v1-hierarchical-semantic-constrained-heterogeneous-graph-for-audio-visual-event-localization)  
+   标签：评分：8.0/10、query:long-video
+   evidence：基于层次语义图的音视频事件定位
+11. [Spatial-Temporal Decoupled Adapter for Micro-gesture Online Recognition](/20260602-20260611/2606.07355v1-spatial-temporal-decoupled-adapter-for-micro-gesture-online-recognition)  
+   标签：评分：8.0/10、query:long-video
+   evidence：提出时空解耦适配器，用于未裁剪视频中微手势在线识别，实现连续流中的事件检测和分类。
 
 
 <div class="dpr-home-promo-card">

@@ -1,0 +1,621 @@
+Title: Adaptive Tokenisation Via Temporal Redundancy Masking And Latent Inpainting
+
+URL Source: https://arxiv.org/pdf/2606.06158v1
+
+Published Time: Fri, 05 Jun 2026 01:29:00 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+> arXiv:2606.06158v1 [cs.CV] 4 Jun 2026
+
+KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 1
+
+# Adaptive Tokenisation Via Temporal Redundancy Masking And Latent Inpainting 
+
+Kevin Dave *1
+
+kevindave5735@gmail.com 
+
+Chhaya Kumar Das *1
+
+chayakudas.das56@gmail.com 
+
+Sai Aditya Patkuri *1, 2 
+
+psaiaditya@iisc.ac.in 
+
+Gouranga Bala 1, 3 
+
+gouranga.bala23@gmail.com 
+
+R. Venkatesh Babu 2
+
+venky@iisc.ac.in 
+
+Rajesh Kumar S A 1
+
+rajeshkumar.s.a@gmail.com  
+
+> 1
+
+Phronetic AI  
+
+> 2
+
+IISc Bangalore  
+
+> 3
+
+IIT Bombay 
+
+Abstract 
+
+Adaptive video tokenisation seeks to dynamically allocate token budgets based on the underlying visual complexity of a sequence. Current continuous-regime approaches achieve this via iterative binarised searches or trained neural regressors, while discrete methods often require a full-rate decoder pass to estimate information content. We demonstrate that such computational overheads are not strictly necessary. We show that the latent space of a frozen continuous video tokeniser inherently encodes temporal re-dundancy that can be exploited directly: spatial positions whose latent representations change minimally between consecutive frames carry near-zero additional information. We introduce a parameter-free adaptive token allocation mechanism that applies a fixed threshold to per-position temporal-L1 differences, identifying and dropping redun-dant latent positions. Consequently, the compression rate emerges naturally from the input content rather than being enforced top-down: static scenes get compressed aggres-sively, while highly dynamic sequences retain more tokens. To reconstruct the dropped positions, we propose the Latent Inpainting Transformer (LIT), a lightweight factorised spatial-temporal attention architecture. The resulting inference pipeline is highly effi-cient, requiring only a single encoder pass and one LIT forward pass, eliminating the need for auxiliary routing networks. Evaluations across TokenBench and DAVIS, which are the standard benchmarks used by recent tokenisers [1, 31], indicate that our frame-work yields meaningful, content-driven token allocation while maintaining competitive reconstruction fidelity, and delivers a 31 × inference-time speedup over the continuous adaptive baseline (ElasticTok-CV) and an ≈ 2× speedup over the discrete information-theoretic baseline (InfoTok). 
+
+# 1 Introduction 
+
+Video foundation models are becoming increasingly important in contemporary artificial in-telligence (AI) research, driven by the ambition to construct reliable representations of the 2 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Figure 1: Per-frame token usage on representative Odyssey clips using our cached method 4.5. Top row shows the input video frames; bottom row plots the fraction of latent positions retained by our method as a function of temporal position at τ = 0.3. Static intervals (visually stationary frames) retain few tokens; dynamic intervals (motion, scene change) retain more. The threshold τ is fixed across the entire clip, yet the retained-token count varies meaning-fully over time, demonstrating that the criterion captures genuine content-driven variation rather than imposing a uniform rate. world [3, 5]. Crucial to this paradigm are tokenisers, which are responsible for compress-ing high-dimensional, raw video data X ∈ RT ×H×W ×C into compact, discrete or low-rank representations [20, 21, 29, 33]. Video data is natively characterised by a highly non-uniform spatiotemporal informa-tion density [1, 28]. While Transformer-based architectures [2, 9, 25] have emerged as a highly effective paradigm for packing high-dimensional visual information into structured sequence representations, a critical architectural bottleneck remains. Prevailing spatiotem-poral tokenisers compress video sequences using a rigid, fixed token allocation budget across all inputs [1, 5, 11, 29], not taking into account the underlying variations in dynamic com-plexity or content redundancy. There have been recent attempts at addressing this bottleneck via adaptive tokenisation .ElasticTok [28] trains an auto-encoder with a mask sampled from a uniform distribution, applied on the tail [13] of the tokens, and supports four mechanisms for selecting per-input token counts at inference: Exhaustive search, Binned search over uniformly spaced lengths, Binary search assuming monotonic reconstruction loss, or a neural regression fine-tuned on paired (input, length) examples. AdapTok [16] trains a block level scorer and an integer linear programming allocator ( IPAL ) that jointly determines token counts per video. InfoTok [31] grounds adaptive allocation in Shannon’s source coding theorem, deriving an Evidence lower bound ( ELBO ) based router that allocates tokens by content complexity. These methods work. However, each of them introduce marginal overheads. Elastic- 
+
+> *Equal contribution. © 2026. The copyright of this document resides with its authors. It may be distributed unchanged freely in print or electronic forms. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 3
+
+Tok’s inference-time mechanisms require several decoder evaluations per input; the neural regressor requires a trained scorer plus an inference time optimisation step. InfoTok requires an additional full-rate decoder pass to estimate per-block ELBO before allocating tokens, effectively doubling the inference cost. The added complexity is justified by the rate-quality gains, but a natural question then emerges, "is it necessary?" To answer this, we deliberately shift our focus to the continuous tokenisation regime. While the majority of prior adaptive work [16, 31] operates in discrete spaces, the broader generative AI landscape is rapidly pivoting toward continuous latent representations to cir-cumvent quantisation bottlenecks. Driven by the success of Latent Video Diffusion Models (LVDMs) [4, 12] and large-scale generators like Sora [17], recent foundational tokenisers, such as CV-VAE [36], and Cosmos [1] have demonstrated that continuous spaces preserve the fine-grained gradients essential for high-fidelity video synthesis [8]. Crucially, operating in this continuous regime offers a unique, largely unexplored advantage for adaptive tokeni-sation methods: the unquantised latent vectors natively encode geometric distance. The latent space of a frozen continuous video tokeniser already contains the signal needed to identify the redundant token positions: When consecutive temporal positions at the same spatial location produce nearly identical latent vectors, the second position adds little information. Detecting this requires no scoring network, and no extra decoder pass. It is simply a comparison between two latent vectors. The idea has a precedent in pixel-space: Run-length tokenisation (RLT) [7], originally proposed to accelerate video transformers, prune redundant patches by thresholding pixel-space L1 differences between consecutive frames. We transfer this principle to the latent space of a continuous video tokeniser. Our pipeline has three components. A frozen continuous video tokeniser encoder pro-duces latents from the input video. A masking criterion computes per-position temporal-L1 differences in the latent space and drops positions whose differences fall below a fixed threshold τ. A Latent Inpainting Transformer (LIT) reconstructs the dropped positions via factorised spatial and temporal attention over the retained tokens. The frozen decoder then produces the final reconstruction. Crucially, the threshold τ is a single scalar whose mag-nitude is dictated primarily by the inherent variance of the chosen backbone’s latent space, calibrated just once to establish a nominal operating point. The compression rate emerges from the complexity of the input rather than being spec-ified up front. Static scenes produce many sub-threshold differences and compress aggres-sively, while dynamic scenes retain more tokens. On UCF-101 at τ = 0.3, per-video drop rates range from 5.15% to 86.10%, reflecting genuine content-driven variation. 
+
+Contributions 
+
+• We show that thresholding temporal-L1 differences in the latent space of a frozen tokeniser provides an adequate signal for adaptive video tokenisation, eliminating the need for learned routers, scoring networks, or extra decoder passes at inference time. • We introduce LIT, a factorised transformer that reconstructs dropped latent positions through interleaved spatial and temporal attention with 2D rotary positional embed-dings. • On TokenBench and DAVIS, we demonstrate that our threshold-driven approach achieves reconstruction fidelity competitive with the state-of-the-art continuous adap-tive baseline, ElasticTok-CV [28], while utilising fewer tokens, and drastically reduc-ing compute overhead. For completeness, we also establish favourable performance 4 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Figure 2: A frozen continuous video tokeniser encoder E maps an input clip x to a latent 
+
+z ∈ RC×t×h×w. The temporal-L1 masking module computes per-position differences between consecutive temporal positions under the last-kept reference scheme and produces a binary keep mask m via thresholding at τ. Positions below the threshold are dropped (zeroed). The Latent Inpainting Transformer (LIT) recovers the dropped positions via interleaved spatial and temporal attention with 2D rotary positional embeddings, producing ˆ z. The frozen de-coder D then reconstructs the video ˆ x from ˆ z. Only LIT is trained; token allocation requires no learned parameters and no extra decoder pass at inference. against the recent discrete adaptive method, namely InfoTok [31], under identical retention constraints. Furthermore, the emergent per-video keep rate varies mean-ingfully with motion complexity, confirming genuine content-adaptive compression rather than a uniformly imposed rate. 
+
+# 2 Related Work 
+
+## 2.1 Discrete Video Tokenisation 
+
+The modern lineage of learned visual tokenisation begins with VQ-VAE [15], which maps image patches to entries in a finite codebook learned jointly with an encoder–decoder pair. VQ-GAN [19] augmented this objective with adversarial training, demonstrating that dis-crete tokens are sufficient for high-fidelity autoregressive image synthesis. For video, MAGVIT [34] extended the 3D convolutional VQ framework to support class-conditional generation, while MAGVIT v2 [32] showed through systematic ablation that tokeniser qual-ity rather than generative model capacity is the decisive factor in downstream video fidelity. These works collectively establish the codec-then-generation paradigm, but they apply a fixed compression rate to every input, irrespective of content. 
+
+## 2.2 Continuous Video Tokenisation 
+
+Continuous tokenisers forgo discrete codebooks entirely, mapping video to a compact con-tinuous latent grid without quantisation error. OmniTokenizer [27] proposed a joint image-video tokeniser with shared parameters that transfers knowledge across modalities. LARP [26] introduced holistic latent tokens that encode global video information through a learned au-toregressive prior. The Cosmos Tokenizer [1], which we adopt as our backbone, achieves a 4×8×8 spatio-temporal compression ratio over a 16-channel continuous latent space, repre-senting the current state of the art in continuous video tokenisation. Despite these advances, all existing continuous tokenisers allocate an identical token budget to every clip regardless of its dynamic complexity a rigid bottleneck that our work explicitly addresses. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 5
+
+## 2.3 Adaptive Tokenisation 
+
+The observation that token budgets should reflect informational complexity has motivated a growing body of work on adaptive tokenisation. ElasticTok [28] introduced the first adaptive video tokeniser, applying a random tail-drop masking scheme during training that imposes a positional ordering: early tokens carry global structure, late tokens carry fine detail that can be sacrificed under compression. Inference requires a binary search over token lengths, incurring approximately log 2 N forward passes. AdapTok [16] moved to a causal 1D latent space, decoupling token ordering from spatial structure, and introduced an Integer Linear Programming allocation strategy that jointly optimises token budgets across a batch. Info-Tok [31] provided the first theoretical grounding for adaptive tokenisation: via Shannon’s Source Coding Theorem, it proved that position-based tail-drop methods are provably bi-ased, and proposed an Evidence Lower Bound (ELBO) router that assigns token budgets proportional to per-video reconstruction difficulty, requiring only two forward passes at in-ference. KARL [10] addressed inference efficiency for images by framing the token count as an approximation to Kolmogorov Complexity and predicting it in a single pass through a learned halting head. Our method occupies a distinct point in this design space. We operate in the continuous-latent regime, complementing the discrete-codebook line of work [16, 31]. And rather than learning a budget routing network or imposing a positional ordering on tokens, we derive a fully parameter-free mask from the temporal structure of the latent representation itself, requiring no training of the masking criterion and no additional network evaluations to de-termine token budgets. 
+
+## 2.4 Token Redundancy and Temporal Pruning 
+
+Closest to our approach is Run-Length Tokenisation (RLT) [7], which exploits consecutive temporal redundancy in pixel space to prune vision-transformer inputs: tokens whose pixel values have not changed appreciably since the most recently retained frame are dropped, on the basis that they can be recovered from their temporal neighbours. Our work transfers this insight to the continuous latent space of a frozen video tokeniser. Operating in latent space rather than pixel space offers two advantages: the latent representation is already spatially compressed, and the frozen backbone’s inductive biases ensure that temporally correlated pixel-space content produces temporally correlated latent vectors. We further complement the parameter-free masking criterion with an inpainting network that explicitly reconstructs dropped positions from their retained neighbours, recovering information that pixel-space pruning methods discard entirely. 
+
+# 3 Method 
+
+We present a video tokenisation framework that achieves content-adaptive compression with-out learned budget routing. The framework comprises three components: a frozen con-tinuous video tokeniser backbone that provides the latent representation, a parameter-free temporal-redundancy masking criterion that determines which latent positions to drop, and a factorised transformer network that reconstructs the full latent from the masked subset. We describe each component below and conclude with the training objective. The exact mechanisms of our method’s forward pass and inference can be found in Algorithm 1. 6 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Algorithm 1 Latent Inpainting Transformer (LIT) Pipeline 
+
+Require: Frozen encoder E; frozen decoder D; threshold τ; LIT parameters θ
+
+Stage 1: Training 
+
+Require: Video dataset X ; loss weights λrecon , λlatent  
+
+> 1:
+
+for each training step do  
+
+> 2:
+
+Sample minibatch {xi}Bi=1 ⊂ X  
+
+> 3:
+
+zi ← E (xi) ▷ Encode with frozen encoder  
+
+> 4:
+
+mi ← TemporalL1Mask (zi, τ) ▷ Algorithm 2  
+
+> 5:
+
+˜zi ← zi ⊙ mi ▷ Drop redundant positions  
+
+> 6:
+
+ˆzi ← LIT θ (˜zi) ▷ Reconstruct latent  
+
+> 7:
+
+ˆxi ← D (ˆzi) ▷ Decode with frozen decoder  
+
+> 8:
+
+L ← λrecon ∥xi − ˆxi∥1 + λlatent ∥zi − ˆzi∥1 
+
+> 9:
+
+Update θ via gradient descent on L 
+
+> 10:
+
+end for 
+
+Stage 2: Inference 
+
+Require: Input video x, threshold τ 
+
+> 11:
+
+z ← E (x) ▷ Single encoder pass  
+
+> 12:
+
+m ← TemporalL1Mask (z, τ) ▷ Parameter-free mask  
+
+> 13:
+
+˜z ← z ⊙ m ▷ Keep only ∑ m tokens  
+
+> 14:
+
+ˆz ← LIT θ (˜z) 
+
+> 15:
+
+ˆx ← D (ˆz) 
+
+> 16:
+
+return ˆx
+
+## 3.1 Continuous Video Tokeniser Backbone 
+
+We build on Cosmos-Tokenize1-CV 4 ×8×8 [1], a continuous tokeniser with no learned quantisation. However, our method can be used for any continuous video tokeniser. Cosmos’ backbone consists of an encoder-decoder pair (E, D) that we treat as frozen throughout. The encoder E : R3×T ×H×W maps a video clip of T frames, having a spatial resolution of 
+
+H × W to a continuous latent tensor with C = 16 channels and spatio temporal dimensions 
+
+(t, h, w) = ( ⌈T /4⌉, H/8,W /8) reflecting the backbone’s 4 × 8 × 8 compression. The decoder 
+
+D acts as the inverse, inverting the encoding. We adopt T = 33 and H = W = 256 as our standard clip configuration, following the con-vention of recent adaptive tokeniser [1, 31]. This returns a latent grid of shape (16 , 9, 32 , 32 )
+
+where N = thw = 9216 represents the tokens per clip. Throughout, E and D remain frozen i.e., no gradients are propagated through them. Our trainable components operate entirely on the latent representation z = E(x) ∈ RC×t×h×w.
+
+## 3.2 Temporal Latent Masking 
+
+Inspired by Run-Length tokenisation (RLT) [7], which exploits redundancy in pixel-space for vision transformer pruning, we adopt a parameter free criterion for selecting which latent positions to drop. The motivating observation, shared with RLT, is the consecutive temporal positions at the same spatial location differ only slightly when the scene is locally station-ary. Dropping such tokens impose minimal information loss, since the receiver can recover them approximately from their retained neighbours. Our contribution lies in transferring this KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 7
+
+Figure 3: A Toy example illustrating the temporal-L1 masking under the last-kept ref-erence scheme. For each spatial position (y, x), the algorithm maintains a reference latent corresponding to the most recently retained temporal position. At each subsequent temporal position t′, the per-channel L1 difference ∆ between the current latent and the reference is computed and compared against threshold τ. Positions with ∆ ≥ τ are retained (and become the new reference); positions with ∆ < τ are dropped. The first temporal position is always retained as the initial reference. This produces a content-adaptive mask whose density fol-lows the input’s temporal redundancy. insight to the latent space of a frozen continuous video tokeniser and demonstrating that a learned inpainting network can effectively reconstruct the dropped positions 
+
+## 3.3 The Masking Criterion 
+
+Let z[:,t′, y, x] ∈ RC denote the latent vector at temporal position t′ and spatial position 
+
+(y, x). For each spatial position, we process temporal positions sequentially and maintain a reference : the most recently retained latent at this spatial position. Formally, define 
+
+ρ(y, x,t′) = max {t′′ < t′ : mt′′ ,y,x = 1} as the index of the most recently retained temporal position at (y, x) prior to t′.The temporal L1 difference at position (t′, y, x) for t′ > 0 is 
+
+∆(t′, y, x) = 1
+
+C
+
+> C
+
+# ∑
+
+> c=1
+
+z[c,t′, y, x] − z[c, ρ(y, x,t′), y, x] (1) An empirical analysis of the Cosmos latent space revealed minimal cross-channel vari-ance. Consequently, taking the channel-wise mean L1 distance provides a highly stable heuristic for capturing temporal redundancy, circumventing the need for more complex nor-malisation or channel-wise maximums. The first temporal position at each spatial location is always retained, providing an un-masked reference. For subsequent positions, we retain the position if its latent has changed by more than τ relative to the most recently retained version at the same location. 
+
+## 3.4 Algorithm and Properties 
+
+The mask is computed by a single causal pass through the temporal axis. Algorithm 2 spec-ifies the procedure. The computation requires only the encoded latent and admits batched implementation on accelerators. With our method, there are three properties which warrant emphasis. 8 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Algorithm 2 Temporal-L1 latent masking. 
+
+Require: Latent z ∈ RC×t×h×w, threshold τ
+
+Ensure: Keep mask m ∈ { 0, 1}t×h×w 
+
+> 1:
+
+m[0, :, :] ← 1 ▷ always keep first temporal position  
+
+> 2:
+
+ref ← z[:, 0, :, :] ▷ reference latent for each (y, x) 
+
+> 3:
+
+for t′ = 1 to t − 1 do  
+
+> 4:
+
+∆ ← 1 
+
+> C
+
+∑c|z[c,t′, :, :] − ref [c, :, :]| ▷ shape (h, w) 
+
+> 5:
+
+m[t′, :, :] ← 1[∆ ≥ τ] 
+
+> 6:
+
+ref ← m[t′, :, :] · z[:,t′, :, :] + ( 1 − m[t′, :, :]) · ref  
+
+> 7:
+
+end for  
+
+> 8:
+
+return m
+
+Content-adaptive compression The fraction of the tokens depends on the temporal struc-ture of the video. Static camera footage with little scene motion will result in aggressive compression. Footage where there is substantial motion related activities going on, produces differences that mostly exceed τ, the threshold itself is fixed, which is in contrast to the rate-based methods that fixed that compression rate, r as a hyperparameter and then decide which tokens should be dropped. We provide qualitative visualisations of these emergent, content-adaptive masks across diverse video samples in Appendix B. 
+
+Parameter free No learned components participate in the masking decision. The threshold 
+
+τ is a single scalar hyperparameter calibrated once in accordance with the encoder-decoder backbone and the dataset, as discussed in Section 3.5. This contrasts with prior work which train a router network [16], or maintain a running estimate of the dataset statistics to guide allocation [31]. 
+
+Single pass Computing the mask requires only the latent z which is already produced by the encoder. No additional decoder pass is necessary at inference time. This contrasts with other adaptive token allocation schemes which require a full decoder pass to estimate per-block reconstruction quality before allocating tokens, or doing some sort of search to deter-mine the tokens required [30]. 
+
+## 3.5 Choosing the Threshold τ
+
+The threshold τ controls the amount of temporal redundancy removed in latent space. We perform τ calibration via an empirical sweep, inspecting both the generated masks and the resulting reconstruction quality across candidate thresholds. For the Cosmos backbone, we found τ = 0.3 to provide the best trade-off between com-pression and fidelity. Lower values retain a large number of temporally redundant back-ground tokens, while higher values begin to suppress tokens corresponding to genuine mo-tion. Importantly, this calibration is backbone-dependent but dataset-agnostic; once selected, the same threshold is used across all datasets and experiments. On UCF-101, τ = 0.3 yields an average token drop rate of 47 .78% under the last-kept reference scheme (Equation 1). The per-video drop rate varies from 5 .15% on the least redundant clips to 86 .10% on the most redundant clips, demonstrating that the resulting KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 9
+
+token budget adapts naturally to video content. Further details of the calibration procedure are provided in Appendix A. 
+
+## 3.6 Latent Inpainting Transformer (LIT) 
+
+Given the masked latent ˜ z = z ⊙ m, the network’s task is to approximate ˆ z of the full-latent 
+
+z. We frame this as an inpainting problem in the latent space where kept tokens provide information from which the dropped tokens must be inferred. A direct approach to latent inpainting is a transformer with full 3-D self-attention over all thw tokens. For our setting, with thw = 9216, this incurs O(( thw )2D) attention cost per-layer, where D is the hidden dimension. The quadratic scaling is problematic for both compute, and memory. Factorised attention decomposes the 3D attention pattern into separate spatial and tempo-ral interactions. For each temporal position t′, spatial attention is restricted to tokens within the same temporal slice {(t′, y, x) : 0 ≤ y < h, 0 ≤ x < w}, yielding t independent attention computations of size hw . For each spatial position (y, x), temporal attention is restricted to tokens within the same spatial column {(t′, y, x) : 0 ≤ t′ < t}, yielding hw independent computations of size t. The combined attention cost is O t · (hw )2 · D + hw · t2 · D.For our dimensions (t, h, w) = ( 9, 32 , 32 ), full 3D attention has cost proportional to 9216 2 ≈ 8.5 × 10 7, while factorised attention has cost proportional to 9 · 1024 2 + 1024 · 81 ≈
+
+9.5 × 10 6, a reduction of approximately 9 ×. Beyond computational efficiency, factorisation provides a useful inductive bias: spatial textures and temporal motion patterns have distinct statistics, and factorised attention can specialise to each. 
+
+## 3.7 Architecture 
+
+The Latent Inpainting Transformer (LIT) is an architecture with alternating spatial and tem-poral attention blocks. Let h(ℓ) ∈ Rthw ×D denote the hidden representation at layer ℓ, where 
+
+D is the hidden dimension. The initial representation h(0) is obtained by linearly projecting the masked latent: h(0) = InProj (˜z) + PE, where PE is the positional encoding described in Section 3.7.1. A spatial block applies the following operations: 
+
+h(ℓ) 
+
+> attn
+
+= h(ℓ−1) + SpatialMHA  LN (h(ℓ−1)),
+
+h(ℓ) = h(ℓ) 
+
+> attn
+
++ FFN  LN (h(ℓ)
+
+> attn
+
+),
+
+(2) where SpatialMHA performs multi-head self-attention restricted to within-slice token pairs (i.e., tokens sharing the same t′). A temporal block applies the analogous operations along the temporal axis: 
+
+h(ℓ) 
+
+> attn
+
+= h(ℓ−1) + TemporalMHA  LN (h(ℓ−1)),
+
+h(ℓ) = h(ℓ) 
+
+> attn
+
++ FFN  LN (h(ℓ)
+
+> attn
+
+),
+
+(3) where TemporalMHA performs attention restricted to within-column token pairs (sharing the same (y, x)). Both blocks use pre-LayerNorm and the standard transformer FFN with 4 × D expansion and GELU activation. 10 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+The network stacks Lmain = 6 pairs of (spatial, temporal) blocks, followed by Lref =
+
+3 refinement pairs that further process the representation. After the final block, a linear projection maps the hidden representation back to the latent dimension: ˆz = OutProj (h(L)). (4) We instantiate LIT with hidden dimension D = 192, H = 8 attention heads, Lmain = 6main blocks and Lre f = 3 refinement blocks, totalling approximately 2.7 million trainable parameters. 
+
+3.7.1 Positional Encoding via RoPE 
+
+We use 2D Rotary Position Embeddings (RoPE) [23] to encode spatiotemporal positions. For spatial attention layers, RoPE is applied along the (y, x) axes, encoding the spatial position of each token within its temporal slice. For temporal attention layers, RoPE is applied along the t′ axis, encoding the temporal position of each token within its spatial column. The use of RoPE removes the need for learnable positional embedding tables and provides relative-position structure that generalises across token-count variations. This choice differs from RLT [7], which augments tokens with a learnable length bias representing the number of consecutive frames a surviving token represents. Their bias is well-suited to downstream classification tasks, where the run-length informs how strongly to weight a token in the final prediction. For our task the run length information isn’t required, the LIT’s objective is purely local (fill-in missing tokens from neighbours). 
+
+3.7.2 Reconstruction 
+
+After the LIT produces ˆ z, the final reconstruction is obtained by passing ˆ z through the frozen Cosmos decoder: ˆx = D(ˆz). (5) The LIT network is the only learned component in the inference pipeline. Its task is to approximately invert the masking operation, producing a latent that the frozen decoder can decode into a high-quality reconstruction. 
+
+## 3.8 Training Objective 
+
+We train the LIT by minimising a combination of pixel-space and latent-space reconstruction losses: 
+
+L = λrecon Lrecon (x, ˆx) + λlatent Llatent (z, ˆz), (6) where 
+
+Lrecon (x, ˆx) = ∥x − ˆx∥1, Llatent (z, ˆz) = ∥z − ˆz∥1. (7) We use L1 norms throughout, consistent with the L1-based masking criterion and the Cos-mos backbone’s training convention [21]. The latent-space term provides direct supervision on the LIT’s primary output, while the pixel-space term ensures that reconstruction quality is measured against the original video content. We set λrecon = 1.0 and λlatent = 1.0 in our main experiments. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 11 
+
+# 4 Experiments 
+
+We evaluate our method on standard video reconstruction benchmarks. We evaluate our method on three standard video reconstruction benchmarks and compare against fixed-rate and adaptive tokenisation baselines. Our experiments are designed to answer three ques-tions: (1) does temporal-L1 thresholding in the latent space produce a useful budget routing signal for adaptive tokenisation? (2) how does the method compare to existing adaptive to-kenisers? and (3) what is the inference cost advantage over methods requiring extra decoder evaluations? 
+
+## 4.1 Setup 
+
+We train on UCF-101 [22] and Kinetics-400 [14], and evaluate on TokenBench [21], and DAVIS [6]. We use Cosmos-Tokenize1-CV4 ×8×8 [1] as the frozen backbone for all exper-iments. Videos are sampled as 33-frame clips at 256 × 256 resolution with frame interval 3, yielding latent grids of shape (16 , 9, 32 , 32 ) with N = 9,216 tokens per clip. We train LIT with AdamW [18] at learning rate 5 × 10 −4, weight decay 10 −4, cosine annealing to 10 −5,and effective batch size 16. We train for 10 ,000 steps and select checkpoints by validation PSNR. We report PSNR, SSIM, LPIPS-VGG [35], and Frechet Video Distance (FVD) [24] as the primary metrics to measure reconstruction quality. Additionally, we report the keep rate which is the the fraction of latent positions retained as the primary compression axis, since absolute bit-cost differs between continuous and discrete tokenisers and is not directly comparable across regimes. Furthermore, for evaluation of different tokenisers, we resize the videos to H = W = 256 with each video clip comprising 33 frames, with frame interval of 1 to ensure fair comparison. 
+
+## 4.2 Inference Cost 
+
+A key practical advantage of our method is its single-pass inference. Table 1 illustrates the number of forward evaluations required by each adaptive tokenisation method, and the corresponding wall-clock measurements on a single NVIDIA A10G GPU at fixed input res-olution. Table 1: Per-clip inference cost. NFE counts the additional forward evaluations for comput-ing the token budget. ElasticTok and our method operate in the continuous regime; InfoTok is included despite operating in the discrete regime. The Speed up is computed relative to ElasticTok-CV.                
+
+> Method NFE ↓Per-clip (secs) ↓Speed Up ↑
+> ElasticTok-CV (binary search) log 2N35.97 1×
+> InfoTok (discrete) 12.84 13 ×
+> Ours 01.15 31 ×
+
+## 4.3 Evaluation Protocol and Baseline Constraints 
+
+Comparing adaptive tokenisers with distinct rate-control mechanisms is empirically chal-lenging. Our Temporal-L1 method yields compression as an emergent property of motion 12 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+complexity, whereas ElasticTok [28] uses iterative search, and InfoTok [31] targets discrete budgets via ELBO. To ensure rigorous comparison: 
+
+Iso-Quality (vs. ElasticTok-CV): Positional tail-dropping degrades spatial details at low budgets. We thus constrain ElasticTok by a strict error threshold (MSE = 0.003). A detailed overview of the results can be found in 2. 
+
+Iso-Rate (vs. InfoTok): For discrete baselines sharing the Cosmos grid, we constrain their budget parameter ( β ) to approximate our emergent keep rate. While discrete indices natu-rally compress further in absolute bit-cost, this isolates and evaluates pure allocation efficacy. 
+
+## 4.4 Results 
+
+As shown in Table 2, we evaluate the reconstruction performance of our method across both TokenBench and DAVIS datasets. Our framework demonstrates exceptional compression efficiency and generalization. On TokenBench, our Cosmos-based variant retains only 32% of spatial-temporal tokens yet vastly outperforms InfoTok at the same budget (+2.81 dB PSNR, -107.55 FVD). This efficiency extends to the DAVIS dataset, where our model dy-namically scales its emergent keep rate to 62%, outperforming InfoTok by +2.47 dB PSNR with superior temporal consistency (312.66 vs. 406.33 FVD). While ElasticTok-CV achieves slightly higher absolute metrics on DAVIS, it demands a substantially higher token budget (82% keep rate), positioning our framework as a more optimal solution for aggressive data reduction without catastrophic fidelity loss. Table 2: Reconstruction quality across diverse datasets. To ensure fair evaluation across distinct rate-control mechanisms, InfoTok is constrained to approximate our emergent keep rate, while ElasticTok-CV is constrained by a strict reconstruction error threshold (MSE = 0.003). Keep rate indicates the fraction of latent spatial-temporal positions retained.                                                                                        
+
+> TokenBench (256x256) DAVIS (256x256)
+> Method Keep Rate ↓PSNR ↑SSIM ↑LPIPS ↓FVD ↓Keep Rate ↓PSNR ↑SSIM ↑LPIPS ↓FVD ↓
+> Cosmos-CV4x8x8 (Fixed) 100% 35.38 0.948 0.078 8.77 100% 31.57 0.918 0.109 61.33 OmniTokenizer-VAE (Fixed) 100% 27.05 0.892 0.128 57.83 100% 24.49 0.837 0.194 244.81 ElasticTok-CV (MSE=0.003) 40%* 30.87 0.900 0.154 68.75 82%* 29.02 0.878 0.172 200.97 InfoTok (Discrete) 32%* 27.50 0.817 0.234 189.16 62%* 25.80 0.787 0.244 406.33
+> Ours (Cosmos, τττ===000...333)32% 30.31 0.894 0.141 81.61 62% 28.27 0.856 0.187 312.66 Ours (Omni, τττ===111...222)29% 23.88 0.790 0.245 168.82 52% 22.50 0.736 0.293 468.15
+> *Baseline methods were strictly constrained by either an MSE threshold (ElasticTok) or target budget parameter (InfoTok)
+
+## 4.5 Streaming Cached Reference Across Clips 
+
+The base masking criterion (Algorithm 1) maintains its last-kept reference only within a single 33-frame clip. When a longer video is processed as a sequence of consecutive chunks, this reference is reinitialised at every clip boundary. Consequently, the first latent frame of each new chunk must be retained, regardless of its similarity to the preceding chunk. This introduces periodic token-retention spikes that fail to exploit temporal continuity across chunk boundaries. To address this limitation, we introduce a streaming variant that maintains two distinct caches across clips: KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 13 
+
+Figure 4: Reconstructions examples of video with different movements using different to-kenisers. Our method can achieve similar reconstruction fidelity with higher compression compared to ElasticTok CV, and trivially, Cosmos-CV • Selection Cache (C sel ): The selection cache Csel ∈ RC×h×w stores the most recently 
+
+retained latent vector at each spatial location. Its sole purpose is to provide a temporal reference for token selection. At the beginning of a new chunk, the first latent frame is compared directly against Csel rather than being automatically retained. If the tem-poral difference is below the threshold τ, the token may be discarded; otherwise it is retained and the corresponding entry of Csel is updated. This removes the artificial boundary effect present in the per-clip formulation. • Fill Cache (C fill ): The fill cache Cfill ∈ RC×h×w stores the most recent non-zero latent presented to the inpainting network . This cache is required because the first timestep of a chunk may now be discarded by the masking stage. After masking, discarded tokens are zeroed before being passed to the latent inpainting transformer (LIT). If the first timestep were removed without replacement, the inpainting network would receive no contextual latent information at that spatial location. Therefore, whenever a first-timestep token is dropped, its corresponding LIT input is populated using Cfill .The selection cache tracks the most recently kept latent for temporal-difference computa-tion, whereas the fill cache tracks the most recently available non-zero latent used by the reconstruction pathway. Consequently, a single cache cannot simultaneously satisfy both requirements. Both caches operate independently at every spatial location and are reset prior to processing a new video to prevent latent-state leakage across sequences. Table 3 compares the standard per-clip masking strategy against the proposed streaming variant on DAVIS at τ = 0.30. By exploiting temporal continuity across chunk boundaries, the cached approach substantially increases compression efficiency, reducing the keep rate from 64% to 53%, while maintaining acceptable reconstruction fidelity. Pseudocode for the complete streaming algorithm is provided in Appendix D. 14 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Table 3: Comparison of standard per-clip and streaming cached reference schemes on the DAVIS dataset at τ = 0.30. The dual-cache variant carries latent states across chunk bound-aries, eliminating periodic forced retention at clip starts and enabling more aggressive com-pression on long videos with continuous visual flow.                
+
+> Variant Keep Rate PSNR ↑SSIM ↑LPIPS ↓FVD ↓
+> Per-clip reference 62% 28.27 0.856 0.187 312.66 Streaming cached 57% 27.92 0.845 0.200 379.03
+
+# 5 Discussions and Limitations 
+
+Downstream task evaluation. Our evaluation focuses on reconstruction quality. The down-stream utility of LIT-reconstructed latents in generative tasks remains an open empirical question. In particular, training latent video diffusion models on these recovered latents, or using the masked representation directly for video-language alignment, would help char-acterise whether the compression preserves the structural properties needed by generative models. 
+
+Limitation In our method the compression rate emerges from the input rather than being specified upfront, our method cannot guarantee a target bits-per-pixel budget. On videos with very high motion (e.g., rapid camera movement, dynamic sports footage), most positions exceed the threshold and few tokens are dropped. In such cases the method offers little compression benefit. This is a property of the criterion (rate follows content) rather than a bug, but it limits applicability for deployment settings requiring a guaranteed compression rate. 
+
+# 6 Conclusion 
+
+We presented a parameter-free approach to adaptive video tokenisation in the continuous-latent regime. By thresholding per-position temporal-L1 differences in the latent space of a frozen continuous video tokeniser, we identify and drop temporally redundant positions without any learned network for token allocation. A factorised transformer (LIT) is trained to reconstruct the dropped positions from those retained, enabling end-to-end reconstruction at content-adaptive rates. The resulting pipeline requires only a single encoder pass at inference and no auxiliary decoder evaluation. Across TokenBench and DAVIS, our method achieves reconstruction quality competitive with continuous-regime baselines at matched keep rates, with substantially lower inference cost. Per-video drop rates vary meaningfully with content, confirming that the threshold captures genuine variability rather than imposing a uniform compression rate. 
+
+# References 
+
+[1] Niket Agarwal, Arslan Ali, Maciej Bala, Yogesh Balaji, Erik Barker, Tiffany Cai, Prithvijit Chattopadhyay, Yongxin Chen, Yin Cui, Yifan Ding, et al. Cosmos world foundation model platform for physical AI. arXiv preprint arXiv:2501.03575 , 2025. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 15 
+
+[2] Anurag Arnab, Mostafa Dehghani, Georg Heigold, Cordelia Sun, Mario Luˇ ci´ c, and Cordelia Schmid. ViViT: A video vision transformer. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2021. [3] Mahmoud Assran, Mathilde Caron, Ishan Misra, Piotr Bojanowski, Armand Joulin, Michael Rabbat, and Yann LeCun. Learning video representations by joint embedding predictive architecture. arXiv preprint arXiv:2404.08471 , 2024. [4] Andreas Blattmann, Robin Rombach, Huan Ling, Tim Dockhorn, Seung Wook Kim, Sanja Fidler, and Karsten Kreis. Align your latents: High-resolution video synthe-sis with latent diffusion models, 2023. URL https://arxiv.org/abs/2304. 08818 .[5] Tim Brooks, Bill Peebles, Holmes Connor, Will DePue, Yufei Guo, Jing Li, Lu Liu, Rohit Girdhar, Jiahui Farooq, Zhou Zhou, et al. Video generation models as world simulators. OpenAI Research Technical Report, 2024. URL https://openai. com/research/video-generation-models-as-world-simulators .[6] Sergi Caelles, Jordi Pont-Tuset, Federico Perazzi, Alberto Montes, Kevis-Kokitsi Maninis, and Luc Van Gool. The 2019 davis challenge on vos: Unsupervised multi-object segmentation, 2019. URL https://arxiv.org/abs/1905.00737 .[7] Rohan Choudhury, Guanglei Zhu, Sihan Liu, Koichiro Niinuma, Kris M. Kitani, and László Jeni. Don’t look twice: Faster video transformers with run-length tokenization. In Advances in Neural Information Processing Systems (NeurIPS) , 2024. [8] Haoge Deng, Ting Pan, Haiwen Diao, Zhengxiong Luo, Yufeng Cui, Huchuan Lu, Shiguang Shan, Yonggang Qi, and Xinlong Wang. Autoregressive video genera-tion without vector quantization, 2025. URL https://arxiv.org/abs/2412. 14169 .[9] Alexey Dosovitskiy, Lucas internally Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representations (ICLR) ,2021. [10] Shivam Duggal, Sanghyun Byun, William T. Freeman, Antonio Torralba, and Phillip Isola. Single-pass adaptive image tokenization for minimum program search. 
+
+ArXiv , abs/2507.07995, 2025. URL https://api.semanticscholar.org/ CorpusID:280290844 .[11] Patrick Esser, Robin Rombach, and Bjorn Ommer. Taming transformers for high-resolution image synthesis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2021. [12] Yuwei Guo, Ceyuan Yang, Anyi Rao, Zhengyang Liang, Yaohui Wang, Yu Qiao, Maneesh Agrawala, Dahua Lin, and Bo Dai. Animatediff: Animate your person-alized text-to-image diffusion models without specific tuning, 2024. URL https: //arxiv.org/abs/2307.04725 .16 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+[13] Wenbo Hu, Zi-Yi Dou, Liunian Harold Li, Amita Kamath, Nanyun Peng, and Kai-Wei Chang. Matryoshka query transformer for large vision-language models, 2024. URL 
+
+https://arxiv.org/abs/2405.19315 .[14] Will Kay, Joao Carreira, Karen Simonyan, Brian Zhang, Chloe Hillier, Sudheendra Vi-jayanarasimhan, Fabio Viola, Tim Green, Trevor Back, Paul Natsev, et al. The kinetics human action video dataset. arXiv preprint arXiv:1705.06950 , 2017. [15] Chieh-Hsin Lai, Dongmian Zou, and Gilad Lerman. Robust vector quantized-variational autoencoder. ArXiv , abs/2202.01987, 2022. URL https://api. semanticscholar.org/CorpusID:246608006 .[16] Yan Li et al. Learning adaptive and temporally causal video tokenization in a 1d latent space. arXiv preprint arXiv:2505.17011 , 2025. [17] Yixin Liu, Kai Zhang, Yuan Li, Zhiling Yan, Chujie Gao, Ruoxi Chen, Zhengqing Yuan, Yue Huang, Hanchi Sun, Jianfeng Gao, Lifang He, and Lichao Sun. Sora: A re-view on background, technology, limitations, and opportunities of large vision models, 2024. URL https://arxiv.org/abs/2402.17177 .[18] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. URL 
+
+https://arxiv.org/abs/1711.05101 .[19] Gabriel Maldonado, Narges Rashvand, Armin Danesh Pazho, Ghazal Alinezhad Noghre, Vinit Katariya, and Hamed Tabkhi. Adversarially-refined vq-gan with dense motion tokenization for spatio-temporal heatmaps. 2025 International Conference on Machine Learning and Applications (ICMLA) , pages 1189–1196, 2025. URL 
+
+https://api.semanticscholar.org/CorpusID:281496851 .[20] Arnab Kumar Mondal, Sankalan Pal Chowdhury, Aravind Jayendran, Parag Singla, Hi-manshu Asnani, and Prathosh AP. Maskaae: Latent space optimization for adversarial auto-encoders, 2020. URL https://arxiv.org/abs/1912.04564 .[21] NVIDIA Cosmos Tokenizer Team. Cosmos tokenizer: High-fidelity video and image compression for world models. GitHub Repository, 2024. URL https://github. com/NVIDIA/Cosmos-Tokenizer .[22] Khurram Soomro, Amir Roshan Zamir, and Mubarak Shah. Ucf101: A dataset of 101 human actions classes from videos in the wild, 2012. URL https://arxiv.org/ abs/1212.0402 .[23] Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, and Yunfeng Liu. Ro-former: Enhanced transformer with rotary position embedding, 2023. URL https: //arxiv.org/abs/2104.09864 .[24] Thomas Unterthiner, Sjoerd van Steenkiste, Karol Kurach, Raphael Marinier, Marcin Michalski, and Sylvain Gelly. Towards accurate generative models of video: A new metric & challenges, 2019. URL https://arxiv.org/abs/1812.01717 .[25] Ashish Kakwani Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 2017. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 17 
+
+[26] Hanyu Wang, Saksham Suri, Yixuan Ren, Hao Chen, and Abhinav Shrivas-tava. Larp: Tokenizing videos with a learned autoregressive generative prior. 
+
+ArXiv , abs/2410.21264, 2024. URL https://api.semanticscholar.org/ CorpusID:273654612 .[27] Junke Wang, Yi Jiang, Zehuan Yuan, Binyue Peng, Zuxuan Wu, and Yu-Gang Jiang. Omnitokenizer: A joint image-video tokenizer for visual generation. In Advances in Neural Information Processing Systems (NeurIPS) , 2024. [28] Content Yan et al. ElasticTok: Adaptive tokenization for image and video. In Interna-tional Conference on Learning Representations (ICLR) Under Review , 2024. [29] Wilson Yan, Yunzhi Zhang, Pieter Abbeel, and Aravind Srinivas. VideoGPT: Video generation using VQ-VAE and transformers. arXiv preprint arXiv:2104.10540 , 2021. [30] Wilson Yan, Matei Zaharia, Volodymyr Mnih, Pieter Abbeel, Aleksandra Faust, and Hao Liu. Elastictok: Adaptive tokenization for image and video. arXiv preprint arXiv:2410.08368 , 2024. [31] Haotian Ye et al. Infotok: Adaptive discrete video tokenizer via information-theoretic compression. In International Conference on Learning Representations (ICLR) , 2026. [32] Lijun Yu, José Lezama, Nitesh Bharadwaj Gundavarapu, Luca Versari, Kihyuk Sohn, David C. Minnen, Yong Cheng, Agrim Gupta, Xiuye Gu, Alexander G. Hauptmann, Boqing Gong, Ming-Hsuan Yang, Irfan Essa, David A. Ross, and Lu Jiang. Language model beats diffusion – tokenizer is key to visual generation. 2023. URL https: //api.semanticscholar.org/CorpusID:263830733 .[33] Lijun Yu, José Lezama, Yu Cheng, Huiwen Chang, Han Zhang, Jianchao Yuan, Jiahui Gu, Lu Jiang, Yong Li, Liangliang Jiang, et al. Language model beats diffusion – tokenizer is key to visual generation. In International Conference on Learning Repre-sentations (ICLR) , 2024. [34] Lijun Yu et al. Magvit: Masked generative video transformer. CVPR , 2023. [35] Richard Zhang, Phillip Isola, Alexei A. Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric, 2018. URL https: //arxiv.org/abs/1801.03924 .[36] Sijie Zhao, Yong Zhang, Xiaodong Cun, Shaoshu Yang, Muyao Niu, Xiaoyu Li, Wenbo Hu, and Ying Shan. Cv-vae: A compatible video vae for latent generative video models, 2024. URL https://arxiv.org/abs/2405.20279 .18 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+# Supplementary Material: Adaptive Tokenisation Via Temporal Redundancy Masking And Latent Inpainting 
+
+# A Empirical Threshold Calibration 
+
+Our mechanism relies on a fixed scalar threshold, τ, which dictates whether the temporal L1 difference ∆(t′, y, x) between consecutive latent positions is perceptually relevant. While this philosophy is conceptually similar to the data-agnostic thresholding proposed in Run-Length Tokenisation (RLT), the continuous latent regime requires backbone-specific calibration. RLT operates directly in normalised pixel space, whereas our method operates within the continuous manifolds of pre-trained video tokenisers. Because foundational to-kenisers like Cosmos and OmniTokenizer enforce different absolute scales and variances upon their latent spaces, τ must be calibrated to the specific backbone. To determine the nominal operating point, we conducted an empirical sweep over a range of candidate τ values. For each candidate threshold, we generated the correspond-ing temporal-L1 masks across a held-out subset of videos and evaluated the resulting global keep rates alongside visual reconstruction quality. As τ increases, the criterion becomes more aggressive, dropping more tokens but risking the loss of subtle motion details. Through this empirical evaluation, we determined that τ = 0.3 is the optimal operating point for the Cosmos backbone. At this threshold, the generated masks reliably identify and drop static spatial-temporal redundancies while strictly preserving the boundaries of genuine motion, yielding an average keep rate of roughly 48% on UCF-101. An identical empirical sweep performed on the OmniTokenizer backbone—which exhibits a wider intrinsic latent variance—led to the selection of τ = 1.2. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 19 
+
+Figure A.1: Empirical calibration of the threshold τ. Visualisation of the generated tem-poral masks at varying τ values (e.g., τ ∈ { 0.1, 0.2, 0.3, 0.4, . . . , 0.9}). By empirically assess-ing these masks, we established τ = 0.3 as the optimal balance for the cosmos backbone, ag-gressively compressing static backgrounds without compromising high-frequency dynamic regions. 20 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Figure A.2: Additional example for our empirical calibration of the threshold τ for Cosmos Backbone. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 21 
+
+Figure A.3: Additional example for our empirical calibration of the threshold τ for Cosmos Backbone. 22 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Figure A.4: Empirical calibration of the threshold τ. Visualisation of the generated tem-poral masks at varying τ values (e.g., τ ∈ { 0.9, 1.0, 1.2, 1.3, . . . , 1.8}). By empirically as-sessing these masks, we established τ = 1.2 as the optimal balance for the omni backbone. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 23 
+
+Figure A.5: Additional example for our empirical calibration of the threshold τ for Omni Backbone. 24 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+Figure A.6: Additional example for our empirical calibration of the threshold τ for Omni Backbone. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 25 
+
+# B Mask Visualisation 
+
+Figure B.1: Temporal masks on representative videos. First: Masks on a video of people dancing. Second: Masks on a video of people playing basketball. Third: Masks on a video of butterfly fluttering. Fourth: Masks on a video of person performing BMX stunts. 26 KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 
+
+# C Token Usage Metrics 
+
+Figure C.1: Top: Tokens utilisation under the per-clip reference regime. Bottom: Token utilisation under the streaming cached regime. 
+
+# D Streaming Cached Temporal Masking 
+
+When processing long videos as a sequence of independent chunks, resetting the reference latent at every boundary artificially forces the retention of the first frame of every new chunk, leading to redundant retention. To address this, we implement a dual-cache streaming mechanism, detailed in Algo-rithm D.1. • Selection Cache (C sel ): Stores the most recently retained latent vector at each spa-tial position. By persisting this cache across chunks, the first frame of a new chunk is compared against the end of the previous chunk and can be dropped if the scene remains static. • Fill Cache (C fill ): When the first frame of a chunk is dropped, feeding a tensor of zeros to the Latent Inpainting Transformer (LIT) deprives it of necessary temporal context. To prevent this, Cfill stores the final non-zero decompressor input from the previous chunk. If the first frame of the current chunk is masked out, it is populated with Cfill ,ensuring temporal continuity for the decompressor without altering the actual token-retention budget. KEVIN, CHHAYA, SAI, GOURANGA, BABU, RAJESH: ADAPTIVE TOKENISATION 27 
+
+Algorithm D.1 Streaming Cached Temporal Masking (Dual-Cache) 
+
+Require: Video chunks {X(1), . . . , X(K)}, Encoder E, Decompressor Dθ , Decoder Dvideo ,Threshold τ
+
+Ensure: Reconstructed video chunks {Y(1), . . . , Y(K)}, Masks {M(1), . . . , M(K)} 
+
+> 1:
+
+Csel ← 0, Cfill ← 0 
+
+> 2:
+
+isFirstChunk ← True  
+
+> 3:
+
+for k = 1 to K do  
+
+> 4:
+
+Z(k) ← E (X(k)) 
+
+> 5:
+
+Initialize mask M(k) ← 0 
+
+> 6:
+
+for t = 1 to T do  
+
+> 7:
+
+if t = 1 and isFirstChunk then  
+
+> 8:
+
+M(k) 
+
+> t
+
+← 1 ▷ Always retain first frame of the first chunk  
+
+> 9:
+
+else  
+
+> 10:
+
+∆t ← 1 
+
+> C
+
+∑Cc=1 Z(k) 
+
+> t
+
+− Csel  
+
+> 11:
+
+M(k) 
+
+> t
+
+← 1[∆t ≥ τ] 
+
+> 12:
+
+end if  
+
+> 13:
+
+Csel ← where (M(k) 
+
+> t
+
+= 1, Z(k) 
+
+> t
+
+, Csel ) ▷ Update selection cache  
+
+> 14:
+
+end for  
+
+> 15: 16:
+
+Z(k) 
+
+> masked
+
+← Z(k) ⊙ M(k) 
+
+> 17: 18:
+
+Z(k) 
+
+> in
+
+← Z(k) 
+
+> masked
+> 19:
+
+Z(k) 
+
+> in ,1
+
+← where (M(k) 
+
+> 1
+
+= 1, Z(k)
+
+> in ,1
+
+, Cfill ) ▷ Fill dropped boundary tokens using Fill Cache  
+
+> 20: 21:
+
+for t = 1 to T do  
+
+> 22:
+
+Cfill ← where (Z(k)
+
+> in ,t
+
+̸ = 0, Z(k) 
+
+> in ,t
+
+, Cfill ) ▷ Update Fill Cache  
+
+> 23:
+
+end for  
+
+> 24:
+
+Z(k) 
+
+> rec
+
+← D θ (Z(k) 
+
+> in
+
+) 
+
+> 25:
+
+Y(k) ← D video (Z(k)
+
+> rec
+
+) 
+
+> 26:
+
+isFirstChunk ← False  
+
+> 27:
+
+end for  
+
+> 28:
+
+return {Y(k)}Kk=1, {M(k)}Kk=1
