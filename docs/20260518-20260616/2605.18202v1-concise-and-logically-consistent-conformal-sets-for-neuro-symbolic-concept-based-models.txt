@@ -1,0 +1,3266 @@
+Title: Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models
+
+URL Source: https://arxiv.org/pdf/2605.18202v1
+
+Published Time: Tue, 19 May 2026 02:46:51 GMT
+
+Number of Pages: 48
+
+Markdown Content:
+# CONCISE AND LOGICALLY CONSISTENT CONFORMAL SETS FOR NEURO -S YMBOLIC CONCEPT -B ASED MODELS 
+
+A P REPRINT 
+
+Samuele Bortolotti 1 Emanuele Marconato 1 Andrea Pugnana 1
+
+Andrea Passerini 1 Stefano Teso 1,21Department of Information Engineering and Computer Science, University of Trento, Italy 
+
+> 2
+
+CIMeC, University of Trento, Rovereto, Italy 
+
+{name.surname}@unitn.it 
+
+May 19, 2026 
+
+ABSTRACT 
+
+Neuro-Symbolic Concept-based Models (NeSy-CBMs) are a family of architectures that integrate neural networks with symbolic reasoning for enhanced reliability in high-stakes applications. They work by first extracting high-level concepts from the input and then inferring a task label from these compatibly with given logical constraints. Yet, their label and concept predictions can be overconfident, making it difficult for stakeholders to gauge when the model’s decisions can be trusted. We address this issue by integrating ideas from Conformal Prediction (CP), a framework providing rigorous, distribution-free coverage guarantees. We formalize three desiderata – consistency, coverage, and conciseness – that any conformal method for NeSy-CBMs should satisfy, and show that existing approaches fall short of at least one. We then introduce COCOCO , a post-hoc framework that conformalizes concepts and labels jointly and reconciles them via a single deduction–abduction revision step . COCOCO satisfies all three desiderata, retains distribution-free coverage, is robust to imperfect knowledge and supports user-specified size budgets. Our experiments on 8 data sets highlight how COCOCO compares favorably against competitors and natural baselines in terms of performance and set size. 
+
+1 Introduction 
+
+Neuro-Symbolic AI (NeSy) architectures integrate neural networks with symbolic reasoning, and as such are prime candidates for designing reliable-by-construction AI systems [ 1, 2]. We focus on Neuro-Symbolic Concept-based Models ( NeSy-CBMs ), a general family of NeSy classifiers that distinguish between the neural and reasoning steps at the architectural level [ 3, 4 , 5]. Given a low-level input, a NeSy-CBM first distills it into a set of high-level concepts using a neural backbone, and then applies differentiable logic reasoning to infer a task prediction that complies to constraints we wish to hold. E.g., if tasked with computing the sum of two MNIST digits [ 6], it would first predict the corresponding digits (the concepts) and then apply the rule of addition (the constraint) [7]. Despite being geared for reliability, NeSy-CBMs can still be overconfident [ 8, 9], making their predictive uncertainty unreliable, see Fig. 1 (Left). This hinders their application to high-stakes tasks, where one often requires machine learning models to be aware of their own mistakes [ 10 ]. Moreover, even if a few NeSy approaches correct overconfidence in a principled manner (e.g., [ 8, 9 ]), their predicted probabilities can be difficult to grasp for practitioners and end-users [11]. We address these limitations with conformal prediction (CP), a general framework for constructing predictors that, rather than producing a point-wise probability estimate, output a set of plausible alternatives with finite-sample and distribution-free coverage guarantees [ 12 ]. Specifically, we distill three desiderata – 
+
+> arXiv:2605.18202v1 [cs.LG] 18 May 2026
+
+Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT NeSy-CBM   
+
+> NN f
+> Logic g
+
+(7, 6)
+
+13 
+
+## K
+
+> Y=C1 +C2
+
+COCOCO 
+
+Υα (x)
+
+> abduction deduction
+
+Γrev (x) 
+
+Υrev (x){ }(7, 5)(7, 6)(4, 6) { }(7, 5)(7, 6)
+
+{11 , 12 , 13} {12 , 13} K
+
+Γ β (x)  
+
+> Logic g
+> NN f
+
+Figure 1: Left : the task and concept predictions of NeSy-CBMs can make confident mistakes (e.g., 6 and 13 ,in red ), making it difficult to gauge the (un)reliability of their predictions. Right : COCOCO enables any NeSy-CBM to output task- and concept-level prediction sets with coverage guarantees for any desired size, while ensuring their mutual consistency via an abduction-deduction refinement step. E.g., in the picture the task label 11 (and the concept label (4 , 6) ) is removed because it is not logically valid, leaving the correct outputs (in green ) untouched with high probability. 
+
+consistency , coverage , and conciseness – that conformal NeSy methods ought to satisfy, and introduce 
+
+COCOCO (COnformality, COnsistency, COnciseness), a novel and general conformal approach that can turn any NeSy-CBM into a full-fledged conformal NeSy predictor satisfying these desiderata. In a nutshell, COCOCO 
+
+implements conformal prediction at the concept and task level and combines them through a post-processing step that ensures the resulting prediction sets are logically consistent with each other. Moreover, we show how to leverage e-values [ 13 , 14 , 15 , 16 ] to ensure the prediction sets [ 17 , 18 , 19 , 20 ] attain maximal coverage for any given size budget while remaining consistent with prior knowledge. Our extensive experiments – on eight image and text datasets and two NeSy CBMs – show that COCOCO achieves high coverage while keeping the size of the prediction sets under control, even in the presence of noisy, incorrect, or underspecified knowledge. 
+
+Our Contributions . We i) formulate three natural desiderata – consistency, coverage and conciseness – that any conformal method for NeSy-CBMs ought to satisfy; ii ) design COCOCO , a post-hoc framework that applies CP jointly at the concept and task levels and reconciles the two via a single deduction–abduction revision step ;
+
+iii ) prove COCOCO satisfies all three desiderata: consistency by construction, distribution-free coverage whose lower bound degrades linearly under imperfect knowledge, and optimal conciseness; iv ) show that COCOCO 
+
+enables user-specified size budgets with guarantees; v) evaluate COCOCO on 8 NeSy data sets with different characteristics, highlighting the promise of COCOCO in terms of consistency, coverage and predictive set size compared to natural competitors. 
+
+2 Preliminaries 
+
+Notation . We write scalar constants x in lower-case, random variables X in upper case, vector constants and variables in bold typeface ( x and X), and sets X , Υ in upper-case italics/greek. Given a function f : X → Y ,we indicate the image of a set X ′ ⊆ X as f (X ′) and the pre-image of a set Y′ ⊆ Y as f −1(Y′). We write ∆S
+
+for the simplex of distributions over S and [n] for {1, . . . n }.
+
+Neuro-Symbolic AI . NeSy approaches differ wildly in terms of aim and architecture [ 1, 2]. We focus on Neuro-Symbolic Concept-based Models ( NeSy-CBMs for short), a family of classifiers designed for reliability [ 3, 4, 5 ]. All NeSy-CBMs extract intermediate, high-level concepts 1 from the input and infer predictions by 
+
+reasoning over the concepts compatibly with user-specified prior knowledge. The latter is encoded as a logic formula K. A NeSy-CBM [ 22 , 23 , 5] maps inputs x ∈ X to k concepts c = ( c1, . . . , c k) ∈ C and then to labels y ∈ Y using two components. The concept extractor f : X → ∆C is a neural network mapping the input x ∈ X to a distribution over concepts pθ (C | x). The inference layer g : C → ∆Y maps concept vectors to a distribution over labels p(Y | c, K) according to given and fixed prior knowledge K. With slight abuse of notation, we write (g ◦ f ) to indicate the conditional distribution p(Y | x; K) obtained by passing the concept probabilities output by f to the inference layer g. In practice, how these are combined depends on the specific NeSy-CBM [5]; we describe the two we use experimentally below, after a running example.   
+
+> 1Also known as neural predicates [21].
+
+2Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Example 1. In MN-Add [ 7 ], the goal is to predict the sum of two MNIST [ 6] digits. Here, the concepts 
+
+c ∈ C := {0, . . . , 9}2 represent the two digits and the label y ∈ Y := {0, . . . , 18 } is their sum. The knowledge 
+
+K = ( y = c1 + c2) specifies 2 that y should be the arithmetic sum of the two concepts. E.g., given an input 
+
+x = , a NeSy-CBM applies f to infer a distribution over digits and then g to obtain one over sums, typically assigning sums that violate K (e.g., c = (7 , 5) , y = 11 ) lower probability. 
+
+We focus on two representative NeSy-CBMs. DeepProbLog (DPL ) [ 7] models the inference layer g using probabilistic logic semantics [ 24 ]. This guarantees that the predictive distribution pθ (Y | c) always allocates zero mass to labels that violate the prior knowledge K, e.g., incorrect sums. DPL infers hard predictions by solving the MAP problem argmax y pθ (y | c), using knowledge compilation [ 25 , 26 ] for efficiency. 
+
+LogicTensorNetworks (LTN ) [ 27 ] implement the inference layer using fuzzy logic [ 28 , 29 ], scoring labels by their fuzzy degree of satisfaction. Both architectures learn the parameters θ via end-to-end training: given a training set Dtr = {(xi, y∗ 
+
+> i
+
+)} sampled from a ground-truth data distribution p∗(X, C, Y), DPL maximizes the likelihood of the training data, while LTN maximizes the fuzzy degree of satisfaction of the prior knowledge 
+
+K evaluated over the ground-truth training data y∗ 
+
+> i
+
+. When concept annotations are available, they can be leveraged during training by combining the original loss with an average cross-entropy term over the concepts. 
+
+Concept independence and reasoning shortcuts . We highlight two key points. First, it is common practice to implement the concept extractor f by stacking per-concept neural classifiers [ 7, 27 , 5]. This means the distribution pθ (C | x) factorizes as Q 
+
+> i
+
+pθ (Ci | x), that is, the predicted concepts are conditionally independent : Ci ⊥⊥ Cj | X for all i̸ = j [9, 30 ]. Second, typically ground-truth concept annotations c∗ 
+
+> i
+
+are not used during training: as a result, NeSy-CBMs often solve the task by learning concepts that do not match human semantics, a phenomenon known as reasoning shortcuts (RSs) [ 23 , 5 ]. Models affected by such RSs output confident but wrong concept predictions even when their label accuracy is high, and thus suffer from impaired interpretability and reliability [8]. 
+
+Conformal Prediction (CP) is a general framework for constructing set-valued predictions with finite-sample 
+
+and distribution-free coverage guarantees [ 12 ]. Such guarantees are especially relevant in decision support systems [ 31 , 32 ], as well as in high-stakes applications where human judgment is needed [ 33 , 34 ] or where statistical reliability assurances are required [35]. Given a predictor pθ (Y | X) and a calibration dataset Dcal = {(xi, y∗ 
+
+> i
+
+)}ni=1 of exchangeable examples, CP maps a test input xi ∈ X to a prediction set Υα(xi) ⊆ Y such that: 
+
+Pr( y∗ 
+
+> i
+
+∈ Υα(xi)) ≥ 1 − α. (1) CP relies on a nonconformity score s(x, y) that quantifies how atypical a candidate output y is for an input x,e.g., a typical choice being 1 − p(y∗ | x) [36 ]. Let si = s(xi, y∗ 
+
+> i
+
+) for i ∈ [n] be the nonconformity score of each calibration example, and let q1−α be the ⌈(n + 1)(1 − α)⌉/n empirical quantile of {si}ni=1 . The factor 
+
+(n + 1) /n is the standard finite-sample correction that treats the test point as exchangeable with the calibration set, and it ensures the exact finite-sample guarantee Eq. (1) [ 36 , 37 ]. Then, the conformal prediction set for a test input xi can be built as: 
+
+Υα(xi) = {y ∈ Y : s(xi, y) ≤ q1−α}. (2) 
+
+3 Building Blocks of Conformal NeSy-CBMs 
+
+NeSy-CBMs are geared for reliability in high-stakes applications [ 5, 38 , 39 ], where it is essential that predictions satisfy domain-specific constraints K [ 7, 40 , 41 , 42 ]. Yet, their predictive uncertainty is both unreliable and difficult to understand. In fact, they are often miscalibrated [ 8 , 9, 10 ], meaning stakeholders cannot use their uncertainty to assess whether to trust their predictions [ 8, 9 ]. Moreover, predictive uncertainty is difficult for users to understand in the first place [ 11 ]. Both issues are problematic, especially for NeSy-CBMs affected by reasoning shortcuts, in which case users ought to be made aware that the learned concepts are not human aligned, yet these are often predicted wrong with confidence [5, 23]. This calls for a different strategy that can simultaneously handle uncertainty while providing a user-friendly interface for reliability assessment. This is where CP comes into play, as it offers a principled, distribution-free remedy that does not involve communicating probabilities to users. We outline the benefits we wish to obtain from such a combination by formalizing three desiderata that any NeSy conformal approach ought to satisfy: 
+
+D1 Consistency : predicted concepts and labels must be logically consistent with the knowledge K.
+
+> 2This constraint can be naturally written in propositional and first-order logic [7].
+
+3Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+D2 Coverage : prediction sets must enjoy distribution-free, finite-sample marginal coverage guarantees on 
+
+both labels and concepts – so as to ensure stakeholders can trust the prediction sets. 
+
+D3 Conciseness : prediction sets should be as small as possible, retaining only relevant alternatives – large sets are uninterpretable and operationally useless [32]. In Section 4, we will introduce COCOCO , a novel NeSy CP strategies that does complies with D1 –D3 . Yet, integrating CP into NeSy-CBMs without compromising any desideratum is non-trivial. In fact, as we will show in Section 4.1, any “ one-sided ” CP strategy that independently targets either the concept extractor or the inference layer is insufficient to satisfy all desiderata. 
+
+Inference layer operators . Before proceeding, we introduce two operators that all methods we will discuss build on, together with their coverage properties. We denote with g† the argmax of the inference layer g and its preimage as g−† , that is: 
+
+g†(c) := argmax y∈Y g(c) ⊆ Y , g−† (y) := {c ∈ C : y ∈ g†(c)}. (3) Intuitively, g† deduces a (subset of) label(s) from given concepts, while g−† abduces a (subset of) concepts from given label(s). Two properties of g† play a central role in our coverage guarantees: 
+
+Definition 3.1 (Deductive & Abductive Soundness) . Let p∗(x, c, y) be the joint data distribution. A NeSy-CBM (f, g ) satisfies deductive soundness if, for every (c∗, y∗) ∈ supp( p∗(x, c, y)) , g†(c∗) = y∗. It satisfies 
+
+abductive soundness if, for every (c∗, y∗) ∈ supp( p∗(x, c, y)) , c∗ ∈ g−† (y∗).Deductive and abductive soundness depend on both the prior knowledge K and on how the inference layer 
+
+g implements it. In particular, they hold when: ( i) the knowledge is correct and complete , meaning that it allows the ground-truth labels and concepts to be retrieved from one another without errors (as in MN-Add , see Example 1), and ( ii ) the inference layer g preserves this property . The latter holds for both DPL and LTN 3 – and in general for most NeSy-CBMs [ 40 , 43 , 41 ]. However, these properties may not hold when the knowledge is incomplete or erroneous, as for some of the datasets used in our experiments (Section 6), or when the inference layer is learned from data [44, 45, 46, 47]. 
+
+Label and concept sets via standard CP . Given a calibration set DY = {(xi, y∗ 
+
+> i
+
+)} of exchangeable examples and a miscoverage level 0 < α < 1, we can obtain a label set Υα(x) ⊆ Y satisfying: 
+
+Pr( y∗ ∈ Υα(x)) ≥ 1 − α . (4) simply by applying CP (Eq. (2)) to the NeSy-CBM’s label distribution pθ (Y | x, K). Doing the same for the concept extractor f is not as straightforward, in that doing so requires concept annotations c∗ on the entire concept vector, which are seldom available [ 48 , 49 ]. We work around this issue by exploiting the conditional independence of concepts. Specifically, for each concept Cj we collect a per-concept calibration set DCj = {(xi, c ∗ 
+
+> ij
+
+)}, build a conformal set Γjβj (x) with miscoverage level βj , and use the latter to construct a product concept set as 
+
+Γ×(x) = 
+
+> k
+
+# ×j=1 
+
+Γjβj (x) = Γ 1 
+
+> β1
+
+(x) × · · · × Γkβk (x). (5) Notably, the product set inherits coverage guarantees, as shown by the following Proposition: 
+
+Proposition 3.1 (Coverage of Γ×(x)). For any NeSy-CBM (f, g ) and 0 < β j < 1, let β = Pkj=1 βj . If each 
+
+Γjβj (x) satisfies Pr( c∗ 
+
+> j
+
+∈ Γjβj (x)) ≥ 1 − βj , then for every (x, c∗, y∗) ∈ supp( p∗(x, c, y)) :
+
+Pr( c∗ ∈ Γ×(x)) ≥ 1 − β. (6) All proofs are reported in Section C due to space constraints. Eq. (6) implies that, in order to ensure Γ×(x)
+
+meets joint coverage 1 − β, it is sufficient to choose βj = β/k for all j. One downside is that, as k grows, this allocates vanishing miscoverage to each per-concept set Γjβj (x), inflating them and Γ×(x) as a result. We will see in Section 4 that e-values avoid this issue entirely. In what follows, we use Γβ (x) to denote any concept set satisfying Pr( c∗ ∈ Γβ (x)) ≥ 1 − β. In our default construction, this is Γ×(x), but our method applies to any concept set with this guarantee, including those built using a calibration set over the entire concept vector c∗.  
+
+> 3We specifically refer to versions of LTN for which this property holds, namely, those that use t-(co)norms [29].
+
+4Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Abductive and deductive operators . With these notions in place, we can map between Υα(x) and Γβ (x)
+
+using the inference layer operators introduced in Eq. (3), that is: 
+
+Γab (x) := g−† (Υ α(x)) , Υde (x) := g†(Γ β (x)) . (7) 
+
+Γab (x) collects all concept vectors that logically entail at least one label in Υα(x) via abduction [ 50 , 51 , 52 ]; 
+
+Υde (x) collects all labels derivable from concepts in Γβ (x) via deduction [ 49 ]. These operators transfer coverage guarantees across levels, as shown by the following propositions: 
+
+Proposition 3.2 (Coverage of Γab (x)). For any NeSy CBM (f, g ), let 0 < α < 1. If Υα(x) is a label conformal set Eq. (4) and Γab (x) is the set constructed as Eq. (7) , then for every (x, c∗, y∗) ∈ supp( p∗(x, c, y)) :
+
+(1 − α)δab ≤ Pr( c∗ ∈ Γab (x)) ≤ α + δab (8) 
+
+where δab := Pr( c∗ ∈ Γab (x) | y∗ ∈ Υα(x)) is the probability that abduction recovers the ground-truth concepts c∗ provided the label set Υα(x) contains the correct label y∗. Moreover, if the NeSy-CBM satisfies abductive soundness, the lower bound tightens to Pr( c∗ ∈ Γab (x)) ≥ 1 − α.
+
+Proposition 3.3 (Coverage of Υde (x)). For any NeSy CBM (f, g ), let 0 < β < 1. If Γβ (x) is a concept confor-mal set Eq. (6) and Υde (x) is the set constructed as Eq. (7) . Then, for every (x, c∗, y∗) ∈ supp( p∗(x, c, y)) :
+
+(1 − β)δde ≤ Pr( y∗ ∈ Υde (x)) ≤ β + δde (9) 
+
+where δde := Pr( y∗ ∈ Υde (x) | c∗ ∈ Γβ (x)) measures how likely it is that deduction recovers the true label 
+
+y∗ given that the concept set Γβ (x) contains the correct concepts c∗. Moreover, under deductive soundness, the bound tightens to Pr( y∗ ∈ Υde (x)) ≥ 1 − β.
+
+Next, we show that Γab (x) or Υde (x), while enjoying coverage guarantees, are insufficient to construct a NeSy CP strategy satisfying D1 –D3 when used in isolation, while combining them through a revision step, as done by COCOCO , does. 
+
+4 Consistency, Conformality and Conciseness 
+
+We begin by introducing COCOCO (COnformality, COnsistency, COnciseness), a post-hoc framework for turning any NeSy-CBM into a conformal predictor satisfying all three desiderata D1 –D3 . The idea is as follows: starting from a label set Υα(x) and a concept set Γβ (x), we make them mutually consistent by intersecting the label set (resp. concept set) with g† applied to the concept set (resp. g−† to the label set). We show that this requires only one revision step to converge. 
+
+Joint Revision Step . Given Υα(x) satisfying Eq. (4) and Γβ (x) satisfying Eq. (6), COCOCO computes: 
+
+Υrev (x) := Υ α(x) ∩ g†(Γ β (x)) , Γrev (x) := Γ β (x) ∩ g−† (Υ α(x)) . (10) In other words, Γrev (x) retains only the concepts in Γβ (x) that logically entail some label in Υα(x), and 
+
+Υrev (x) retains only the labels in Υα(x) that are entailed by some concept in Γβ (x). We highlight two key structural properties: a single application of Eq. (10) is enough to reconcile the two sets, and the resulting pair is maximally informative among all consistent revisions of (Γ β (x), Υα(x)) . Both properties are made formal below. 
+
+Proposition 4.1 (One-step consistency and optimality of COCOCO ). Let R(Γ , Υ) :=  Γ ∩ g−† (Υ) , Υ ∩ g†(Γ) 
+
+denote the joint revision operator. Then, for any (Γ β (x), Υα(x)) :1. (One-step fixed point) R R(Γ β (x), Υα(x))  = R(Γ β (x), Υα(x)) , so iterating the revision is unneces-sary. 2. (Optimality) (Γ rev (x), Υrev (x)) = R(Γ β (x), Υα(x)) is the largest pair (Γ ′, Υ′) ⊆ Γβ (x) × Υα(x) such that Γ′ ⊆ g−† (Υ ′) and Υ′ ⊆ g†(Γ ′) – i.e., each label y ∈ Υ′ is represented by at least a concept c ∈ Γ′,and vice-versa, according to the inference layer g, making it the largest mutually consistent subset of 
+
+(Γ β (x), Υα(x)) .
+
+Proposition 4.1 is the operational core of COCOCO : a single deduction–abduction pass simultaneously achieves consistency ( D1 ) and optimal conciseness ( D3 ) given (Γ β (x), Υα(x)) by construction. Next, we show that this joint revision preserves coverage guarantees ( D2 ). 5Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Table 1: Summary of guarantees provided by different NeSy conformal strategies.                                                                
+
+> CONSISTENCY (D1 )COVERAGE (D2 )CONCISENESS (D3 )METHOD TASK CONCEPTS TASK YCONCEPTS CTASK YCONCEPTS C
+> Task Only ( TO ) [53] ✗–✓(4) ✗✗–Task plus Abduction ( TAb )✓✓✓(4) ✓(3.2) ✗✗
+> Concepts Only ( CO )–✗✗✓(3.1) –✗
+> Concepts plus Deduction ( CDe )✓✓✓(3.3) ✓(3.1) ✗✗
+> Joint ( RPB ) [49] ✓✗✓✓✓✗
+> COCOCO ✓(C.7) ✓(C.7) ✓(4.2) ✓(4.2) ✓(C.8, 6.2) ✓(C.8, 6.2)
+
+Proposition 4.2 (Marginal coverage of COCOCO ). For any NeSy CBM (f, g ), let 0 < α < 1 and 0 < β < 1.If Γβ (x) is a concept conformal set Eq. (6) and Υα(x) is a label conformal set Eq. (4) , then, for every 
+
+(x, c∗, y∗) ∈ supp( p∗(x, c, y)) , we have 
+
+Pr( c∗ ∈ Γrev (x)) ≥ (1 − α)δab − β + Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) , (11) 
+
+Pr( y∗ ∈ Υrev (x)) ≥ (1 − β)δde − α + Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) , (12) 
+
+where Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) and Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) are the probabilities that the ground-truths are not covered by neither the concept/label conformal set nor the abductive/deductive conformal set. Moreover, if the NeSy predictor satisfies both deductive soundness and abductive soundness (Definition 3.1), the bounds tighten, with δab = 1 = δde .
+
+Under soundness ( δab = δde = 1 ), COCOCO retains coverage at least 1 − α − β on both sides, plus a non-negative joint-failure correction, i.e., Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) or Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) .This correction term is empirically estimable from a held-out set and is small in practice ( ≤ 0.08 across our datasets, see Section F). When soundness degrades – e.g., on incomplete-knowledge datasets like RIV10 – the bounds worsen according to the quality of the inference layer ( δ). 
+
+User-specified size budgets . Standard CP fixes α, β a priori and yields the corresponding set sizes. In practice, specifically in decision-support systems [ 31 , 34 , 32 ], it is often more useful to fix a size budget (“at most 5
+
+candidate concepts”) and report the corresponding coverage, thereby avoiding overwhelming practitioners with a range of choices. As shown by Gauthier et al. [19] , this can be achieved by replacing standard CP with 
+
+conformal e-predictions [ 17 , 18 , 19 , 20 ], which use e-values [13 , 14 , 15 , 16 ] in place of quantiles. E-values bring two benefits to COCOCO . First, we can provably build a conformal set over concepts while avoiding Bonferroni’s correction (Corollary C.4), meaning that the resulting concept-set guarantee does not degrade with the number of concepts k (Proposition C.9). Second, e-values allow data-dependent miscoverage levels ˜α, ˜β to be chosen after observing calibration scores, in particular to satisfy user-specified size budgets while retaining a coverage guarantee in expectation [ 16 , 17 ]. We denote this variant COCOCO ∗, and prove its joint-coverage guarantee in Section C.10. Details about e-values and COCOCO ∗ are left to Section D.3 due to space constraints. 
+
+Runtime . A key advantage of COCOCO is that the joint revision operator reaches a fixed point in a single step (Proposition 4.1), so the additional overhead amounts to computing the abductive and deductive images once, i.e., Γab (x) = g−† (Υ α(x)) and Υde (x) = g†(Γ β (x)) . The main computational bottleneck lies in constructing the concept set Γ×(x), which scales exponentially in the number of concepts k due to the cross-product structure. This issue is mitigated when full concept annotations are available or if COCOCO ∗ is employed due to e-values , in which cases Γβ (x) can be obtained carrying out any set product. In practice, we find that the runtime of COCOCO does not exceed 1.5× that of standard DPL and LTN , which is acceptable in high-stakes settings where reliability is crucial. A detailed runtime analysis is deferred to Section F.4 due to space constraints. 
+
+4.1 One-Sided Strategies do not Suffice 
+
+The joint revision operator R(Γ , Υ) = (Γ ∩ g−† (Υ) , Υ ∩ g†(Γ)) admits four one-sided restrictions, obtained by conformalizing only one side and either bypassing the symbolic layer or applying g†/g −† unilaterally. We briefly discuss them and their properties (summarized in Table 1): • Task only ( TO ) applies CP to the labels but not to the concepts, meaning it violates coverage D2 ; it also violates consistency D1 as a single concept vector may not entail the entire label set. • Concepts only ( CO ) is the converse, i.e., it does not apply CP to the task labels, violating coverage D2 ;moreover, if employed, Bonferroni inflates Γ×(x), breaking conciseness D3 .6Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+• Task plus Abduction ( TAb ) computes (Υ α(x), g −† (Υ α(x))) , in which case the abduced concept set contains all concept vectors c entailing some label in Υα(x), affecting conciseness D3 .• Concepts plus Deduction ( CDe ) computes (Γ β (x), g †(Γ β (x))) instead, meaning that it inflates the label side, violating D3 .Ramalingam et al. [49] propose a variation of the revision operator, here denoted as RPB , that applies R
+
+asymmetrically, revising only the label side: it matches COCOCO ’s Υrev (x) but leaves Γβ (x) untouched, breaking concept-side consistency D1 . We defer to Section B for an in-depth discussion. 
+
+5 Related Work 
+
+Conformal Prediction . CP produces prediction sets containing the ground-truth value with a pre-specified coverage [ 12 ]. Core theoretical guarantees are established by Papadopoulos et al. [36] . Extensions cover regression [ 54 , 55 ]; conditional guarantees [ 56 , 57 ]; noisy ground truth [ 58 , 59 ], covariate shifts [ 60 ] and size control [ 19 , 20 ]. We refer the reader to Angelopoulos and Bates [37] for a broader survey on conformal prediction. 
+
+Conformal prediction for NeSy . The two closest works are Ledaguenel et al. [53] , who apply CP only at the label level (matching our TO baseline and inheriting its lack of concept-side coverage), and Ramalingam et al. [49] , who propose three strategies for symbolic programs over bounding-boxes that align with our CDe , TO ,and RPB baselines. Both are subsumed by our framework. COCOCO goes further by also revising the concept set via g−† (Υ α(x)) , which is what guarantees concept-side consistency and drives the empirical concept-set reductions reported in Section 6. Other lines of work [ 61 , 62 ] use CP for LLM-generated programs and are orthogonal to ours. 
+
+NeSy-CBMs and Reasoning Shortcuts . NeSy-CBMs constitute a broad family of architectures that combine neural concept extractors with symbolic inference layers [ 1 , 22 ], encompassing models based on probabilistic logic [ 7 , 63 , 64 , 40 , 52 , 65 ], fuzzy logic [ 28 , 27 ], and algebraic constraints [ 41 , 43 ]. A known failure mode of these models is that of reasoning shortcuts [ 23 ], whereby the concept extractor learns incorrect concepts that allow to predict correct labels in training [ 5]. This phenomenon is mainly tackled by resorting to additional supervision [23, 66] and uncertainty estimation [8, 9]. 
+
+6 Experiments 
+
+We address the following research questions: 
+
+RQ1 How does COCOCO fare in terms of D1 –D3 under correct and noisy knowledge? 
+
+RQ2 How does the COCOCO behave when deductive soundness fails? 
+
+RQ3 Can we impose hard size constraints on the prediction sets while retaining coverage guarantees? 
+
+6.1 Experimental Settings 
+
+We report results in the main text using concept supervision , as the unsupervised setting yields substantially larger prediction sets that are harder to read and less operationally meaningful; the unsupervised results follow the same qualitative trends and are reported in full in Section F. 
+
+Data sets . We focus on four datasets, grouped by the properties of the prior knowledge K. Complete-and-correct K: C HEST -X RAYS (CHX [67 ]) is a high-stakes medical diagnosis task in which the label is the number of active binary symptoms; C EBAB ( CEB [ 68 ]) is a restaurant-review dataset with four aspect-level concepts and an overall rating derived by majority vote. Incomplete K: RIVAL-10 ( RIV10 [69 ]) contains 10 classes with hand-crafted visual attributes such that at least two class pairs share the same concept signature, so deductive soundness fails (Definition 3.1). Reasoning-shortcut benchmark : MNIST-E VEN ODD (MN-EO [70 ]) is a biased variant of MN-Add [ 7] designed to induce reasoning shortcuts. Details for these and the four additional datasets are in Section D.5. 
+
+Competitors and metrics . We employ two state-of-the-art NeSy-CBMs, DPL [ 7] and LTN [27 ], trained with and without concept supervision, and compare COCOCO against RPB [ 49 ], the strongest competitor; full ablations against TO , TAb , CO , and CDe are in Section F.3. Following D1 –D3 , we report C OVERAGE , S IZE ,and C ONSISTENCY at nominal coverages 1 − α = 1 − β = 0 .9, averaged over 10 seeds. Details about hyperparameters and metrics can be found in Section D and Section E. 7Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Table 2: Results for DPL on four representative datasets. We report concept and label consistency (C ONST ., fraction of consistent pairs – see Section D.2), size, and coverage at nominal coverage 1 − α = 1 − β = 0 .9,averaged over 10 seeds (mean ± std). Full results, including LTN , are in Section F.                                                                                                                                                                                                                                                   
+
+> CONCEPTS LABELS
+> METHOD CONST .SIZE COV .CONST .SIZE COV .
+> CHX  DPL 1.00 ±0.00 1.00 ±0.00 0.47 ±0.11 1.00 ±0.00 1.00 ±0.00 0.72 ±0.01
+> DPL +RPB 0.55 ±0.05 5.30 ±1.01 0.91 ±0.03 1.00 ±0.00 1.60 ±0.18 0.88 ±0.03
+> DPL +COCOCO 1.00 ±0.00 2.90 ±0.56 0.83 ±0.04 1.00 ±0.00 1.60 ±0.18 0.88 ±0.03
+> RIV10  DPL 1.00 ±0.00 1.00 ±0.00 0.43 ±0.02 1.00 ±0.00 1.00 ±0.00 0.80 ±0.00
+> DPL +RPB 0.94 ±0.01 6.33 ±0.65 0.92 ±0.01 1.00 ±0.00 1.20 ±0.02 0.89 ±0.01
+> DPL +COCOCO 1.00 ±0.00 5.85 ±0.62 0.84 ±0.01 1.00 ±0.00 1.20 ±0.02 0.89 ±0.01
+> CEB  DPL 1.00 ±0.00 1.00 ±0.00 0.18 ±0.02 1.00 ±0.00 1.00 ±0.00 0.58 ±0.03
+> DPL +RPB 0.78 ±0.06 75 .06 ±38 .35 0.90 ±0.04 1.00 ±0.00 2.31 ±0.16 0.87 ±0.01
+> DPL +COCOCO 1.00 ±0.00 53 .49 ±25 .93 0.83 ±0.03 1.00 ±0.00 2.31 ±0.16 0.87 ±0.01
+> MN-EO  DPL □1.00 ±0.00 1.00 ±0.00 0.13 ±0.08 1.00 ±0.00 1.00 ±0.00 0.72 ±0.01
+> DPL +RPB □0.12 ±0.01 100 .00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.55 ±0.18 0.90 ±0.02
+> DPL +COCOCO □1.00 ±0.00 12 .13 ±1.37 0.90 ±0.02 1.00 ±0.00 1.55 ±0.18 0.90 ±0.02
+
+Setup . We train DPL and LTN end-to-end on the training split following [ 70 ]. We partition the test set into a calibration set Dcal (20% ) and a held-out evaluation set Dtest (80% ), computing nonconformity scores 
+
+s(x, y) = − log pθ (y | x) on Dcal for both concepts and labels, and use them to construct the conformal sets Γβ (x) (in practice, Γ×(x)) and Υα(x) at the desired miscoverage levels. COCOCO ’s revision step (Eq. (10)) is then applied at test time on Dtest , for which we report all metrics. For COCOCO ∗, we replace the standard nonconformity scores with soft-rank e-values (Eq. (99)) and adaptively select ˜α and ˜β via bootstrap (Section D.3) to satisfy user-specified size budgets. Full training, conformalization, and evaluation details are in Section D. 
+
+6.2 Experimental Results and Discussion RQ1: COCOCO preserves coverage and consistency with smaller prediction sets across all regimes . By symmetrically revising both sides, COCOCO matches RPB ’s label sets while strictly improving the concept side. COCOCO attains concept consistency 1.00 across all four datasets, whereas RPB ranges from 0.12 (MN-EO )to 0.94 (RIV10 ). With complete-and-correct K: on CHX , COCOCO shrinks the concept set from 5.30 (RPB )to 2.90 (1.8×); on CEB , a consistent reduction, 75 .06 → 53 .49 (1.4×), with concept consistency rising 
+
+0.78 → 1.00 . With incomplete K (RIV10 ), COCOCO reduces the concept set 6.33 → 5.85 and increases consistency 0.94 → 1.00 . On RS-benchmark (MN-EO , unsupervised), RPB returns concept sets of size 100 –i.e., all possible digits combinations – at consistency 0.12 , reflecting the strong miscalibration induced by RSs [ 8 , 9]; COCOCO shrinks this to 12 .13 (8.2×) at consistency 1.00 , with label coverage preserved at 0.90 .
+
+COCOCO and RPB both maintain label-set sizes ≤ 2, except on CEB (2.31 ); label coverage is ≥ 0.87 for correct and concept coverage is ≥ 0.83 . Results for LTN are deferred to Appendix Section F due to space constraints. 
+
+Trade-off note. Concept coverage of COCOCO is systematically 7–10 points below RPB ’s (e.g., 0.83 vs 0.91 
+
+on CHX , 0.84 vs 0.92 on RIV10 ). This is unavoidable since Γrev (x) ⊆ Γβ (x), so any concept removed by intersection with Γab (x) previously contributed to coverage. The drop reflects cases in which y∗̸ ∈ Υα(x),potentially causing Γab (x) to exclude c∗. COCOCO trades this small coverage drop for guaranteed concept-side consistency (always 1.00 ) and substantially smaller sets. 
+
+RQ2: coverage guarantees degrades controllably under incomplete knowledge . The bound in Propo-sition 4.2 degrades with δab and δde . RIV10 is designed so that 2 of 10 classes share concepts ( dog /horse ,
+
+automobile /truck ), yielding δde = 0 .8 by construction (verified empirically; see Section F.1). Abductive soundness holds, ˆδab = 1 .00 . Plugging δde = 0 .80 , β = 0 .1 into Proposition 4.2 yields Pr( y∗ ∈ Υrev (x)) ≥
+
+0.62 .4 This bound is respected: DPL attains label coverage 0.80 on RIV10 . Section F reports the joint-failure correction Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) and Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) , respectively, for both CIF10 
+
+and RIV10 , confirming it is small ( ≤ 0.06 ) and closes the gap between the theoretical lower bound and ob-served coverage. Results on CIF10 follow a similar trend, ref. Section F. 
+
+RQ3: COCOCO supports user-specified size budgets while retaining coverage . A recurring practical concern with CP is that size and coverage cannot be jointly specified. Conformal e-predictions [ 17 , 19 ] invert the procedure: given size budgets, the method adaptively chooses ˜α and ˜β while retaining the conformal guarantee (Proposition C.10). E-values additionally avoid Bonferroni’s correction (Proposition C.9), so 
+
+> 4
+
+This excludes the joint-failure correction term, which further tightens the bound slightly; see Section F for more details. 
+
+8Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 0.70 0.75 0.80 0.85 0.90 0.95 1.00         
+
+> 1
+> 0
+> 1
+> 2
+> 3
+> 4
+> Frequency
+> Empirical 1given |rev (x)| 2|rev (x)| 5
+> 1
+> Th. ±1 std (0.039)
+> Th.: 0.823
+> Em.: 0.914 ± 0.013
+> Em.: 0.914 ± 0.013
+
+(a) Label coverage 0.4 0.5 0.6 0.7 0.8 0.9 1.0          
+
+> 1
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> Frequency
+> Empirical 1given |rev (x)| 2|rev (x)| 5
+> 1
+> Th. ±1 std (0.126)
+> Th.: 0.773
+> Em.: 0.887 ± 0.028
+> Em.: 0.887 ± 0.028
+
+(b) Concept coverage 
+
+Figure 2: COCOCO ∗ on CHX with DPL under fixed regime |Υrev (x)| ≤ 2 ∧ | Γrev (x)| ≤ 5, bootstrapped over 
+
+100 calibration resamples and averaged across 10 seeds. Empirical coverage ( orange ) exceeds the theoretical target ( green ), while sizes remain strictly below the imposed budgets. guarantees do not degrade with the number of concepts. We evaluate on CHX , fixing label and concept budgets to 2 and 5 – operationally meaningful for a clinical decision-support setting. Fig. 2 reports the both-fixed regime, bootstrapped over 100 calibration resamples. Average set sizes are 1.80 (labels) and 3.57 (concepts), strictly below the budgets, with empirical coverages 0.91 and 0.89 , both exceeding by far the theoretical targets 
+
+1 − E[˜ α] = 0 .77 and 1 − E[ ˜β] = 0 .82 . Single-sided regimes and full results are in Table 31 and additional ablation on different e-value formulation in Section F.2. 
+
+7 Conclusion 
+
+We introduced COCOCO , a post-hoc conformal framework for NeSy-CBMs that jointly conformalizes concept and label predictions and reconciles them via a single deduction–abduction revision step. This step provably yields the largest logically consistent revision of the two sets and reaches a fixed point in one pass (Proposi-tion 4.1). The framework retains distribution-free coverage that degrades controllably under imperfect knowl-edge, and – combined with e-values – supports user-specified size budgets. To our knowledge, COCOCO is the first method that exploits symbolic knowledge to simultaneously shrink conformal prediction sets and enforce label–concept consistency while retaining distribution-free coverage. Empirically, COCOCO consistently attains target coverage while reducing concept-set size on eight benchmarks. 
+
+Limitations and Future Work . Abduction and deduction require enumerating g†(Γ β (x)) and g−† (Υ α(x)) ,while Γ×(x) requires to compute the product over a possibly large number of concepts. This becomes a bottleneck for very large concept spaces (e.g., BDD-OIA [ 71 , 70 ]). Similarly, regarding inference time, the inference layer g is called multiple times; while knowledge-compiled circuits [25, 72, 26, 73, 74] (as in DPL )make this tractable in practice. The product-set Γ×(x) – if the cross-product construction is used – assume conditional independence (Proposition C.9), inherited from standard NeSyCBMs [ 30 , 9]. Importantly, the 
+
+COCOCO revision step itself does not require independence: it operates on any concept set satisfying Eq. (6). Plugging in expressive concept distributions [ 30 , 9] is a direct extension. As future work, we plan to extend 
+
+COCOCO to a broader range of NeSy-CBMs architectures, leveraging, once mature, recent initiatives that aim to make NeSy-AI more accessible and easier to adopt for practitioners, such as DeepLog [ 74 ] and ULLER [ 75 ], and to architectures that learn the knowledge from data [ 44 , 45 , 46 , 47 ], where soundness can no longer be assumed a priori and must be estimated, affecting the bounds of Proposition 4.2. 
+
+Acknowledgments 
+
+The authors are grateful to Tommaso Carraro for his precious help in the experimental evaluation, and to Cesare Barbera and Carlotta Giacchetta for their useful discussions. Funded by the European Union. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Health and Digital Executive Agency (HaDEA). Neither the European Union nor the granting authority can be held responsible for them. Grant Agreement no. 101120763 - TANGO. 9Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+References 
+
+[1] Luc De Raedt, Sebastijan Dumanˇ ci´ c, Robin Manhaeve, and Giuseppe Marra. From statistical relational to neural-symbolic artificial intelligence. In IJCAI , 2021. [2] Artur d’Avila Garcez, Sebastian Bader, Howard Bowman, Luis C Lamb, Leo de Penning, BV Illuminoo, Hoifung Poon, and COPPE Gerson Zaverucha. Neural-symbolic learning and reasoning: A survey and interpretation. Neuro-Symbolic Artificial Intelligence: The State of the Art , 342:1, 2022. [3] Eleonora Giunchiglia, Mihaela Catalina Stoian, and Thomas Lukasiewicz. Deep learning with logical constraints. pages 5478–5485, 2022. doi: 10.24963/IJCAI.2022/767. URL https://doi.org/10. 24963/ijcai.2022/767 .[4] Tirtharaj Dash, Sharad Chitlangia, Aditya Ahuja, and Ashwin Srinivasan. A review of some techniques for inclusion of domain-knowledge into deep neural networks. Scientific Reports , 2022. [5] Emanuele Marconato, Samuele Bortolotti, Emile van Krieken, Paolo Morettin, Elena Umili, Antonio Vergari, Efthymia Tsamoura, Andrea Passerini, and Stefano Teso. Symbol grounding in neuro-symbolic ai: A gentle introduction to reasoning shortcuts. arXiv preprint arXiv:2510.14538 , 2025. [6] Yann LeCun. The mnist database of handwritten digits. http://yann. lecun. com/exdb/mnist/ , 1998. [7] Robin Manhaeve, Sebastijan Dumancic, Angelika Kimmig, Thomas Demeester, and Luc De Raedt. DeepProbLog: Neural Probabilistic Logic Programming. NeurIPS , 2018. [8] Emanuele Marconato, Samuele Bortolotti, Emile van Krieken, Antonio Vergari, Andrea Passerini, and Stefano Teso. BEARS Make Neuro-Symbolic Models Aware of their Reasoning Shortcuts. Uncertainty in AI , 2024. [9] Emile van Krieken, Pasquale Minervini, Edoardo Ponti, and Antonio Vergari. Neurosymbolic diffusion models. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [10] Salvatore Ruggieri and Andrea Pugnana. Things machine learning models know that they don’t know. In 
+
+AAAI , pages 28684–28693. AAAI Press, 2025. [11] Charvi Rastogi, Yunfeng Zhang, Dennis Wei, Kush R Varshney, Amit Dhurandhar, and Richard Tomsett. Deciding fast and slow: The role of cognitive biases in ai-assisted decision-making. Proceedings of the ACM on Human-computer Interaction , 6(CSCW1):1–22, 2022. [12] Vladimir Vovk, Alexander Gammerman, and Craig Saunders. A tutorial on conformal prediction. In 
+
+Advances in Neural Information Processing Systems , 1999. [13] Glenn Shafer and Vladimir Vovk. Game-theoretic foundations for probability and finance . John Wiley & Sons, 2019. [14] Vladimir Vovk and Ruodu Wang. E-values: Calibration, combination and applications. The Annals of Statistics , 49(3):1736–1754, 2021. [15] Peter Grünwald, Rianne de Heide, and Wouter M Koolen. Safe testing. In 2020 Information theory and applications workshop (ITA) , pages 1–54. IEEE, 2020. [16] Aaditya Ramdas and Ruodu Wang. Hypothesis testing with e-values. Foundations and Trends® in Statistics , 1(1-2):1–390, 2025. [17] Vladimir Vovk. Conformal e-prediction. Pattern Recognition , 166:111674, 2025. [18] Etienne Gauthier, Francis Bach, and Michael I Jordan. E-values expand the scope of conformal prediction. 
+
+arXiv preprint arXiv:2503.13050 , 2025. [19] Etienne Gauthier, Francis R. Bach, and Michael I. Jordan. Backward conformal prediction. In NeurIPS ,2025. [20] Etienne Gauthier, Francis R. Bach, and Michael I. Jordan. Adaptive coverage policies in conformal prediction. In AISTATS , 2026. [21] Robin Manhaeve, Sebastijan Dumanˇ ci´ c, Angelika Kimmig, Thomas Demeester, and Luc De Raedt. Neural probabilistic logic programming in deepproblog. Artificial Intelligence , 298:103504, 2021. [22] Samuele Bortolotti, Emanuele Marconato, Paolo Morettin, Andrea Passerini, and Stefano Teso. Shortcuts and identifiability in concept-based models from a neuro-symbolic lens. CoRR , abs/2502.11245, February 2025. URL https://doi.org/10.48550/arXiv.2502.11245 .[23] Emanuele Marconato, Stefano Teso, Antonio Vergari, and Andrea Passerini. Not all neuro-symbolic concepts are created equal: Analysis and mitigation of reasoning shortcuts. In NeurIPS , 2023. 10 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+[24] Luc De Raedt and Angelika Kimmig. Probabilistic (logic) programming concepts. Machine Learning ,100:5–47, 2015. [25] Adnan Darwiche and Pierre Marquis. A knowledge compilation map. Journal of Artificial Intelligence Research , 17:229–264, 2002. [26] Antonio Vergari, YooJung Choi, Anji Liu, Stefano Teso, and Guy Van den Broeck. A compositional atlas of tractable circuit operations for probabilistic inference. NeurIPS , 2021. [27] Samy Badreddine, Artur d’Avila Garcez, Luciano Serafini, and Michael Spranger. Logic tensor networks. 
+
+Artificial Intelligence , 303:103649, 2022. [28] Ivan Donadello, Luciano Serafini, and Artur D’Avila Garcez. Logic tensor networks for semantic image interpretation. In IJCAI , 2017. [29] Emile van Krieken, Erman Acar, and Frank van Harmelen. Analyzing Differentiable Fuzzy Implications. In Proceedings of the 17th International Conference on Principles of Knowledge Representation and Reasoning , pages 893–903, 9 2020. doi: 10.24963/kr.2020/92. URL https://doi.org/10.24963/ kr.2020/92 .[30] Emile Van Krieken, Pasquale Minervini, Edoardo Ponti, and Antonio Vergari. On the independence assumption in neurosymbolic learning. In International Conference on Machine Learning , pages 49078– 49097. PMLR, 2024. [31] Giovanni De Toni, Nastaran Okati, Suhas Thejaswi, Eleni Straitouri, and Manuel Gomez-Rodriguez. Towards human-ai complementarity with prediction sets. In A. Globerson, L. Mackey, D. Bel-grave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Informa-tion Processing Systems , volume 37, pages 31380–31409. Curran Associates, Inc., 2024. doi: 10.52202/079017-0986. URL https://proceedings.neurips.cc/paper_files/paper/2024/ file/37d4d4413b7c7558cc27a6d3d42ea998-Paper-Conference.pdf .[32] Eleni Straitouri and Manuel Gomez Rodriguez. Designing decision support systems using counterfactual prediction sets. In International Conference on Machine Learning , pages 46722–46744. PMLR, 2024. [33] Adrian Arnaiz-Rodriguez, Nina Corvelo Benz, Suhas Thejaswi, Nuria Oliver, and Manuel Gomez-Rodriguez. Towards human-ai complementarity in matching tasks. arXiv preprint arXiv:2508.13285 ,2025. [34] Eleni Straitouri, Suhas Thejaswi, and Manuel Gomez Rodriguez. Controlling counterfactual harm in decision support systems based on prediction sets. In A. Globerson, L. Mackey, D. Bel-grave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Informa-tion Processing Systems , volume 37, pages 129443–129479. Curran Associates, Inc., 2024. doi: 10.52202/079017-4113. URL https://proceedings.neurips.cc/paper_files/paper/2024/ file/e9e3e5bdb017bbc887271c6f6de5353f-Paper-Conference.pdf .[35] Ron S. Boger, Seyone Chithrananda, Anastasios N. Angelopoulos, Peter H. Yoon, Michael I. Jordan, and Jennifer A. Doudna. Functional protein mining with conformal guarantees. Nature Communications , 16 (1):85, Jan 2025. ISSN 2041-1723. doi: 10.1038/s41467-024-55676-y. URL https://doi.org/10. 1038/s41467-024-55676-y .[36] Harris Papadopoulos, Kostas Proedrou, Volodya Vovk, and Alexander Gammerman. Inductive confidence machines for regression. In ECML , volume 2430 of Lecture Notes in Computer Science , pages 345–356. Springer, 2002. [37] Anastasios N. Angelopoulos and Stephen Bates. Conformal prediction: A gentle introduction. Found. Trends Mach. Learn. , 16(4):494–591, 2023. [38] Eleonora Giunchiglia, Fergus Imrie, Mihaela van der Schaar, and Thomas Lukasiewicz. Machine learning with requirements: A manifesto. Neurosymbolic Artificial Intelligence , 1:NAI–240767, 2025. doi: 10.3233/NAI-240767. URL https://doi.org/10.3233/NAI-240767 .[39] Eleonora Giunchiglia, Mihaela C˘ at˘ alina Stoian, Salman Khan, Fabio Cuzzolin, and Thomas Lukasiewicz. Road-r: the autonomous driving dataset with logical requirements. Machine Learning , 112(9):3261– 3291, 2023. [40] Kareem Ahmed, Stefano Teso, Kai-Wei Chang, Guy Van den Broeck, and Antonio Vergari. Semantic Probabilistic Layers for Neuro-Symbolic Learning. In NeurIPS , 2022. [41] Leander Kurscheidt, Paolo Morettin, Roberto Sebastiani, Andrea Passerini, and Antonio Vergari. A probabilistic neuro-symbolic layer for algebraic constraint satisfaction. In Silvia Chiappa and Sara 11 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Magliacane, editors, Proceedings of the Forty-first Conference on Uncertainty in Artificial Intelligence ,volume 286 of Proceedings of Machine Learning Research , pages 2431–2471. PMLR, 21–25 Jul 2025. URL https://proceedings.mlr.press/v286/kurscheidt25a.html .[42] Leander Kurscheidt, Gabriele Masina, Roberto Sebastiani, and Antonio Vergari. The theory and practice of map inference over non-convex constraints. arXiv preprint arXiv:2602.08681 , 2026. [43] Eleonora Giunchiglia, Alex Tatomir, Mihaela C˘ at˘ alina Stoian, and Thomas Lukasiewicz. Ccn+: A neuro-symbolic framework for deep learning with requirements. International Journal of Approximate Reasoning , page 109124, 2024. [44] Pang Wei Koh, Thao Nguyen, Yew Siang Tang, Stephen Mussmann, Emma Pierson, Been Kim, and Percy Liang. Concept bottleneck models. In International conference on machine learning , pages 5338– 5348. PMLR, 2020. [45] Alessandro Daniele, Tommaso Campari, Sagar Malhotra, and Luciano Serafini. Deep symbolic learning: discovering symbols and rules from perceptions. In IJCAI , 2023. [46] Hikaru Shindo, Viktor Pfanschilling, Devendra Singh Dhami, and Kristian Kersting. (alpha)ilp: thinking visual scenes as differentiable logic programs. Machine Learning , 112(5):1465–1497, 2023. [47] Hao Tang and Kevin Ellis. From perception to programs: regularize, overparameterize, and amortize. In 
+
+ICML , 2023. [48] Ghassan Najjar, Céline Berthou, and Héléna Vorobieva. Scaling multi-label conformal prediction with label interactions for a large number of labels. In Rita P. Ribeiro, Bernhard Pfahringer, Nathalie Japkowicz, Pedro Larrañaga, Alípio M. Jorge, Carlos Soares, Pedro H. Abreu, and João Gama, editors, 
+
+Machine Learning and Knowledge Discovery in Databases. Research Track , pages 111–128, Cham, 2026. Springer Nature Switzerland. ISBN 978-3-032-06109-6. [49] Ramya Ramalingam, Sangdon Park, and Osbert Bastani. Uncertainty quantification for neurosymbolic programs via compositional conformal prediction. arXiv preprint arXiv:2405.15912 , 2024. [50] Zhi-Hua Zhou. Abductive learning: towards bridging machine learning and logical reasoning. Science China. Information Sciences , 62(7):76101, 2019. [51] Myeongjun Jang and Thomas Lukasiewicz. Are training resources insufficient? predict first then explain! 
+
+arXiv preprint arXiv:2110.02056 , 2021. [52] Emile van Krieken, Thiviyan Thanapalasingam, Jakub M Tomczak, Frank van Harmelen, and Annette ten Teije. A-nesi: A scalable approximate method for probabilistic neurosymbolic inference. arXiv preprint arXiv:2212.12393 , 2022. [53] Arthur Ledaguenel, Céline Hudelot, and Mostepha Khouadjia. Neurosymbolic conformal classification. 
+
+arXiv preprint arXiv:2409.13585 , 2024. [54] Jing Lei and Larry Wasserman. Distribution-free prediction bands for non-parametric regression. Journal of the Royal Statistical Society Series B: Statistical Methodology , 76(1):71–96, 2014. [55] Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J Tibshirani, and Larry Wasserman. Distribution-free predictive inference for regression. Journal of the American Statistical Association , 113(523):1094– 1111, 2018. [56] Rina Foygel Barber, Emmanuel J Candes, Aaditya Ramdas, and Ryan J Tibshirani. The limits of distribution-free conditional predictive inference. Information and Inference: A Journal of the IMA , 10 (2):455–482, 2021. [57] Isaac Gibbs, John J Cherian, and Emmanuel J Candès. Conformal prediction with conditional guarantees. 
+
+Journal of the Royal Statistical Society Series B: Statistical Methodology , 87(4):1100–1126, 2025. [58] David Stutz, Abhijit Guha Roy, Tatiana Matejovicova, Patricia Strachan, Ali Taylan Cemgil, and Arnaud Doucet. Conformal prediction under ambiguous ground truth. Trans. Mach. Learn. Res. , 2023, 2023. [59] Michele Caprio, David Stutz, Shuo Li, and Arnaud Doucet. Conformalized credal regions for classifica-tion with ambiguous ground truth. Trans. Mach. Learn. Res. , 2025, 2025. [60] Ryan J. Tibshirani, Rina Foygel Barber, Emmanuel J. Candès, and Aaditya Ramdas. Conformal prediction under covariate shift. In NeurIPS , pages 2526–2536, 2019. [61] Stephen Mell, Botong Zhang, David Mell, Shuo Li, Ramya Ramalingam, Nathan Yu, Steve Zdancewic, and Osbert Bastani. A fast, reliable, and secure programming language for llm agents with code actions, 2025. URL https://arxiv.org/abs/2506.12202 .12 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+[62] Celeste Barnaby, Qiaochu Chen, Ramya Ramalingam, Osbert Bastani, and I¸ sıl Dillig. Active learning for neurosymbolic program synthesis. Proc. ACM Program. Lang. , 9(OOPSLA2), October 2025. doi: 10.1145/3763102. URL https://doi.org/10.1145/3763102 .[63] Jiani Huang, Ziyang Li, Binghong Chen, Karan Samel, Mayur Naik, Le Song, and Xujie Si. Scallop: From probabilistic deductive databases to scalable differentiable reasoning. NeurIPS , 2021. [64] Wang-Zhou Dai and Stephen H Muggleton. Abductive knowledge induction from raw data. arXiv preprint arXiv:2010.03514 , 2020. [65] Jaron Maene and Luc De Raedt. Soft-unification in deep probabilistic logic. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. [66] Xiao-Wen Yang, Wen-Da Wei, Jie-Jing Shao, Yu-Feng Li, and Zhi-Hua Zhou. Analysis for abductive learning and neural-symbolic reasoning shortcuts. In ICML , 2024. [67] Joseph Paul Cohen, Joseph D. Viviano, Paul Bertin, Paul Morrison, Parsa Torabian, Matteo Guarrera, Matthew P Lungren, Akshay Chaudhari, Rupert Brooks, Mohammad Hashir, and Hadrien Bertrand. Torchxrayvision: A library of chest x-ray datasets and models. In Ender Konukoglu, Bjoern Menze, Archana Venkataraman, Christian Baumgartner, Qi Dou, and Shadi Albarqouni, editors, Proceedings of The 5th International Conference on Medical Imaging with Deep Learning , volume 172 of Proceedings of Machine Learning Research , pages 231–249. PMLR, 06–08 Jul 2022. URL https://proceedings. mlr.press/v172/cohen22a.html .[68] Eldar D Abraham, Karel D’Oosterlinck, Amir Feder, Yair Gat, Atticus Geiger, Christopher Potts, Roi Reichart, and Zhengxuan Wu. Cebab: Estimating the causal effects of real-world concepts on nlp model behavior. Advances in Neural Information Processing Systems , 35:17582–17596, 2022. [69] Mazda Moayeri, Phillip Pope, Yogesh Balaji, and Soheil Feizi. A comprehensive study of image classification model sensitivity to foregrounds, backgrounds, and visual attributes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , June 2022. [70] Samuele Bortolotti et al. A benchmark suite for systematically evaluating reasoning shortcuts. In 
+
+NeurIPS Datasets & Benchmarks Track , 2024. [71] Yiran Xu, Xiaoyin Yang, Lihang Gong, Hsuan-Chu Lin, Tz-Ying Wu, Yunsheng Li, and Nuno Vasconce-los. Explainable object-induced action decision for autonomous vehicles. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2020. [72] Y Choi, Antonio Vergari, and Guy Van den Broeck. Probabilistic circuits: A unifying framework for tractable probabilistic models. UCLA. URL: http://starai. cs. ucla. edu/papers/ProbCirc20. pdf , page 6, 2020. [73] Jaron Maene, Vincent Derkinderen, and Pedro Zuidberg Dos Martires. Klay: Accelerating arithmetic circuits for neurosymbolic ai. In ICLR , 2025. [74] Vincent Derkinderen, Robin Manhaeve, Rik Adriaensen, Lucas Van Praet, Lennert De Smet, Giuseppe Marra, and Luc De Raedt. The deeplog neurosymbolic machine, 2025. URL https://arxiv.org/ abs/2508.13697 .[75] Emile Van Krieken, Samy Badreddine, Robin Manhaeve, and Eleonora Giunchiglia. Uller: A unified language for learning and reasoning. In International Conference on Neural-Symbolic Learning and Reasoning , pages 219–239. Springer, 2024. [76] Shahnawaz Alam, Mohammed Mudassir Uddin, and Mohammed Kaif Pasha. Constraint-aware neu-rosymbolic uncertainty quantification with bayesian deep learning for scientific discovery. arXiv preprint arXiv:2601.12442 , 2026. [77] Ruodu Wang and Aaditya Ramdas. False discovery rate control with e-values. Journal of the Royal Statistical Society Series B: Statistical Methodology , 84(3):822–852, 2022. [78] Andrea Pugnana, Giovanni De Toni, Cesare Barbera, Roberto Pellungrini, Bruno Lepri, and Andrea Passerini. To ask or not to ask: Learning to require human feedback. arXiv preprint arXiv:2510.08314 ,2025. [79] Nick W Koning. Post-hoc and anytime valid permutation and group invariance testing. arXiv preprint arXiv:2310.01153 , 2023. [80] Alexander A Balinsky and Alexander David Balinsky. Enhancing conformal prediction using e-test statistics. arXiv preprint arXiv:2403.19082 , 2024. 13 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+[81] Solomon Eyal Shimony. Finding maps for belief networks is np-hard. Artificial Intelligence , 68(2): 399–410, 1994. ISSN 0004-3702. doi: https://doi.org/10.1016/0004-3702(94)90072-8. URL https: //www.sciencedirect.com/science/article/pii/0004370294900728 .[82] Tommaso Carraro, Luciano Serafini, and Fabio Aiolli. Ltntorch: Pytorch implementation of logic tensor networks. arXiv preprint arXiv:2409.16045 , 2024. [83] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. [84] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE Conference on Computer Vision and Pattern Recognition ,pages 248–255, 2009. doi: 10.1109/CVPR.2009.5206848. [85] Emanuele Marconato, Gianpaolo Bontempo, Elisa Ficarra, Simone Calderara, Andrea Passerini, and Stefano Teso. Neuro symbolic continual learning: Knowledge, reasoning shortcuts and concept rehearsal. In ICML , 2023. [86] Diederik P Kingma. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. [87] Herbert E. Robbins. A stochastic approximation method. Annals of Mathematical Statistics , 22:400–407, 1951. URL https://api.semanticscholar.org/CorpusID:16945044 .[88] Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. Optuna: A next-generation hyperparameter optimization framework. In Proceedings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining , pages 2623–2631, 2019. [89] Shuhei Watanabe. Tree-structured parzen estimator: Understanding its algorithm components and their roles for better empirical performance. arXiv preprint arXiv:2304.11127 , 2023. [90] Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to document recognition. Proceedings of the IEEE , 86(11):2278–2324, 2002. [91] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 770–778, 2016. [92] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers) , pages 4171–4186, 2019. 14 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Broader Impact 
+
+By coupling distribution-free coverage with logical consistency, COCOCO makes NeSy-CBMs suitable for decision-support systems [ 31 , 32 , 34 ], particularly in high-stakes settings such as CHX where practitioners consume both intermediate concepts and final labels. We foresee no negative societal impact specific to 
+
+COCOCO beyond those shared by any conformal method. 
+
+A Additional Related Work 
+
+Uncertainty quantification in NeSy-CBMs . NeSy-CBMs, despite their architectural bias toward reliability, are not immune to overconfident predictions [ 8]. Existing approaches fall into two categories. The first modifies the concept distribution to be more expressive [ 30 ], e.g., via deep ensembles [ 8] or diffusion-based parametrizations [ 9]. The second enforces uncertainty-related properties during training via constraint-based objectives [ 76 ]. Our approach is complementary and post-hoc: it operates on top of an already-trained NeSy-CBM and provides distribution-free coverage on top of any of these methods. 
+
+B Extended One-Sided Strategies and Prior Work 
+
+COCOCO combines two design choices: (i) constructing both a label set Υα(x) and a concept set Γβ (x), and (ii) revising each via the logical image of the other. A natural question is whether either choice can be relaxed without sacrificing the desiderata. In this section we systematically ablate COCOCO along these two axes, showing that each one-sided strategy fails at least one desideratum. The ablations also subsume prior work: Ledaguenel et al. [53] ’s strategy corresponds to applying CP on the label side, while Ramalingam et al. [49] ’s “compositional,” “direct,” and “full” can be matched in three of our ablations ( CDe , TO and RPB , respectively). Table 3 summarizes the comparison. CONSISTENCY (D1 ) COVERAGE (D2 ) CONCISENESS (D3 )METHOD TASK CONCEPTS TASK Y CONCEPTS C TASK Y CONCEPTS C                                                
+
+> Task Only ( TO ) [53] ✗–✓(4) ✗✗–Task plus Abduction ( TAb )✓✓✓(4) ✓(3.2) ✗✗
+> Concepts Only ( CO )–✗✗✓(3.1) –✗
+> Concepts plus Deduction ( CDe )✓✓✓(3.3) ✓(3.1) ✗✗
+> Joint ( RPB ) [49] ✓✗✓✓✓✗
+> COCOCO ✓(C.7) ✓(C.7) ✓(4.2) ✓(4.2) ✓(C.8, 6.2) ✓(C.8, 6.2)
+
+Table 3: Summary of guarantees provided by different NeSy conformal strategies. 
+
+One-side CP . The simplest strategies apply CP to only one level: TO : Ledaguenel et al. [53] applies CP only to the label distribution to obtain Υα(x), and predicts the single argmax concept ˆc. Label coverage is satisfied by construction, but the concept side has no conformalization ( D2 ), and the predicted concept may not entail all labels in Υα(x), breaking consistency ( D1 ). CO symmetrically applies CP only to the concepts (via Γ×(x)) and predicts the single argmax label. The label side is uncoformalized and inconsistencies arise in the opposite direction. Moreover, Bonferroni’s correction (Corollary C.4) inflates Γ×(x) as the number of concepts k grows, breaking conciseness ( D3 ). 
+
+Cross-Level CP without revision . A natural improvement is to use one of g−† , g † to derive the missing side from the conformalized one – but without revising both jointly. TAb reports the label set Υα(x) and the abducted concept set Γab (x) = g−† (Υ α(x)) . Both sets are consistent by construction ( D1 ) and inherit coverage from Υα(x) via Proposition 3.2 ( D2 ). However, Γab (x) contains every concept vector entailing some label in Υα(x) – including low-probability ones under f – so it is potentially much larger than the input-aware Γβ (x), breaking conciseness ( D3 ). CDe (the “direct” approach of Ramalingam et al. [49] ) is the symmetric strategy: report Γβ (x) and the deduced label set Υde (x) = g†(Γ β (x)) . Coverage (Proposition 3.3) and consistency hold, but Υde (x) inflates when Γβ (x) contains low-probability concepts whose images inflate 
+
+Y, breaking D3 on the label side. 
+
+One-Sided Joint Revision : The closest competitor, RPB [49 ] (their “full” approach), can be represented in our framework as a revision applied only to the label side: 
+
+Υrev (x)RPB = Υ α(x) ∩ g†(Γ β (x)) , Γβ (x)RPB = Γ β (x) (unchanged) . (13) 15 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+This delivers label-side consistency and matches COCOCO ’s label set by construction. However, the concept set is left untouched: it still contains concept vectors that entail labels outside Υrev (x)RPB , breaking concept-side consistency ( D1 ). Empirically (Section 6), this manifests as concept-side consistency dropping to ≈ 0.08 –0.94 
+
+across our datasets, while COCOCO attains 1.00 throughout. 
+
+Discussion : On the one hand, Υα(x) and Γβ (x), used in isolation, leave the other side unconformalized – so stakeholders cannot tell which concepts (resp. labels) can be trusted, violating coverage ( D2 ) – and the predicted side may not entail or abduce all elements of the conformalized one, violating consistency ( D1 ). On the other hand, Γab (x) and Υde (x) ensure concept-side (resp. label-side) consistency by design, but potentially inflate the resulting set – Γab (x) contains every concept vector c entailing some label in Υα(x), and Υde (x) every label deducible from some concept in Γβ (x) – violating conciseness ( D3 ). Section F.3 analyzes these failure modes in detail, exploring all combinations of these four objects – including those of Ledaguenel et al. [53] and Ramalingam et al. [49] as special cases – and shows that none satisfies the three desiderata simultaneously. 
+
+C Proofs 
+
+Notation and Standing Assumptions 
+
+We recall the definition of g† instead is 
+
+g† := argmax 
+
+> y∈Y
+
+g(c) ⊆ Y , (14) and its inverse g−† when it is applied to a subset Ys ⊆ Y 
+
+g−† (y) = {c ∈ C : y ∈ argmax g(c)}, g−† (Ys) = [
+
+> y∈Y s
+
+{c ∈ C : y ∈ argmax g(c)}. (15) We also recall that for a given 0 < α < 1 and every pair (x, y∗) ∈ D Y , we define the label set Υα(x) ⊆ Y 
+
+that satisfies 
+
+Pr( y∗ ∈ Υα(x)) ≥ 1 − α. (16) Similarly, for 0 < β < 1 and (x, c∗) ∈ D C, we define the concept set Γβ (x) ⊂ C that satisfies 
+
+Pr( c∗ ∈ Γβ (x)) ≥ 1 − β. (17) To make self-contained this appendix without loss of generality, we prove the main statements in the text, providing equivalent statements with the material here recollected. 
+
+C.1 Proof of abductive and deductive assumptions (Definition 3.1) Proposition C.1 (Deductive soundness implies abductive soundness) . For any NeSy-CBM (f, g ), deductive soundness implies abductive soundness (Definition 3.1). Consequently, a model that satisfies deductive soundness but not abductive soundness cannot exist. Proof. Suppose the NeSy-CBM satisfies deductive soundness, i.e., g†(c∗) = y∗ for every (c∗, y∗) in 
+
+supp( p∗). Then g†(c∗) = y∗ means c∗ belongs to g−† (y∗) = {c ∈ C : argmax g(c) = y∗}, which is ex-actly abductive soundness (Definition 3.1). 
+
+Proposition C.2 (Abductive soundness implies δab = 1 ). Let Γab (x) := g−† (Υ α(x)) be the concept set obtained by abduction according to Eq. (15) . If the NeSy-CBM satisfies abductive soundness (Definition 3.1), then 
+
+δab := Pr  c∗ ∈ Γab (x) | y∗ ∈ Υα(x) = 1 . (18) 
+
+Proof. From Definition 3.1, abductive soundness ensures that c∗ ∈ g−† (y∗) for every (c∗, y∗) in the support of 
+
+p∗(x, c, y). Suppose y∗ ∈ Υα(x). Because Γab (x) = g−† (Υ α(x)) = S 
+
+> y∈Υα(x)
+
+g−† (y) and c∗ ∈ g−† (y∗)
+
+with y∗ ∈ Υα(x), we have c∗ ∈ g−† (y∗) ⊆ Γab (x). Hence, the event {c∗ ∈ Γab (x)} holds surely whenever 
+
+{y∗ ∈ Υα(x)} holds, giving 
+
+Pr( c∗ ∈ Γab (x) | y∗ ∈ Υα(x)) = 1 . (19) 16 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Proposition C.3 (Deductive soundness implies δde = 1 ). Let Υde (x) := g†(Γ β (x)) be the label set obtained by the image of g on Γβ (x). If the NeSy-CBM satisfies deductive soundness (Definition 3.1), then 
+
+δde := Pr  y∗ ∈ Υde (x) | c∗ ∈ Γβ (x) = 1 . (20) 
+
+Proof. Deductive soundness states that g†(c∗) = y∗ for every (c∗, y∗) in the support of p∗(x, c, y). Suppose 
+
+c∗ ∈ Γβ (x). Then g†(c∗) ∈ g†(Γ β (x)) = Υ de (x). Since g†(c∗) = y∗, we have y∗ ∈ Υde (x). Hence the event {y∗ ∈ Υde (x)} holds surely whenever {c∗ ∈ Γβ (x)} holds, giving 
+
+Pr( y∗ ∈ Υde (x) | c∗ ∈ Γβ (x)) = 1 . (21) 
+
+Remark. Propositions C.2 and C.3 are central to give tighter bounds stated in Propositions 3.2, 3.3 and 4.2: when δab = 1 (resp. δde = 1 ) in the general bounds, this yields the 1 − α (resp. 1 − β) guarantees. 
+
+C.2 Coverage proof of TAb (Proposition 3.2) Proposition (3.2, Marginal coverage of Γab (x)). For 0 < α < 1 and for any (x, c∗, y∗) in the support of 
+
+p∗(x, c, y), suppose Υα(x) satisfies Eq. (16) . Let Γab (x) := g−† (Υ α(x)) . Then 
+
+(1 − α)δab ≤ Pr( c∗ ∈ Γab (x)) ≤ α + δab (22) 
+
+where δab := Pr( c∗ ∈ Γab (x) | y∗ ∈ Υα(x)) is the probability that abduction recovers the ground-truth concepts c∗ given that the label set Υα(x) contains the correct label y∗. Moreover, if the NeSy-CBM satisfies abductive soundness (Definition 3.1), the bound tightens to 
+
+Pr( c∗ ∈ Γab (x)) ≥ 1 − α. (23) 
+
+Proof. Let the two binary events A = ( y∗ ∈ Υα(x)) and B = ( c∗ ∈ Γab (x)) . We first derive the lower bound. By the law of total probability, 
+
+Pr( B) = Pr( B | A) Pr( A) + Pr( B | ¬ A) Pr( ¬A) (24) 
+
+≥ Pr( B | A) Pr( A) (25) Since Υα(x) is a conformal label set with miscoverage α, we have that, by Eq. (4): Pr (A) ≥ 1 − α (26) We can plug this result into the previous one, i.e., Pr( B) ≥ Pr( B | A) Pr( A) (Eq. (25)), to obtain 
+
+Pr( B) ≥ Pr( B|A)(1 − α) (27) (28) Which proofs the lower bound: 
+
+Pr( c∗ ∈ Γab (x)) ≥ Pr( c∗ ∈ Γab (x) | y∗ ∈ Υα(x))(1 − α). (29) Next, we prove the upper bound. Consider again the right-hand side of Eq. (24). Since Pr( B | ¬ A) ≤ 1 and 
+
+Pr( ¬A) ≤ α, we have 
+
+Pr( B | ¬ A) Pr( ¬A) ≤ α. (30) Moreover, Pr( A) ≤ 1. Hence, 
+
+Pr( B | A) Pr( A) ≤ Pr( B | A). (31) Combining these observations yields: 
+
+Pr( B) = Pr( B | A) Pr( A) + Pr( B | ¬ A) Pr( ¬A) (Law of total probability - Eq. (24)) 
+
+≤ Pr( B | A) + Pr( B | ¬ A) Pr( ¬A) (Substitute the left term - Eq. (31)) 
+
+≤ Pr( B | A) + α (Substitute the right term - Eq. (30)) Substituting the expression for A and B, we have the upper bound 
+
+Pr( c∗ ∈ Γab (x)) ≤ α + δab . (32) Under abductive soundness (Definition 3.1), by Proposition C.2 we have δab = 1 . Hence, we get 
+
+Pr( B) ≥ δab (1 − α) ≥ 1 − α . (33) While for the upper bound Eq. (30) 
+
+Pr( B) ≤ δab + α ≤ min(1 , δ ab + α) . (34) This concludes the proof. 17 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+C.3 Coverage proof of Product Set (Proposition 3.1) 
+
+For 0 < β j < 1, with j ∈ { 1, . . . k }, and for any (x, c∗) in the support of p∗(x, c, y), we recall the definition of individual concept sets Γjβj (x) that satisfy: 
+
+Pr( c∗ 
+
+> j
+
+∈ Γjβj (x)) ≥ 1 − βj . (35) The cartesian product set is given by 
+
+Γβ (x) = 
+
+> k
+
+# ×j=1 
+
+Γjβj (x). (36) 
+
+Proposition (Marginal coverage of Product Set 3.1) . , For any NeSy CBM (f, g ), let 0 < β j < 1 and 
+
+0 < β < 1 such that β = Pkj=1 βj . If Γjβj (x), for j ∈ [1 , . . . , k ], are concept conformal sets with miscoverage level βj , respectively (Eq. (6) ), then let Γ×(x) be the set constructed as in Eq. (5) based on the k sets Γjβj (x).Then, for every (x, c∗, y∗) ∈ supp( p∗(x, c, y)) :
+
+Pr( c∗ ∈ Γ×(x)) ≥ 1 − β. (37) 
+
+Proof. By construction, we have c∗ ∈ Γ×(x) if and only if c∗ 
+
+> j
+
+∈ Γjβj (x) for all j ∈ [k]. Therefore, the probability that the joint vector c∗ does not belong to Γ×(x) can be written as 
+
+Pr( c∗ /∈ Γ×(x)) = Pr 
+
+
+
+> k
+
+[
+
+> j=1
+
+{c∗ 
+
+> j
+
+/∈ Γjβj (x)}
+
+ . (38) Applying the union bound (Boole’s inequality) yields 
+
+Pr 
+
+
+
+> k
+
+[
+
+> j=1
+
+{c∗ 
+
+> j
+
+/∈ Γjβj (x)}
+
+ ≤
+
+> k
+
+X
+
+> j=1
+
+Pr( c∗ 
+
+> j
+
+/∈ Γjβj (x)) ≤
+
+> k
+
+X
+
+> j=1
+
+βj , (39) where the last inequality uses the individual coverage guarantees. Subtracting from 1, we obtain 
+
+Pr( c∗ ∈ Γ×(x)) = 1 − Pr( c∗ /∈ Γ×(x)) ≥ 1 −
+
+> k
+
+X
+
+> i=j
+
+βj . (40) 
+
+Corollary C.4 (Bonferroni’s correction) . If we desire joint coverage at level 1 − β, using Bonferroni’s correction, i.e., setting βj = β/k for all j guarantees 
+
+Pr( c∗ ∈ Γ×(x)) ≥ 1 −
+
+> k
+
+X
+
+> i=1
+
+βk = 1 − β. (41) 
+
+This follows directly from the proposition above. 
+
+C.4 Coverage proof of CDe (Proposition 3.3) Proposition (Marginal coverage of CDe Proposition 3.3) . For 0 < β < 1 and for any (x, c∗, y∗) in the support of p∗(x, c, y), suppose Γβ (x) satisfies Eq. (17) . Let Υde (x) := g†(Γ β (x)) . Then 
+
+(1 − β)δde ≤ Pr( y∗ ∈ Υde (x)) ≤ β + δde (42) 
+
+where δde := Pr( y∗ ∈ Υde (x) | c∗ ∈ Γβ (x)) is the probability that deduction recovers the ground-truth labels y∗ given that the concept set Γβ (x) contains the correct concepts c∗. Moreover, if the NeSy-CBM satisfies deductive soundness (Definition 3.1), the bound tightens to: 
+
+Pr( y∗ ∈ Υde (x)) ≥ 1 − β. (43) 18 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Proof. Let the two binary events A = ( c∗ ∈ Γβ (x)) and B = ( y∗ ∈ Υde (x)) . We first derive the lower bound. By the law of total probability Eq. (24) 
+
+Pr( B) = Pr( B | A) Pr( A) + Pr( B | ¬ A) Pr( ¬A) (44) 
+
+≥ Pr( B | A) Pr( A) (45) Since Γβ (x) is a conformal concept set with miscoverage β by Eq. (17), we have that 
+
+Pr( A) = Pr( c∗ ∈ Γβ (x)) ≥ 1 − β. (46) We can plug this result into the previous one, i.e., Pr( B) ≥ Pr( B | A) Pr( A) (Eq. (45)), to obtain 
+
+Pr( B) ≥ Pr( B | A)(1 − β) (47) Which proofs the lower-bound: 
+
+Pr( y∗ ∈ Υde (x)) ≥ Pr( y∗ ∈ Υde (x) | c∗ ∈ Γβ (x))(1 − β). (48) Next, we prove the upper bound. Consider again the right-hand side of Eq. (44). Since Pr( B | ¬ A) ≤ 1 and 
+
+Pr( ¬A) ≤ β, we have: 
+
+Pr( B | ¬ A) Pr( ¬A) ≤ β. (49) Moreover, Pr( A) ≤ 1. Hence, 
+
+Pr( B | A) Pr( A) ≤ Pr( B | A). (50) Combining these observations yields: 
+
+Pr( B) = Pr( B | A) Pr( A) + Pr( B | ¬ A) Pr( ¬A) (Law of total probability - Eq. (24)) 
+
+≤ Pr( B | A) + Pr( B | ¬ A) Pr( ¬A) (Substitute the left term - Eq. (50)) 
+
+≤ Pr( B | A) + β (Substitute the right term - Eq. (49)) Substituting the expression for A and B, we have the upper bound 
+
+Pr( y∗ ∈ Υde (x)) ≤ β + δde (51) Under deductive soundness (Definition 3.1), by Proposition 3.3, we have δde = 1 . Hence, we get 
+
+Pr( B) ≥ δde (1 − β) ≥ 1 − β. (52) While for the upper bound Eq. (49): 
+
+Pr( B) ≤ δde + β ≤ min(1 , δ de + β). (53) This concludes the proof. 
+
+C.5 Coverage proofs of COCOCO concept set (Proposition 4.2) Proposition (Marginal coverage of Γrev (x) (Proposition 4.2)) . For 0 < α < 1 and 0 < β < 1, and for any (x, c∗, y∗) in the support of p∗(x, c, y), suppose Υα(x) satisfies Eq. (16) and Γβ (x) satisfies Eq. (17) .Let Υde (x) := g†(Γ β (x)) and Γab (x) := g−† (Υ α(x)) . Define the refined concept set as Γrev (x) := Γβ (x) ∩ Γab (x). Then 
+
+Pr( c∗ ∈ Γrev (x)) ≥ (1 − α) Pr( c∗ ∈ Γab (x) | y∗ ∈ Υα(x)) − β
+
++ Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) (54) 
+
+Proof. Let A := ( c∗ ∈ Γβ (x)) and B := ( c∗ ∈ Γab (x)) , so that 
+
+Pr( c∗ ∈ Γrev (x)) = Pr( A ∩ B). (55) By the inclusion-exclusion identity, we have 
+
+Pr( A ∩ B) = Pr( A) + Pr( B) − Pr( A ∪ B). (56) Since Pr( A ∪ B) = 1 − Pr( ¬A ∩ ¬ B), this is equivalent to 
+
+Pr( A ∩ B) = Pr( A) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B). (57) 19 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+We know that Pr( A) ≥ 1−β follows from Eq. (17), and that Pr( B) ≥ (1 −α)δab follows from Proposition 3.2. Therefore, we can proceed to obtain the lower bound as follows: 
+
+Pr( c∗ ∈ Γrev (x)) = Pr( A ∩ B) (def. of Γrev (x))
+
+= Pr( A) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B) (inclusion–exclusion Eq. (57)) 
+
+≥ (1 − β) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B) (Eq. (17)) 
+
+≥ (1 − β) + (1 − α)δab − 1 + Pr( ¬A ∩ ¬ B) (Proposition 3.2) 
+
+= (1 − α)δab − β + Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) . (subst. Pr( ¬A ∩ ¬ B))Under abductive soundness (Definition 3.1), we have δab = 1 . Hence, we get 
+
+Pr( c∗ ∈ Γrev (x)) ≥ 1 − α − β + Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) . (58) This concludes the proof. 
+
+Remark. The term Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) is the probability that the ground-truth concept c∗ is not captured by neither the concept conformal set ( Γβ (x)) nor the abduced concept set ( Γab (x)). 
+
+C.6 Coverage proofs of COCOCO label set (Proposition 4.2) Proposition (Marginal coverage of Υrev (x) (Proposition 4.2)) . For 0 < α < 1 and 0 < β < 1, and for any 
+
+(x, c∗, y∗) in the support of p∗(x, c, y), suppose Υα(x) satisfies Eq. (16) and Γβ (x) satisfies Eq. (17) . Let 
+
+Υde (x) := g†(Γ β (x)) and Γab (x) := g−† (Υ α(x)) . Define the refined label set as Υrev (x) = Υ α(x)∩Υde (x).Then: 
+
+Pr( y∗ ∈ Υrev (x)) ≥ (1 − β) Pr( y∗ ∈ Υde (x) | c∗ ∈ Γβ (x)) − α
+
++ Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) . (59) 
+
+Proof. Let A := ( y∗ ∈ Υα(x)) and B := ( y∗ ∈ Υde (x)) , so that 
+
+Pr( y∗ ∈ Υrev (x)) = Pr( A ∩ B). (60) By the inclusion–exclusion identity, 
+
+Pr( A ∩ B) = Pr( A) + Pr( B) − Pr( A ∪ B). (61) Since Pr( A ∪ B) = 1 − Pr( ¬A ∩ ¬ B), this is equivalent to 
+
+Pr( A ∩ B) = Pr( A) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B). (62) We know that Pr( A) ≥ 1−α follows from Eq. (16), and that Pr( B) ≥ (1 −β)δde follows from Proposition 3.3. Therefore: 
+
+Pr( y∗ ∈ Υrev (x)) = Pr( A ∩ B) (def. of Υrev (x))
+
+= Pr( A) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B) (inclusion–exclusion Eq. (62)) 
+
+≥ (1 − α) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B) (Eq. (16)) 
+
+≥ (1 − α) + (1 − β)δde − 1 + Pr( ¬A ∩ ¬ B) (Proposition 3.3) 
+
+= (1 − β)δde − α + Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) . (subst. Pr( ¬A ∩ ¬ B))Under deductive soundness (Definition 3.1), we have δde = 1 . Hence, we get 
+
+Pr( y∗ ∈ Υrev (x)) ≥ 1 − α − β + Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) . (63) This concludes the proof. 
+
+Remark. The term Pr( y∗ /∈ Υα(x)∧y∗ /∈ Υde (x)) is the probability that the ground-truth label y∗ is captured by neither the label conformal set ( Υα(x)) nor the deduced label set ( Υde (x)). 20 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+C.7 Fixed point proof of COCOCO (Proposition C.7) 
+
+To prove that COCOCO does not require further iterations, let R be the operator that revises the label and concept sets. Formally: 
+
+R : (Γ , Υ) 7 → (R(Γ) , R (Υ)) ⊆ C × Y , R(Γ , Υ) :=  Γ ∩ g−† (Υ) , Υ ∩ g†(Γ) . (64) By construction, COCOCO applies R only once to the pair (Γ β (x), Υα(x)) , producing 
+
+(Γ rev (x), Υrev (x)) = R(Γ β (x), Υα(x)) (65) Before introducing the main proposition, we show two useful lemmas. 
+
+Lemma C.5 (Set behavior of g−† on intersection) . For any A, B ⊆ Y ,
+
+g−† (A ∩ B ) ⊆ g−† (A) ∩ g−† (B). (66) 
+
+The reverse inclusion does not hold in general for g†.Proof. Let c ∈ g−† (A ∩ B ), there exists y ∈ g†(c) ∩ (A ∩ B ). Then y ∈ g†(c) ∩ A , so c ∈ g−† (A), and likewise c ∈ g−† (B). Hence c ∈ g−† (A) ∩ g−† (B).The reverse inclusion fails when ties are present: if g†(c) = {y1, y 2} with y1 ∈ A \ B and y2 ∈ B \ A , then 
+
+c ∈ g−† (A) ∩ g−† (B) but c /∈ g−† (A ∩ B ).
+
+Lemma C.6. For any Γ′ ⊆ C ,
+
+Γ′ ⊆ g−†  g†(Γ ′). (67) 
+
+Proof. Let c ∈ Γ′. By definition of the image, g†(c) ∈ g†(Γ ′). By Eq. (15), 
+
+g−†  g†(Γ ′) = [
+
+> y∈g†(Γ ′)
+
+{c′ ∈ C : y ∈ argmax g(c′)}, (68) so for any c′ ∈ C ,
+
+g†(c′) ∈ g†(Γ ′) = ⇒ c′ ∈ g−†  g†(Γ ′). (69) In particular, Γ′ ⊆ g−† (g†(Γ ′)) .Now we can proceed with the main proposition. 
+
+Proposition C.7 (COCOCO reaches a fixed point) . For a NeSy-CBM (f, g ), let R be defined as Eq. (64) . Then, for any Γ ⊆ C and Υ ⊆ Y ,
+
+R R(Γ , Υ)  = R(Γ , Υ) . (70) 
+
+In particular, (Γ rev (x), Υrev (x)) is a fixed point of R, and no iterative refinement is needed. Proof. Let (Γ 1, Υ1) = R(Γ , Υ) . By definition of R, these are 
+
+Γ1 = Γ ∩ g−† (Υ) , Υ1 = Υ ∩ g†(Γ) . (71) Now, denote with (Γ 2, Υ2) the sets obtained by applying R twice on Γ, Υ, namely 
+
+(Γ 2, Υ2) = R(Γ 1, Υ1) = R(R(Γ , Υ)) , (72) which are given by 
+
+Γ2 = Γ 1 ∩ g−† (Υ 1), Υ2 = Υ 1 ∩ g†(Γ 1). (73) Now, to proceed with the proof, we use the standard set identity: for any two sets S, T ,
+
+S ⊆ T ⇐⇒ S ∩ T = S. (74) This means that, following Eq. (74): 
+
+(I) Γ2 = Γ 1 ⇐⇒ Γ1 ⊆ g−† (Υ 1) = g−† (Υ ∩ g†(Γ)) (75) 
+
+(II ) Υ2 = Υ 1 ⇐⇒ Υ1 ⊆ g†(Γ 1) = g†(Γ ∩ g−† (Υ)) . (76) 21 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+To prove the fixed point, we prove these two inclusions in turn. 
+
+Proof of (I): Γ1 ⊆ g−†  Υ ∩ g†(Γ) .Let c ∈ Γ1, this means that, since Γ1 = Γ ∩ g−† (Υ) , c ∈ Γ and c ∈ g−† (Υ) . We prove c ∈ g−† (Υ 1), i.e., that g†(c) ∩ Υ1̸ = ∅.By definition of Γ1 = Γ ∩ g−† (Υ) , the concept c satisfies (a) c ∈ Γ, hence g†(c) ⊆ g†(Γ) ;(b) c ∈ g−† (Υ) , hence g†(c) ∩ Υ̸ = ∅.Now, let y be any y ∈ (g†(c) ∩ Υ) ̸ = ∅ from (b). By (a), y ∈ g†(Γ) as well. Therefore 
+
+y ∈ g†(c) ∩ Υ ∩ g†(Γ) (77) 
+
+y ∈ g†(c) ∩ Υ1 (from Υ1 = Υ ∩ g†(Γ) )since g†(c) ∩ Υ1̸ = ∅, this concludes the proof of the first inclusion (I) Eq. (75). 
+
+Proof of (II): Υ1 ⊆ g†(Γ 1) ⊆ g† Γ ∩ g−† (Υ) . This proof does not follow the steps of (I): unlike g−† , the image g† does not distribute over intersection in general, so we cannot mirror the argument above. We proceed elementwise. Let y ∈ Υ1 = Υ ∩ g†(Γ) . Then: • y ∈ Υ, and • y ∈ g†(Γ) , so by definition of the image there exists some c ∈ Γ such that y ∈ g†(c).Let us then fix c such that y ∈ g†(c).Now, we verify that c ∈ Γ1 = Γ ∩ g−† (Υ) :• c ∈ Γ holds by the choice of c;• g†(c) = y ∈ Υ, so by the definition of Eq. (15): 
+
+g−† (Υ) = [
+
+> y∈C
+
+{c ∈ Γ : y ∈ argmax g(c)} (78) We can conclude that c ∈ g−† (Υ) .Hence c ∈ Γ1 and g†(c) = y, which means y ∈ g†(Γ 1), proving the second inclusion (II) Eq. (76). 
+
+Conclusion . By (I), Γ2 = Γ 1 ∩ g−† (Υ 1) = Γ 1. By (II), Υ2 = Υ 1 ∩ g†(Γ 1) = Υ 1. Therefore R R(Γ , Υ)  =(Γ 1, Υ1) = R(Γ , Υ) , i.e. (Γ 1, Υ1) is a fixed point of R.This concludes the proof. 
+
+C.8 Proof of the Optimality of COCOCO 
+
+Proposition C.8 (Optimality of COCOCO ). Let Γβ (x) ⊆ C and Υα(x) ⊆ Y be arbitrary prediction sets, and let (Γ rev (x), Υrev (x)) = R(Γ β (x), Υα(x)) be their joint revision. Then (Γ rev (x), Υrev (x)) is the largest pair (Γ ′, Υ′) ⊆ C × Y satisfying: 1. Containment: Γ′ ⊆ Γβ (x) and Υ′ ⊆ Υα(x).2. Mutual coverage: 
+
+(a) every concept entails at least one retained label: ∀c ∈ Γ′, g †(c) ∩ Υ′̸ = ∅ (equivalently, 
+
+Γ′ ⊆ g−† (Υ ′)); (b) every label is entailed by at least one retained concept: ∀y ∈ Υ′, ∃c ∈ Γ′ with y ∈ g†(c)
+
+(equivalently, Υ′ ⊆ g†(Γ ′)). 
+
+22 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Consequently, 
+
+|Γrev (x)| ≤ | Γβ (x)|, |Υrev (x)| ≤ | Υα(x)|. (79) 
+
+Moreover, (Γ rev (x), Υrev (x)) is a minimal revision of (Γ β (x), Υα(x)) that enforces logical consistency with g.Proof. Step 1: (Γ rev (x), Υrev (x)) itself satisfies (1) and (2) .By definition, 
+
+Γrev (x) = Γ β (x) ∩ g−† (Υ α(x)) ⊆ Γβ (x) (80) and 
+
+Υrev (x) = Υ α(x) ∩ g†(Γ β (x)) ⊆ Υα(x), (81) therefore (1) holds. 
+
+Mutual coverage (2a): Γrev (x) ⊆ g−† (Υ rev (x)) .
+
+By definition, (Γ rev (x), Υrev (x)) = R(Γ β (x), Υα(x)) , so Γrev (x) = Γ β (x) ∩ g−† (Υ α(x)) plays the role of 
+
+Γ1 and Υrev (x) = Υ α(x) ∩ g†(Γ β (x)) plays the role of Υ1 in the proof of Proposition C.7. Inclusion (I) of that proof established Γ1 ⊆ g−† (Υ 1); specialising to the present sets gives Γrev (x) ⊆ g−† (Υ rev (x)) .
+
+Mutual coverage (2b): Υrev (x) ⊆ g†(Γ rev (x)) .
+
+Recall that Υrev (x) = Υ α(x) ∩ g†(Γ β (x)) and Γrev (x) = Γ β (x) ∩ g−† (Υ α(x)) .Let y ∈ Υrev (x). Since y ∈ g†(Γ β (x)) , by definition of the image there is some c ∈ Γβ (x) with y ∈ g†(c).This c lies in Γrev (x) by definition of Γrev (x). Using y ∈ Υrev (x) ⊆ Υα(x) from (1), 
+
+y ∈ g†(c) ∩ Υα(x)̸ = ∅ =⇒ c ∈ g−† (Υ α(x)) , (82) hence c ∈ Γβ (x) ∩ g−† (Υ α(x)) = Γ rev (x).
+
+Step 2: Any pair satisfying (1) and (2) is contained in (Γ rev (x), Υrev (x)) .Let (Γ ′, Υ′) satisfy (1) and (2). We must show that Γ′ ⊆ Γrev (x) and Υ′ ⊆ Υrev (x).
+
+Show Γ′ ⊆ Γrev (x). Let c ∈ Γ′. We prove c ∈ Γrev (x) by checking the two conditions defining Γrev (x) = Γβ (x) ∩ g−† (Υ α(x)) .(i) c ∈ Γβ (x): this follows directly from c ∈ Γ′ ⊆ Γβ (x) by (1). (ii) c ∈ g−† (Υ α(x)) : by definition, this requires g†(c) ∩ Υα(x)̸ = ∅. From (2a), g†(c) ∩ Υ′̸ = ∅, and from (1), Υ′ ⊆ Υα(x). Hence 
+
+∅̸ = g†(c) ∩ Υ′ ⊆ g†(c) ∩ Υα(x). (83) Combining (i) and (ii) gives c ∈ Γβ (x) ∩ g−† (Υ α(x)) = Γ rev (x).
+
+Show Υ′ ⊆ Υrev (x). Let y ∈ Υ′. We prove y ∈ Υrev (x) by checking the two conditions defining 
+
+Υrev (x) = Υ α(x) ∩ g†(Γ β (x)) .(i) y ∈ Υα(x): this follows directly from y ∈ Υ′ ⊆ Υα(x) by (1). (ii) y ∈ g†(Γ β (x)) : by definition of the image, this requires some c ∈ Γβ (x) with y ∈ g†(c). From (2b), there exists c ∈ Γ′ with y ∈ g†(c), and from (1), c ∈ Γ′ ⊆ Γβ (x).Combining (i) and (ii) gives y ∈ Υα(x) ∩ g†(Γ β (x)) = Υ rev (x).This concludes the proof. 23 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+C.9 Coverage proof of Product Set leveraging e-values Proposition C.9 (Concept coverage via aggregated e-values) . For 0 < β < 1 and any (x, c∗) ∈ D C, let 
+
+c = ( c1, . . . , cK ) ∈ C = C1 × · · · × C K be a concept vector, where each cj ∈ { 0, . . . , V − 1}. For each concept j, let sj : X × C j → R≥0 be a non-negative conformity score and let Dj = {(xi, c∗ 
+
+> ij
+
+)}ni=1 be a calibration set. Define the soft-rank e-value [77] for concept j and candidate v as 
+
+Ej (x, v) = (n + 1) sj (x, v )
+
+> n
+
+X
+
+> i=1
+
+sj (xi, c ∗ 
+
+> ij
+
+) + sj (x, v)
+
+. (84) 
+
+the joint e-value for a candidate tuple v = ( v1, . . . , v K ) as 
+
+E(x, v) = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+Ej (x, v j ). (85) 
+
+and the concept prediction set for threshold β > 0 as 
+
+Γβ (x) = 
+
+(
+
+v ∈
+
+> K
+
+# ×j=1 
+
+{0, . . . , V − 1} : E(x, v) < 1
+
+β
+
+)
+
+. (86) 
+
+Then: 
+
+Pr ( c∗ ∈ Γβ (x)) ≥ 1 − β. (87) 
+
+In particular, this guarantee holds without Bonferroni correction (Corollary C.4) and does not degrade with the number of concepts K.Proof. Step 1: each Ej (x, c∗ 
+
+> j
+
+) is a valid e-variable . By exchangeability of the calibration data and the test point, each soft-rank e-value satisfies E[Ej (x, c∗ 
+
+> j
+
+)] ≤ 1 Vovk [17], Gauthier et al. [18]. 
+
+Step 2: the average E(x, c) = 1
+
+> K
+
+PKj=1 Ej (x, cj ) is a valid e-variable . By linearity of expectation: 
+
+E [E(x, c∗)] = E
+
+ 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+Ej (x, c∗ 
+
+> j
+
+)
+
+ = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+EEj (x, c∗ 
+
+> j
+
+) ≤ 1
+
+K · K = 1 , (88) where the inequality uses Step 1 termwise. Hence E(x, c∗) is a valid e-variable. 
+
+Step 3: Coverage follows by Markov’s inequality [ 16 ]. Since E(x, c) ≥ 0 and E[E(x, c)] ≤ 1, Markov’s inequality gives: 
+
+Pr 
+
+
+
+E(x, c) ≥ 1
+
+β
+
+
+
+≤ β, (89) or equivalently, 
+
+Pr 
+
+
+
+E(x, c) < 1
+
+β
+
+
+
+≥ 1 − β. (90) Since c ∈ Γβ (x) if and only if E(x, c) < 1/β , the coverage guarantee follows. 
+
+Remark (Comparison with Bonferroni correction (Corollary C.4)) . Proposition 3.1 applies Bonferroni’s correction, allocating miscoverage β/K to each individual concept and requiring K separate thresholds. The e-value approach in Proposition C.9 avoids this entirely: independence is exploited at the level of expectations via the product factorization in Step 2, so a single threshold 1/β suffices and the guarantee does not degrade with K.
+
+Remark (Average vs. product aggregation) . An alternative aggregation is the product E(x, c) =
+
+QKj=1 Ej (x, cj ). To make it a valid e-variable, it requires: 
+
+E
+
+
+
+> K
+
+Y
+
+> j=1
+
+Ej (x, c∗ 
+
+> j
+
+)
+
+ =
+
+> K
+
+Y
+
+> j=1
+
+EEj (x, c∗ 
+
+> j
+
+) , (91) which is not implied by the conditional concept independence Ci ⊥⊥ Cj | X standard in NeSy-CBMs [ 9, 30 ], because the per-concept e-values share the same test input x and the same calibration set Dcal . The product is a valid e-variable if one additionally assumes conditional independence of the per-concept e-values given 
+
+(x, Dcal ), which might not hold in pratice. Despite this, COCOCO ∗ also behaves well when using the product, as shown in our experiments for CHX (see Section F.2). 24 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+C.10 Coverage proof of COCOCO leveraging e-values Proposition C.10 (Joint coverage of COCOCO using e-values) . For 0 < ˜α, ˜β possibly data-dependent, let 
+
+Γrev (x) and Υrev (x) be the jointly revised sets of COCOCO (Eq. (10) ). Suppose the concept set Γβ (x) and the label set Υα(x) are constructed using e-values so that 
+
+Pr( c∗ /∈ Γβ (x)) ≤ E[ ˜β], Pr( y∗ /∈ Υα(x)) ≤ E[˜ α]. (92) 
+
+If the NeSy-CBM satisfies both deductive and abductive soundness (Definition 3.1), then 
+
+Pr( c∗ ∈ Γrev (x)) ≥ 1 − E[˜ α] − E[ ˜β] + Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) , (93) 
+
+Pr( y∗ ∈ Υrev (x)) ≥ 1 − E[˜ α] − E[ ˜β] + Pr( y∗ /∈ Υα(x) ∧ y∗ /∈ Υde (x)) . (94) 
+
+Proof. We prove the bound for Γrev (x); the argument for Υrev (x) is identical by symmetry. Let A := ( c∗ ∈ Γβ (x)) and B := ( c∗ ∈ Γab (x)) , so Pr( c∗ ∈ Γrev (x)) = Pr( A∩B). By inclusion–exclusion, 
+
+Pr( A ∩ B) = Pr( A) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B). (95) Under abductive soundness, Proposition C.2 gives δab = 1 , so c∗ ∈ Γab (x) = g−† (Υ α(x)) whenever 
+
+y∗ ∈ Υα(x). Hence Pr( B) ≥ 1 − E[˜ α].Using also Pr( A) ≥ 1 − E[ ˜β] and substituting into Eq. (95), 
+
+Pr( c∗ ∈ Γrev (x)) = Pr( A) + Pr( B) − 1 + Pr( ¬A ∩ ¬ B) (Eq. (95)) 
+
+≥ (1 − E[ ˜β]) + (1 − E[˜ α]) − 1 + Pr( ¬A ∩ ¬ B) (e-value guarantees) 
+
+= 1 − E[˜ α] − E[ ˜β] + Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) . (simplify, δde )This concludes the proof. 
+
+Remark (Relation to fixed miscoverage levels) . When ˜α and ˜β are fixed constants independent of the data, 
+
+E[˜ α] = α and E[ ˜β] = β, and the bound recovers the guarantee of Proposition 4.2 with the additional term 
+
+Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) [ 16 ]. If instead, abductive and deductive soundness do not hold, the bound can be recovered the same way as Proposition 4.2. 
+
+D Implementation Details 
+
+Here, we provide additional details about all metrics, datasets, and models useful for reproducibility. 
+
+D.1 Implementation 
+
+All experiments were conducted using Python 3.9 and PyTorch 2.5.1, and were run on a single NVIDIA A100 GPU. The implementations of DPL and LTN for MN-Add , MN-H , and MN-EO were taken from [ 70 ], while they were developed from scratch for all other datasets. The MN-Add variants were constructed starting from the original MNIST images [ 6]. The CHX dataset was taken verbatim from [ 78 ]. For RIV10 , we used the images contained in the ordinary folder, preserving the original train/test split. For CEB , we used train_observational as the training set, dev as the validation set, and test as the test set. For CIF10 , we retained the original train/test split. 
+
+D.2 Metrics details 
+
+For all datasets, we evaluate predictions at both the label and concept levels using three metrics, coverage , size ,and consistency , defined below. 
+
+Coverage . Coverage is defined as: COVERAGE = 1
+
+|D test |
+
+X
+
+> x∈D test
+
+1{c∗ ∈ Γβ (x)}, (96) 25 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+where Dtest denotes the test set and |D test | its cardinality. This metric quantifies the proportion of test samples for which the ground-truth concept c∗ is included in the predicted concept set Γβ (x). An analogous definition applies at the label level by replacing c∗ and Γβ (x) with y∗ and Υα(x), respectively. 
+
+Size . We measure the average size of the prediction sets as SIZE = 1
+
+|D test |
+
+X
+
+> x∈D test
+
+|Γβ (x)|, (97) which corresponds to the expected cardinality of the predicted concept sets. The same definition applies to label sets Υα(x).
+
+Consistency . Concept-level consistency is defined as CONSISTENCY = 1
+
+|D test |
+
+X
+
+> x∈D test
+
+X 
+
+> c∈Γβ(x)
+
+1{g†(c) ∩ Υα(x)̸ = ∅}
+
+max(1 , |Γβ (x)|) , (98) this metric measures the extent to which predicted concepts agree with predicted labels. Specifically, it captures the average fraction of concepts in Γβ (x) whose induced label g†(c) is contained in Υα(x). A fully consistent model ensures that every predicted concept is supported by at least one compatible label. An analogous definition applies at the label level. 
+
+D.3 E-values details 
+
+A powerful and recent tool in the conformal prediction literature is conformal e-prediction, which uses e-values [ 13 , 14 , 15 , 16 ] to build prediction sets [ 17 , 18 , 19 , 20 ]. An e-variable E is a nonnegative random variable satisfying E[E] ≤ 1 [ 16 ]. Thresholding E at level 1/α yields a valid prediction set with marginal coverage at least 1 − α: by Markov’s inequality, Pr( E ≥ 1/α ) ≤ α, or equivalently, Pr( E < 1/α ) ≥ 1 − α.A standard e-value for conformal prediction is the soft-rank e-variable [ 77 , 79 , 80 ]. Given a non-negative nonconformity score s : X × Y → R≥0 and a calibration set Dcal = {(xi, y∗ 
+
+> i
+
+)}ni=1 , it is defined as: 
+
+E(x, y) = (n + 1) s(x, y)
+
+> n
+
+X
+
+> i=1
+
+s(xi, y∗ 
+
+> i
+
+) + s(x, y)
+
+. (99) This is a valid e-variable whenever the calibration scores {s(xi, y∗ 
+
+> i
+
+)}ni=1 and the test score s(x, y) are exchangeable [17]. 
+
+Proposition D.1 (Gauthier et al. [18] ). Consider a calibration set Dcal = {(xi, y∗ 
+
+> i
+
+)}ni=1 and a test point (x, y∗)
+
+such that all n + 1 points are exchangeable. Let ˜α be any (possibly data-dependent) miscoverage level. Then: 
+
+E
+
+ Pr( y∗ /∈ Υ˜α(x) | ˜α)˜α
+
+
+
+≤ 1, (100) 
+
+where 
+
+Υ˜α(x) = 
+
+
+
+y ∈ Y : (n + 1) s(x, y )
+
+> n
+
+X
+
+> i=1
+
+s(xi, y∗ 
+
+> i
+
+) + s(x, y )
+
+< 1˜α
+
+
+
+. (101) 
+
+Remark. When ˜α is a fixed constant independent of the data, Eq. (100) reduces to the standard conformal guarantee Pr( y∗ ∈ Υα(x)) ≥ 1 − α [18] 
+
+E-value prediction sets . COCOCO ∗ (Section 4) instantiates Eq. (99) with the negative log-probability noncon-formity score s(x, y ) = − log pθ (y | x), which is non-negative by design. 
+
+Label sets . At calibration time, COCOCO ∗ computes the label score sum SY = Pni=1 s(xi, y∗ 
+
+> i
+
+) and stores the calibration count n. At test time, given a miscoverage level ˜α, the label prediction set, following Eq. (101), is 
+
+Υα(x) = 
+
+
+
+y ∈ Y : (n + 1) s(x, y )
+
+SY + s(x, y ) < 1˜α
+
+
+
+. (102) 26 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Concept sets . COCOCO ∗ aggregates per-concept e-values via averaging: 
+
+E(x, c) = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+Ej (x, v j ), (103) which is a valid e-variable by linearity of expectation (Proposition C.9). The concept prediction set 
+
+Γβ (x) = 
+
+n
+
+c ∈ C : E(x, c) < 1˜β
+
+o
+
+(104) satisfies Pr( c∗ ∈ Γβ (x)) ≥ 1 − E[ ˜β] (Proposition C.9), without Bonferroni correction (Corollary C.4) and 
+
+without degradation in K. The product alternative Q 
+
+> j
+
+Ej is also valid but requires conditional independence of the Ej given (x, Dcal ), which does not hold in practice (see Section C.9). Nevertheless, COCOCO ∗ remains robust to this violation (see Section F.2). 
+
+Size-budget calibration: computing ˜α and ˜β.Rather than fixing α and β a priori, COCOCO ∗ selects the smallest miscoverage levels that keep the average prediction-set sizes within user-specified budgets CY (for labels) and CC (for concepts). Formally, following Gauthier et al. [19], given a test set D and calibration statistics (SY , {Sj }Kj=1 ):
+
+˜α = inf 
+
+(
+
+α ∈ (0 , 1) : 1
+
+|D| 
+
+X
+
+> x∈D
+
+|Υα(x)| ≤ CY
+
+)
+
+, (105) 
+
+˜β = inf 
+
+(
+
+β ∈ (0 , 1) : 1
+
+|D| 
+
+X
+
+> x∈D
+
+|Γβ (x)| ≤ CC
+
+)
+
+. (106) Both ˜α and ˜β are data-dependent: they depend on the calibration score sums SY and {Sj }. According to Proposition C.10, under deductive and abductive soundness (Definition 3.1), the jointly revised sets Γrev (x)
+
+and Υrev (x) produced by COCOCO ∗ satisfy: 
+
+Pr( c∗ ∈ Γrev (x)) ≥ 1 − E[˜ α] − E[ ˜β] + Pr( c∗ /∈ Γβ (x) ∧ c∗ /∈ Γab (x)) . (107) 
+
+Bootstrap estimation of E[˜ α] and E[ ˜β]. We estimate these quantities over T = 100 bootstrap itera-tions. In each iteration t, a calibration sample Dt of size |D cal | is drawn with replacement from Dcal ,score sums are recomputed on Dt, and prediction sets are built on the fixed test set for all (α, β ) in 
+
+({0.10 , 0.15 , 0.20 , 0.25 , 0.30 }, {0.10 , 0.35 , 0.40 , 0.45 , 0.50 , 0.55 , 0.60 }) The minimal miscoverage levels ˜αt
+
+and ˜βt are then selected as the smallest joint values achieving average set sizes at most CY = 2 and CC = 5 ,respectively (Eq. (106)). The empirical coverage lower bounds are reported as 
+
+1 − 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+˜αt and 1 − 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+˜βt. (108) 
+
+D.4 Neuro-Symbolic Models 
+
+In this subsection, we report relevant details about the implementation and use of the neuro-symbolic models used in the experiments, i.e., DPL and LTN .
+
+D.4.1 Inference 
+
+We begin by describing how inference is carried out at test time in DPL and LTN , that is, how the concept distribution pθ (C | x) produced by the neural backbone is combined with prior knowledge K to yield a label prediction ˆy.
+
+DeepProbLog . We use the DPL implementation of Bortolotti et al. [70] . At inference time, given an input x,the model computes the joint distribution over concepts and labels under prior knowledge K
+
+pθ (Y, C | x, K) = pθ (C | X)1{(C, Y) |= K}. (109) Hard predictions are obtained by solving the MAP problem, which is NP-hard [81], that is: 
+
+(ˆ c, ˆy) = argmax 
+
+> c∈C ,y∈Y
+
+pθ (C | x)1{(C, Y) |= K} (110) 27 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+where 
+
+pθ (C | x) = 
+
+> K
+
+Y
+
+> j
+
+pθ (Cj | x) (111) Namely, pθ (C | x) factorizes over all the K concepts due to conditional independence [7]. 
+
+Logic Tensor Networks . To implement LTN , we used the ltn-torch library [ 82 ], following the approach of Bortolotti et al. [70] . Given a formula K and concept distribution pθ (C | x), each candidate label y is scored according to the degree to which the pair (c, y) satisfies K under the chosen fuzzy relaxation. We experiment with three t-(co)norms: • Gödel semantics 
+
+TG(a, b ) = min( a, b ), SG(a, b ) = max( a, b ), NG(a) = 1{a = 0 } (112) • Product semantics 
+
+TP (a, b ) = a · b, SP (a, b ) = a + b − a · b, NP (a) = 1 − a (113) • Łukasiewicz semantics 
+
+TL(a, b ) = max( a + b − 1, 0) , SL(a, b ) = min( a + b, 1) , NL(a) = 1 − a (114) Where T denotes a t-norm , S denotes a t-conorm , N denotes the negation operation , and a and b are fuzzy truth values in [0 , 1] .The inference layer selects the label: 
+
+ˆy = argmax 
+
+> y∈Y
+
+TK (pθ (C | x), 1{Y = y}) (115) where TK ∈ [0 , 1] denotes the fuzzy satisfaction degree. In practice, inference is performed by first computing: 
+
+ˆc = argmax 
+
+> c∈C
+
+pθ (C | x) (116) and then predicting the final label leveraging prior knowledge K:
+
+ˆy = K(ˆ c) (117) 
+
+D.4.2 Grounding 
+
+For each dataset, we detail how the prior knowledge K is grounded in DPL and LTN . In DPL , K is compiled into a concept-to-label matrix W ∈ [0 , 1] |C|×|Y| , where each entry Wc,y represents the probability of (c, y) |= K.The label distribution is then computed by pθ (Y | x) = W ⊤pθ (C | x). In LTN , K is expressed as a first-order logic formula whose predicates are grounded on the neural outputs pθ (c | x) ∈ [0 , 1] , while logical connectives are interpreted using a chosen t-norm (and corresponding co-tnorm), as detailed in Section E.2. 
+
+MN-Add (and MN-EO , MN-H ). Each input consists of two images (x1, x2) with associated digit variables 
+
+c1, c2 ∈ { 0, . . . , 9} and output y ∈ { 0, . . . , 18 }. DPL : The circuit enumerates all 10 2 digit combinations and sets W(c1,c2), y = 1{c1 + c2 = y}, so that each concept vector c maps deterministically to exactly one sum. 
+
+LTN : The knowledge base is 
+
+KMN −Add := ∀x1, x2, y.∃d1, d 2. digit( x1, d 1) ∧ digit( x2, d 2) s.t. d1 + d2 = y, (118) where digit( xi, d i) := pθ (ci = d | xi) is the digit probability. 
+
+MN-SP . The setup is as in MN-Add , but with Y ∈ { 0, 1} encoding the parity of the sum. DPL : W(c1,c2),y =
+
+1{(c1 + c2) mod 2 = y}. LTN : Same FOL template as MN-Add , with arithmetic condition d1 + d2 = y
+
+(mod 2) .
+
+CHX . The concepts are the four binary symptoms c = ( c1, c2, c3, c4) ∈ 0, 14 (Fracture , Pneumothorax ,
+
+Airspace opacity , Nodule/mass ), and the label y denotes the severity level. DPL : The model enumerates all 24 possible concept combinations and defines Wc,y = 1{P4 
+
+> i=1
+
+ci = y}, corresponding to the five severity 28 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+levels healthy , green , yellow , orange , red . LTN : We instead formulate the knowledge base in first-order logic. Let present( x, i ) := pθ (ci = 1 | x). The knowledge base is then defined as follows: 
+
+Kmc  
+
+> CHX
+
+:= ∀x, y. ∃s1, s 2, s 3, s 4 ∈ { 0, 1}.
+
+> 4
+
+^
+
+> i=1
+
+ si ⇐⇒ present( x, i ) s.t. P4 
+
+> i=1
+
+si = y. (119) 
+
+CEB . Recall that c ∈ Positive , Negative , Neutral , unknown 5 and the label y ∈
+
+Positive , Negative , Neutral , unknown , conflict is defined as the majority vote with the tie-breaking rule described in Section D.5. DPL : The circuit enumerates all 45 possible concept com-binations. For each combination, let Nv := P5 
+
+> i=1
+
+1{ci = v} denote the count of each value 
+
+v ∈ Positive , Negative , Neutral , unknown . Then 
+
+Wc, y =
+
+(1{NPos = NNeg ∧ NPos ≥ max( NNeu , N Unk )} y = Conflict ,
+
+1{Nv ≥ max v′̸ =v Nv′ } ·  1 − Wc,Conflict 
+
+ y ∈ { Pos , Neg , Neu , Unk }, (120) where the tie-breaking priority Pos ≻ Neg ≻ Neu ≻ Unk is enforced by evaluating the cases in order and assigning exactly one label per concept combination. LTN : The discrete argmax rule is not directly differentiable. We therefore adopt a relaxed formulation based on soft counts ˜N v (x) := P i = 1 5pθ (Ci =
+
+v | x), together with smooth comparison operators: 
+
+ge( a, b ) := σ(a − b), eq( a, b ) := exp  −| a − b|, (121) where σ denotes the sigmoid function, i.e., σ(x) = 11+exp( −x) . Strict inequality is expressed compositionally as gt( a, b ) := ge( a, b ) ∧ ¬ , eq( a, b ). The knowledge base is defined as the conjunction, over all five labels, of biconditionals between each label indicator and the corresponding count-based predicate: 
+
+KCEB := ∀x, y. 1{y = Pos } ⇐⇒ gt( ˜NPos , ˜NNeg ) ∧ ge( ˜NPos , ˜NNeu ) ∧ ge( ˜NPos , ˜NUnk )
+
+∧ 1{y = Neg } ⇐⇒ gt( ˜NNeg , ˜NPos ) ∧ ge( ˜NNeg , ˜NNeu ) ∧ ge( ˜NNeg , ˜NUnk )
+
+∧ 1{y = Neu } ⇐⇒ gt( ˜NNeu , ˜NPos ) ∧ gt( ˜NNeu , ˜NNeg ) ∧ ge( ˜NNeu , ˜NUnk )
+
+∧ 1{y = Unk } ⇐⇒ gt( ˜NUnk , ˜NPos ) ∧ gt( ˜NUnk , ˜NNeg ) ∧ gt( ˜NUnk , ˜NNeu )
+
+∧ 1{y = Conflict } ⇐⇒ eq( ˜NPos , ˜NNeg ) ∧ ge( ˜NPos , ˜NNeu ) ∧ ge( ˜NPos , ˜NUnk ).
+
+The tie-breaking priority Pos ≻ Neg ≻ Neu ≻ Unk is encoded through the asymmetric use of ge and gt :higher-priority categories are allowed to win ties via ≥, whereas lower-priority categories must satisfy the strict inequality >.
+
+CIF10 and RIV10 . The concepts are the 7 binary visual attributes c =(cwhl , cmet , cwng , cani , chai , chrn , csnt ) ∈ 0, 17, and the labels are the 10 CIF10 classes. DPL : The circuit enu-merates all 27 concept combinations. For each combination, the rule base in Section D.5 is evaluated; when the active concepts uniquely entail a single class, we set Wc,y = 1 for that class. When two classes share the same concepts (i.e., automobile /truck and dog /horse ), the mass is split equally, yielding Wc,y = 1 /2
+
+for each. Concept combinations that do not uniquely identify any class are handled by distributing proba-bility uniformly over the consistent classes (e.g., Wc,plane = Wc,car = Wc,truck = Wc,ship = 1 /4 when only met is active). This explicitly encodes the incompleteness of K in the truth table. LTN : For LTN , let 
+
+present( x, a ) = pθ (ca = 1 | x) for a ∈ whl , met , wng , ani , hai , hrn , snt . The knowledge base is expressed as a conjunction of biconditionals, one per class: 
+
+KCIF10 := ∀x, y. 1{y = plane } ⇐⇒ met ∧ ¬ ani ∧ wng 
+
+∧ 1{y = car } ∨ 1{y = truck } ⇐⇒ whl ∧ ¬ wng ∧ met ∧ ¬ ani 
+
+∧ 1{y = bird } ⇐⇒ ani ∧ ¬ met ∧ wng 
+
+∧ 1{y = frog } ⇐⇒ ani ∧ ¬ met ∧ ¬ hai 
+
+∧ 1{y = deer } ⇐⇒ ani ∧ ¬ met ∧ ¬ wng ∧ hai ∧ hrn 
+
+∧ 1{y = cat } ⇐⇒ ani ∧ ¬ met ∧ ¬ wng ∧ hai ∧ ¬ hrn ∧ ¬ snt 
+
+∧ 1{y = dog } ∨ 1{y = horse } ⇐⇒ ani ∧ ¬ met ∧ ¬ wng ∧ hai ∧ ¬ hrn ∧ snt 
+
+∧ 1{y = ship } ⇐⇒ met ∧ ¬ ani ∧ ¬ whl ∧ ¬ wng ,
+
+RIV10 uses the same grounding since the two datasets share the same labels and concepts. 29 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+D.5 Dataset details 
+
+Here we report additional information about the evaluated datasets. 
+
+D.5.1 MN-Add MN-Add , originally introduced in Manhaeve et al. [7] , is the canonical benchmark in Neuro-Symbolic AI. Each input consists of two MNIST [ 6] digit images, and the target label is their arithmetic sum. Formally, each sample is a pair of images (x1, x2) representing MNIST digits (c1, c2), each taking values in [0 , 9] , and the task is to predict: 
+
+y = c1 + c2, (122) In contrast to MN-EO and MN-H , MN-Add contains all possible digit combinations ( 54 , 000 train examples, 6, 000 
+
+validation examples and 10 , 000 test examples) and does not induce structural ambiguity in the digit-to-value mapping. The underlying combinatorial structure uniquely identifies each digit, and no deterministic reasoning shortcuts arise. Consequently, MN-Add erves as a shortcut-free reference benchmark for reasoning [22]. 
+
+Reasoning Shortcuts . MN-Add is provably reasoning shortcuts free. For further information refer to Bortolotti et al. [70]. 
+
+D.5.2 CHX CHX [ 67 ] is medical dataset characterized by four binary symptoms: Fracture , Pneumothorax , Airspace opacity , and Nodule/mass . Each symptom is represented as a binary variable indicating its presence or absence. For preprocessing, we follow Pugnana et al. [78] . However, in its original form, CHX is not directly suitable for learning and reasoning tasks. For this reason, we construct our setting as follows: let the concept vector be defined as: 
+
+c = ( c1, c2, c3, c4) ∈ { 0, 1}4, (123) where: 
+
+c =
+
+
+
+Fracture Pneumothorax Airspace opacity Nodule/mass 
+
+ (124) We designed our NeSy task, such that the final label is determined by the total number of present symptoms. Formally, let 
+
+s =
+
+> 4
+
+X
+
+> i=1
+
+ci. (125) The diagnostic label y is defined as: 
+
+y =
+
+
+
+healthy if s = 0 ,
+
+green_code if s = 1 ,
+
+yellow_code if s = 2 ,
+
+orange_code if s = 3 ,
+
+red_code if s = 4 .
+
+(126) Thus, the task consists of predicting a severity level derived deterministically from the number of active symptoms. CHX consists of 3, 150 train samples, 350 validation samples, and 876 test samples. 
+
+Reasoning Shortcuts . CHX contains reasoning shortcuts. For example, yellow_code (y = 2 ) can be obtained not only by predicting c = (1 , 0, 1, 0) , but also via other permutations such as c′ = (0 , 1, 1, 0) . For the exact (or approximate) number of reasoning shortcuts, we refer the reader to rs-count [70 ] specifying such settings. 
+
+D.5.3 CEB CEB [68 ] is a dataset designed to evaluate concept-based and causal reasoning in natural language models. It consists of restaurant reviews with structured, aspect-level annotations and counterfactual edits. Each instance consists of: • A review text called description , i.e., the input, • A set of high-level semantic concepts c ∈ [0 , 4] ,30 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+• An overall rating review_majority ∈ [0 , 5] .The core concepts correspond to distinct aspects of the restaurant experience: 
+
+c =
+
+
+
+food_aspect_majority service_aspect_majority noise_aspect_majority ambiance_aspect_majority 
+
+ (127) Each aspect captures the sentiment expressed toward that dimension (i.e., Positive , Negative , Neutral ,
+
+unknown ). From this concepts, the goal is to infer the causally influenced label that is review_majority .The dataset is distributed in JSON format. Below is an example instance: 
+
+{"id": "000000_000000", "original_id": "000000", "edit_id": "000000", "is_original": true, "edit_goal": "Negative", "edit_type": "noise", "edit_worker": "w82", "description": "Overbooked and did not honor reservation time, put on wait list with walk-ins", "review_majority": "1", "review_label_distribution": { "1": 4, "2": 1 }, "review_workers": { "w244": "1", "w120": "2", "w197": "1", "w7": "1", "w132": "1" }, "food_aspect_majority": "", "ambiance_aspect_majority": "", "service_aspect_majority": "Negative", "noise_aspect_majority": "unknown", "service_aspect_label_distribution": { "Negative": 5 }, "noise_aspect_label_distribution": { "unknown": 4, "Negative": 1 }, "opentable_metadata": { "restaurant_id": 6513, "restaurant_name": "Molino’s Ristorante", "cuisine": "italian", "price_tier": "low", "dining_style": "Casual Elegant", "dress_code": "Smart Casual", "parking": "Private Lot", "region": "south", "rating_ambiance": 1, "rating_food": 3, "rating_noise": 2, "rating_service": 2, "rating_overall": 2 }
+
+31 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+}
+
+Preprocessing . As originally defined, CEB does not provide a deterministic rule mapping aspect-level concepts to the overall review label, making it unsuitable for a NeSy setting in which symbolic inference must be explicit. To address this, we introduce review_majority as an additional concept, so that the concept vector c becomes 
+
+c =
+
+
+
+food_aspect_majority service_aspect_majority noise_aspect_majority ambiance_aspect_majority review_majority 
+
+ ∈ { 0, 1, 2, 3}5 (128) with each component ci ∈ {Positive , Neutral , Negative , unknown }. To make it compliant with the other concepts, the original review_majority field is quantized as: 
+
+review_majority =
+
+
+
+unknown if ∈ { no majority , unknown },
+
+Negative if ≤ 2,
+
+Neutral if = 3 ,
+
+Positive if ≥ 4,
+
+(129) We then construct our reasoning task as selecting the category with the maximum count, representing an aggregate of the restaurant’s quality: 
+
+y = argmax 
+
+> ci
+
+X 
+
+> cj∈C
+
+1{ci = cj }, y ∈ { Positive , Neutral , Negative , unknown , conflict }, (130) with the following tie-breaking rule: if both Positive and Negative attain the maximum count, then 
+
+y = conflict ; otherwise, ties follow the priority order Positive ≻ Negative ≻ Neutral ≻ unknown .The dataset provides three different training sets: observational , inclusive , and exclusive . Since we do not analyze counterfactuals or interpretability, we use the observational training split. The dataset contains 1, 755 training samples, 1, 673 validation samples, and 1, 689 test samples. 
+
+Reasoning Shortcuts . CEB , as designed, is not free of reasoning shortcuts. For instance, for a given label such as Negative , multiple concept combinations are possible, such as c =(Negative , Negative , Negative , Negative ) or (Positive , Negative , Neutral , Negative ). If inter-ested, exact (or approximate) number of reasoning shortcuts can be found by using rs-count [70 ] instatiating the formalized problem. 
+
+D.5.4 CIF10 
+
+The CIF10 dataset [ 83 ] is a standard benchmark for image classification. It contains 60 , 000 color images of size 32 × 32 , divided into 10 classes, with 50 , 000 training images (which we further split into 35 , 000 for training and 15 , 000 for validation) and 10 , 000 test images. The original class labels are: 
+
+{airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck} (131) 
+
+Preprocessing . As with CEB , the raw CIF10 dataset is not directly suitable for learning and reasoning tasks. For this reason, we introduce a set of intermediate concepts that are intended to be present in all images and useful for distinguishing the 10 classes. However, to avoid trivial label leakage and to ensure that some concepts remain insufficient, we deliberately design the concept-to-label mapping to be incomplete. In particular, we construct the labeling such that, given only the provided concepts, it is not possible to distinguish between 
+
+automobile and truck , nor between dog and horse . In practice, we build a binary concept vector c ∈{0, 1}7 for each CIF10 image, encoding high-level semantic attributes such as ani (animal), wng (wing), met 
+
+(metallic), whl (wheels), hai (hairy), hrn (horn) and snt (snout). These concepts are deterministically derived from the original class label. Then, given the concepts, we build the following rules for the CIF10 labels: 
+
+airplane ⇐⇒ met ∧ ¬ ani ∧ wng ,
+
+automobile, truck ⇐⇒ whl ∧ met ∧ ¬ wng ∧ ¬ ani ,
+
+bird ⇐⇒ ani ∧ ¬ met ∧ wng ,
+
+frog ⇐⇒ ani ∧ ¬ met ∧ ¬ hai ,
+
+deer ⇐⇒ ani ∧ ¬ met ∧ ¬ wng ∧ hai ∧ hrn ,
+
+dog, horse ⇐⇒ ani ∧ ¬ met ∧ ¬ wng ∧ hai ∧ ¬ hrn ∧ snt ,
+
+ship ⇐⇒ met ∧ ¬ ani ∧ ¬ whl ∧ ¬ wng .
+
+(132) 32 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Reasoning Shortcuts . CIF10 , as constructed, is not free of reasoning shortcuts. For instance, airplane is defined as met ∧ ¬ ani ∧ wng but nothing is said about other concepts. For example, concept assignments such as met = ⊤, ani = ⊥, wng = ⊤, hai = ⊥ and met = ⊤, ani = ⊥, wng = ⊤, hai = ⊤ both entail the airplane class. For the exact (or approximate) number of reasoning shortcuts, you can instantiate this problem in rs-count [70]. 
+
+D.5.5 RIV10 RIV10 [69 ] is a real-world image dataset built from ImageNet [ 84 ] that contains natural images spanning the same 10 semantic categories as CIF10 : airplane , automobile , bird , cat , deer , dog , frog , horse , ship ,and truck . We kept the original train/test split as in [ 69 ], but creating a validation set from the train data counting 14 , 768 train samples, 6, 330 validation samples and 5, 286 test samples. 
+
+Preprocessing . Since RIV10 shares the same labels as CIF10 , we adopt the exact same preprocessing pipeline. 
+
+Reasoning Shortcuts . Since RIV10 shares the same concepts, knowledge and concept combinations of CIF10 
+
+(despite having different distributions). Refer to CIF10 for the reasoning shortcuts discussion. 
+
+D.5.6 MN-EO 
+
+Following [ 70 ], we consider the MN-EO dataset, originally introduced in [ 85 ]. This dataset is a structured variant of MN-Add in which only a restricted subset of digit combinations is observed during training. Specifically, the dataset contains exclusively pairs composed either of even digits or of odd digits, defined by the following constraints: 
+
+
+
++ = 6 
+
++ = 10 
+
++ = 10 
+
++ = 12 
+
+∧
+
+
+
++ = 6 
+
++ = 10 
+
++ = 10 
+
++ = 12 
+
+(133) The dataset contains 6, 720 fully annotated training samples, 1, 920 validation samples, and 960 in-distribution test samples. 
+
+Reasoning Shortcuts . MN-EO is one of the first datasets introduced to study reasoning shortcuts; for a detailed analysis, see Marconato et al. [23]. 
+
+D.5.7 MN-H MN-H , originally introduced in [ 8], is a biased variant of MN-Add in which only digits from 0 to 4 are considered. Moreover, only a subset of digit combinations is observed during training, given by: 
+
+
+
++ = 0 
+
++ = 1 
+
++ = 5 
+
++ = 6 
+
+(134) This restricted supervision induces ambiguity in the digit-to-value mapping and therefore introduces reasoning shortcuts. In contrast to MN-EO , digits 0 and 1 remain uniquely identifiable from the observed equations, while digits 2, 3, and 4 admit multiple consistent assignments. The dataset comprises 2, 940 fully annotated training samples, 840 validation samples, and 420 in-distribution test samples. 
+
+Reasoning Shortcuts . Similarly to MN-EO , MN-H , was introduced to study reasoning shortcuts; for a detailed analysis, see Marconato et al. [8]. 
+
+D.5.8 MN-SP MN-SP , originally introduced in [ 22 ], is a variant of MN-Add that has a different logical rule. As in MN-Add ,the input consists of two MNIST digit images corresponding to digits (x1, x2). However, instead of predicting 33 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+their arithmetic sum, the target label is defined as the parity of the sum. For this reason, it has the same amount of samples as MN-Add per split. Formally, the task is: 
+
+y = ( x1 + x2) mod 2 , (135) where y ∈ { 0, 1}, with 0 denoting an even sum and 1 an odd sum. For example: 
+
+( + ) mod 2 = 0 (136) 
+
+( + ) mod 2 = 1 (137) 
+
+Reasoning Shortcuts . Similarly to MN-EO and MN-H , MN-SP was introduced to study shortcuts; for a detailed analysis, see Bortolotti et al. [22]. 
+
+E Architecture Details & Model Selection 
+
+E.1 Model Selection 
+
+All experiments use either the Adam [ 86 ] or SGD [ 87 ] optimizer, selected as part of the hyperparameter search. Hyperparameters were selected through Bayesian optimization via Optuna [88 ], using a BoTorch 
+
+sampler [ 88 ] with a TPE sampler [ 89 ] for the initial startup trials, maximizing the macro F1 score of the final label on a validation set. Each study ran for <M> (at least 20 ) trials, with 10 warm-up trials before the Bayesian model is fitted. All experiments were run for <N> epochs employing early stopping, saving the checkpoint which achieves the highest F1 score on the validation set. The learning rate γ was selected from 
+
+{10 −5, 10 −4, 10 −3, 10 −2, 10 −1}, and the momentum ι from {10 −5, 10 −4, 10 −3, 10 −2, 0.1, 0.5, 0.9, 0.99 }.The batch size ν was chosen from {32 , 64 , 128 , 256 }.For LTN , a consistent logic family was selected jointly for all operators, choosing among Gödel, Product, and Łukasiewicz. Under Product logic, the implication operator defaults to Goguen implication for consistency. The quantifier parameter p was searched over integer values in the range [1 , 9] . For LTN , since the training objective can be hard to optimize since the p parameter governs the sharpness of the existential and universal quantifiers. We therefore linearly anneal p from 1 to the target value p∗ across all training epochs: 
+
+pt = round 
+
+
+
+1 + ( p∗ − 1) tT − 1
+
+
+
+, t = 0 , . . . , T − 1, (138) where T is the total number of epochs. This keeps the logic soft early in training and progressively makes it crisper as concept representations stabilize. Similarly, when concept supervision is available, we suppress concept supervision for the first 25% of training and then linearly ramp the concept-loss weight from 0 to 1.All models were trained for 200 epochs with early stopping, except for CEB , where models were trained for 
+
+500 epochs. Early stopping selects the checkpoint achieving the highest F1 score on the validation set with respect to the final label. All experiments have been tested with the same 10 seeds for consistency, specifically 
+
+{1011 , 1213 , 1415 , 1617 , 1819 , 2021 , 2223 , 2425 , 2627 , 2829 }.Below, you find all the hyperparameters which performed the best on our datasets. 
+
+Hyperparameters for MN-Add .• DPL , γ = 10 −1, ν = 32 , ι = 0 .1, optimizer = SGD ;• LTN , γ = 10 −1, ν = 64 , ι = 10 −5, optimizer = SGD , p = 8 , AND/OR/IMPLICATION set to Product. 
+
+Hyperparameters for CHX .• DPL (with and without concept supervision), γ = 10 −4, ν = 128 , ι = 10 −2, optimizer = Adam ;• LTN (with and without concept supervision), γ = 10 −4, ν = 256 , ι = 0 .9, optimizer = Adam , p = 4 ,AND/OR/IMPLICATION set to Product. 
+
+Hyperparameters for RIV10 :• DPL (with concept supervision), γ = 10 −3, ν = 128 , ι = 0 .99 , optimizer = SGD ;34 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+• DPL (without concept supervision), γ = 10 −4, ν = 128 , ι = 0 .99 , optimizer = SGD ;• LTN (with and without concept supervision), γ = 10 −4, ν = 256 , ι = 0 .9, optimizer = Adam , p = 4 ,AND/OR/IMPLICATION set to Product. 
+
+Hyperparameters for CIF10 :• DPL (with concept supervision), γ = 10 −3, ν = 128 , ι = 0 .99 , optimizer = SGD ;• DPL (without concept supervision), γ = 10 −4, ν = 128 , ι = 10 −2, optimizer = Adam ;• LTN (with and without concept supervision), γ = 10 −4, ν = 256 , ι = 0 .9, optimizer = Adam , p = 4 ,AND/OR/IMPLICATION set to Product. 
+
+Hyperparameters for CEB :• DPL (with concept supervision), γ = 10 −2, ν = 64 , ι = 1 e − 05 , optimizer = Adam ;• DPL (without concept supervision), γ = 10 −4, ν = 128 , ι = 10 −4, optimizer = Adam ;• LTN (with and without concept supervision), γ = 10 −4, ν = 256 , ι = 0 .9, optimizer = Adam , p = 4 ,AND/OR/IMPLICATION set to Product. 
+
+Hyperparameters for other MNIST -based datasets :• DPL (MN-H , MN-SP , MN-EO ), γ = 10 −1, ν = 32 , ι = 10 −1, optimizer = SGD ;• LTN (MN-H , MN-SP ), γ = 10 −4, ν = 256 , ι = 0.9, optimizer = Adam , p = 4,AND/OR/IMPLICATION set to Product. • LTN (MN-EO ), γ = 10 −2, ν = 64 , ι = 0 .99 , optimizer = Adam , p = 3 , AND/OR/IMPLICATION set to Gödel. 
+
+E.2 Model Architectures 
+
+We describe below the three neural architectures used as concept extractors f across our experiments. 
+
+LeNet5 . LeNet5 [ 90 ] is used as backbone for MNIST [ 6] images (i.e., MN-Add and its variants). The architecture takes as input a single-channel 28 × 28 image and produces a num _concepts -dimensional output. Table 4 details the layer configuration. Table 4: LeNet5 architecture used for MN-Add and its variants. INPUT LAYER TYPE PARAMETER ACTIVATION                                     
+
+> (1 ,28 ,28) Conv2d depth = 6 , kernel = 5 , stride = 1 , padding = 2 Tanh
+> (6 ,28 ,28) AvgPool2d kernel = 2 , stride = 2 (6 ,14 ,14) Conv2d depth = 16 , kernel = 5 , stride = 1 Tanh
+> (16 ,10 ,10) AvgPool2d kernel = 2 , stride = 2 (16 ,5,5) Flatten dim = 400 (400) Linear 400 →120 Tanh
+> (120) Linear 120 →84 Tanh
+> (84) Linear 84 →num _concepts
+
+ResNet18 . ResNet18 [ 91 ] is used as backbone for higher-resolution image datasets (i.e., CHX , CIF10 , and 
+
+RIV10 ). We use weights pretrained on ImageNet [ 84 ] for both CIF10 and CHX , but not for RIV10 , as its images are sourced from the same ImageNet [ 84 ] dataset on which ResNet-18 was pretrained. For all datasets, we resize the images to 224 × 224 to make them compatible with the ResNet18 architecture. The final fully connected layer is replaced with a linear layer mapping to num _concepts outputs. Table 5 details the layer configuration. 
+
+BERT . bert-base-uncased [ 92 ] is used as backbone for the text dataset CEB . We adopt the standard pretrained bert-base-uncased encoder, freezing its weights, and append a trainable MLP classification head producing num _concepts × num _concept _dim logits, which are reshaped into per-concept predictions of dimension num _concept _dim . Table 6 details the layer configuration. Table 6 details the layer configuration. 35 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Table 5: ResNet18 architecture used for CHX , CIF10 , and RIV10 .INPUT LAYER TYPE PARAMETER ACTIVATION 
+
+(3 , 224 , 224) Conv2d depth = 64 , kernel = 7 , stride = 2 , padding = 3 (64 , 112 , 112) BatchNorm2d dim = 64 ReLU 
+
+(64 , 112 , 112) MaxPool2d kernel = 3 , stride = 2 , padding = 1 (64 , 56 , 56) 2×BasicBlock depth = 64 , kernel = (1 , 1) , stride = (1 , 1) , padding = (1 , 1) (128 , 28 , 28) 2×BasicBlock depth = 128 , kernel = (1 , 1) , stride = (2 , 2) , padding = (1 , 1) (256 , 14 , 14) 2×BasicBlock depth = 256 , kernel = (1 , 1) , stride = (2 , 2) , padding = (1 , 1) (512 , 7, 7) 2×BasicBlock depth = 512 , kernel = (1 , 1) , stride = (2 , 2) , padding = (1 , 1) (512 , 7, 7) AvgPool2d dim = (1 , 1) (512 , 1, 1) Flatten dim = 512 (512) Linear 512 → num _concepts 
+
+Table 6: BERT architecture used for CEB .INPUT LAYER TYPE PARAMETER ACTIVATION 
+
+Token sequence bert-base-uncased (frozen) hidden dim = 768 , layers = 12 , heads = 12 
+
+[CLS] token (768) Linear 768 → 256 ReLU 
+
+(256) Dropout p = 0 .1(256) Linear 256 → 128 ReLU 
+
+(128) Dropout p = 0 .1(128) Linear 128 → num _concepts × num _concept _dim 
+
+(num _concepts × num _concept _dim ) Reshape → (num _concepts , num _concept _dim )
+
+F Additional Experiments 
+
+In this section, we report experiments on additional datasets and under different settings (with or without concept supervision), as well as configurations involving e-values. All tables, by default, use concept supervision unless otherwise specified. We also provide two ablation studies on the proposed method for encoding conformal predictions in NeSy-CBMs, along with a runtime analysis. 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+DPL + TO 0.90 ± 0.01 1.00 ± 0.00 0.98 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + TAb 1.00 ± 0.00 6.01 ± 0.05 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + CO 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 0.91 ± 0.01 1.00 ± 0.00 0.98 ± 0.00 
+
+DPL + CDe 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.91 ± 0.01 0.90 ± 0.01 
+
+DPL + RPB 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 0.99 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+Table 7: Results for DPL (without concept supervision) on MN-Add .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 
+
+LTN + TAb 1.00 ± 0.00 6.66 ± 0.02 0.97 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 
+
+LTN + CO 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 1.00 ± 0.00 0.97 ± 0.00 
+
+LTN + CDe 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+LTN + RPB 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+Table 8: Results for LTN (without concept supervision) on MN-Add .36 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.61 ± 0.01 
+
+DPL + TO 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 0.33 ± 0.14 3.59 ± 1.49 0.94 ± 0.06 
+
+DPL + TAb 1.00 ± 0.00 742 .55 ± 296 .73 0.94 ± 0.06 1.00 ± 0.00 3.59 ± 1.49 0.94 ± 0.06 
+
+DPL + CO 0.23 ± 0.01 907 .88 ± 76 .19 0.97 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.61 ± 0.01 
+
+DPL + CDe 1.00 ± 0.00 907 .88 ± 76 .19 0.97 ± 0.02 1.00 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+DPL + RPB 0.74 ± 0.27 907 .88 ± 76 .19 0.97 ± 0.02 1.00 ± 0.00 3.59 ± 1.49 0.94 ± 0.06 
+
+DPL + COCOCO 1.00 ± 0.00 670 .15 ± 252 .46 0.92 ± 0.06 1.00 ± 0.00 3.59 ± 1.49 0.94 ± 0.06 
+
+Table 9: Results for DPL (without concept supervision) on CEB .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.18 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.58 ± 0.03 
+
+DPL + TO 1.00 ± 0.00 1.00 ± 0.00 0.18 ± 0.02 0.42 ± 0.03 2.41 ± 0.18 0.90 ± 0.02 
+
+DPL + TAb 1.00 ± 0.00 504 .38 ± 34 .71 0.90 ± 0.02 1.00 ± 0.00 2.41 ± 0.18 0.90 ± 0.02 
+
+DPL + CO 0.39 ± 0.05 75 .06 ± 38 .35 0.90 ± 0.04 0.97 ± 0.01 1.00 ± 0.00 0.58 ± 0.03 
+
+DPL + CDe 1.00 ± 0.00 75 .06 ± 38 .35 0.90 ± 0.04 1.00 ± 0.00 3.71 ± 0.65 0.96 ± 0.02 
+
+DPL + RPB 0.78 ± 0.06 75 .06 ± 38 .35 0.90 ± 0.04 1.00 ± 0.00 2.31 ± 0.16 0.87 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 53 .49 ± 25 .93 0.83 ± 0.03 1.00 ± 0.00 2.31 ± 0.16 0.87 ± 0.01 
+
+Table 10: Results for DPL (with concept supervision) on CEB .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.62 ± 0.01 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 0.20 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + TAb 1.00 ± 0.00 1024 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + CO 0.30 ± 0.01 349 .70 ± 34 .12 0.91 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.62 ± 0.01 
+
+LTN + CDe 1.00 ± 0.00 349 .70 ± 34 .12 0.91 ± 0.02 1.00 ± 0.00 4.31 ± 0.18 0.99 ± 0.01 
+
+LTN + RPB 1.00 ± 0.00 349 .70 ± 34 .12 0.91 ± 0.02 1.00 ± 0.00 4.31 ± 0.18 0.99 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 349 .70 ± 34 .12 0.91 ± 0.02 1.00 ± 0.00 4.31 ± 0.18 0.99 ± 0.01 
+
+Table 11: Results for LTN (without concept supervision) on CEB .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.24 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.63 ± 0.01 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.24 ± 0.01 0.20 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + TAb 1.00 ± 0.00 1024 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + CO 0.41 ± 0.02 36 .19 ± 4.07 0.90 ± 0.02 0.98 ± 0.01 1.00 ± 0.00 0.63 ± 0.01 
+
+LTN + CDe 1.00 ± 0.00 36 .19 ± 4.07 0.90 ± 0.02 1.00 ± 0.00 3.13 ± 0.13 0.96 ± 0.01 
+
+LTN + RPB 1.00 ± 0.00 36 .19 ± 4.07 0.90 ± 0.02 1.00 ± 0.00 3.13 ± 0.13 0.96 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 36 .05 ± 4.08 0.90 ± 0.02 1.00 ± 0.00 3.13 ± 0.13 0.96 ± 0.01 
+
+Table 12: Results for LTN (with concept supervision) on CEB .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.45 ± 0.09 1.00 ± 0.00 1.00 ± 0.00 0.73 ± 0.01 
+
+DPL + TO 1.00 ± 0.00 1.00 ± 0.00 0.45 ± 0.09 0.61 ± 0.08 1.67 ± 0.21 0.90 ± 0.03 
+
+DPL + TAb 1.00 ± 0.00 5.05 ± 0.92 0.90 ± 0.03 1.00 ± 0.00 1.67 ± 0.21 0.90 ± 0.03 
+
+DPL + CO 0.28 ± 0.06 6.85 ± 2.53 0.91 ± 0.02 1.00 ± 0.01 1.00 ± 0.00 0.73 ± 0.01 
+
+DPL + CDe 1.00 ± 0.00 6.85 ± 2.53 0.91 ± 0.02 1.00 ± 0.00 3.50 ± 0.49 0.99 ± 0.01 
+
+DPL + RPB 0.52 ± 0.12 6.85 ± 2.53 0.91 ± 0.02 1.00 ± 0.00 1.66 ± 0.22 0.90 ± 0.04 
+
+DPL + COCOCO 1.00 ± 0.00 3.36 ± 0.80 0.84 ± 0.04 1.00 ± 0.00 1.66 ± 0.22 0.90 ± 0.04 
+
+Table 13: Results for DPL (without concept supervision) on CHX .37 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.47 ± 0.11 1.00 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+DPL + TO 1.00 ± 0.00 1.00 ± 0.00 0.47 ± 0.11 0.62 ± 0.07 1.63 ± 0.19 0.89 ± 0.03 
+
+DPL + TAb 1.00 ± 0.00 4.96 ± 0.86 0.89 ± 0.03 1.00 ± 0.00 1.63 ± 0.19 0.89 ± 0.03 
+
+DPL + CO 0.31 ± 0.04 5.30 ± 1.01 0.91 ± 0.03 0.99 ± 0.01 1.00 ± 0.00 0.72 ± 0.01 
+
+DPL + CDe 1.00 ± 0.00 5.30 ± 1.01 0.91 ± 0.03 1.00 ± 0.00 3.19 ± 0.30 0.98 ± 0.01 
+
+DPL + RPB 0.55 ± 0.05 5.30 ± 1.01 0.91 ± 0.03 1.00 ± 0.00 1.60 ± 0.18 0.88 ± 0.03 
+
+DPL + COCOCO 1.00 ± 0.00 2.90 ± 0.56 0.83 ± 0.04 1.00 ± 0.00 1.60 ± 0.18 0.88 ± 0.03 
+
+Table 14: Results for DPL (with concept supervision) on CHX .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.45 ± 0.10 1.00 ± 0.00 1.00 ± 0.00 0.73 ± 0.02 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.45 ± 0.10 0.20 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + TAb 1.00 ± 0.00 16 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + CO 0.24 ± 0.05 7.58 ± 2.49 0.91 ± 0.02 0.99 ± 0.01 1.00 ± 0.00 0.73 ± 0.02 
+
+LTN + CDe 1.00 ± 0.00 7.58 ± 2.49 0.91 ± 0.02 1.00 ± 0.00 3.68 ± 0.44 0.98 ± 0.01 
+
+LTN + RPB 1.00 ± 0.00 7.58 ± 2.49 0.91 ± 0.02 1.00 ± 0.00 3.68 ± 0.44 0.98 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 7.54 ± 2.51 0.91 ± 0.02 1.00 ± 0.00 3.68 ± 0.44 0.98 ± 0.01 
+
+Table 15: Results for LTN (without concept supervision) on CHX .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.46 ± 0.09 1.00 ± 0.00 1.00 ± 0.00 0.74 ± 0.02 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.46 ± 0.09 0.20 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + TAb 1.00 ± 0.00 16 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 5.00 ± 0.00 1.00 ± 0.00 
+
+LTN + CO 0.26 ± 0.04 6.58 ± 1.64 0.92 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.74 ± 0.02 
+
+LTN + CDe 1.00 ± 0.00 6.58 ± 1.64 0.92 ± 0.01 1.00 ± 0.00 3.53 ± 0.35 0.99 ± 0.01 
+
+LTN + RPB 1.00 ± 0.00 6.58 ± 1.64 0.92 ± 0.01 1.00 ± 0.00 3.53 ± 0.35 0.99 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 6.56 ± 1.66 0.92 ± 0.01 1.00 ± 0.00 3.53 ± 0.35 0.99 ± 0.01 
+
+Table 16: Results for LTN (with concept supervision) on CHX .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 0.97 ± 0.05 1.00 ± 0.00 0.34 ± 0.02 0.97 ± 0.05 1.00 ± 0.00 0.66 ± 0.00 
+
+DPL + TO 0.99 ± 0.01 1.00 ± 0.00 0.34 ± 0.02 0.84 ± 0.05 1.83 ± 0.08 0.90 ± 0.01 
+
+DPL + TAb 1.00 ± 0.00 171 .66 ± 7.97 0.90 ± 0.01 1.00 ± 0.00 1.83 ± 0.08 0.90 ± 0.01 
+
+DPL + CO 0.77 ± 0.05 57 .60 ± 24 .96 0.97 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.66 ± 0.00 
+
+DPL + CDe 1.00 ± 0.00 57 .60 ± 24 .96 0.97 ± 0.01 1.00 ± 0.00 5.54 ± 0.98 0.78 ± 0.01 
+
+DPL + RPB 0.79 ± 0.05 57 .60 ± 24 .96 0.97 ± 0.01 1.00 ± 0.00 1.83 ± 0.08 0.90 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 45 .43 ± 19 .68 0.90 ± 0.01 1.00 ± 0.00 1.83 ± 0.08 0.90 ± 0.01 
+
+Table 17: Results for DPL (without concept supervision) on CIF10 .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.34 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.66 ± 0.00 
+
+DPL + TO 1.00 ± 0.00 1.00 ± 0.00 0.34 ± 0.01 0.88 ± 0.02 1.76 ± 0.06 0.90 ± 0.01 
+
+DPL + TAb 1.00 ± 0.00 164 .21 ± 5.73 0.90 ± 0.01 1.00 ± 0.00 1.76 ± 0.06 0.90 ± 0.01 
+
+DPL + CO 0.88 ± 0.02 20 .75 ± 2.33 0.93 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.66 ± 0.00 
+
+DPL + CDe 1.00 ± 0.00 20 .75 ± 2.33 0.93 ± 0.01 1.00 ± 0.00 2.89 ± 0.25 0.75 ± 0.00 
+
+DPL + RPB 0.91 ± 0.02 20 .75 ± 2.33 0.93 ± 0.01 1.00 ± 0.00 1.76 ± 0.06 0.90 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 18 .87 ± 2.12 0.88 ± 0.01 1.00 ± 0.00 1.76 ± 0.06 0.90 ± 0.01 
+
+Table 18: Results for DPL (with concept supervision) on CIF10 .38 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 0.98 ± 0.00 1.00 ± 0.00 0.13 ± 0.04 0.98 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.13 ± 0.04 0.73 ± 0.05 3.09 ± 0.16 0.90 ± 0.01 
+
+LTN + TAb 1.00 ± 0.00 288 .11 ± 15 .71 0.90 ± 0.00 1.00 ± 0.00 3.09 ± 0.16 0.90 ± 0.01 
+
+LTN + CO 0.84 ± 0.04 28 .83 ± 3.66 0.93 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 
+
+LTN + CDe 1.00 ± 0.00 28 .83 ± 3.66 0.93 ± 0.01 1.00 ± 0.00 3.15 ± 0.11 0.75 ± 0.01 
+
+LTN + RPB 0.94 ± 0.03 28 .83 ± 3.66 0.93 ± 0.01 1.00 ± 0.00 3.08 ± 0.17 0.90 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 27 .09 ± 2.77 0.88 ± 0.01 1.00 ± 0.00 3.08 ± 0.17 0.90 ± 0.01 
+
+Table 19: Results for LTN (without concept supervision) on CIF10 .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 0.98 ± 0.00 1.00 ± 0.00 0.31 ± 0.01 0.98 ± 0.00 1.00 ± 0.00 0.58 ± 0.01 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.31 ± 0.01 0.77 ± 0.03 2.06 ± 0.14 0.89 ± 0.01 
+
+LTN + TAb 1.00 ± 0.00 196 .29 ± 13 .29 0.90 ± 0.01 1.00 ± 0.00 2.06 ± 0.14 0.89 ± 0.01 
+
+LTN + CO 0.85 ± 0.03 19 .65 ± 2.28 0.93 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.58 ± 0.01 
+
+LTN + CDe 1.00 ± 0.00 19 .65 ± 2.28 0.93 ± 0.01 1.00 ± 0.00 3.12 ± 0.14 0.75 ± 0.01 
+
+LTN + RPB 0.93 ± 0.02 19 .65 ± 2.28 0.93 ± 0.01 1.00 ± 0.00 2.06 ± 0.14 0.89 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 18 .22 ± 1.79 0.88 ± 0.01 1.00 ± 0.00 2.06 ± 0.14 0.89 ± 0.01 
+
+Table 20: Results for LTN (with concept supervision) on CIF10 .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.41 ± 0.03 1.00 ± 0.00 1.00 ± 0.00 0.78 ± 0.00 
+
+DPL + TO 0.92 ± 0.01 1.00 ± 0.00 0.41 ± 0.03 1.00 ± 0.00 1.24 ± 0.01 0.91 ± 0.01 
+
+DPL + TAb 1.00 ± 0.00 116 .77 ± 0.97 0.91 ± 0.01 1.00 ± 0.00 1.24 ± 0.01 0.91 ± 0.01 
+
+DPL + CO 0.97 ± 0.03 8.11 ± 2.22 0.93 ± 0.01 0.98 ± 0.01 1.00 ± 0.00 0.78 ± 0.00 
+
+DPL + CDe 1.00 ± 0.00 8.11 ± 2.22 0.93 ± 0.01 1.00 ± 0.00 2.06 ± 0.26 0.76 ± 0.00 
+
+DPL + RPB 0.92 ± 0.03 8.11 ± 2.22 0.93 ± 0.01 1.00 ± 0.00 1.23 ± 0.02 0.90 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 7.31 ± 1.77 0.86 ± 0.01 1.00 ± 0.00 1.23 ± 0.02 0.90 ± 0.01 
+
+Table 21: Results for DPL (without concept supervision) on RIV10 .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.43 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.80 ± 0.00 
+
+DPL + TO 0.91 ± 0.01 1.00 ± 0.00 0.43 ± 0.02 1.00 ± 0.00 1.21 ± 0.02 0.90 ± 0.01 
+
+DPL + TAb 1.00 ± 0.00 114 .20 ± 1.38 0.90 ± 0.01 1.00 ± 0.00 1.21 ± 0.02 0.90 ± 0.01 
+
+DPL + CO 0.99 ± 0.00 6.33 ± 0.65 0.92 ± 0.01 0.97 ± 0.01 1.00 ± 0.00 0.80 ± 0.00 
+
+DPL + CDe 1.00 ± 0.00 6.33 ± 0.65 0.92 ± 0.01 1.00 ± 0.00 1.71 ± 0.10 0.74 ± 0.01 
+
+DPL + RPB 0.94 ± 0.01 6.33 ± 0.65 0.92 ± 0.01 1.00 ± 0.00 1.20 ± 0.02 0.89 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 5.85 ± 0.62 0.84 ± 0.01 1.00 ± 0.00 1.20 ± 0.02 0.89 ± 0.01 
+
+Table 22: Results for DPL (with concept supervision) on RIV10 .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 0.99 ± 0.02 1.00 ± 0.00 0.14 ± 0.11 0.99 ± 0.02 1.00 ± 0.00 0.56 ± 0.12 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.14 ± 0.11 0.90 ± 0.04 2.15 ± 0.38 0.90 ± 0.02 
+
+LTN + TAb 1.00 ± 0.00 201 .12 ± 33 .62 0.90 ± 0.02 1.00 ± 0.00 2.15 ± 0.38 0.90 ± 0.02 
+
+LTN + CO 0.93 ± 0.03 12 .00 ± 1.78 0.92 ± 0.01 0.98 ± 0.01 1.00 ± 0.00 0.56 ± 0.12 
+
+LTN + CDe 1.00 ± 0.00 12 .00 ± 1.78 0.92 ± 0.01 1.00 ± 0.00 1.97 ± 0.08 0.74 ± 0.01 
+
+LTN + RPB 0.99 ± 0.00 12 .00 ± 1.78 0.92 ± 0.01 1.00 ± 0.00 2.05 ± 0.30 0.89 ± 0.02 
+
+LTN + COCOCO 1.00 ± 0.00 11 .65 ± 1.74 0.85 ± 0.01 1.00 ± 0.00 2.05 ± 0.30 0.89 ± 0.02 
+
+Table 23: Results for LTN (without concept supervision) on RIV10 .39 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 0.99 ± 0.00 1.00 ± 0.00 0.41 ± 0.02 0.99 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+LTN + TO 0.97 ± 0.01 1.00 ± 0.00 0.41 ± 0.02 0.99 ± 0.01 1.35 ± 0.03 0.90 ± 0.01 
+
+LTN + TAb 1.00 ± 0.00 128 .86 ± 2.72 0.90 ± 0.01 1.00 ± 0.00 1.35 ± 0.03 0.90 ± 0.01 
+
+LTN + CO 0.97 ± 0.01 9.41 ± 0.72 0.92 ± 0.01 0.98 ± 0.01 1.00 ± 0.00 0.72 ± 0.01 
+
+LTN + CDe 1.00 ± 0.00 9.41 ± 0.72 0.92 ± 0.01 1.00 ± 0.00 1.84 ± 0.12 0.75 ± 0.01 
+
+LTN + RPB 0.96 ± 0.01 9.41 ± 0.72 0.92 ± 0.01 1.00 ± 0.00 1.33 ± 0.02 0.89 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 8.85 ± 0.68 0.85 ± 0.01 1.00 ± 0.00 1.33 ± 0.02 0.89 ± 0.01 
+
+Table 24: Results for LTN (with concept supervision) on RIV10 .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.13 ± 0.08 1.00 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+DPL + TO 1.00 ± 0.00 1.00 ± 0.00 0.13 ± 0.08 0.65 ± 0.07 1.55 ± 0.18 0.90 ± 0.02 
+
+DPL + TAb 1.00 ± 0.00 12 .13 ± 1.37 0.90 ± 0.02 1.00 ± 0.00 1.55 ± 0.18 0.90 ± 0.02 
+
+DPL + CO 0.08 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+DPL + CDe 1.00 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 19 .00 ± 0.00 1.00 ± 0.00 
+
+DPL + RPB 0.12 ± 0.01 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.55 ± 0.18 0.90 ± 0.02 
+
+DPL + COCOCO 1.00 ± 0.00 12 .13 ± 1.37 0.90 ± 0.02 1.00 ± 0.00 1.55 ± 0.18 0.90 ± 0.02 
+
+Table 25: Results for DPL (without concept supervision) on MN-EO .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + TAb 1.00 ± 0.00 8.05 ± 0.05 0.94 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + CO 0.08 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + CDe 1.00 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 19 .00 ± 0.00 1.00 ± 0.00 
+
+LTN + RPB 0.08 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 8.05 ± 0.05 0.94 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+Table 26: Results for LTN (without concept supervision) on MN-EO .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 1.00 ± 0.00 1.00 ± 0.00 0.99 ± 0.01 
+
+DPL + TO 0.89 ± 0.05 1.00 ± 0.00 0.50 ± 0.03 1.00 ± 0.00 0.89 ± 0.05 0.89 ± 0.05 
+
+DPL + TAb 1.00 ± 0.00 2.20 ± 0.14 0.89 ± 0.05 1.00 ± 0.00 0.89 ± 0.05 0.89 ± 0.05 
+
+DPL + CO 0.10 ± 0.00 25 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.99 ± 0.01 
+
+DPL + CDe 1.00 ± 0.00 25 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 9.00 ± 0.00 1.00 ± 0.00 
+
+DPL + RPB 0.09 ± 0.01 25 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.89 ± 0.05 0.89 ± 0.05 
+
+DPL + COCOCO 1.00 ± 0.00 2.20 ± 0.14 0.89 ± 0.05 1.00 ± 0.00 0.89 ± 0.05 0.89 ± 0.05 
+
+Table 27: Results for DPL (without concept supervision) on MN-H .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 1.00 ± 0.00 1.00 ± 0.00 0.83 ± 0.12 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 0.47 ± 0.46 5.80 ± 4.13 0.99 ± 0.02 
+
+LTN + TAb 1.00 ± 0.00 16 .00 ± 11 .62 0.99 ± 0.02 1.00 ± 0.00 5.80 ± 4.13 0.99 ± 0.02 
+
+LTN + CO 0.10 ± 0.01 19 .48 ± 1.70 0.87 ± 0.04 1.00 ± 0.00 1.00 ± 0.00 0.83 ± 0.12 
+
+LTN + CDe 1.00 ± 0.00 19 .48 ± 1.70 0.87 ± 0.04 1.00 ± 0.00 8.62 ± 0.24 1.00 ± 0.00 
+
+LTN + RPB 0.64 ± 0.46 19 .48 ± 1.70 0.87 ± 0.04 1.00 ± 0.00 5.60 ± 3.97 0.99 ± 0.02 
+
+LTN + COCOCO 1.00 ± 0.00 12 .77 ± 9.35 0.86 ± 0.04 1.00 ± 0.00 5.60 ± 3.97 0.99 ± 0.02 
+
+Table 28: Results for LTN (without concept supervision) on MN-H .40 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.03 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.99 ± 0.00 
+
+DPL + TO 0.90 ± 0.01 1.00 ± 0.00 0.03 ± 0.02 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + TAb 1.00 ± 0.00 45 .19 ± 0.35 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + CO 0.81 ± 0.22 46 .81 ± 36 .72 0.93 ± 0.05 1.00 ± 0.00 1.00 ± 0.00 0.99 ± 0.00 
+
+DPL + CDe 1.00 ± 0.00 46 .81 ± 36 .72 0.93 ± 0.05 1.00 ± 0.00 1.34 ± 0.46 1.00 ± 0.00 
+
+DPL + RPB 0.73 ± 0.19 46 .81 ± 36 .72 0.93 ± 0.05 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 27 .92 ± 12 .05 0.84 ± 0.05 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+Table 29: Results for DPL (without concept supervision) on MN-SP .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.03 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + TO 1.00 ± 0.00 1.00 ± 0.00 0.03 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + TAb 1.00 ± 0.00 50 .00 ± 0.00 0.98 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + CO 0.50 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + CDe 1.00 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 2.00 ± 0.00 1.00 ± 0.00 
+
+LTN + RPB 0.50 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + COCOCO 1.00 ± 0.00 50 .00 ± 0.00 0.98 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+Table 30: Results for LTN (without concept supervision) on MN-SP .
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE 1 − E[ ˜β] COV . CONST . SIZE 1 − E[ ˜ α] COV .Concept-fixed 5 3.37 ± 0.30 0.90 ± 0.00 0.86 ± 0.02 — 1.43 ± 0.08 — —Label-fixed — 2.42 ± 0.45 — — 2 1.72 ± 0.12 0.82 ± 0.04 0.90 ± 0.02 
+
+Both-fixed 5 3.57 ± 0.73 0.77 ± 0.13 0.89 ± 0.03 2 1.80 ± 0.06 0.82 ± 0.04 0.91 ± 0.01 
+
+Table 31: E-prediction theoretical coverage target ( 1 − E[α], 1 − E[β], respectively) results on CHX , averaged over 10 seeds ( mean ± std ). C ONST . is the imposed set-size constraint (– if unconstrained); S IZE is the average prediction-set size; C OV . is the empirical coverage. 0.70 0.75 0.80 0.85 0.90 0.95 1.00 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+> Frequency
+
+Empirical 1 given | rev (x)| 2
+
+> 1
+> Th. ±1 std (0.039)
+> Th.: 0.823
+> Em.: 0.902 ± 0.021
+> Em.: 0.902 ± 0.021
+
+(a) Label-fixed: |Υrev (x)| ≤ 20.75 0.80 0.85 0.90 0.95 1.00 
+
+1
+
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> Frequency
+
+Empirical 1 given | rev (x)| 5 
+
+> 1
+> Th. ±1 std (0.000)
+> Th.: 0.900
+> Em.: 0.855 ± 0.019
+> Em.: 0.855 ± 0.019
+
+(b) Concept-fixed: |Γrev (x)| ≤ 5
+
+Figure 3: E-conformal coverage under single-sided constraints on CHX averaged over 10 seeds. Empirical coverage closely tracks the theoretical guarantee in both regimes. 41 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+> MN-Add
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+DPL + RPB □ 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + COCOCO □ 1.00 ± 0.00 0.99 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+> MN-H
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 1.00 ± 0.00 1.00 ± 0.00 0.99 ± 0.01 
+
+DPL + RPB □ 0.09 ± 0.01 25 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.89 ± 0.05 0.89 ± 0.05 
+
+DPL + COCOCO □ 1.00 ± 0.00 2.20 ± 0.14 0.89 ± 0.05 1.00 ± 0.00 0.89 ± 0.05 0.89 ± 0.05 
+
+> MN-SP
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.03 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.99 ± 0.00 
+
+DPL + RPB □ 0.73 ± 0.19 46 .81 ± 36 .72 0.93 ± 0.05 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+DPL + COCOCO □ 1.00 ± 0.00 27 .92 ± 12 .05 0.84 ± 0.05 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+> MN-EO
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.13 ± 0.08 1.00 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+DPL + RPB □ 0.12 ± 0.01 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.55 ± 0.18 0.90 ± 0.02 
+
+DPL + COCOCO □ 1.00 ± 0.00 12 .13 ± 1.37 0.90 ± 0.02 1.00 ± 0.00 1.55 ± 0.18 0.90 ± 0.02 
+
+> CHX
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.47 ± 0.11 1.00 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+DPL + RPB 0.55 ± 0.05 5.30 ± 1.01 0.91 ± 0.03 1.00 ± 0.00 1.60 ± 0.18 0.88 ± 0.03 
+
+DPL + COCOCO 1.00 ± 0.00 2.90 ± 0.56 0.83 ± 0.04 1.00 ± 0.00 1.60 ± 0.18 0.88 ± 0.03 
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.45 ± 0.09 1.00 ± 0.00 1.00 ± 0.00 0.73 ± 0.01 
+
+DPL + RPB □ 0.52 ± 0.12 6.85 ± 2.53 0.91 ± 0.02 1.00 ± 0.00 1.66 ± 0.22 0.90 ± 0.04 
+
+DPL + COCOCO □ 1.00 ± 0.00 3.36 ± 0.80 0.84 ± 0.04 1.00 ± 0.00 1.66 ± 0.22 0.90 ± 0.04 
+
+> CIF10
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.34 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.66 ± 0.00 
+
+DPL + RPB 0.91 ± 0.02 20 .75 ± 2.33 0.93 ± 0.01 1.00 ± 0.00 1.76 ± 0.06 0.90 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 18 .87 ± 2.12 0.88 ± 0.01 1.00 ± 0.00 1.76 ± 0.06 0.90 ± 0.01 
+
+DPL □ 0.97 ± 0.05 1.00 ± 0.00 0.34 ± 0.02 0.97 ± 0.05 1.00 ± 0.00 0.66 ± 0.00 
+
+DPL + RPB □ 0.79 ± 0.05 57 .60 ± 24 .96 0.97 ± 0.01 1.00 ± 0.00 1.83 ± 0.08 0.90 ± 0.01 
+
+DPL + COCOCO □ 1.00 ± 0.00 45 .43 ± 19 .68 0.90 ± 0.01 1.00 ± 0.00 1.83 ± 0.08 0.90 ± 0.01 
+
+> RIV10
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.43 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.80 ± 0.00 
+
+DPL + RPB 0.94 ± 0.01 6.33 ± 0.65 0.92 ± 0.01 1.00 ± 0.00 1.20 ± 0.02 0.89 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 5.85 ± 0.62 0.84 ± 0.01 1.00 ± 0.00 1.20 ± 0.02 0.89 ± 0.01 
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.41 ± 0.03 1.00 ± 0.00 1.00 ± 0.00 0.78 ± 0.00 
+
+DPL + RPB □ 0.92 ± 0.03 8.11 ± 2.22 0.93 ± 0.01 1.00 ± 0.00 1.23 ± 0.02 0.90 ± 0.01 
+
+DPL + COCOCO □ 1.00 ± 0.00 7.31 ± 1.77 0.86 ± 0.01 1.00 ± 0.00 1.23 ± 0.02 0.90 ± 0.01 
+
+> CEB
+
+DPL 1.00 ± 0.00 1.00 ± 0.00 0.18 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.58 ± 0.03 
+
+DPL + RPB 0.78 ± 0.06 75 .06 ± 38 .35 0.90 ± 0.04 1.00 ± 0.00 2.31 ± 0.16 0.87 ± 0.01 
+
+DPL + COCOCO 1.00 ± 0.00 53 .49 ± 25 .93 0.83 ± 0.03 1.00 ± 0.00 2.31 ± 0.16 0.87 ± 0.01 
+
+DPL □ 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.61 ± 0.01 
+
+DPL + RPB □ 0.74 ± 0.27 907 .88 ± 76 .19 0.97 ± 0.02 1.00 ± 0.00 3.59 ± 1.49 0.94 ± 0.06 
+
+DPL + COCOCO □ 1.00 ± 0.00 670 .15 ± 252 .46 0.92 ± 0.06 1.00 ± 0.00 3.59 ± 1.49 0.94 ± 0.06 
+
+Table 32: Full results over the 8 datasets for DPL . □ indicates no concept supervision. CIFAR-10 
+
+cs=0.0 
+
+CIFAR-10 
+
+cs=1.0 
+
+RIVAL-10 
+
+cs=0.0 
+
+RIVAL-10 
+
+cs=1.0 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+> Probability
+
+Pr( c * c * ab )
+
+Model 
+
+DPL 
+
+LTN 
+
+CIFAR-10 
+
+cs=0.0 
+
+CIFAR-10 
+
+cs=1.0 
+
+RIVAL-10 
+
+cs=0.0 
+
+RIVAL-10 
+
+cs=1.0 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+0.07 
+
+> Probability
+
+Pr( y * y * de )
+
+Model 
+
+DPL 
+
+LTN 
+
+Joint Failure Correction Terms 
+
+Figure 4: Joint failure probabilities on CIF10 and RIV10 . Even if low, this estimate contributes to tightening the lower bound in Proposition 4.2 and Proposition C.10. 42 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+CONCEPTS LABELS 
+
+METHOD CONST . SIZE COV . CONST . SIZE COV .
+
+> MN-Add
+
+LTN □ 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.97 ± 0.00 
+
+LTN + RPB □ 1.00 ± 0.00 1.00 ± 0.00 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+LTN + COCOCO □ 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 1.00 ± 0.00 0.90 ± 0.01 0.90 ± 0.01 
+
+> MN-H
+
+LTN □ 1.00 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 1.00 ± 0.00 1.00 ± 0.00 0.83 ± 0.12 
+
+LTN + RPB □ 0.64 ± 0.46 19 .48 ± 1.70 0.87 ± 0.04 1.00 ± 0.00 5.60 ± 3.97 0.99 ± 0.02 
+
+LTN + COCOCO □ 1.00 ± 0.00 12 .77 ± 9.35 0.86 ± 0.04 1.00 ± 0.00 5.60 ± 3.97 0.99 ± 0.02 
+
+> MN-SP
+
+LTN □ 1.00 ± 0.00 1.00 ± 0.00 0.03 ± 0.02 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + RPB □ 0.50 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+LTN + COCOCO □ 1.00 ± 0.00 50 .00 ± 0.00 0.98 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.98 ± 0.00 
+
+> MN-EO
+
+LTN □ 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + RPB □ 0.08 ± 0.00 100 .00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+LTN + COCOCO □ 1.00 ± 0.00 8.05 ± 0.05 0.94 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.94 ± 0.01 
+
+> CHX
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.46 ± 0.09 1.00 ± 0.00 1.00 ± 0.00 0.74 ± 0.02 
+
+LTN + RPB 1.00 ± 0.00 6.58 ± 1.64 0.92 ± 0.01 1.00 ± 0.00 3.53 ± 0.35 0.99 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 6.56 ± 1.66 0.92 ± 0.01 1.00 ± 0.00 3.53 ± 0.35 0.99 ± 0.01 
+
+LTN □ 1.00 ± 0.00 1.00 ± 0.00 0.45 ± 0.10 1.00 ± 0.00 1.00 ± 0.00 0.73 ± 0.02 
+
+LTN + RPB □ 1.00 ± 0.00 7.58 ± 2.49 0.91 ± 0.02 1.00 ± 0.00 3.68 ± 0.44 0.98 ± 0.01 
+
+LTN + COCOCO □ 1.00 ± 0.00 7.54 ± 2.51 0.91 ± 0.02 1.00 ± 0.00 3.68 ± 0.44 0.98 ± 0.01 
+
+> CIF10
+
+LTN 0.98 ± 0.00 1.00 ± 0.00 0.31 ± 0.01 0.98 ± 0.00 1.00 ± 0.00 0.58 ± 0.01 
+
+LTN + RPB 0.93 ± 0.02 19 .65 ± 2.28 0.93 ± 0.01 1.00 ± 0.00 2.06 ± 0.14 0.89 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 18 .22 ± 1.79 0.88 ± 0.01 1.00 ± 0.00 2.06 ± 0.14 0.89 ± 0.01 
+
+LTN □ 0.98 ± 0.00 1.00 ± 0.00 0.13 ± 0.04 0.98 ± 0.00 1.00 ± 0.00 0.50 ± 0.03 
+
+LTN + RPB □ 0.94 ± 0.03 28 .83 ± 3.66 0.93 ± 0.01 1.00 ± 0.00 3.08 ± 0.17 0.90 ± 0.01 
+
+LTN + COCOCO □ 1.00 ± 0.00 27 .09 ± 2.77 0.88 ± 0.01 1.00 ± 0.00 3.08 ± 0.17 0.90 ± 0.01 
+
+> RIV10
+
+LTN 0.99 ± 0.00 1.00 ± 0.00 0.41 ± 0.02 0.99 ± 0.00 1.00 ± 0.00 0.72 ± 0.01 
+
+LTN + RPB 0.96 ± 0.01 9.41 ± 0.72 0.92 ± 0.01 1.00 ± 0.00 1.33 ± 0.02 0.89 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 8.85 ± 0.68 0.85 ± 0.01 1.00 ± 0.00 1.33 ± 0.02 0.89 ± 0.01 
+
+LTN □ 0.99 ± 0.02 1.00 ± 0.00 0.14 ± 0.11 0.99 ± 0.02 1.00 ± 0.00 0.56 ± 0.12 
+
+LTN + RPB □ 0.99 ± 0.00 12 .00 ± 1.78 0.92 ± 0.01 1.00 ± 0.00 2.05 ± 0.30 0.89 ± 0.02 
+
+LTN + COCOCO □ 1.00 ± 0.00 11 .65 ± 1.74 0.85 ± 0.01 1.00 ± 0.00 2.05 ± 0.30 0.89 ± 0.02 
+
+> CEB
+
+LTN 1.00 ± 0.00 1.00 ± 0.00 0.24 ± 0.01 1.00 ± 0.00 1.00 ± 0.00 0.63 ± 0.01 
+
+LTN + RPB 1.00 ± 0.00 36 .19 ± 4.07 0.90 ± 0.02 1.00 ± 0.00 3.13 ± 0.13 0.96 ± 0.01 
+
+LTN + COCOCO 1.00 ± 0.00 36 .05 ± 4.08 0.90 ± 0.02 1.00 ± 0.00 3.13 ± 0.13 0.96 ± 0.01 
+
+LTN □ 1.00 ± 0.00 1.00 ± 0.00 0.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.62 ± 0.01 
+
+LTN + RPB □ 1.00 ± 0.00 349 .70 ± 34 .12 0.91 ± 0.02 1.00 ± 0.00 4.31 ± 0.18 0.99 ± 0.01 
+
+LTN + COCOCO □ 1.00 ± 0.00 349 .70 ± 34 .12 0.91 ± 0.02 1.00 ± 0.00 4.31 ± 0.18 0.99 ± 0.01 
+
+Table 33: Full results over the 8 datasets for LTN . □ indicates no concept supervision. | rev (x)| 2 | rev (x)| 5 | rev (x)| 2 | rev (x)| 5
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> Average set size
+
+Average | rev (x)| and | rev (x)| 
+
+Label set size 
+
+Concept set size 
+
+Figure 5: Average prediction-set sizes across constraint regimes; error bars show ±1 std across 10 seeds. 43 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0   
+
+> ab
+> 0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Coverage bound  (1  ) ab
+> Fixed = 0.1
+> = 0.2
+> = 0.15
+> = 0.1
+> = 0.05
+> 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> ab
+> Fixed = 0.1
+> = 0.2
+> = 0.15
+> = 0.1
+> = 0.05
+
+Figure 6: Synthetic experiment showing (1 − α)δab − β for varying α (left) and β (right) starting at nominal guarantee of 1−α = 1 −β = 0 .9. The bound decrease linearly depending on the quality of the inference layer g.
+
+F.1 Estimating δab and δde 
+
+We estimate the soundness gaps empirically as 
+
+ˆδde = 1
+
+|D test |
+
+X
+
+> (x,c∗,y∗)∈D test
+
+1{g†(c∗) = y∗}, (139) 
+
+ˆδab = 1
+
+|D test |
+
+X
+
+> (x,c∗,y∗)∈D test
+
+1{c∗ ∈ g−† (y∗)}. (140) where Dtest is the test set. RIV10 and CIF10 are constructed such that 4 of 10 classes share concepts with another class, so δde = 0 .8 is a structural property of the dataset by design.                                                   
+
+> DATASET ˆδab ˆδde
+> MN-Add 1.00 ±0.00 1.00 ±0.00
+> MN-H 1.00 ±0.00 1.00 ±0.00
+> MN-SP 1.00 ±0.00 1.00 ±0.00
+> MN-EO 1.00 ±0.00 1.00 ±0.00
+> CHX 1.00 ±0.00 1.00 ±0.00
+> CEB 1.00 ±0.00 1.00 ±0.00
+> CIF10 1.00 ±0.00 0.79 ±0.01
+> RIV10 1.00 ±0.00 0.79 ±0.01
+
+Table 34: Empirical estimates of δab and δde on the test set, averaged over 10 seeds (mean ± std). 
+
+F.2 Product vs. Average e-value Aggregation: when Assumptions do not hold 
+
+As an additional ablation, we examine what happens when there is data leakage in the calibration process, as well as when we employ the product as an e-value aggregator. Specifically, we used the entire test set for evaluation. In this case, leakage occurs because the model is selected via early stopping on the validation set and is therefore influenced by it, which violates the exchangeability assumption. We evaluate COCOCO ∗ on CHX , fixing the label and concept budgets to 2 and 5, respectively, and using product 
+
+as the e-value aggregator. This approach is theoretically justified only under the assumption of conditional independence of the per-concept e-values given (x, Dcal ) – an assumption that does not hold in practice. For this analysis, we performed an extensive search over the space of α and β – the label and concept miscoverage rates, respectively – and ran 100 bootstrap iterations. Specifically, we analyze the following combinations: 
+
+({0.10 , 0.11 , . . . , 0.30 }, {0.10 , 0.30 , 0.31 , . . . , 0.60 }). Surprisingly, despite these violations, COCOCO ∗ exhibit stable behavior on the test set. As shown in Fig. 8, the average set sizes are 1.74 for labels and 4.97 for concepts, both strictly below their respective budgets. The empirical coverages are 0.91 and 0.89 , substantially exceeding the theoretical targets 1 − E[˜ α] = 0 .77 and 1 − E[ ˜β] = 0 .67 (see Fig. 7). 44 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00         
+
+> 1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Frequency
+> Empirical 1given |rev (x)| 2|rev (x)| 5
+> 1
+> Th. ±1 std (0.03)
+> Th.: 0.77
+> Em.: 0.91 ± 0.02
+> Em.: 0.91 ± 0.02
+
+(a) Label coverage 0.5 0.6 0.7 0.8 0.9 1.0          
+
+> 1
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Frequency
+> Empirical 1given |rev (x)| 2|rev (x)| 5
+> 1
+> Th. ±1 std (0.07)
+> Th.: 0.67
+> Em.: 0.89 ± 0.03
+> Em.: 0.89 ± 0.03
+
+(b) Concept coverage 
+
+Figure 7: COCOCO ∗ on CHX with DPL under fixed regime |Υrev (x)| ≤ 2 ∧ | Γrev (x)| ≤ 5, bootstrapped over 100 
+
+calibration resamples and averaged across 10 seeds. Empirical coverage (orange) exceeds the theoretical target (green), while sizes remain strictly below the imposed budgets. Results using product as e-value aggregator. | rev (x)| 2 | rev (x)| 5 | rev (x)| 2 | rev (x)| 5
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> Average set size
+
+Average | rev (x)| and | rev (x)| 
+
+> Label set size
+> Concept set size
+
+Figure 8: Average set-sizes using COCOCO ∗ and product as e-value aggregator. 
+
+F.3 The Full Spectrum of NeSy Conformal Prediction 
+
+In the main text we compared COCOCO only against RPB , the strongest competitor. Here we report the full ablation against the four natural conformalization strategies introduced in Section B: TO , TAb , CO , and CDe .The goal is threefold: (i) confirm that the two-sided joint revision of COCOCO is genuinely necessary and that no simpler one-sided strategy achieves the same trade-off across D1 –D3 ; (ii) quantify the failure modes of each baseline across the eight data sets; and (iii) ground the design choices of COCOCO empirically. The full numerical results are Tables 7 to 29; we summarise the qualitative results below. Throughout, the nominal coverage targets are 1 − α = 1 − β = 0 .9.
+
+TO offers conformalized labels but uncalibrated, inconsistent concepts . TO applies CP to the label distribution pθ (Y | x, K) directly. As predicted by Eq. (4), label coverage hits the nominal 1 − α = 0 .9
+
+target on every data set (e.g., 0.90 on MN-Add , 0.89 on CHX with DPL , 0.90 on RIV10 , CEB , and CIF10 ). On the concept side, however, TO returns the single argmax concept (size 1), so concept coverage collapses to the base concept accuracy of the underlying NeSy-CBM: as low as 0.18 on CEB (DPL , supervised), 0.00 on 
+
+CEB unsupervised ( DPL and LTN ), 0.00 and 0.13 on MN-EO (LTN and DPL , respectively) and 0.03 on MN-SP 
+
+(DPL and LTN ). Worse, label consistency drops well below 1 whenever the conformal label set is non-trivial: e.g., 0.20 on CHX (LTN ), 0.20 -0.42 on CEB , and 0.62 on CHX (DPL , supervised). TO thus violates both D1 
+
+(consistency) and D2 (concept-side coverage). 
+
+CO achieves conformalized concepts but uncalibrated labels . CO applies CP at the concept level using the product construction of Eq. (5) with Bonferroni’s correction (Corollary C.4). Concept coverage matches the target on most data sets ( 0.87 -1.00 ). However, CO returns the single argmax label, so the label side inherits the base label accuracy. Label consistency drops: 0.08 -0.40 on MN-EO , MN-H , CEB , and CHX . Bonferroni’s correction (Corollary C.4) inflates the concept set as the number of concepts grows: 75 .06 on CEB (DPL ,45 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+supervised), 57 .60 on CIF10 (DPL , unsupervised), 100 .00 , the entire product space, on MN-SP (LTN ) and 
+
+MN-EO (LTN and DPL ). CO thus partially satisfies D2 on the concept side but fails both D1 and D3 .
+
+TAb achieves consistency and coverage but not conciseness . TAb constructs a concept set via abduction, 
+
+Γab (x) = g−† (Υ α(x)) . This recovers both coverage and consistency at the concept level by construction: on every data set, TAb attains high concept coverage ≥ 0.89 and 1.00 consistency by construction. The caveat is concept-size. Because abduction indiscriminately includes every concept vector consistent with some label in Υα(x), the resulting set is an order of magnitude larger than any competitor: 504 .38 and 742 .55 on CEB 
+
+for DPL , supervised and unsupervised setting respectively, 1024 for LTN instead (the entire concept space), 
+
+171 .66 and 288 .11 on CIF10 for DPL and LTN unsupervised, 2.20 -50 .00 on the MNIST variants. TAb therefore satisfies D1 –D2 on the concept side but fails D3 dramatically. 
+
+CDe achieves consistency but inflated label sets . CDe constructs a label set by deducing g†(Γ β (x)) from the concept set. It achieves both label and concept coverage near the nominal level and 1.00 consistency by construction (Proposition 3.3). The failure mode is on the label side: the deduced label set can be substantially larger than TO . On CEB (DPL , supervised), as an example, CDe produces label sets of size 3.71 vs. 2.41 of TO 
+
+and on MN-H (DPL ) 9.00 vs. 0.89 . And the same trend could be observed in every tested datasets. The issue is that every element of Γ×(x) – even low-probability ones – contributes a label to Υde (x). CDe is therefore a reasonable baseline when label size is not a binding constraint, but it inflates the label set failing D3 on the labels. 
+
+RPB closes label-side consistency but leaves the concept set inconsistent . RPB [ 49 ] revises the label set as Υrev (x) = Υ α(x) ∩ g†(Γ×(x)) , but leaves Γ×(x) untouched. It therefore produces identical label sets to COCOCO by construction, but underperforms on the concept side: concept consistency is typically 0.50 -
+
+0.94 across the eight data sets (vs. 1.00 for COCOCO ), and the concept set is at least as large as COCOCO ’s in every case where the two differ. Representative gaps include CEB (DPL , supervised), 0.78 → 1.00 consistency, 
+
+75 .06 → 53 .49 size, CHX (DPL, supervised) 0.55 → 1.00 , 5.30 → 2.90 , MN-EO (DPL ) 0.12 → 1.00 ,
+
+100 .00 → 12 .13 , MN-EO (LTN ) 0.08 → 1.00 , 100 .00 → 8.05 and MN-H (DPL ) 0.09 → 1.00 , 25 .00 → 2.20 .The takeaway is that revising only the label side leaves the concept side inconsistent with the deduced labels; the symmetric revision in COCOCO is what closes this gap and delivers D1 on both sides while preserving D2 .Summary. Each one-sided baseline achieves one desideratum at the cost of another: TO ensures label coverage but sacrifices concept coverage and consistency; CO ensures concept coverage but sacrifices consistency and concept conciseness; TAb ensures concept coverage and consistency but sacrifices concept conciseness; CDe 
+
+ensures consistency but sacrifices label conciseness; RPB ensures label consistency but leaves the concept set inflated and inconsistent. COCOCO is the only method to revise both sides symmetrically in a single deduction– abduction step (Proposition C.7) and to attain D1 , D2 , and D3 simultaneously across all eight data sets and both NeSy backbones. 
+
+F.4 Time Overhead Analysis 
+
+A key point of COCOCO is that the joint revision operator reaches a fixed point in one step (Proposition 4.1), making the additional cost a single computation of the abductive and deductive images, i.e., Γab (x) = 
+
+g−† (Υ α(x)) and Υde (x) = g†(Γ β (x)) .In practice, as shown by Section F.4 and Fig. 10, COCOCO is comparable in runtime to all other ablations. While it is naturally slower than TO and RPB since it requires additional revision steps, Proposition C.7 ensures it remains tractable thanks to the fixed-point theorem (Proposition C.7). Looking at the aggregate results in Section F.4, COCOCO exhibits an overhead of approximately 160% relative to DPL and LTN when considered individually in the unsupervised setting ( 100% horizontal line), and around 
+
+120% in the supervised setting. This is comparable to RPB (140% and 110% , respectively) and to CDe 
+
+(130 − 150% unsupervised), and only moderately higher than TO , which is the closest to the baseline. Looking at individual datasets in Fig. 10, the overhead of COCOCO is dataset-dependent, as it depends on the number of concepts and labels produced by the conformal method, but remains consistently bounded, except for CEB , where the number of concept combinations is 4× higher than the baseline due to the large number of generated concepts and labels. Notably, in CHX – our operational dataset – and RIV10 , the overhead is almost non-existent, demonstrating that in practical applications the overhead is negligible. In fact, COCOCO is well-suited to settings where a human is in the loop and the number of concepts and produced labels is close to one, precisely the scenario in which COCOCO excels. 46 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT 
+
+Furthermore, when employing COCOCO with e-values ( COCOCO ∗), as well as in other ablations, the computa-tional overhead is approximately 200 − 250% in the unsupervised setting and close to 150% in the supervised setting. This is worse than COCOCO even with the speed-up arising from avoiding the Bonferroni correction (Proposition C.9), as it eliminates the need to enumerate the full product set (Eq. (5)). COCOCO ∗, used in a p-value-like fashion, produces consistently larger concept and label sets, except in CHX and RIV10 . Nevertheless, unlike all other approaches, COCOCO ∗ can be fixed in size and thus in computational overhead. In fact, with appropriate choices of ˆβ and ˆα – namely those that keep the set size below a given threshold (as shown in Sec-tion 6) – we can cap the computational cost, since we know in advance the size of the instances on which the inference layer g will be applied. TO TAb CO CDe RPB COCOCO COCOCO*         
+
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Overhead (% of no-conformal baseline)
+> DPL averaged across all datasets
+> sup=false
+> sup=true
+> Baseline (100%)
+> TO TAb CO CDe RPB COCOCO COCOCO*
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> 350
+> 400
+> Overhead (% of no-conformal baseline)
+> LTN averaged across all datasets
+> sup=false
+> sup=true
+> Baseline (100%)
+
+Figure 9: Time overhead (%) relative to DPL (left) and LTN (right) baseline (dashed line, 100% ) for all methods (TO , TAb , CO , CDe , RPB , COCOCO and COCOCO ∗) averaged across all 10 seeds and all datasets. Blue shows the case where concept supervision was absent, and orange shows the case where it was present. Error bars indicate standard deviation. 47 Concise and Logically Consistent Conformal Sets for Neuro-Symbolic Concept-Based Models A P REPRINT TO 
+
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+MNIST-Add 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+25 
+
+50 
+
+75 
+
+100 
+
+125 
+
+150 
+
+175 
+
+> Overhead (%)
+
+MNIST-Half 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+MNIST-SumP 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+MNIST-EO 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overhead (%)
+
+CHX 
+
+sup=false 
+
+sup=true 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+> Overhead (%)
+
+RIVAL-10 
+
+sup=false 
+
+sup=true 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+CIFAR-10 
+
+sup=false 
+
+sup=true 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+500 
+
+> Overhead (%)
+
+CeBaB 
+
+sup=false 
+
+sup=true 
+
+DPL per-dataset inference overhead TO 
+
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+> Overhead (%)
+
+MNIST-Add 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+MNIST-Half 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+MNIST-SumP 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+MNIST-EO 
+
+sup=false 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+> Overhead (%)
+
+CHX 
+
+sup=false 
+
+sup=true 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+> Overhead (%)
+
+RIVAL-10 
+
+sup=false 
+
+sup=true 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Overhead (%)
+
+CIFAR-10 
+
+sup=false 
+
+sup=true 
+
+> TO
+> TAb
+> CO
+> CDe
+> RPB
+> COCOCO
+> COCOCO*
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+500 
+
+600 
+
+700 
+
+> Overhead (%)
+
+CeBaB 
+
+sup=false 
+
+sup=true 
+
+LTN per-dataset inference overhead 
+
+Figure 10: Time overhead (%) relative to the DPL and LTN baseline (dashed line, 100% ) for all methods ( TO ,
+
+TAb , CO , CDe , RPB , COCOCO , and COCOCO ∗), across all 8 datasets, averaged over 10 seeds. The top panel reports results with the DPL baseline, and the bottom panel with the LTN baseline. Blue indicates absence of concept supervision, while orange indicates its presence. Error bars denote standard deviation. 48

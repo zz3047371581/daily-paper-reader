@@ -1,0 +1,292 @@
+Title: Task-Routed Mixture-of-Experts with Cognitive Appraisal for Implicit Sentiment Analysis
+
+URL Source: https://arxiv.org/pdf/2605.20916v1
+
+Published Time: Thu, 21 May 2026 00:59:33 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+> 1
+
+# Task-Routed Mixture-of-Experts with Cognitive Appraisal for Implicit Sentiment Analysis 
+
+Yaping Chai, Haoran Xie, Joe S. Qin 
+
+Abstract —Implicit sentiment analysis is challenging because sentiment toward an aspect is often inferred from events rather than expressed through explicit opinion words. Existing models typically learn from the final polarity label, which provides limited guidance for reasoning about sentiment from the context. Motivated by cognitive appraisal theory, we propose an appraisal-aware multi-task learning (MTL) framework for implicit senti-ment analysis that provides polarity prediction with two comple-mentary auxiliary tasks: implicit sentiment detection and cog-nitive rationale generation. However, training several objectives with different targets and sharing a single backbone across tasks in MTL limits flexibility and can lead to task interference. To reduce interference among these related but distinct objectives, we adopt task-level mixture-of-experts models in which all tasks share a common set of experts, and task identity controls the sparse combination of these experts. Our method builds on an encoder-decoder architecture and replaces a subset of encoder and decoder blocks with these sparse mixtures. We use a task-conditioned router to select sparse expert mixtures for each task, and a task-separated routing objective to encourage different tasks to learn distinct expert-selection patterns. Experimental results show that our model outperforms recently proposed approaches, with strong gains on the implicit sentiment subset. Our code is available at https://github.com/yaping166/TRMoE-ISA. 
+
+Index Terms —Implicit sentiment analysis, mixture-of-experts, multi-task learning, large language models 
+
+I. I NTRODUCTION 
+
+Aspect-based sentiment analysis (ABSA) aims to identify the sentiment polarity expressed toward a specific aspect in a review and has become a central research direction for understanding fine-grained opinions [1]. However, much of the existing work assumes that sentiment evidence is provided in the text. Words such as “delicious”, “rude”, or “overpriced” often indicate the speaker’s evaluative intention. In contrast, the sentence “We waited forty minutes before anyone came to the table” does not contain an obvious negative adjective. However, it still expresses dissatisfaction with the service. This scenario, known as implicit sentiment analysis (ISA), is challenging because polarity cannot be inferred solely on explicit sentiment words [2]. 
+
+This work was supported by the Research Impact Fund by the Research Grants Council of Hong Kong (Project No. 130272); a grant from the Research Grants Council of the Hong Kong Special Administrative Region, China (R1015-23); the Faculty Research Grants (SDS24A8, SDS25A15, and SDS24A19), Interdisciplinary & Strategic Research Grant (ISRG252606), and the Direct Grants (DR25E8 and DR26F2) of Lingnan University, Hong Kong. 
+
+(Corresponding author: Haoran Xie.) 
+
+Yaping Chai, Haoran Xie, and Joe S. Qin are with the Division of Artificial Intelligence, Lingnan University, Hong Kong (e-mail: yapingchai@ln.hk; hrxie@ln.edu.hk; joeqin@ln.edu.hk). 
+
+Existing approaches have made progress by improving contextual representations [3] or aligning implicit expressions with explicit sentiment words [4]. Nevertheless, most learning objectives are still centered on a single polarity label. This guidance tells the model what sentiment is expressed, but does not provide information about the reasoning behind the sentiment judgment. In implicit cases, a reasoning chain is important for interpretation [5], [6]. For example, a consumer who receives the main course much later than everyone else at the table may appraise the event as blocking the goal of timely service (goal inconduciveness) and violating expected service norms (norm incompatibility) [7]. These appraisals explain how speakers evaluate events along core psychological dimensions, e.g., goals and expectations, before a negative attitude toward service emerges. These intermediate cognitive steps explain why attitudes toward service are likely to be negative, yet single-task polarity learning only provides the final polarity outcome (negative), rather than the intermediate steps that led to it, which limits the learning signal for implicit sentiment reasoning. According to cognitive appraisal theory, affective responses arise from the cognitive evaluation of psychological factors, including goals, expectations, agency, and consequences [8], [9]. This perspective suggests that aspect-level sentiment is not only a polarity decision but also the outcome of affective processes. Motivated by this view, we formulate ISA as an appraisal-aware multi-task learning problem. In addition to polarity classification, we introduce cognitive appraisal rea-soning, in which the model generates a brief explanation of why the speaker holds an attitude toward the target aspect. The rationale provides intermediate affective information that links the event in the review to the final polarity. We also introduce implicit sentiment detection, where the model predicts whether the sentiment evidence is explicit or implicit. This task guides the model to look beyond lexical sentiment words and infer the affective implication of events. These auxiliary tasks are complementary to polarity classifi-cation. However, they require different targets: polarity classi-fication focuses on the final sentiment label, implicit sentiment detection focuses on an explicit-implicit evidence judgment, and rationale generation requires explanatory sentence gen-eration. In multi-task learning, it is common to use a single backbone across tasks with different formats and objectives, which can lead to task interference and negative transfer when parameters are updated jointly [10], [11]. Sharing affective knowledge across related objectives while limiting interference among them remains challenging. Task-level mixture-of-experts (MoE) provides an efficient 
+
+> arXiv:2605.20916v1 [cs.CL] 20 May 2026 2
+
+way to address this challenge [12], [13]. Prior task-level MoE studies [14]–[16] show that expert routing can help multi-task models support both cooperation and specialization by assigning different tasks to different expert mixtures while still allowing shared experts when tasks need overlapping knowledge. This motivates us to use a task-routed MoE architecture, where the router is conditioned on task identity, allowing different tasks to use task-specific expert mixtures rather than passing through the same network at every layer. Inspired by the above motivations, we propose a unified framework for implicit sentiment analysis. It formulates each aspect-level instance into three natural-language tasks: polar-ity classification, implicit sentiment detection, and cognitive appraisal reasoning. Our method builds on a sequence-to-sequence backbone [17] with task-routed expert layers. Each task has a learnable representation, and each routed layer uses this representation to select a sparse mixture of feed-forward experts. We further introduce a task-separated routing objective. This objective reduces the similarity between the gate distributions of different tasks, encouraging them to form separable routing patterns across expert layers. The model therefore preserves shared pre-trained language knowledge while creating task-conditioned pathways for appraisal-aware implicit sentiment inference. Our contributions are as follows:  
+
+> •
+
+We adopt task-routed mixture-of-experts for appraisal-aware implicit sentiment analysis and use task identity to route samples, enabling related tasks to share knowledge while keeping their expert selection patterns different.  
+
+> •
+
+We propose a task-separated routing objective that en-courages different tasks to acquire separable expert-selection patterns, reducing task interference.  
+
+> •
+
+Empirical evaluation of the benchmarks shows that our method achieves a strong performance against recent methods, including implicit sentiment subsets, demon-strating the effectiveness of the proposed approach. II. R ELATED WORK 
+
+A. Implicit Sentiment Analysis 
+
+Implicit sentiment analysis focuses on situations in which opinion words do not directly express sentiment toward an aspect. Prior work addresses the scarcity of implicit senti-ment expressions by aligning representations or using external knowledge and synthetic data. For example, [2] introduces su-pervised contrastive pre-training for implicit sentiment, using contrastive learning, review reconstruction, and masked aspect prediction to align representations of explicit and implicit sentiment expressions. [18] constructs multi-aspect samples with aspect and polarity augmentation channels, and uses contrastive learning with an entropy-based filter to reduce noise from generated examples. Recent text data augmenta-tion methods enhance model performance by leveraging the generative capabilities of large language models [19]. For example, [5] uses chain-of-thought prompting to induce the latent aspect, the underlying opinion, and the final polarity step by step. Other studies utilize the internal logic and syntactic dependencies that connect aspects to their implicit sentiments. For example, [3] proposes a relational graph attention network that uses an aspect-oriented dependency tree to reshape syn-tactic structure around the target aspect, helping the model connect aspects with their relevant opinion expressions. [20] studies the influence of confounding sentiment words and uses instrumental variables with stochastic perturbations to estimate a cleaner causal relation between a sentence and its sentiment. These methods show that ISA benefits from richer context modeling and implicit-explicit alignment. However, most of them still optimize the model mainly toward the final polarity decision. In contrast, our work treats implicitness detection and cognitive rationale generation as auxiliary tasks, so that aux-iliary objectives complement the polarity classification with additional supervision dimensions beyond surface sentiment labels. 
+
+B. Multi-task Learning for ABSA 
+
+Multi-task learning enables knowledge sharing across re-lated tasks, allowing the model to leverage complementary information from different tasks [21]. In ABSA, [22] improves aspect-target sentiment classification through domain-specific language model fine-tuning followed by task-specific super-vised training, showing that domain-aware auxiliary training can reduce the mismatch between general pre-training and target-domain sentiment prediction. [4] generates explicit sen-timent augmentations for implicit cases and integrates them as additional clues for polarity prediction. [23] studies multi-task implicit sentiment analysis with large language models, constructing auxiliary sentiment-element tasks and using au-tomatic weight learning to handle data and task uncertainty. However, training several objectives with different targets and sharing a single backbone across tasks in MTL limits flexibility and can lead to task interference [10]. Task-level mixture-of-experts mitigates this by maintaining a single set of experts and activating different experts for each task. For example, [15] uses task representations to route tasks through different expert combinations and analyze the learned cross-task skills. [14] uses MoE layers and a mutual-information objective to encourage sparse dependencies between tasks and experts, balancing cooperation and specialization in multi-task learning. Beyond task-conditioned sparse experts, we propose a task-separated routing objective that allows related tasks to share knowledge while enabling different tasks to select distinct experts, reducing task interference. III. M ETHOD 
+
+Our framework has three components. First, we convert each aspect-level instance into a unified text-to-text multi-task problem containing polarity classification, implicit sen-timent detection, and cognitive appraisal reasoning. Second, we replace the feed-forward modules in selected encoder and decoder layers with a set of task-conditioned experts, allowing the model to share general linguistic knowledge while assigning different expert mixtures based on the task identifier. Third, we use a task-separated routing objective to encourage the learned routing patterns to be separable across tasks. Fig. 1 shows the overview of our method. 3 
+
+> Fig. 1. Overview of our framework. A. Multi-task Data Construction: each aspect-level instance is formulated into three text-to-text tasks. B. Rationale Generation: Prompt template for the cognitive appraisal rationale generation task, along with an example of the model output. C. Task-routed MoE-FFN Block: layer normalization is applied before the experts; only the top-k expert weights are kept; the outputs of those experts are then combined using the routing weights.
+
+A. Problem Formulation 
+
+Each annotated instance is a tuple (x, a, y, e, r ), where x ∈X is a review sentence; a is an aspect term in x; y ∈ Y =
+
+{positive , negative , neutral } is the gold polarity toward a. The dataset provides an implicitness indicator e ∈ { 0, 1}, with e=1 
+
+for implicit sentiment and e=0 for explicit sentiment, together with a short rationale r that explains why y is assigned to 
+
+(x, a ). Instead of only predicting the polarity y, we formulate each aspect-level instance as three text-to-text tasks: 
+
+T = {POL , IMP , REA }
+
+covering polarity classification ( POL ), implicitness detection (IMP ), and cognitive appraisal reasoning ( REA ). Training on all three tasks yields supervision at different targets: the sentiment decision, whether the sentiment is expressed via explicit opinion cues or inferred from context, and a textual description of the underlying appraisal. 
+
+B. Cognitive Appraisal Rationale Generation 
+
+In order to improve the reasoning capability of ISA lan-guage models, we use a large language model (LLM) to generate a cognitive appraisal rationale that explicitly links the sentence, the target term, and the sentiment polarity. The LLM generates an appraisal-based rationale r for cognitive evaluations, indicating the relationship between (x, a ) and y,creating an augmented element set (x, a, y, r ) that can be used to train models to perform ISA with appraisal reasoning. Fig. 1(B) shows the prompt template and an example output. These rationales enable the model to integrate appraisal-based information for implicit sentiment analysis. 
+
+C. Task-Routed Mixture-of-Experts a) Expert Set: We adopt a pretrained encoder-decoder language model [17] containing L transformer blocks. Each block contains an attention sublayer and a feed-forward sub-layer FFN . Following the previous sparse MoE design [24], we only modify layers in M ⊂ { 1, . . . , L }. For each ℓ ∈ M ,the dense FFN ℓ in the corresponding encoder and decoder blocks is replaced with N parallel experts E(1)  
+
+> ℓ
+
+, . . . , E (N ) 
+
+> ℓ
+
+,where N represents the number of experts in that layer. Each 
+
+E(i) 
+
+> ℓ
+
+keeps the same architecture as the original FFN ℓ.
+
+b) Task-conditioned Router: In contrast to the token-level routers of large language MoEs [24]–[26], our router operates at the task level, where the task identity t determines the expert mixture. The three tasks, POL , IMP , and REA , are encoded as task IDs, and each task ID is associated with a task embedding τ t ∈ Rdτ . For each routed layer ℓ ∈ M , we use a separate gating network gℓ to map this task embedding to N expert logits: 
+
+gℓ(τ t) = MLP ℓ
+
+ LN( τ t) ∈ RN (1) where MLP ℓ is a two-layer feed-forward network with a tanh 
+
+activation. The expert gate is then obtained by normalizing the logits: 
+
+πℓ,t = softmax  gℓ(τ t) (2) Thus πℓ,t is the routing weight assigned to the N experts for task t at layer ℓ.
+
+c) Sparse Top-k Selection: We use the top-k gating in sparse MoE layers. For task t at layer ℓ, we only keep the k
+
+experts with the largest probabilities in πℓ,t , and ˜πℓ,t denote the resulting sparse gate after re-normalizing the retained weights. Let h represent the hidden state after the preceding sublayer, LN( ·) is layer normalisation, each {E(j) 
+
+> ℓ
+
+}Nj=1 is one expert feed-forward network in this layer, and Drop( ·) is dropout. We compute LN( h), mix the expert outputs with ˜πℓ,t ,4
+
+add the mixture to h, and apply Drop( ·):
+
+FFN MoE  
+
+> ℓ
+
+(h, t ) = h + Drop 
+
+
+
+> N
+
+X
+
+> j=1
+
+˜π(j) 
+
+> ℓ,t
+
+E(j)
+
+> ℓ
+
+ LN( h) (3) 
+
+D. Learning Objectives 
+
+The objectives below are defined on the encoder-decoder forward pass of pθ , where θ denotes all trainable parameters and pθ is the distribution over target tokens defined by the model with parameters θ. At layers ℓ ∈ M , the dense feed-forward sublayer is replaced by FFN MoE  
+
+> ℓ
+
+(Eq. (3)). 
+
+a) Multi-task generation objective: All three tasks are trained in a unified generative manner. For each task t ∈T = {POL , IMP , REA }, given the review-aspect pair under the corresponding task instruction, the model generates the task-specific target sequence yt. The multi-task generation objective is the standard sequence-to-sequence negative log-likelihood: 
+
+Lgen (θ) = − X
+
+> t∈T
+
+E(x,a,y t)∈D t
+
+> |yt|
+
+X
+
+> s=1
+
+log pθ (yt,s | yt,<s , x, a, t )
+
+(4) where yt,s is the s-th token of the target sequence for task t,
+
+Dt is the training set for task t, and θ denotes the trainable parameters. 
+
+b) Task-separated routing objective: To reduce task in-terference among related yet distinct objectives, we propose a routing objective that pushes the gate distributions of different tasks apart. Each routed layer ℓ ∈ M produces one dense gate vector πℓ,t for each task t ∈ T . Let P = {(t, t ′) : t, t ′ ∈T , t ̸ = t′} denote the ordered task pairs. We minimize the average cosine similarity between their gates: 
+
+Lsep (θ) = 1
+
+|M| 
+
+X
+
+> ℓ∈M
+
+1
+
+|P| 
+
+X
+
+> (t,t ′)∈P
+
+cos( πℓ,t , πℓ,t ′ ) (5) where cos( u, v) = u⊤v/(∥u∥2∥v∥2) is the cosine similarity. The dense gate πℓ,t is the softmax-normalised output of the layer-specific router in Eq. (2), with logits gℓ(τ t) given in Eq. (1). 
+
+c) Overall objective: The final training objective com-bines generation loss and task-separated routing loss: 
+
+L(θ) = Lgen (θ) + λsep Lsep (θ), (6) where λsep ≥ 0 controls the strength of the impact of routing separation. When λsep = 0 , the router is trained only through the generation objective. IV. E XPERIMENT 
+
+A. Datasets and Metrics 
+
+We conduct experiments on the SemEval-2014 Restaurant and Laptop datasets [27]. Following [2], we further divide each benchmark into explicit and implicit sentiment subsets according to whether the sentiment polarity toward opinion words directly expresses the target aspect. We reserve 10% of the original training set as the validation set and train the model on the remaining training instances. We evaluate per-formance with respect to both overall and implicit sentiments. Specifically, we report accuracy and macro-F1 score on the full test set, and accuracy on the implicit sentiment polarity subset. 
+
+B. Baselines 
+
+We compare our method with three groups of baselines.  
+
+> •
+
+Conventional ABSA baselines: these methods typically treat aspect-based sentiment analysis as a supervised classification task. The models we use for comparison include BERT+SPC [28], BERT+ADA [22], RGAT [3], BERT Asp +CEPT [2], BERT Asp +SCAPT [2], C3DA [18], and ISAIV [20].  
+
+> •
+
+Inference-only baselines directly: these methods use the zero-shot learning ability of the LLM, which prompts the LLM to classify each test instance without task-specific training on the ABSA datasets. The baseline models include GPT-5.4-mini [29], DeepSeekV3.2 [30] and Llama-3.3-70B-Instruct [31].  
+
+> •
+
+Instruction-based fine-tuning baselines: these meth-ods formulate the task as a generation problem. In the ABSA task, provide instruction prompts to the model and fine-tune it to generate the target sentiment output. For comparison, we use ABSA-ESA [4], Flan-T5 [17], InstructABSA [32], THOR-prompt [5], THOR [5], and MT-ISA [23] as baselines. 
+
+C. Models and Hyperparameters 
+
+We use Flan-T5-large as the backbone model and use GPT-5.4-mini for cognitive appraisal rationales generation. We replace selected encoder and decoder FFN layers with task-routed MoE layers in layers 8, 10, 12, 14, 16, 18, 20, and 22. Each layer contains 5 experts and activates the top 2 experts for each task. The routing separation weight λsep is set to 0.4 because the validation set achieves optimal performance at this value, as discussed in section IV-F0a. We train with a batch size of 4 and accumulate gradients in 4 steps, and the learning rate is 3 × 10 −5. All reported results are the average of three runs with different random seeds. 
+
+D. Main Results a) Analysis of conventional ABSA baselines: As shown in Table I, conventional ABSA baselines are not competitive in overall performance, especially in the implicit sentiment subset. These methods mainly train the model to predict the polarity label, relying on explicit opinion words when present. However, they do not guide the model to detect implicit evidence or explain why an event supports a sentiment. Instruction-based fine-tuning improves conventional ABSA baselines across both domains, with larger performance gains on the implicit subset, which is a particular challenge for ISA. 
+
+b) Analysis of inference-only baselines: The inference-only baselines show that LLMs can leverage their pretrained knowledge to interpret sentiment reviews without task-specific training. However, zero-shot reasoning remains limited, and under the same prompting settings, stronger LLMs tend to score higher. For example, the GPT baseline ranks above 5
+
+TABLE I BENCHMARK EVALUATION OF THE PROPOSED METHOD AGAINST REPRESENTATIVE BASELINES ON REST 14 AND LAP 14. T HE BEST SCORE IN EACH COLUMN IS SHOWN IN BOLD . † INDICATES RESULTS ARE REFERRED FROM [23]. Model Rest14 Lap14 All A All F ISA A All A All F ISA A
+
+Conventional ABSA Baselines 
+
+BERT+SPC † [28] BERT-base (110M) 83.57 77.16 65.54 78.22 73.45 69.54 BERT+ADA † [22] BERT-base (110M) 87.14 80.05 65.92 78.96 74.18 70.11 RGAT † [3] BERT-base (110M) 86.6 81.35 67.79 78.21 74.07 72.99 BERT Asp +CEPT † [2] BERT-base (110M) 87.5 82.07 67.79 81.66 78.38 75.86 BERT Asp +SCAPT † [2] BERT-base (110M) 89.11 83.79 72.28 82.76 79.15 77.59 C3DA † [18] BERT-base (110M) 86.93 81.23 65.54 80.61 77.11 73.57 ISAIV † [20] BERT-base (110M) 87.05 81.4 - 80.41 77.25 -ABSA-ESA † [4] T5-base (220M) 88.29 81.74 70.78 82.44 79.34 80 
+
+Inference-only Baselines 
+
+GPT-5.4-mini 88.84 81.92 71.76 82.39 78.28 73.29 DeepSeek-V3.2 87.14 76.14 65.54 79.62 72.78 60.57 Llama-3.3-70b-instruct 86.34 74.91 63.3 80.56 73.45 59.43 
+
+Instruction-based Fine-tuning 
+
+Flan-T5 [17] Flan-T5-base (250M) 86.43 77.45 63.3 80.41 75.2 71.43 InstructABSA [32] Flan-T5-base (250M) 85.62 75.52 62.17 81.82 77.72 76.57 THOR-prompt [5] Flan-T5-base (250M) 86.7 79.49 65.92 81.19 77.42 74.28 THOR [5] Flan-T5-base (250M) 87.05 80.09 66.67 81.66 77.51 74.29 MT-ISA † [23] Flan-T5-base (250M) 88.21 82.45 70.41 82.91 79.86 80.57 Ours Flan-T5-base (250M) 88.23 80.36 69.16 81.09 75.88 72.43 Flan-T5 [17] Flan-T5-large (780M) 88.75 81 71.91 84.01 79.58 78.29 InstructABSA [32] Flan-T5-large (780M) 87.86 80.08 68.54 83.39 79.27 78.86 THOR-prompt [5] Flan-T5-large (780M) 88.13 82.03 72.29 83.54 80.3 80 THOR [5] Flan-T5-large (780M) 88.21 80.85 70.41 83.7 81.01 80.57 Ours Flan-T5-large (780M) 90.21 84.74 75.9 85 81.63 82.67 
+
+the Llama baseline across all evaluation metrics and datasets. Despite the LLM having strong general reasoning ability, instruction-based fine-tuning, including our method, also im-proves over inference-only LLMs. This improvement suggests that aspect-specific supervision aligns the model with the benchmark and trainable inference skills. 
+
+c) Analysis of instruction-based fine-tuning baselines: 
+
+In the instruction-based fine-tuning setup, smaller instruction-tuned models have benefited from the generative formulation. Still, they lack sufficient capacity to leverage the auxiliary supervision introduced in our framework. We observe that increasing the backbone to Flan-T5-large further improves this group’s performance. With the Flan-T5-large backbone, our method achieves the best results, indicating that the proposed multi-task learning framework becomes more effective when the backbone has sufficient representation capacity. Compared with prior instruction-tuned methods, our method improves over this group because polarity prediction is trained together with implicitness detection and cognitive appraisal reasoning, allowing the model to learn not only the lexical polarity cues but also the latent evaluation process that supports the sentiment. The routing mechanism then allows these objectives to share general language knowledge while preserving task-specific expert pathways. 
+
+E. Ablation Study 
+
+We perform ablation experiments to verify the impact of multi-task learning and the MoE routing architecture. As shown in Table II, Ours (w/o MTL) keeps the MoE archi-tecture and trains only the polarity prediction task, and Ours (w/o MoE) removes the MoE layers and performs multi-task learning with the standard Flan-T5-large architecture. Remov-ing multi-task learning (w/o MTL) degrades performance on both datasets. The larger decrease on ISA A indicates that implicit sentiment prediction benefits from auxiliary supervi-sion of implicitness detection and cognitive appraisal rationale generation. Without these auxiliary tasks, the model mainly learns the direct mapping from the review and aspect to the polarity label, which weakens its ability to capture latent sentiment evidence. Removing the MoE architecture (w/o MoE) also leads to clear performance degradation, especially on Rest14, where ISA A decreases from 75.9% to 71.16%. This performance drop shows that simply applying multi-task learning with a shared Flan-T5-large backbone is insufficient to fully exploit different supervision signals. The task-routed MoE layers enable different tasks to share general linguistic knowledge while maintaining task-specific expert pathways, thereby improving both overall sentiment classification and implicit sentiment inference. 
+
+TABLE II ABLATION RESULTS ON REST 14 AND LAP 14, ISOLATING THE EFFECTS OF MULTI -TASK LEARNING AND MOE ARCHITECTURE . T HE BEST SCORE IN EACH COLUMN IS SHOWN IN BOLD .Rest14 Lap14 All A All F ISA A All A All F ISA A
+
+Ours 90.21 84.74 75.9 85 81.63 82.67 
+
+Ours (w/o MTL) 88.57 81.37 70.41 84.17 81 80.57 Ours (w/o MoE) 88.84 81.34 71.16 83.54 80.26 81.71 
+
+F. Further Analysis a) Effect of λsep : We study how the hyperparameter λsep 
+
+affects experimental outcomes. As shown in Fig. 2, our method 6           
+
+> Fig. 2. Effect of the hyperparameter λsep on two benchmarks, where performance is measured by F1 score. Both datasets achieve their best performance at
+> λsep = 0 .4, and all λvalues remain above the THOR baseline. We mark the highest value with a ⋆.
+> Fig. 3. Routing entropy H(·)for the three tasks on Rest14 and Lap14 under different λ. Each point is the mean over routed MoE layers.
+
+outperforms THOR [5] in all λ settings, demonstrating the effectiveness of our method. Both benchmarks achieve their best performance at an intermediate value of λsep = 0 .4,indicating that a balanced routing separation weight improves model performance. If λsep is too small, tasks still overshare experts, and weaken task-specific signals; if it is too large, routing becomes overly constrained, weakening useful cross-task transfer. 
+
+b) Routing entropy across tasks: To study whether dif-ferent tasks use MoE routing in different ways, we analyze routing entropy for implicitness detection ( IMP ), polarity clas-sification ( POL ), and cognitive appraisal rationale generation (REA ), and compare these entropies under different routing separation weights λ. Routing entropy reflects how the model activates experts for each task: higher values indicate broader mixing across experts, while lower values indicate more con-centrated, sparse expert usage. As shown in Fig. 3, as λ increases, the REA curve de-creases, indicating that a larger routing separation weight leads to routing on fewer experts, thereby reducing task entropy. Additionally, across all λ settings and in both domains, we observe a consistent phenomenon: H(IMP ) ≈ H(POL ) ≪
+
+H(REA ), where H(·) denotes routing entropy. The entropy pattern indicates that easier targets, such as classification and detection, can be achieved with a small subset of experts, whereas rationale generation demands richer expert mixing. 
+
+> Fig. 4. An example of the routing probabilities heatmap at the MoE decoder’s 18th layer, where each row represents one of three tasks, each column represents an expert, and each cell represents the probability that the task assigns to that expert at this layer.
+
+c) Specialization of expert assignments: We measure expert specialization by selecting the expert with the highest probability (Top-1) among the five experts in each routed layer, reflecting the dominance of the most active expert in each context. As shown in Fig. 4, for simpler detection and classification tasks, the Top-1 values across all MoE layers are notably high, indicating that a single expert dominates the activation. For the complex sequence generation task REA ,the Top-1 is lower and can decrease further in certain layers, reflecting more mixed expert usage. This pattern aligns with the REA objective, which involves generating rationales that benefit from combining multiple experts rather than relying 7
+
+primarily on a single expert. The same phenomenon also occurs in the routing entropy discussed in section IV-F0b, where the entropy of IMP and POL is lower, while the entropy of REA is higher. 
+
+TABLE III EFFECT OF EXPERT NUMBER UNDER THE SAME EXPERIMENTAL SETTINGS AND TOP -2 EXPERT SELECTION . B EST RESULTS ARE HIGHLIGHTED IN BOLD . N REFERS TO THE NUMBER OF EXPERTS PER ROUTED LAYER .
+
+N Rest Lap Overall Mean of Six Metrics All A All F ISA A All A All F ISA A
+
+4 89.55 83.38 74.32 84.80 81.21 82.29 82.59 5 90.21 84.74 75.90 85.00 81.63 82.67 83.36 
+
+6 89.59 83.47 74.2 85.06 81.85 82.48 82.77 7 89.02 82.11 71.54 84.48 81.12 81.14 81.57 
+
+d) Effect of expert number: We vary the number of experts per routed layer N ∈ { 4, 5, 6, 7} while keeping top-2 expert selection to study how the number of experts affects performance. Table III shows that the overall performance improves from N = 4 to N = 5 and then decreases as N
+
+increases to 6 and 7. N = 5 achieves the best average results. A likely reason is that with too few experts, different tasks tend to rely on overlapping expert subsets, which is less effective for the rationale task that benefits from broader expert mixing; with too many experts, enlarging the expert pool does not yield further gains and can instead reduce the learning signal received by each expert. We therefore use N = 5 in the main experiments. V. C ONCLUSION 
+
+In implicit aspect-level sentiment, sentiment toward an aspect is often conveyed through events rather than explicit opinion words. Polarity supervision alone is not enough to teach a model how an event implies an attitude toward an aspect. We introduce cognitive appraisal reasoning and implicit sentiment detection as auxiliary tasks, so that polarity predic-tion is trained together with signals about why the sentiment holds and whether the evidence is explicit or implicit. We then address the sharing problem introduced by the multi-task formulation with task-routed mixture-of-experts layers. Instead of forcing all objectives to pass through the same feed-forward networks, the model learns task-conditioned ex-pert mixtures. The task-separated routing objective further encourages the routing distributions of different tasks to re-main distinguishable. Performance gains in the benchmarks, including improvements in the implicit subset, demonstrate the effectiveness of the proposed method. REFERENCES [1] X. Chen, H. Xie, S. J. Qin, Y. Chai, X. Tao, and F. L. Wang, “Cognitive-inspired deep learning models for aspect-based sentiment analysis: A retrospective overview and bibliometric analysis,” Cogn. Comput. ,vol. 16, no. 6, pp. 3518–3556, 2024. [2] Z. Li, Y. Zou, C. Zhang, Q. Zhang, and Z. Wei, “Learning implicit sentiment in aspect-based sentiment analysis with supervised contrastive pre-training,” in Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing . Online and Punta Cana, Dominican Republic: Association for Computational Linguistics, 2021, pp. 246–256. [3] K. Wang, W. Shen, Y. Yang, X. Quan, and R. Wang, “Relational graph attention network for aspect-based sentiment analysis,” in Proceedings of the 58th annual meeting of the association for computational linguistics ,2020, pp. 3229–3238. [4] J. Ouyang, Z. Yang, S. Liang, B. Wang, Y. Wang, and X. Li, “Aspect-based sentiment analysis with explicit sentiment augmentations,” in 
+
+Proceedings of the AAAI conference on artificial intelligence , vol. 38, no. 17, 2024, pp. 18 842–18 850. [5] H. Fei, B. Li, Q. Liu, L. Bing, F. Li, and T.-S. Chua, “Reasoning implicit sentiment with chain-of-thought prompting,” in Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers) , 2023, pp. 1171–1182. [6] Z. Duan and J. Wang, “Implicit sentiment analysis based on chain of thought prompting,” arXiv:2211.10986, 2024. [7] G. Yeo, S. Furniturewala, and K. Jaidka, “Beyond text: Leveraging multi-task learning and cognitive appraisal theory for post-purchase intention analysis,” in Findings of the Association for Computational Linguistics: ACL 2024 , 2024, pp. 12 353–12 360. [8] R. S. Lazarus, Emotion and Adaptation . New York: Oxford University Press, 1991. [9] K. R. Scherer, “Appraisal considered as a process of multilevel sequen-tial checking,” in Appraisal Processes in Emotion: Theory, Methods, Research , K. R. Scherer, A. Schorr, and T. Johnstone, Eds. New York: Oxford University Press, 2001, pp. 92–120. [10] T. Standley, A. R. Zamir, D. Chen, L. Guibas, J. Malik, and S. Savarese, “Which tasks should be learned together in multi-task learning?” in 
+
+Proceedings of the 37th International Conference on Machine Learning (ICML) , ser. Proceedings of Machine Learning Research, vol. 119. PMLR, 2020, pp. 9120–9132. [11] C. Ding, Z. Lu, S. Wang, R. Cheng, and V. N. Boddeti, “Mitigating task interference in multi-task learning via explicit task routing with non-learnable primitives,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 7756–7765. [12] S. Mu and S. Lin, “A comprehensive survey of mixture-of-experts: Algorithms, theory, and applications,” arXiv:2503.07137, 2025. [13] W. Cai, J. Jiang, F. Wang, J. Tang, S. Kim, and J. Huang, “A survey on mixture of experts in large language models,” IEEE Transactions on Knowledge and Data Engineering , 2025. [14] Z. Chen, Y. Shen, M. Ding, Z. Chen, H. Zhao, E. G. Learned-Miller, and C. Gan, “Mod-Squad: Designing mixtures of experts as modular multi-task learners,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023, pp. 11 828–11 837. [15] Q. Ye, J. Zha, and X. Ren, “Eliciting and understanding cross-task skills with task-level mixture-of-experts,” in Findings of the Association for Computational Linguistics: EMNLP 2022 . Abu Dhabi, United Arab Emirates: Association for Computational Linguistics, 2022, pp. 2567– 2592. [16] C. He, F. Gao, H. Liu, S. Zhu, Y. Jia, H. Zan, and M. Peng, “Task-aware contrastive mixture of experts for quadruple extraction in conversations with code-like replies and non-opinion detection,” in Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Asso-ciation for Computational Linguistics: Human Language Technologies (NAACL) . Association for Computational Linguistics, 2025. [17] H. W. Chung, L. Hou, S. Longpre, B. Zoph, Y. Tay, W. Fedus, Y. Li, X. Wang, M. Dehghani, S. Brahma et al. , “Scaling instruction-finetuned language models,” J. Mach. Learn. Res. , vol. 25, no. 70, pp. 1–53, 2024. [18] B. Wang, L. Ding, Q. Zhong, X. Li, and D. Tao, “A contrastive cross-channel data augmentation framework for aspect-based sentiment analysis,” in Proceedings of the 29th international conference on com-putational linguistics , 2022, pp. 6691–6704. [19] Y. Chai, H. Xie, and S. J. Qin, “Text data augmentation for large language models: a comprehensive survey of methods, challenges, and opportunities,” Artif. Intell. Rev. , vol. 59, no. 1, p. 35, 2026. [20] S. Wang, J. Zhou, C. Sun, J. Ye, T. Gui, Q. Zhang, and X.-J. Huang, “Causal intervention improves implicit sentiment analysis,” in Proceed-ings of the 29th international conference on computational linguistics ,2022, pp. 6966–6977. [21] R. Caruana, “Multitask learning,” Machine learning , vol. 28, no. 1, pp. 41–75, 1997. [22] A. Rietzler, S. Stabinger, P. Opitz, and S. Engl, “Adapt or get left behind: Domain adaptation through bert language model finetuning for aspect-target sentiment classification,” in Proceedings of the twelfth language resources and evaluation conference , 2020, pp. 4933–4941. [23] W. Lai, H. Xie, G. Xu, and Q. Li, “Multi-task learning with llms for implicit sentiment analysis: Data-level and task-level automatic weight learning,” IEEE Transactions on Knowledge and Data Engineering ,2025. 8
+
+[24] W. Fedus, B. Zoph, and N. Shazeer, “Switch Transformers: Scaling to trillion parameter models with simple and efficient sparsity,” Journal of Machine Learning Research , vol. 23, no. 120, pp. 1–39, 2022. [25] N. Shazeer, A. Mirhoseini, K. Maziarz, A. Davis, Q. V. Le, G. E. Hinton, and J. Dean, “Outrageously large neural networks: The sparsely-gated mixture-of-experts layer,” in Proceedings of the 5th International Conference on Learning Representations (ICLR) , 2017. [26] Y. Li, S. Jiang, B. Hu, L. Wang, W. Zhong, W. Luo, L. Ma, and M. Zhang, “Uni-moe: Scaling unified multimodal llms with mixture of experts,” IEEE Transactions on Pattern Analysis and Machine Intelli-gence , 2025. [27] M. Pontiki, D. Galanis, J. Pavlopoulos, H. Papageorgiou, I. Androut-sopoulos, and S. Manandhar, “Semeval-2014 task 4: Aspect based sentiment analysis,” in Proceedings of the 8th International Workshop on Semantic Evaluation, SemEval@COLING 2014, Dublin, Ireland, August 23-24, 2014 . The Association for Computer Linguistics, 2014, pp. 27– 35. [28] J. Devlin, M. Chang, K. Lee, and K. Toutanova, “Bert: Pre-training of deep bidirectional transformers for language understanding,” in Proc. Conf. North Amer. Chapter Assoc. Comput. Linguistics: Human Lang. Technol. Assoc. Comput. Linguistics, 2019, pp. 4171–4186. [29] A. Singh, A. Fry, A. Perelman, A. Tart, A. Ganesh, A. El-Kishky, A. McLaughlin, A. Low, A. Ostrow, A. Ananthram et al. , “Openai gpt-5 system card,” arXiv:2601.03267, 2025. [30] A. Liu, A. Mei, B. Lin, B. Xue, B. Wang, B. Xu, B. Wu, B. Zhang, C. Lin, C. Dong et al. , “Deepseek-v3. 2: Pushing the frontier of open large language models,” arXiv:2512.02556, 2025. [31] A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan et al. , “The llama 3 herd of models,” arXiv:2407.21783, 2024. [32] K. Scaria, H. Gupta, S. Goyal, S. Sawant, S. Mishra, and C. Baral, “Instructabsa: Instruction learning for aspect based sentiment analysis,” in Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 2: Short Papers) , 2024, pp. 720–736. 
+
+Yaping Chai is a Ph.D. candidate in the School of Data Science at Lingnan University, Hong Kong, supervised by Prof. Joe S. Qin and Prof. Haoran Xie. Her research interests center on large language models, natural language processing, and aspect-based sentiment analysis. She investigates advanced techniques for fine-tuning and assessing language models for sentiment analysis and other related NLP tasks. 
+
+Haoran Xie (Senior Member, IEEE) received a Ph.D. degree in Computer Science from City Uni-versity of Hong Kong and an Ed.D degree in Digital Learning from the University of Bristol. He is cur-rently a Professor and the Person-in-Charge at the Division of Artificial Intelligence, Director of LEO Dr David P. Chan Institute of Data Science, and Associate Dean of the School of Data Science, Ling-nan University, Hong Kong. His research interests include natural language processing, large language models, language learning, and AI in education. He has published 500 research publications, including 300 journal articles. He is the Editor-in-Chief of Natural Language Processing Journal, Computers & Education: Artificial Intelligence, and Computers & Education: X Reality. He has been selected as the World’s Top 2% Scientists by Stanford University. 
+
+S. Joe Qin (Fellow, IEEE) received the B.S. and M.S. degrees in automatic control from Tsinghua University, Beijing, China, in 1984 and 1987, re-spectively, and the Ph.D. degree in chemical engi-neering from the University of Maryland, College Park, MD, USA, in 1992. He is currently the Wai Kee Kau Chair Professor and President of Lingnan University, Hong Kong. His research interests in-clude data science and analytics, machine learning, process monitoring, model predictive control, system identification, smart manufacturing, smart cities, and predictive maintenance. Prof. Qin is a Fellow of the U.S. National Academy of Inventors, IFAC, and AIChE. He was the recipient of the 2022 CAST Computing Award by AIChE, 2022 IEEE CSS Transition to Practice Award, U.S. NSF CAREER Award, and NSF-China Outstanding Young Investigator Award. His h-indices for Web of Science, SCOPUS, and Google Scholar are 66, 73, and 89, respectively.
