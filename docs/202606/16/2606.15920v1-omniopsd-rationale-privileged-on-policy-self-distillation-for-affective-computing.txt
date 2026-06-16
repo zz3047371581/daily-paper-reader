@@ -1,0 +1,380 @@
+Title: OmniOPSD: Rationale-Privileged On-Policy Self-Distillation for Affective Computing
+
+URL Source: https://arxiv.org/pdf/2606.15920v1
+
+Published Time: Tue, 16 Jun 2026 02:14:11 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# OMNI OPSD: RATIONALE -P RIVILEGED ON-P OLICY 
+
+# SELF -D ISTILLATION FOR AFFECTIVE COMPUTING 
+
+Zebang Cheng ∗,1,2, Shuimu Chen ∗,3, Boxue Yang ∗,4
+
+Yuanshen Guan 5, Jingyi Chen 1,6, Zheng Lian 7, Xiaojiang Peng 6
+
+Fei Ma †,2, LaiZhong Cui †,1, Qi Tian 2,81 Shenzhen University 2 Guangdong Laboratory of Artificial Intelligence and Digital Economy (SZ)  
+
+> 3
+
+Tsinghua University 4 Shanghai Jiao Tong University 5 University of Science and Technology of China  
+
+> 6
+
+Shenzhen Technology University 7 Tongji University 8 Huawei 
+
+Project: https://omniopsd.github.io/ 
+
+# ABSTRACT 
+
+Reinforcement learning for multimodal large language models (MLLMs) is often hindered by severe reward sparsity in complex reasoning tasks. This challenge is particularly pronounced in human-centered scenarios involving states, emo-tions, intentions, and behaviors, where heterogeneous multimodal signals and subjective human factors make high-quality chain-of-thought (CoT) annotations expensive and difficult to obtain. Although many multimodal datasets provide expert-annotated ground-truth labels, directly using these labels for supervised fine-tuning may encourage shortcut learning in multimodal perception and pro-vides limited transparency for safety-critical human–AI interaction. To address these limitations, we propose OmniOPSD , a Rationale-Privileged On-Policy Self-Distillation framework that uses frontier-generated rationales as teacher-side privileged evidence rather than student imitation targets. OmniOPSD uses frontier-generated evidence-aware rationales only as training-time privileged evidence context for a local teacher. The student samples its own rollout from the original multimodal input, while the rationale-privileged teacher scores the same tokens and provides dense token-level supervision. Thus, the student learns on its own trajectory distribution without directly imitating frontier-model completions, and inference requires no labels, rationales, CoT annotations, or closed-source model access. Experiments on MER-UniBench show that OmniOPSD achieves state-of-the-art performance with an average score of 84 .19 , and ablations further support the value of rationale-privileged teacher guidance. 
+
+# 1 INTRODUCTION 
+
+Multimodal large language models (MLLMs) have made substantial progress on perception-oriented tasks (Liu et al., 2023; Wang et al., 2024b; Dong et al., 2025; Wang et al., 2026a; Wen et al., 2026a; Wang et al., 2026b; Ke et al., 2026; Wen et al., 2026b), yet human-centered multimodal reasoning remains difficult (Qin et al., 2026; Zhang et al., 2026; Wen et al., 2025). This difficulty is central to affective computing, where models are expected to infer emotions, intentions, and behaviors from facial expressions, speech, language, temporal dynamics, body motion, and social context (Picard, 2000; Zhang et al., 2025c). Unlike object-centric recognition, the target states in these tasks are often latent, subjective, and context dependent. A capable affective MLLM should therefore do more than output the correct category. It should ground its decision in multimodal evidence that is plausible to human observers (Lian et al., 2023b). The available supervision, however, is poorly matched to this goal. Most affective computing datasets provide reliable expert-annotated or consensus-based labels (Busso et al., 2008; Zadeh et al., 2018; Poria et al., 2019; Lian et al., 2023a; Zhang et al., 2024), but these labels are sparse outcome-level 
+
+> *
+
+Equal contribution. 
+
+> †
+
+Corresponding authors. 
+
+1
+
+> arXiv:2606.15920v1 [cs.CV] 14 Jun 2026
+
+signals. A label such as happy , angry , or intent to complain does not identify the facial cue, acoustic pattern, temporal change, or conversational evidence that supports the answer. Human-written rationales would provide denser supervision, but they are expensive to collect, difficult to standardize, and especially hard to scale for subjective human-centered tasks (Lian et al., 2023b; Cheng et al., 2024). This creates a gap between the reliability of labels and the granularity of supervision needed for evidence-grounded reasoning. Frontier MLLMs offer an appealing source of dense supervision because they can produce multimodal evidence-aware rationales for labeled examples (Liu et al., 2023; Cheng et al., 2024). Yet these generated rationales are unverified model outputs rather than gold-standard reasoning, and they should not be treated as direct supervision targets. Directly fine-tuning a smaller MLLM to imitate them turns evidence descriptions into offline demonstration trajectories (Ho et al., 2023; Wang et al., 2024a). The student may learn the teacher’s verbal style or explanation template without acquiring the underlying multimodal grounding (Dai et al., 2025; Chen et al.), and the capacity gap between frontier and local models can further induce shortcut learning and hallucinated justifications (Zhang et al., 2025a;b). In this sense, offline imitation of generated rationales conflates two roles that should be separated: extracting useful multimodal evidence from the frontier model and optimizing the student policy. A natural way to separate these roles is to keep the supervision dense while moving the training trajectories back onto the student policy. On-policy distillation (OPD) follows this principle by supervising trajectories generated by the student itself (Agarwal et al., 2024; Lu & Lab, 2025). It combines the dense feedback of distillation with the distributional alignment of on-policy learning, thereby avoiding some of the exposure bias inherent in offline imitation Song & Zheng (2026) and the sparse credit assignment of outcome-only RL (Shao et al., 2024). The difficulty is that conventional OPD remains tied to the teacher interface. It typically requires exact next-token teacher probabilities (Zhou et al., 2026), which are unavailable for closed-source frontier MLLMs and difficult to align across different tokenizers. Replacing the frontier model with a large local teacher reduces this mismatch only at the cost of expensive multimodal inference and additional deployment complexity. These constraints raise a practical question: can dense token-level guidance be obtained without relying on an external teacher model? On-policy self-distillation (OPSD) takes this step by letting the same model play both student and teacher under different contexts (Hübotter et al., 2026; Zhao et al., 2026a). This efficiency is attractive, but in affective multimodal reasoning it exposes a deeper limitation. Vanilla OPSD often assumes that a small MLLM can become a reliable teacher once it receives privileged information such as the correct label. We find that this assumption is fragile: 
+
+label-conditioned self-rationalization is unreliable for small MLLMs . Even with the correct label, a model may invent visual, temporal, acoustic, or behavioral evidence to justify the answer. In multimodal reasoning, knowing the answer is not equivalent to knowing the evidence. We propose OmniOPSD , a Rationale-Privileged On-Policy Self-Distillation framework for affec-tive computing. The central idea is to use frontier-generated evidence-aware rationales as training-time 
+
+privileged evidence context for a local teacher, rather than as target sequences for the student. The stu-dent samples its own rollout from the original multimodal input. The local teacher, conditioned on the privileged evidence context, scores the same student-generated tokens and provides dense token-level guidance. Thus, OmniOPSD decouples evidence acquisition from policy learning. Frontier MLLMs contribute multimodal evidence, while optimization remains on the student’s own trajectories within a unified local modeling framework. At inference time, the student uses only the original multimodal input and does not require labels, rationales, or closed-source model access. Our contributions are summarized as follows: 1. We introduce OmniOPSD, a rationale-privileged on-policy self-distillation framework that uses frontier-generated rationales as teacher-side privileged evidence, enabling dense token-level guidance on student-generated trajectories. 2. We identify the unreliability of label-conditioned self-rationalization for small MLLMs in affective multimodal reasoning, showing that knowing the answer label does not necessarily provide reliable visual, acoustic, temporal, or behavioral evidence. 3. Extensive experiments show that OmniOPSD outperforms offline imitation/distillation and outcome-reward RL baselines in overall post-training performance, and achieves state-of-the-art performance on MER-UniBench with an average score of 84 .19 .22 RELATED WORK 
+
+2.1 POST -T RAINING , D ISTILLATION , AND ON-P OLICY LEARNING 
+
+Post-training aligns large language models with human preferences, task objectives, and reasoning behavior (Christiano et al., 2017; Ouyang et al., 2022; Rafailov et al., 2023). Outcome-reward methods such as GRPO (Shao et al., 2024; Guo et al., 2025) have shown strong reasoning gains when reliable verifiers are available. Yet final-answer rewards are sparse: they indicate success or failure but provide little guidance about which tokens or evidence-grounding steps should change. Distillation offers denser supervision, but conventional rationale or CoT distillation is usually off-policy because the student learns from fixed teacher trajectories (Dai et al., 2025; Zhang et al., 2025a). On-policy distillation (OPD) (Agarwal et al., 2024; Lu & Lab, 2025) reduces this mismatch by supervising trajectories sampled from the student policy, combining token-level guidance with on-policy alignment. However, standard OPD often depends on teacher logits or token probabilities, which are costly or unavailable for frontier models and difficult to align across model families (Zhou et al., 2026). On-policy self-distillation (OPSD) (Hübotter et al., 2026; Zhao et al., 2026a) further removes the external teacher interface by letting the same model act as student and teacher under different contexts. Existing OPSD studies (Kim et al., 2026; Zhao et al., 2026b; Jiang et al., 2026) mainly focus on text generation, mathematical reasoning, or limited vision-language settings, and typically assume that privileged context induces a reliable teacher. In omni-modal affective reasoning, this assumption is fragile: knowing the label does not necessarily reveal the visual, acoustic, temporal, or behavioral evidence. OmniOPSD therefore uses frontier-generated rationales as teacher-side privileged evidence, while keeping student learning on its own on-policy trajectories. 2.2 MULTIMODAL AFFECTIVE REASONING 
+
+Affective computing (Picard, 2000) aims to infer affective states and socially relevant intentions from multimodal signals, including speech, facial expressions, textual language, temporal dynamics, and social context. Representative datasets (Lin et al., 2024; Jiang et al., 2020; Luo et al., 2020; Zhang et al., 2022) have supported the development of multimodal emotion recognition and sentiment analysis, while fusion-based methods (Cheng et al., 2023; Wang et al., 2025; Fang et al., 2025) have improved discriminative affect prediction. However, most existing models focus on label-level classification and provide limited explanations grounded in fine-grained multimodal evidence (Lian et al., 2023b). Recent MLLM-based affective systems (Lian et al., 2025b; Zhang et al., 2026) shift the focus from closed-set affect classification to open-ended, explainable, and context-aware affective reasoning. Several studies use multimodal rationales generated by frontier MLLMs to enhance smaller affective MLLMs (Xie et al., 2024; Cheng et al., 2024; Lian et al., 2025a), and some further incorporate reinforcement-learning algorithms such as GRPO (Lian et al., 2025a; Zhao et al., 2025). These advances highlight both the value and risk of rationale supervision. Generated rationales can provide dense evidence-aware signals, but direct imitation may encourage a smaller model to copy explanation style without faithfully grounding its prediction (Chen et al.; Zhang et al., 2025b). This issue is further complicated by the subjective nature of affective annotation. Consensus labels are relatively robust but coarse, whereas detailed multimodal reasoning trajectories are informative but costly to collect and potentially noisy (Lian et al., 2023b; Chen et al., 2024). To address this supervision-granularity gap, OmniOPSD uses generated rationales only as privileged information available during training. Rather than supervising the student to imitate these rationales, OmniOPSD provides them to the teacher for scoring student-generated trajectories, allowing the student to learn from dense teacher feedback on its own on-policy responses. 
+
+# 3 METHOD 
+
+We present Rationale-Privileged On-Policy Self-Distillation (OmniOPSD), a framework that decouples multimodal evidence acquisition from student learning. Instead of using frontier-generated rationales as imitation targets, OmniOPSD provides them only to a local teacher as training-time privileged evidence. The student first generates its own response from the original multimodal task prompt. The teacher then evaluates the same student-generated tokens while conditioned on the privileged evidence. In this way, rationales strengthen the teacher-side supervision signal without serving as direct imitation targets for the student. 33.1 PROBLEM FORMULATION 
+
+Let D = {(mi, x i, a i, e i)}Ni=1 denote a multimodal human-centered dataset augmented with training-time teacher rationales. Here mi denotes the multimodal input, which may include video, audio, images, subtitles, or dialogue context; xi is the task instruction; ai is the expert-annotated or consensus answer; and ei is a frontier-generated multimodal evidence-aware rationale. We use ri = ei to denote the privileged rationale available during training. The rationale may describe facial expressions, acoustic patterns, temporal changes, linguistic cues, or behavioral evidence relevant to the task. However, ri is not treated as a ground-truth reasoning trace or as a target sequence for student imitation. Instead, it is used only as teacher-side privileged information. At inference time, the model observes only (mi, x i) and generates a response y = ( y1, . . . , y T ) without access to ai or 
+
+ri.We define two prompts for each example. The student prompt cSi preserves the original task semantics and multimodal input: 
+
+cSi = Prompt S (mi, x i). (1) The teacher prompt augments the same task with the privileged rationale: 
+
+cTi = Prompt T (mi, x i, r i). (2) The student generates its response from cSi , while the teacher scores the same student-generated tokens under cTi . In this way, the rationale improves teacher-side token-level supervision, but it is never exposed to the student rollout or used as a supervised CoT target. 3.2 RATIONALE -P RIVILEGED TEACHER SCORING 
+
+OmniOPSD uses the same local MLLM architecture for the student and teacher branches, but conditions them on different contexts. At optimization step k, let θk denote the student parameters and ¯θk denote the teacher-side parameters. For each example, the student observes only the original prompt cSi and generates a completion autoregressively. At token position t, the student and teacher next-token distributions are defined as 
+
+P (i)
+
+> S,t
+
+(·) ≜ πθk (· | cSi , ˆyi,<t ), (3) 
+
+P (i)
+
+> T,t
+
+(·) ≜ π¯θk (· | cTi , ˆyi,<t ), (4) where ˆyi,<t = (ˆ yi, 1, . . . , ˆyi,t −1) denotes the previously generated tokens, and the student samples 
+
+ˆyi,t ∼ P (i)
+
+> S,t
+
+(·) for t = 1 , . . . , T i. The teacher observes the teacher prompt cTi , which contains the privileged rationale ri, but it does not decode a separate target completion. Instead, after the student completion ˆyi is sampled, the teacher re-scores the same student-generated tokens under the rationale-privileged context. Thus, P (i) 
+
+> S,t
+
+and P (i) 
+
+> T,t
+
+are evaluated at the same token position and on the same generated prefix ˆyi,<t . They differ only in their conditioning context: the student uses the original task prompt, while the teacher additionally uses the privileged rationale. The teacher parameters can be instantiated in different ways. A fixed teacher keeps ¯θ frozen throughout training, while an online stop-gradient teacher sets ¯θk = θk at each step and blocks gradients through the teacher forward pass. In this paper, unless otherwise stated, we use an exponential-moving-average teacher. After the student is updated by the distillation objective, the teacher parameters are updated as ¯θk+1 ← μ¯θk + (1 − μ)θk+1 , μ ∈ [0 , 1) . (5) The teacher forward pass is always evaluated without gradient back-propagation. Because the student and teacher share the same local modeling framework, their token distributions are defined over the same tokenizer and vocabulary. This allows OmniOPSD to compute token-level distillation locally, while using frontier-generated rationales only as teacher-side privileged context, without requiring frontier-model next-token logits or online frontier-model inference. 3.3 ON-P OLICY SELF -D ISTILLATION OBJECTIVE 
+
+The core training signal of OmniOPSD is a token-level divergence between the student distribution and the rationale-privileged teacher distribution along the student’s own sampled trajectory. At 4optimization step k, the student samples a completion ˆyi = (ˆ yi, 1, . . . , ˆyi,T i ) from the student prompt 
+
+cSi . We write ˆyi ∼ πθk (· | cSi ) as a shorthand for autoregressive sampling: 
+
+πθk (ˆ yi | cSi ) = 
+
+> Ti
+
+Y
+
+> t=1
+
+πθk
+
+ ˆyi,t | cSi , ˆyi,<t 
+
+ . (6) Given the sampled completion ˆyi, the student and teacher next-token distributions at position t
+
+are P (i) 
+
+> S,t
+
+and P (i)
+
+> T,t
+
+, as defined in Eq. (3) and Eq. (4) . Both distributions are evaluated on the same generated prefix ˆyi,<t and over the same vocabulary. Let z(i) 
+
+> S,t
+
+and z(i) 
+
+> T,t
+
+denote the corresponding next-token logits from the student and teacher branches. With temperature τ > 0, we define the temperature-scaled distributions as 
+
+P τ, (i) 
+
+> S,t
+
+= softmax 
+
+
+
+z(i)
+
+> S,t
+
+/τ 
+
+
+
+, P τ, (i) 
+
+> T,t
+
+= softmax 
+
+
+
+z(i)
+
+> T,t
+
+/τ 
+
+
+
+. (7) When τ = 1 , these reduce to the original next-token distributions. The teacher distribution is used as a stop-gradient target: 
+
+eP τ, (i) 
+
+> T,t
+
+= sg 
+
+
+
+P τ, (i)
+
+> T,t
+
+
+
+, (8) where sg( ·) denotes the stop-gradient operator. We use a generalized Jensen–Shannon divergence to align the student distribution with the rationale-privileged teacher distribution. For β ∈ (0 , 1) , the mixed distribution is 
+
+M βi,t = (1 − β)P τ, (i) 
+
+> S,t
+
++ β eP τ, (i) 
+
+> T,t
+
+. (9) The token-level divergence is defined as 
+
+Dβ
+
+> JSD
+
+ eP τ, (i) 
+
+> T,t
+
+, P τ, (i)
+
+> S,t
+
+
+
+= β KL 
+
+ eP τ, (i) 
+
+> T,t
+
+∥ M βi,t 
+
+
+
++ (1 − β) KL 
+
+
+
+P τ, (i) 
+
+> S,t
+
+∥ M βi,t 
+
+
+
+. (10) When β = 0 .5, this reduces to the standard symmetric Jensen–Shannon divergence. Only completion tokens are included in the loss mask. The self-distillation objective is 
+
+Ldistill = E(mi,x i,a i,e i)∼D Eˆyi∼πθk (·| cSi )
+
+"
+
+1
+
+TiTiX
+
+> t=1
+
+Dβ
+
+> JSD
+
+ eP τ, (i) 
+
+> T,t
+
+, P τ, (i)
+
+> S,t
+
+#
+
+, (11) where Ti = |ˆyi| is the number of generated completion tokens. Gradients are back-propagated only through the student branch, while the teacher branch and the sampled trajectory are treated as fixed for the current optimization step. This objective is on-policy because the token sequence ˆyi is sampled from the student under the original prompt cSi . At the same time, the dense token-level supervision is provided by the teacher distribution under the privileged rationale prompt cTi . Thus, OmniOPSD uses rationales to shape teacher-side distributional guidance without treating them as supervised CoT targets for the student. 3.4 REWARD -G ROUNDED HYBRID TRAINING 
+
+Although OmniOPSD can be trained purely with self-distillation, the implementation also supports a reward-grounded hybrid objective. This is useful when task-specific rewards are available, e.g., answer-format rewards, label-matching rewards, or reward-model scores. Given reward functions 
+
+{Rk}Kk=1 with weights {ωk}Kk=1 , we use their weighted sum as the sequence reward, 
+
+R(ˆ yi) = 
+
+> K
+
+X
+
+> k=1
+
+ωkRk(mi, x i, ˆyi, a i, r i). (12) We use this raw reward directly, without subtracting a baseline or normalizing by its standard deviation. Because each rollout is generated and updated on-policy within a single optimization step, the reward term reduces to a plain policy gradient that weights each sampled token by the raw sequence reward, 
+
+LR = −E(mi,x i,a i,e i)∼D Eˆyi∼πθk (·| cSi )
+
+"
+
+1
+
+TiTiX
+
+> t=1
+
+R(ˆ yi) log πθk (ˆ yi,t | cSi , ˆyi,<t )
+
+#
+
+. (13) 5The final training objective combines the two terms, 
+
+LOmniOP SD = Ldistill + α LR, (14) where α is the reward-training weight. When α = 0 , Eq. (14) reduces to pure on-policy self-distillation. 3.5 TRAINING PROCEDURE 
+
+Each optimization step ties the components above into a single on-policy loop. The student rolls out a completion from the label-free prompt cSi , and the teacher re-scores those same tokens under the rationale-privileged prompt cTi . The student is then updated by the self-distillation objective in Eq. (11) , optionally combined with the raw-reward term in Eq. (14) , and the teacher is refreshed as an exponential moving average of the student in Eq. (5). This loop realizes the decoupling of evidence acquisition from policy learning that motivates Om-niOPSD. Frontier-generated rationales enter training only as teacher-side privileged evidence, never as a target the student imitates or a supervised CoT label, so optimization stays on the student’s own trajectory. The student therefore receives dense token-level supervision computed entirely within a local model, without frontier-model logits, cross-tokenizer distillation, or online large-teacher inference. At inference time, the student uses only the original multimodal input, with no access to labels, rationales, or closed-source models. 
+
+# 4 EXPERIMENTS 
+
+We design the experiments to examine three aspects of OmniOPSD. First, we evaluate whether rationale-privileged on-policy self-distillation improves multimodal affective reasoning on a broad benchmark. Second, we compare it with supervised fine-tuning and outcome-reward training to test whether dense teacher-side guidance on student rollouts is more effective than offline imitation or sparse reward optimization. Third, we isolate the role of CoT-style privileged evidence context to verify that generated rationales are useful when they condition the local teacher. 4.1 EXPERIMENTAL SETUP 
+
+Datasets and evaluation metrics. The main experiments are conducted on MER-UniBench (Lian et al., 2025a), a unified benchmark for generalized multimodal emotion understanding. MER-UniBench evaluates three task families: sentiment analysis, basic emotion recognition, and fine-grained emotion detection. Following the benchmark protocol, we report weighted average F1 (WAF) for MOSI (Zadeh et al., 2016), MOSEI (Zadeh et al., 2018), SIMS (Yu et al., 2020), and SIMS v2 (Liu et al., 2022a); hit rate (HIT) for MER23 (Lian et al., 2023a), MER24 (Lian et al., 2024), MELD (Poria et al., 2019), and IEMOCAP (Busso et al., 2008); emotion-wheel F1 (EW-F1) for OV-MERD+ (Lian et al., 2025b); and the unweighted mean across all datasets. For a fair comparison, Table 1 preserves the modality grouping used in prior MER-UniBench reports; baseline results are reproduced from the corresponding published tables, while OmniOPSD is evaluated under audio-text, video-text, and audio-video-text settings. For ablation studies, we report macro-averaged F1 scores. Models are trained and evaluated in-domain on three English multimodal datasets spanning emotion recognition, intent detection, and sentiment-oriented affect analysis: MELD (Poria et al., 2019), MIntRec 2.0 (Zhang et al., 2024), and IEMOCAP (Busso et al., 2008). We further evaluate zero-shot OOD robustness on MC-EIU (Liu et al., 2024) and MAFW (Liu et al., 2022b). For MC-EIU, Intent-ZH and Emotion-ZH denote Chinese intent recognition and Chinese emotion recognition, respectively. For MAFW, Emotion-SL and Emotion-ML denote single-label and multi-label emotion recognition, respectively. 
+
+Implementation details. We use Qwen2.5-Omni-3B and Qwen2.5-Omni-7B as backbone models, both with audio, text, and video inputs. For video inputs, we sample between 1 and 16 frames per example. The CoT-style reasoning trajectories used as privileged evidence context for the training datasets are generated by GPT-4o from MMEVerse. All post-training experiments start from the corresponding cold-start checkpoint and are then trained for one epoch with a learning rate of 6Table 1: Main results on MER-UniBench. Best result in each column is in bold.                                                                                                                                                                                                                                                                                           
+
+> Model Sentiment Basic Emotion Fine-grained Mean
+> MOSI MOSEI SIMS SIMS v2 MER23 MER24 MELD IEMOCAP OV-MERD+
+> Input modality: Audio, Text
+> OneLLM 64.01 54.09 63.39 61.98 25.52 17.21 28.32 33.44 22.25 41.14 SECap 55.76 54.18 59.51 57.41 40.95 52.46 25.56 36.92 36.97 46.64 PandaGPT 66.06 61.33 62.93 58.88 33.57 39.04 31.91 36.55 31.33 46.84 Qwen-Audio 70.09 46.90 70.73 65.26 41.85 31.61 49.09 35.47 32.36 49.26 SALMONN 81.00 67.03 68.69 65.93 55.53 45.38 45.62 46.84 45.00 57.89 AffectGPT 83.46 80.74 82.99 83.75 72.94 73.41 56.63 55.68 59.98 72.18 AffectGPT-R1 80.13 80.01 84.49 82.31 81.69 93.49 63.74 63.85 65.49 77.24 OmniOPSD (Ours) 88.90 87.37 87.14 86.52 77.27 86.47 71.06 86.50 56.09 80.81
+> Input modality: Video, Text
+> Otter 52.89 50.44 57.56 53.12 16.41 14.65 22.57 29.08 16.63 34.82 Video-LLaVA 56.37 61.64 53.28 57.45 36.93 30.25 30.73 38.95 34.00 44.40 PandaGPT 58.50 64.25 62.07 65.25 39.13 47.16 38.33 47.21 35.07 50.77 Video-ChatGPT 54.42 63.12 64.82 65.80 44.86 46.80 37.33 56.83 39.80 52.64 VideoChat2 66.84 54.32 69.49 70.66 33.67 54.50 36.64 48.70 39.21 52.67 LLaMA-VID 61.78 63.89 69.35 67.48 50.72 57.60 42.75 46.02 45.01 56.07 VideoChat 65.13 63.61 69.52 72.14 48.73 57.30 41.11 48.38 44.52 56.71 Chat-UniVi 54.53 63.18 68.15 66.36 57.62 65.67 45.61 52.37 48.00 57.94 mPLUG-Owl 72.40 72.91 72.13 75.00 56.86 59.89 49.11 55.54 48.18 62.45 AffectGPT 82.39 81.57 87.20 86.29 74.58 75.29 57.63 62.19 61.65 74.31 AffectGPT-R1 78.78 79.07 85.91 85.85 77.72 85.29 61.09 67.42 62.42 75.95 OmniOPSD (Ours) 88.29 88.12 87.53 87.94 76.32 85.27 68.16 79.84 56.24 79.74
+> Input modality: Audio, Video, Text
+> PandaGPT 61.92 67.61 68.38 67.23 40.21 51.89 37.88 44.04 37.12 52.92 R1-Omni 58.02 56.48 71.82 68.58 64.17 67.43 43.20 51.58 55.24 59.61 Emotion-LLaMA 66.13 67.66 78.32 77.23 59.38 73.62 46.76 55.47 52.97 64.17 Emotion-LLaMAv2 86.28 87.69 87.72 86.02 77.28 86.90 51.32 84.05 62.90 78.91 AffectGPT 81.30 80.90 88.49 86.18 78.54 78.80 55.65 60.54 62.52 74.77 AffectGPT-R1 79.39 79.24 88.25 84.97 84.32 93.75 63.12 74.26 68.05 79.48 OmniOPSD (Ours) 90.06 89.03 90.76 89.14 85.79 92.43 71.89 89.09 59.52 84.19
+
+1 × 10 −6. The teacher is maintained as an exponential moving average of the student with decay 
+
+μ = 0 .999 in Eq. (5) , and the distillation objective uses the generalized JSD over the full vocabulary with β = 0 .5 and temperature τ = 1 .0. When the optional reward term is enabled, we combine the answer-accuracy and format rewards as in Eq. (12) and set the reward-training weight to α = 0 .2.We set the maximum sequence length to 24 K tokens, the maximum completion length to 512 tokens, use bfloat16 precision, and freeze the visual encoder during training. 4.2 MAIN RESULTS ON MER-U NI BENCH 
+
+Table 1 summarizes the main comparison on MER-UniBench, where OmniOPSD shows consistent advantages across modality settings. In the audio-video-text setting, OmniOPSD achieves the best overall mean score of 84 .19 , improving over the strongest reproduced tri-modal baseline, AffectGPT-R1, by 4.71 points. The gains are not limited to the full multimodal input: OmniOPSD also achieves the best mean scores in the audio-text and video-text settings, reaching 80 .81 and 79 .74 and improving over AffectGPT-R1 by 3.57 and 3.79 points, respectively. Across these settings, the improvements are most evident on the four sentiment datasets and on MELD/IEMOCAP, indicating that rationale-privileged teacher guidance benefits both acoustic-textual and visual-textual affective reasoning. This pattern supports the core premise of our method: labels are reliable but sparse, and using frontier-generated rationales as teacher-side privileged evidence provides dense token-level guidance without forcing the student to imitate frontier-model trajectories. 
+
+Task-level behavior. The strongest gains appear on label-grounded affective classification tasks. OmniOPSD reaches 90 .06 WAF on MOSI, 89 .03 WAF on MOSEI, 90 .76 WAF on SIMS, and 
+
+89 .14 WAF on SIMS v2, indicating that on-policy self-distillation also improves polarity-level affect recognition. For basic emotion recognition, OmniOPSD obtains 85 .79 HIT on MER23, 71 .89 HIT on MELD, and 89 .09 HIT on IEMOCAP, while remaining close to the best result on MER24. In contrast, 7Table 2: Ablation results across in-domain and OOD affective benchmarks. The left block reports in-domain results after joint training on MELD, MIntRec 2.0, and IEMOCAP, while the right block reports OOD zero-shot performance. Bold numbers indicate the best result within each base-model block, and underlined numbers indicate the second-best result.                                                                
+
+> Base Model Method In-domain OOD Zero-shot
+> MELD MIntRec 2.0 IEMOCAP MC-EIU Intent-ZH MC-EIU Emotion-ZH MAFW Emotion-SL MAFW Emotion-ML Qwen2.5-Omni-3B Base 0.5941 0.2936 0.1747 0.2597 0.2747 0.2127 0.2636
+> SFT 0.6355 0.3161 0.2275 0.2270 0.2593 0.1920 0.2383 GRPO 0.6093 0.2921 0.2208 0.2352 0.2670 0.2048 0.2298 OmniOPSD 0.6427 0.3248 0.2388 0.2551 0.2834 0.2159 0.2343 Qwen2.5-Omni-7B Base 0.6051 0.3007 0.1900 0.2539 0.2839 0.2453 0.3164
+> SFT 0.6451 0.3581 0.2343 0.2214 0.2450 0.1965 0.2330 GRPO 0.6424 0.3179 0.2267 0.2196 0.2607 0.2194 0.2431 OmniOPSD 0.6501 0.3510 0.2426 0.2248 0.2360 0.2250 0.2700
+
+Table 3: Ablation on CoT-style privileged context. Results are reported on the in-domain evaluation with Qwen2.5-Omni-3B. The w/ CoT variants use generated CoT-style evidence only as teacher-side privileged context. Colored subscripts denote relative changes from the corresponding w/o CoT variant. 
+
+Method MELD MIntRec 2.0 IEMOCAP 
+
+GRPO w/o CoT 0.6088 0.2982 0.2272 GRPO w/ CoT 0.6093 ↑0.08% 0.2921 ↓2.05% 0.2208 ↓2.82% 
+
+OmniOPSD w/o CoT 0.6289 0.3192 0.2254 OmniOPSD w/ CoT 0.6427 ↑2.19% 0.3248 ↑1.75% 0.2388 ↑5.94% 
+
+OmniOPSD is not the best method on OV-MERD+. This is a useful boundary case: fine-grained open-vocabulary emotion detection requires semantic calibration beyond closed-set labels and short evidence descriptions, suggesting that richer privileged contexts or reward designs may be needed for open-vocabulary affect generation. 4.3 ABLATION AND TRAINING ANALYSIS 
+
+We next study whether the gains come from the rationale-privileged on-policy mechanism rather than from generic post-training. Table 2 compares the base model, SFT, GRPO, and OmniOPSD using Qwen2.5-Omni-3B and Qwen2.5-Omni-7B. The in-domain setting trains and evaluates on MELD, MIntRec 2.0, and IEMOCAP, while the OOD setting evaluates the resulting models zero-shot on MC-EIU and MAFW. All ablation scores are macro-averaged F1. 
+
+In-domain analysis. OmniOPSD gives the most consistent in-domain improvement across model scales. For Qwen2.5-Omni-3B, it achieves the best score on all three datasets, improving the average in-domain macro-F1 from 0.3541 for the base model to 0.4021 . For Qwen2.5-Omni-7B, it achieves the best results on MELD and IEMOCAP and remains close to SFT on MIntRec 2.0, yielding the strongest average in-domain performance. SFT can be competitive on several in-domain datasets, but it trains on fixed target sequences and therefore does not directly address the distribution mismatch between offline demonstrations and student-generated trajectories. GRPO, which optimizes outcome rewards, is less stable on these classification-style reasoning tasks, consistent with the sparse credit-assignment issue discussed in the introduction. By contrast, OmniOPSD provides dense teacher-side guidance on student on-policy rollouts while using evidence-aware rationales only as privileged context. 
+
+OOD analysis. The OOD results are more nuanced, as expected for cross-dataset and cross-lingual affective reasoning. The base model can remain strong on some OOD columns, indicating that post-training may trade generality for task alignment. Among post-training methods, however, OmniOPSD preserves robustness more reliably. For the 3B model, it is the strongest post-training method on 80 500 1k 1500 2k          
+
+> Step
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> Answer Reward
+> 0500 1k 1500 2k
+> Step
+> 0.0
+> 0.5
+> 1.0
+> Format Reward
+> 0500 1k 1500 2k
+> Step
+> 100
+> 150
+> 200
+> Completion Length
+> OmniOPSD GRPO
+
+Figure 1: Training dynamics of GRPO and OmniOPSD on Qwen2.5-Omni-3B. The three panels track the answer-accuracy reward, the format reward, and the completion length over training. both MC-EIU variants and on MAFW Emotion-SL. For the 7B model, it is the strongest post-training method on MC-EIU Intent-ZH and both MAFW settings. This pattern supports the on-policy component of OmniOPSD: training on the student’s own rollouts reduces the over-specialization often introduced by supervised fine-tuning, while the rationale-privileged teacher supplies denser feedback than outcome-only rewards. 
+
+Effect of privileged evidence context. Table 3 isolates the role of CoT-style evidence context. Adding the same generated context to GRPO yields only a negligible gain on MELD and decreases performance on MIntRec 2.0 and IEMOCAP. In contrast, adding CoT-style context to OPSD improves all three datasets, with relative gains of 2.19% , 1.75% , and 5.94% . This distinction is central to OmniOPSD. Generated rationales are never used as a target for the student to imitate. They help most as the privileged context that conditions the local teacher scoring the student-generated tokens. 
+
+Training dynamics. Figure 1 compares GRPO and OmniOPSD during training on Qwen2.5-Omni-3B. OmniOPSD drives both the answer-accuracy reward and the format reward up faster and to higher values, showing that dense teacher-side guidance points the optimization in a more effective direction than outcome-only rewards. Its completion length grows and then stabilizes rather than shrinking, so the model preserves its reasoning behavior instead of degenerating into short, shallow answers. Together, these curves match the intended role of rationale-privileged on-policy self-distillation, which provides dense evidence-aware teacher guidance on the student’s own rollouts. 
+
+# 5 CONCLUSION 
+
+We presented OmniOPSD, a rationale-privileged on-policy self-distillation framework for multi-modal affective computing. Instead of treating frontier-generated rationales as gold CoT targets, OmniOPSD uses them only as teacher-side privileged evidence, allowing a local teacher to provide dense token-level guidance on student-generated trajectories from the original multimodal prompt. This design separates evidence acquisition from policy learning, avoiding frontier-model logits, cross-tokenizer distillation, online large-teacher inference, and inference-time access to labels or rationales. Experiments on MER-UniBench and ablation studies show that this strategy improves multimodal affective reasoning over supervised fine-tuning and outcome-reward RL baselines, especially in label-grounded human-centered tasks. Future work will study how rationale-privileged self-distillation can support stronger self-improvement, including iterative teacher refinement, adaptive privileged-context selection, and more reliable internal feedback for continual multimodal reasoning. 9REFERENCES 
+
+Rishabh Agarwal, Nino Vieillard, Yongchao Zhou, Piotr Stanczyk, Sabela Ramos Garea, Matthieu Geist, and Olivier Bachem. On-policy distillation of language models: Learning from self-generated mistakes. In The twelfth international conference on learning representations , 2024. Carlos Busso, Murtaza Bulut, Chi-Chun Lee, Abe Kazemzadeh, Emily Mower, Samuel Kim, Jean-nette N Chang, Sungbok Lee, and Shrikanth S Narayanan. Iemocap: Interactive emotional dyadic motion capture database. Language resources and evaluation , 42(4):335–359, 2008. Hardy Chen, Haoqin Tu, Fali Wang, Hui Liu, Xianfeng Tang, Xinya Du, Yuyin Zhou, and Cihang Xie. Sft or rl? an early investigation into training r1-like reasoning large vision-language models. 
+
+Transactions on Machine Learning Research .Yin Chen, Jia Li, Shiguang Shan, Meng Wang, and Richang Hong. From static to dynamic: Adapting landmark-aware image models for facial expression recognition in videos. IEEE Transactions on Affective Computing , 16(2):624–638, 2024. Zebang Cheng, Yuxiang Lin, Zhaoru Chen, Xiang Li, Shuyi Mao, Fan Zhang, Daijun Ding, Bowen Zhang, and Xiaojiang Peng. Semi-supervised multimodal emotion recognition with expression mae. In Proceedings of the 31st ACM International Conference on Multimedia , pp. 9436–9440, 2023. Zebang Cheng, Zhi-Qi Cheng, Jun-Yan He, Jingdong Sun, Kai Wang, Yuxiang Lin, Zheng Lian, Xiaojiang Peng, and Alexander G Hauptmann. Emotion-llama: Multimodal emotion recognition and reasoning with instruction tuning. Advances in Neural Information Processing Systems , 37: 110805–110853, 2024. Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep reinforcement learning from human preferences. Advances in neural information processing systems , 30, 2017. Chengwei Dai, Kun Li, Wei Zhou, and Songlin Hu. Capture the key in reasoning to enhance cot distillation generalization. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 441–465, 2025. Yuhao Dong, Zuyan Liu, Hai-Long Sun, Jingkang Yang, Winston Hu, Yongming Rao, and Ziwei Liu. Insight-v: Exploring long-chain visual reasoning with multimodal large language models. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 9062–9072, 2025. Yiyang Fang, Wenke Huang, Guancheng Wan, Kehua Su, and Mang Ye. Emoe: Modality-specific enhanced dynamic emotion experts. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 14314–14324, 2025. Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 , 2025. Namgyu Ho, Laura Schmid, and Se-Young Yun. Large language models are reasoning teachers. In 
+
+Proceedings of the 61st annual meeting of the association for computational linguistics (volume 1: long papers) , pp. 14852–14882, 2023. Jonas Hübotter, Frederike Lübeck, Lejs Behric, Anton Baumann, Marco Bagatella, Daniel Marta, Ido Hakimi, Idan Shenfeld, Thomas Kleine Buening, Carlos Guestrin, et al. Reinforcement learning via self-distillation. arXiv preprint arXiv:2601.20802 , 2026. Dengyang Jiang, Xin Jin, Dongyang Liu, Zanyi Wang, Mingzhe Zheng, Ruoyi Du, Xiangpeng Yang, Qilong Wu, Zhen Li, Peng Gao, et al. D-opsd: On-policy self-distillation for continuously tuning step-distilled diffusion models. arXiv preprint arXiv:2605.05204 , 2026. Xingxun Jiang, Yuan Zong, Wenming Zheng, Chuangao Tang, Wanchuang Xia, Cheng Lu, and Jiateng Liu. Dfew: A large-scale database for recognizing dynamic facial expressions in the wild. In Proceedings of the 28th ACM international conference on multimedia , pp. 2881–2889, 2020. 10 Junlong Ke, Zichen Wen, Boxue Yang, Yantai Yang, Xuyang Liu, Chenfei Liao, Zhaorun Chen, Shaobo Wang, and Linfeng Zhang. Flash-unified: A training-free and task-aware acceleration framework for native unified models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 9131–9142, 2026. Jeonghye Kim, Xufang Luo, Minbeom Kim, Sangmook Lee, Dohyung Kim, Jiwon Jeon, Dongsheng Li, and Yuqing Yang. Why does self-distillation (sometimes) degrade the reasoning capability of llms? arXiv preprint arXiv:2603.24472 , 2026. Zheng Lian, Haiyang Sun, Licai Sun, Kang Chen, Mingyu Xu, Kexin Wang, Ke Xu, Yu He, Ying Li, Jinming Zhao, et al. Mer 2023: Multi-label learning, modality robustness, and semi-supervised learning. In Proceedings of the 31st ACM international conference on multimedia , pp. 9610–9614, 2023a. Zheng Lian, Haiyang Sun, Licai Sun, Hao Gu, Zhuofan Wen, Siyuan Zhang, Shun Chen, Mingyu Xu, Ke Xu, Kang Chen, et al. Explainable multimodal emotion recognition. arXiv preprint arXiv:2306.15401 , 2023b. Zheng Lian, Haiyang Sun, Licai Sun, Zhuofan Wen, Siyuan Zhang, Shun Chen, Hao Gu, Jinming Zhao, Ziyang Ma, Xie Chen, et al. Mer 2024: Semi-supervised learning, noise robustness, and open-vocabulary multimodal emotion recognition. In Proceedings of the 2nd International Workshop on Multimodal and Responsible Affective Computing , pp. 41–48, 2024. Zheng Lian, Haoyu Chen, Lan Chen, Haiyang Sun, Licai Sun, Yong Ren, Zebang Cheng, Bin Liu, Rui Liu, Xiaojiang Peng, et al. Affectgpt: A new dataset, model, and benchmark for emotion understanding with multimodal large language models. In Proceedings of the 42nd International Conference on Machine Learning . ML Research Press, 2025a. Zheng Lian, Haiyang Sun, Licai Sun, Haoyu Chen, Lan Chen, Hao Gu, Zhuofan Wen, Shun Chen, Zhang Siyuan, Hailiang Yao, et al. Ov-mer: Towards open-vocabulary multimodal emotion recognition. In International Conference on Machine Learning , pp. 37015–37050. PMLR, 2025b. Wang Lin, Yueying Feng, WenKang Han, Tao Jin, Zhou Zhao, Fei Wu, Chang Yao, and Jingyuan Chen. E3: Exploring embodied emotion through a large-scale egocentric video dataset. Advances in Neural Information Processing Systems , 37:118182–118197, 2024. Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural information processing systems , 36:34892–34916, 2023. Rui Liu, Haolin Zuo, Zheng Lian, Xiaofen Xing, Björn W Schuller, and Haizhou Li. Emotion and intent joint understanding in multimodal conversation: A benchmarking dataset. arXiv preprint arXiv:2407.02751 , 2024. Yihe Liu, Ziqi Yuan, Huisheng Mao, Zhiyun Liang, Wanqiuyue Yang, Yuanzhe Qiu, Tie Cheng, Xiaoteng Li, Hua Xu, and Kai Gao. Make acoustic and visual cues matter: Ch-sims v2. 0 dataset and av-mixup consistent module. In Proceedings of the 2022 international conference on multimodal interaction , pp. 247–258, 2022a. Yuanyuan Liu, Wei Dai, Chuanxu Feng, Wenbin Wang, Guanghao Yin, Jiabei Zeng, and Shiguang Shan. Mafw: A large-scale, multi-modal, compound affective database for dynamic facial ex-pression recognition in the wild. In Proceedings of the 30th ACM international conference on multimedia , pp. 24–32, 2022b. Kevin Lu and Thinking Machines Lab. On-policy distillation. Thinking Machines Lab: Connection-ism , 2025. doi: 10.64434/tml.20251026. https://thinkingmachines.ai/blog/on-policy-distillation. Yu Luo, Jianbo Ye, Reginald B Adams Jr, Jia Li, Michelle G Newman, and James Z Wang. Arbee: Towards automated recognition of bodily expression of emotion in the wild. International journal of computer vision , 128(1):1–25, 2020. Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. Advances in neural information processing systems , 35:27730– 27744, 2022. 11 Rosalind W Picard. Affective computing . MIT press, 2000. Soujanya Poria, Devamanyu Hazarika, Navonil Majumder, Gautam Naik, Erik Cambria, and Rada Mihalcea. Meld: A multimodal multi-party dataset for emotion recognition in conversations. In Proceedings of the 57th annual meeting of the association for computational linguistics , pp. 527–536, 2019. Zheng Qin, Ruobing Zheng, Yabing Wang, Tianqi Li, Yi Yuan, Jingdong Chen, and Le Wang. Humansense: From multimodal perception to empathetic context-aware responses through rea-soning mllms. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pp. 24973–24981, 2026. Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741, 2023. Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, et al. Deepseekmath: Pushing the limits of mathematical reason-ing in open language models. arXiv preprint arXiv:2402.03300 , 2024. Mingyang Song and Mao Zheng. A survey of on-policy distillation for large language models. arXiv preprint arXiv:2604.00626 , 2026. Hanqing Wang, Shaoyang Wang, Yiming Zhong, Zemin Yang, Jiamin Wang, Zhiqing Cui, Jiahao Yuan, Yifan Han, Mingyu Liu, and Yuexin Ma. Affordance-r1: Reinforcement learning for generalizable affordance reasoning in multimodal large language models. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pp. 9738–9746, 2026a. Lei Wang, Yi Hu, Jiabang He, Xing Xu, Ning Liu, Hui Liu, and Heng Tao Shen. T-sciq: Teaching multimodal chain-of-thought reasoning via large language model signals for science question answering. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pp. 19162–19170, 2024a. Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024b. Yiyu Wang, Xuyang Liu, Xiyan Gui, Xinying Lin, Boxue Yang, Chenfei Liao, Tailai Chen, and Linfeng Zhang. Accelerating streaming video large language models via hierarchical token compression. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 18523–18533, 2026b. Yusong Wang, Xuanye Fang, Huifeng Yin, Dongyuan Li, Guoqi Li, Qi Xu, Yi Xu, Shuai Zhong, and Mingkun Xu. Big-fusion: Brain-inspired global-local context fusion framework for multimodal emotion recognition in conversations. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pp. 1574–1582, 2025. Zichen Wen, Yiyu Wang, Chenfei Liao, Boxue Yang, Junxian Li, Weifeng Liu, Haocong He, Bolong Feng, Xuyang Liu, Yuanhuiyi Lyu, et al. Ai for service: Proactive assistance with ai glasses. arXiv preprint arXiv:2510.14359 , 2025. Zichen Wen, Boxue Yang, Shuang Chen, Yaojie Zhang, Yuhang Han, Junlong Ke, Cong Wang, Yicheng Fu, Jiawang Zhao, Jiangchao Yao, et al. Innovator-vl: A multimodal large language model for scientific discovery. arXiv preprint arXiv:2601.19325 , 2026a. Zichen Wen, Boxue Yang, Junlong Ke, Jiajie Huang, Chenfei Liao, Junxi Wang, Xuyang Liu, and Linfeng Zhang. Evostreaming: Your offline video model is a natively streaming assistant. arXiv preprint arXiv:2605.10343 , 2026b. Hongxia Xie, Chu-Jun Peng, Yu-Wen Tseng, Hung-Jen Chen, Chan-Feng Hsu, Hong-Han Shuai, and Wen-Huang Cheng. Emovit: Revolutionizing emotion insights with visual instruction tuning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 26596–26605, 2024. 12 Wenmeng Yu, Hua Xu, Fanyang Meng, Yilin Zhu, Yixiao Ma, Jiele Wu, Jiyun Zou, and Kaicheng Yang. Ch-sims: A chinese multimodal sentiment analysis dataset with fine-grained annotation of modality. In Proceedings of the 58th annual meeting of the association for computational linguistics , pp. 3718–3727, 2020. Amir Zadeh, Rowan Zellers, Eli Pincus, and Louis-Philippe Morency. Mosi: multimodal cor-pus of sentiment intensity and subjectivity analysis in online opinion videos. arXiv preprint arXiv:1606.06259 , 2016. AmirAli Bagher Zadeh, Paul Pu Liang, Soujanya Poria, Erik Cambria, and Louis-Philippe Morency. Multimodal language analysis in the wild: Cmu-mosei dataset and interpretable dynamic fusion graph. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 2236–2246, 2018. Chen Zhang, Qiuchi Li, Dawei Song, Zheyu Ye, Yan Gao, and Yao Hu. Towards the law of capacity gap in distilling language models. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 22504–22528, 2025a. Fan Zhang, Zebang Cheng, Chong Deng, Haoxuan Li, Zheng Lian, Qian Chen, Huadai Liu, Wen Wang, YiFan Zhang, Renrui Zhang, Ziyu Guo, Zhihong Zhu, Hao Wu, Haixin Wang, Yefeng Zheng, Xiaojiang Peng, Xian Wu, Kun Wang, Xiangang Li, Jieping Ye, and Pheng-Ann Heng. MME-emotion: A holistic evaluation benchmark for emotional intelligence in multimodal large language models. In The Fourteenth International Conference on Learning Representations , 2026. URL https://openreview.net/forum?id=oSX9aenbea .Hanlei Zhang, Hua Xu, Xin Wang, Qianrui Zhou, Shaojie Zhao, and Jiayan Teng. Mintrec: A new dataset for multimodal intent recognition. In Proceedings of the 30th ACM international conference on multimedia , pp. 1688–1697, 2022. Hanlei Zhang, Xin Wang, Hua Xu, Qianrui Zhou, Kai Gao, Jianhua Su, jinyue Zhao, Wenrui Li, and Yanting Chen. MIntrec2.0: A large-scale benchmark dataset for multimodal intent recognition and out-of-scope detection in conversations. In The Twelfth International Conference on Learning Representations , 2024. URL https://openreview.net/forum?id=nY9nITZQjc .Jingyi Zhang, Jiaxing Huang, Huanjin Yao, Shunyu Liu, Xikun Zhang, Shijian Lu, and Dacheng Tao. R1-vl: Learning to reason with multimodal large language models via step-wise group relative pol-icy optimization. 2025 IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 1859– 1869, 2025b. URL https://api.semanticscholar.org/CorpusID:277066741 .Xinjie Zhang, Tenggan Zhang, Lei Sun, Jinming Zhao, and Qin Jin. Exploring interpretability in deep learning for affective computing: a comprehensive review. ACM Transactions on Multimedia Computing, Communications and Applications , 21(7):1–28, 2025c. Jiaxing Zhao, Xihan Wei, and Liefeng Bo. R1-omni: Explainable omni-multimodal emotion recognition with reinforcement learning. arXiv preprint arXiv:2503.05379 , 2025. Siyan Zhao, Zhihui Xie, Mengchen Liu, Jing Huang, Guan Pang, Feiyu Chen, and Aditya Grover. Self-distilled reasoner: On-policy self-distillation for large language models. arXiv preprint arXiv:2601.18734 , 2026a. Ziqi Zhao, Xinyu Ma, Liu Yang, Yujie Feng, Daiting Shi, Jingzhou He, Xin Xin, Zhaochun Ren, and Xiao-Ming Wu. Rosd: Reflective on-policy self-distillation for language model reasoning across domains. arXiv preprint arXiv:2605.28014 , 2026b. Yuhang Zhou, Lizhu Zhang, Yifan Wu, Mingyi Wang, Peng Bo, Jiayi Liu, Xiangjun Fan, and Zhuokai Zhao. Omniopd: Logit-free on-policy distillation via speculative verification. arXiv preprint arXiv:2606.01476 , 2026. 13
