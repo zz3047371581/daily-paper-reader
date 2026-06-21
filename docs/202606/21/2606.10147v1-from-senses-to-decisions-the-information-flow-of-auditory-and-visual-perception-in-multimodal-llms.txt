@@ -1,0 +1,3937 @@
+Title: From Senses to Decisions: The Information Flow of Auditory and Visual Perception in Multimodal LLMs
+
+URL Source: https://arxiv.org/pdf/2606.10147v1
+
+Published Time: Wed, 10 Jun 2026 00:14:33 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# From Senses to Decisions: The Information Flow of Auditory and Visual Perception in Multimodal LLMs 
+
+Wish Suharitdamrong 1∗ Muhammad Awais 1,2 Xiatian Zhu 1,2 Sara Atito 1,21Surrey Institute for People-Centred AI (PAI), University of Surrey, UK 
+
+> 2
+
+Centre for Vision, Speech and Signal Processing (CVSSP), University of Surrey, UK 
+
+Abstract 
+
+Multimodal Large Language Models (MLLMs) can listen and see, but how do audio and visual signals actually travel through the network to shape an answer? Despite their growing role in research and real-world applications, the internal pathways through which audio and visual tokens influence the final prediction remain poorly understood. In this study, we examine audio-visual information flow inside Audio-Visual Large Language Models (AVLLMs), tracing how AVLLMs route, utilize, and integrate audio and visual information across two input configurations, audio-visual video and multiple interleaved audio-visual items. We find that for audio-visual video, AVLLMs follow the sequential information flow pathway established for VLMs and VideoLLMs, with audio and visual contribution flowing along this pathway in proportion to the task’s reliance on each modality. In settings with multiple interleaved audio-visual items, this routing shifts to different parallel streams. Furthermore, we demonstrate that audio-visual and other token types can be discarded once their information is transferred to LLM, with minimal impact on the model’s prediction or even slight improvement, generalizing across multiple tasks and datasets, enabling more efficient inference. These findings hold across multiple models and scales, Qwen2.5-Omni and Video-SALMONN2 Plus at 3B and 7B scales, leading to hypotheses on why these flow structures emerge. Together, these results deliver the first coherent picture of how AVLLMs orchestrate sound and sight inside the network and lay the groundwork for the next wave of interpretability, design, and efficiency advances in audio-visual and broader MLLMs. 
+
+1 Introduction 
+
+Multimodal Large Language Models (MLLMs) [ 43 , 18 ] have progressed rapidly, jointly processing auditory and visual information in models that can both listen and see, bringing machine perception closer to human perception. Earlier research developed each modality independently, leading to specialized Vision-Language models (VLMs) [ 28 , 24 , 1, 2, 45 , 54 , 46 ] and Audio-Language models (ALMs) [ 15 , 41 , 11 , 12 , 5 ], each operating effectively within its target modality. Recent Audio-Visual Large Language Models (AVLLMs) [ 49 , 40 , 50 , 9 , 4, 44 ] integrate visual and auditory inputs to enable unified audio-visual understanding. These models can answer questions about audio-visual scenes and transcribe visually grounded speech, tasks requiring cross-modal reasoning across the audio and visual modalities. These models span input formats from single images, videos, or audio clips to audio-visual videos and multiple interleaved audio-visual items, reaching diverse real-world scenarios. Around these models, an active research landscape has emerged, including benchmarks 
+
+> ∗Corresponding author: ws00372@surrey.ac.uk Preprint.
+> arXiv:2606.10147v1 [cs.AI] 8 Jun 2026
+
+probing audio-visual understanding across rich and complex scenarios [ 51 , 25 , 56 , 27 ], parameter-efficient fine-tuning methods [ 47 ], adaptation-based token compression [ 13 , 7], and training-free token compression at inference [42, 23]. In parallel, mechanistic interpretability has made significant progress in uncovering the internal mechanisms inside LLMs [ 31 , 8 , 36 , 10 ]. Similar techniques have recently been extended to MLLMs [ 3 , 34 , 32 , 55 , 21 , 19 , 37 ]. In particular, attention knockout has been used to trace how cross-modal information flow emerges from image inputs in VLMs [ 55 ] and how spatiotemporal information flow emerges from video inputs in VideoLLMs [ 21 ]. Beyond these mechanistic studies, multi-image input handling has been actively studied in VLMs, surfacing failure modes and motivat-ing mitigation strategies. Cross-image information leakage has been identified as a core failure mode, where visual content from different images entangles in the output [ 35 ]. Delimiter tokens have been examined and exploited as a mechanism to limit this entanglement [ 22 ]. Performance on multi-image tasks has also been shown to degrade as the number of input images grows [6]. While AVLLMs introduce a new dimension to machine perception through the integration of sound and sight, the internal mechanisms underlying audio-visual integration remain largely unstudied. Concurrent work on AVLLMs [ 37 ] examines audio-visual captioning and reports that cross-modal integration concentrates in deep layers. In contrast, information flow studies in VLMs [ 55 ] and VideoLLMs [ 21 ] locate cross-modal integration at earlier-to-middle layers, where visual information flows to the prediction only through the language tokens. Whether the information flow in AVLLMs aligns with these VLM and VideoLLM findings or departs from them, and how AVLLMs distribute their reliance on audio versus visual inputs along this flow, remains an open question. In particular, no prior work has examined the role of audio along the information flow in MLLMs, and it is unclear whether audio behaves similarly to visual information or follows different pathways. Additionally, in the multi-input interleaved configuration, prior work in VLMs has characterized model behavior on multi-image inputs [ 35 , 22 , 6 ], but the underlying information flow has not been examined, neither for multi-image inputs nor for the broader case where audio items are interleaved alongside visual items. In this study, we trace how audio and visual information jointly flow through AVLLMs to form the prediction, mapping these pathways in both input configurations and characterizing how each modality contributes along the way. Our key findings are as follows: • Audio-visual information does not reach the deep layers: Video attention in later layers is dominated by attention artifacts that disproportionately attract attention, making attention allocation an unreliable indicator of information flow. • Task requirements steer the model’s audio-visual flow: The contribution of each modality to the prediction and the strength of interaction between audio and video vary with what the task requires, with more visual, auditory, or audio-visual alignment content depending on which is needed to answer the question. • Multiple independent audio-visual inputs route through parallel paths: Independent audio and visual items interleaved with text route information to the prediction along multiple parallel paths, rather than through a single sequential path as in single audio-visual videos. • Tokens can be discarded after their information is transferred: Once a token’s content has been passed on, it can be discarded with minimal impact on accuracy or even slight improvement. We show this across tasks and datasets, and across input configurations, with each token type discarded at the distinct layer where its information transfer completes. 
+
+2 Preliminary on audio-visual large language models (AVLLMs) 
+
+Multimodal tokenization and sequence construction: AVLLMs process a video with its audio track and a text instruction through an autoregressive transformer over an interleaved token sequence. Let the video frames be V ∈ RT ×H×W ×3, with T frames at spatial resolution H × W . The frames are passed through a vision encoder and projector to produce NV video tokens of dimension d, the audio track is processed by an audio encoder into NA audio tokens of the same dimension, and the text instruction is tokenized into NT text tokens. For a single audio-visual video input, AVLLMs preserve temporal alignment by interleaving audio and video tokens within fixed temporal windows. Let C denote the number of windows, and let Vc and Ac be the visual and audio tokens within 2the c-th window. With system prompt , video , audio , and question segments, the full input sequence to the language model is 
+
+I =
+
+h
+
+s1, . . . , s NS
+
+| {z }
+
+> system
+
+; V1 , A1 ; . . . ; VC , AC
+
+| {z }
+
+> single audio-visual video
+
+; q1, . . . , q NQ
+
+| {z }
+
+> question
+
+i
+
+, (1) where s1, . . . , s NS are system-prompt tokens, q1, . . . , q NQ are question tokens, and the total sequence length is N = NS + NV + NA + NQ. Beyond this single audio-visual video setting, AVLLMs also process multi-input sequences with multiple independent audio and visual items interleaved with text, which we describe in Section 5. 
+
+Causal self-attention: At each transformer layer ℓ, the hidden states Hℓ ∈ RN ×d are pro-jected into query, key, and value matrices Qℓ = HℓWℓQ, Kℓ = HℓWℓK , Vℓ = HℓWℓV , where 
+
+WℓQ, WℓK , WℓV ∈ Rd×dh are learnable and dh is the per-head dimension. The attention output is 
+
+Attention( Qℓ, Kℓ, Vℓ) = softmax 
+
+ Qℓ(Kℓ)⊤
+
+√dh
+
++ M
+
+
+
+Vℓ, (2) where M ∈ RN ×N is a causal mask enforcing autoregressive decoding. 
+
+3 What attention patterns reveal about information flow? 
+
+To trace how audio-visual information reaches the prediction, a natural starting point is to examine where the model directs its attention. We do this on multiple-choice question-answering (MCQ) tasks, where the prediction is a single token (the answer letter), using Qwen2.5-Omni [ 49 ] at 3B scale as our subject model. We inspect the attention allocation of this last token which is the first generated token where the prediction is formed. Specifically, we track its allocation across layers and across token categories ( system prompt , video , audio , user instruction ). Figure 1 (left) shows that throughout most of the network, the last token attends predominantly to language tokens ( system prompt and user instruction ), and attention to multimodal tokens fades through the layers. However, attention to video sharply spikes at layer 31 and remains elevated through the final layer. 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35     
+
+> Layer
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Attention Allocations
+> Video Attention
+> Spike
+> Generated Token Attention Allocations per Token Category
+> Query
+> Attention Map — Layer 30
+> Key
+> Vision sink token
+> Attention Map — Layer 31
+> Key
+> 0.00
+> 0.01
+> 0.02
+> 0.03
+> 0.04
+> 0.05
+> Attention score
+> System Video Audio User Instruction Generated
+
+Figure 1: Attention to video sharply spikes at layer 31. (Left) Attention allocation of the last token per layer and token category. (Middle, Right) Attention maps at layers 30 and 31 of Qwen2.5-Omni 3B, with the vision sinks at layer 31 marked by red arrows. Table 1: Masking attention to video and audio tokens at later layers (31–35) leaves AV-SpeakerBench accuracy unchanged or slightly improved. 
+
+Mask Accuracy 
+
+Original Casual Mask 42.24 Mask video for last token 42.24 Mask video for all text 42.31 Mask video and audio for all text 42.52 
+
+To understand why this spike emerges, we examine the attention maps at layers 30 and 31 (Figure 1 middle and right). The spike is driven by a sparse set of visual tokens generally at the first visual position of frames, receiving concentrated attention at layer 31 but absent at layer 30. This behavior of visual tokens matches the visual attention sinks identified in [ 20 , 30 ], and Figure 2 confirms the sink-token characteristic, with these tokens generally exhibiting much larger L2 norms than the rest of the sequence and activating the same hidden dimen-sions as the language sink tokens [ 48 , 39 , 16 ] in the 3system prompt. Therefore, the attention to these visual tokens is a mechanical artifact of their massive activation, not a sign of meaningful visual information. This motivates the central question: if video attention in the later layers is dominated by sinks, does any audio-visual information actually flow to the prediction through these layers? To answer this, we apply three masking conditions at layers 31 through the final layer and measure their impact on AV-SpeakerBench [ 33 ], an audio-visual video MCQ benchmark (Table 1). Across all three conditions, accuracy is unchanged or marginally im-proved. Despite the strong attention weights on the vision sinks, neither audio nor visual information flows through these later layers. 0 250 500 750 1000 1250 1500 1750          
+
+> Token position
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> 3500
+> L2 norm
+> System Sink
+> System Sink
+> Vision Sink
+> Vision Sink
+> Vision Sink Vision Sink
+> Vision Sink
+> Vision Sink
+> Hidden state L2 norm — Layer 31
+> System
+> Video
+> Audio
+> User Instruction
+> 0500 1000 1500 2000
+> 0
+> 500
+> 1000
+> Magnitude
+> System
+> 0500 1000 1500 2000
+> Hidden dimension
+> 0
+> 500
+> 1000
+> 1500
+> Magnitude
+> Video
+
+Figure 2: Vision sinks share the same hidden-state activation as the language sinks. (Left) Hidden state L2 norm at layer 31, with vision sink tokens marked by red circles. (Right) Magnitude per hidden dimension for a system sink and a vision sink, with massive activation peaks at dimensions 318, 1874, and 1819 for both, on Qwen2.5-Omni 3B. 
+
+Finding 1: Attention allocation is not a reliable indicator of information flow in AVLLMs. Video attention in later layers is dominated by attention sinks, and audio-visual information does not flow through these deep layers. 
+
+4 How do audio and visual information flow in audio-visual videos? 
+
+In the previous section (Section 3), we showed that attention allocation does not reliably reveal information flow. To trace the information flow, we use causal interventions to invesitgate this, starting with the single audio-visual video input. Section 4.2 examines within- and cross-modal interactions, and Section 4.3 traces the route taken to the prediction. We first describe the experimental setup in Section 4.1. We then extend the analysis to the multi-input interleaved configuration in Section 5. 
+
+4.1 Experimental setup 
+
+We use Attention Knockout [10 ], a causal intervention that selectively blocks specific attention edges and measures the relative change in prediction probability. We apply it on AV-SpeakerBench [ 33 ], an audio-visual four-way MCQ benchmark. To ensure each knockout measures a degradation rather than a coincidental change, we run all interventions only on samples the model predicts correctly. 
+
+Attention knockout: Given a source set of token positions S (the key side) and a target set T
+
+(the query side), we modify the causal mask M from Section 2 at a chosen subset of layers L such that Mℓi,j = −∞ for all i ∈ T , j ∈ S , ℓ ∈ L , blocking query positions in T from attending to key positions in S while leaving all other attention edges intact. We measure the effect via the relative change in the model’s probability of the predicted answer letter, ∆p = ( pknockout − pbase )/p base , where 
+
+pbase is the probability under the original causal mask and pknockout is the probability after the mask modification. A large negative ∆p indicates the blocked pathway carries information critical to the prediction, while ∆p ≈ 0 indicates it is dispensable. Following [ 10 , 55 , 21 ], we localize where in the network a pathway operates by applying the knockout within a sliding window of k consecutive layers centered at each layer ℓ and sweeping ℓ across the full depth, yielding a curve of ∆p versus center layer. We use k = 7 unless otherwise noted. We denote a knockout pathway as S̸ → T ; for example, Video ̸→Question denotes blocking the question tokens from attending to the video tokens. 4Table 2: Five representative task categories in AV-SpeakerBench , with example questions and two of four options per example (separated by ‘;’). Category color indicates the cross-modal direction, visual anchor → audio answer , audio anchor → visual answer , and mixed . 
+
+Task Example question 
+
+Speech Recognition What does the man in the blue shirt say just before he puts on a red jacket? Options: “Are you sure?”; “No way” Speech Attributes Among the people who speak, who speaks the most quietly overall? Options: The man with glasses; the man with brown hair Visual Recognition When does the man say “I have to tell you”? Options: Just before he sits down; just after he takes off his glasses Speaker Recognition Who speaks right before the notebook is opened? Options: Woman with blonde hair saying “I can’t”; man in black jacket saying “it’s a tiger” Speaker Detection Does the man in the black shirt speak after the woman hands him the ring? Options: No, he only cries; yes, he tries to defend himself 
+
+We use S̸ ↔ T for bidirectional knockouts, where each set serves as both source and target of the other in the interleaved audio-video layout shown in Equation 1. 
+
+Dataset and tasks: AV-SpeakerBench is a speaker-centric audio-visual benchmark covering audio perception and visual understanding capabilities. Each task follows an anchor–target design [ 33 ] that requires cross-modal understanding, where the anchor is a cue in the question text pointing to an event in one modality (e.g., a visual action or a spoken phrase), and the answer must be read off the opposite modality at the moment the anchor identifies. We select a subset of the benchmark’s tasks and group them into five representative categories (Table 2). Full details of the task selection and grouping are in Appendix D.1. 
+
+Models: We use Qwen2.5-Omni [ 49 ] at 3B scale as the main subject model throughout our analysis. Results for Qwen2.5-Omni 7B and Video-SALMONN2 Plus [ 40 ] at 3B and 7B scales are reported in Appendices G, H, and I. 
+
+4.2 Do the modalities interact within themselves or with each other, and where? 0 10 20 30               
+
+> Layer
+> −15
+> −10
+> −5
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Cross-frame Interaction Cross-audio segment Interaction Audio↮Video
+
+Figure 3: Within- and cross-modal interactions concentrate at early-to-middle layers. Change in prediction probability when disconnecting within-modality (Cross-frame, Cross-audio) and direct cross-modal (Audio ̸↔Video) pathways, across layers and five AV-SpeakerBench tasks. Cross-frame attention contributes across all tasks, while cross-modal effects vary by task. First, we investigate whether and where the two modalities interact within themselves and with each other. Following [ 21 ], we block cross-frame attention within the video stream, and we addition-ally block cross-chunk attention within the audio stream and bidirection cross-modal interaction between both modalities (Audio ̸↔Video). Figure 3 shows several patterns. First, all interactions are concentrated in the early-to-middle layers, with cross-modal exchange peaking shortly alongside within-modality interaction. Second, cross-frame attention contributes substantially to almost every task. This is expected for visually-grounded tasks like Visual Recognition and Speaker Recognition, but it also holds for tasks with audio-related answers. For example, in Speech Attributes, the question 5asks “who speaks the most quietly?” with the answer being a person’s identity (e.g., “the man with glasses”). Although the answer concerns audio (relative loudness), the model must first identify 
+
+which speaker corresponds to each visual descriptor, which is a visual task, before it can answer. Third, bidirectional cross-modal interaction varies by task. It carries substantial information for tasks that require fine-grained audio–visual alignment (Speech Recognition, Speaker Detection), where it operates shortly alongside cross-frame attention, but contributes little for tasks that can be solved through visual information alone. Fourth, cross-audio interaction has minimal impact across all tasks, likely because audio tokens within each chunk have already temporally interacted in the audio encoder before reaching the LLM, while video tokens lack such pre-interaction and rely on cross-frame attention within the LLM for temporal context. 
+
+4.3 How and where does audio-visual information travel to the prediction? 0 10 20 30                 
+
+> Layer
+> −50
+> −40
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last
+
+Figure 4: Overall audio-visual information flow in AVLLMs. Change in prediction probability across knockouts targeting the question and the last token. Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. The flow follows a single sequential pathway with no direct flow from the modalities to the last token. Next, we trace how audio and visual information reach the prediction. Figure 4 reveals a clean indirect route, Modalities → Question → Last, aligning with prior findings on VLMs [ 55 ] and VideoLLMs [ 21 ]. At mid layers, video and audio transfer their information into the question tokens, picking up where the modality interactions of Section 4.2 left off. Since the question is positioned after the modalities in the sequence, it acts as the aggregation point for audio-visual content. The contribution of each modality along this route is shaped by the task requirements. Tasks that can be solved through visual contexts (Visual Recognition, Speech Attributes, Speaker Recognition) flow primarily through video, while tasks requiring fine-grained audio information (Speech Recognition, Speaker Detection) draw from both modalities simultaneously. At late layers, the question then carries this combined content to the last token, where the model prediction is formed. A deeper analysis of which question components (correct option, incorrect options, non-option question) carry the audio-visual content is provided in Appendix F.1. 
+
+Finding 2: Audio-visual information follows a single sequential pathway. Within- and cross-modal interactions at early-to-mid layers transfer audio-visual content into the question as the aggregation point, with their relative contribution shaped by the task requirements. Subsequently, the question carries this information to the model’s prediction. 
+
+5 How does information flow across multiple interleaved inputs? 
+
+In Section 4, we traced information flow in the single audio-visual video input. However, real-world prompts often arrive as multiple independent images and audio clips interleaved with text instructions. We investigate this multi-input interleaved setting, where these independent audio-visual items are interleaved with the question text. Section 5.2 traces how information from these independent sources flows to the prediction, and Section 5.3 reveals the information flow to the model’s decision. We first describe the experimental setup in Section 5.1. 
+
+5.1 Experimental setup for multiple interleaved audio-visual inputs 
+
+6Table 3: Example multi-input interleaved prompts in AV-Odyssey. The model matches a single reference in one modality against four candidates in the opposite modality, with the question text describing the task. 
+
+Direction Example prompt 
+
+A Ref →
+
+I Cand Which instrument illustrated in images in [img1][img2][img3][img4] do you think best matches audio [audio1] ? Options: second image; fourth image; third image; first image I Ref →
+
+A Cand Which audio among [audio1][audio2][audio3][audio4] best matches the scene shown in [img1] ? Op-tions: first audio; second audio; fourth audio; third audio 
+
+Dataset and tasks: AV-Odyssey [ 14 ] is a multi-input audio-visual benchmark where the inputs contain multiple independent images and audio clips interleaved with the question text. We focus on the matching subset where the model matches a single reference (Ref) item in one modality against four candidate (Cand) items in the opposite modality, across two task directions, audio reference to image candidates (A Ref → I Cand) and image reference to audio candidates (I Ref → A Cand) as shown in Table 3. Within this subset, samples vary in the order of candidates, reference, and question text. We use the most common ordering in the dataset, candidates, question, reference , and report results averaged across the selected tasks. The knockout results for individual tasks, task selection details, and additional dataset information are in Appendices F.3 and D.3.1. 
+
+Input structure: Multi-input interleaved samples consist of several independent items (images and audio clips) interleaved with the question text without temporal alignment. We extend the notation from Section 2 as follows: Cc denotes the tokens of the c-th candidate, Q the tokens of the question text, R the tokens of the reference, and Oo the tokens of the o-th option letter. Unlike Equation 1 where the question text and option letters form a single block, the interleaved structure here separates them, with the reference appearing between the question text and the option letters. The full input sequence with candidates , question , and reference segments, is 
+
+I =
+
+h
+
+s1, . . . , s NS
+
+| {z }
+
+> system
+
+; C1, C2, C3, C4
+
+| {z }
+
+> candidates
+
+; Q
+
+|{z} 
+
+> question
+
+; R
+
+|{z} 
+
+> reference
+
+; O1, O2, O3, O4
+
+| {z }
+
+> options
+
+i
+
+. (3) 
+
+5.2 How does the model route information across multiple interleaved inputs? 0 10 20 30          
+
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) I Ref → A Cand
+> 010 20 30
+> Layer
+> (b) A Ref → I Cand
+> 010 20 30
+> Layer
+> −12.5
+> −10.0
+> −7.5
+> −5.0
+> −2.5
+> 0.0
+> 2.5
+> % Change in Probability
+> (c) I Ref → A Cand
+> 010 20 30
+> Layer
+> (d) A Ref → I Cand
+> Cross-Candidate
+> Candidates↛Reference
+> Question↛Reference
+> Candidates↛Question
+> Reference↛Last
+> Candidates↛Last
+> Question↛Last
+
+Figure 5: Multi-input interleaved information aggregates at the late-positioned token. At mid layers, candidates interact among themselves (Cross-Candidate), and both candidates and question transfer their content to the reference. At late layers, only the reference reaches the last token. To trace this flow, we apply attention knockout (Section 4.1) across candidates, question, and reference. Figure 5 reveals the route Candidates + Question → Reference → Last. At mid layers, candidates exchange information among themselves (Cross-Candidate), then both the candidates and the question flow into the reference. The candidates and question reach the reference independently, with no flow between them. At late layers, only the reference flows to the model’s prediction; blocking the candidates or question from the last token has negligible effect. The reference therefore plays the role 7that the question played in audio-visual videos (Section 4.3), with the late-positioned token serving as the aggregation point in both settings. Since the prediction is one of four answer-choice letters, how does the reference’s content translate into a specific option? We answer this in Section 5.3. 
+
+5.3 How is the final answer selected? 0 10 20 30          
+
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> 10
+> % Change in Probability
+> (a) I Ref → A Cand
+> 010 20 30
+> Layer
+> (b) A Ref → I Cand
+> 010 20 30
+> Layer
+> −20
+> −10
+> 0
+> 10
+> % Change in Probability
+> (c) I Ref → A Cand
+> 010 20 30
+> Layer
+> (d) A Ref → I Cand
+> CorrectCand↛CorrectOpt
+> IncorrectCand↛CorrectOpt
+> Reference↛CorrectOpt
+> Question↛CorrectOpt
+> CorrectCand↛Last
+> IncorrectCand↛Last
+> CorrectOpt↛Last
+> IncorrectOpt↛Last
+
+Figure 6: The prediction flows through the option letters. (a-b) At mid layers, the correct option letter (CorrectOpt) aggregates from the correct and incorrect candidates (CorrectCand, IncorrectCand) and the reference. (c-d) At late layers, the last token reads from both correct and incorrect option letters, with the competition between them driving the prediction. Next, we trace how the model selects the correct option. We knock out pathways into the correct option (CorrectOpt) and from the option letters into the last token. At mid layers (Figure 6a-b), CorrectOpt draws primarily from the correct candidate, with smaller contributions from the incorrect candidates and reference, and no flow from the question. At late layers (Figure 6c-d), both correct and incorrect (IncorrectOpt) option letters flow to the last token. Blocking CorrectOpt ̸ → Last suppresses the correct prediction, while blocking IncorrectOpt ̸ → Last increases it, indicating the incorrect options actively compete with the correct one. The decision therefore flows through the option letters, not directly from the candidates. Together, Sections 5.2 and 5.3 reveal two parallel paths to the prediction: (1) Candidates + Question → Reference → Last and (2) Candidates → Option letters →
+
+Last. At mid layers, both paths aggregate candidate content, but only the reference receives question content, so the question reaches the prediction exclusively via the reference. At late layers, the last token integrates from both paths independently. 
+
+Finding 3: Unlike the single sequential path in audio-visual videos, multi-input interleaved information flows through two parallel paths to the prediction, each with its own late-positioned aggregation point, integrating independently at the last token. 
+
+6 Do we still need multimodal and text tokens after information transfer? 
+
+Sections 4 and 5 establish that audio, visual, and non-option question tokens transfer their content to the late-positioned aggregation token (with the non-option question analysis for video reported in Appendix F.1.2). Combined with the attention sink result of Section 3, this implies that these tokens become dispensable from the sequence once their content has been transferred and can be discarded. Previously, [ 55 ] demonstrated this token removal for image tokens in VLMs and [ 21 ] validated effective pathways in VideoLLMs through attention masking. We extend these findings to AVLLMs by discarding audio, visual, and non-option question tokens, with each token type discarded at the distinct layer where its information transfer completes, applying this to both the single audio-visual video and multi-input interleaved configurations. We evaluate discarding video, audio, and non-option question tokens (single video) or candidates, reference, and non-option question tokens (multi-input), individually or all together. Each setting covers the task analyzed in Sections 4 and 5. We further evaluate generalization on cross-task and cross-dataset settings using AV-SpeakerBench [ 33 ], AV-Odyssey [ 14 ], and WorldSense [ 17 ] (details in Appendix D). Table 4 shows that discarding has minimal impact on model prediction and generalizes across tasks and datasets, improving model efficiency. 8Finding 4: Multimodal and text tokens can be discarded after their information is transferred, with each token type discarded once its information transfer is complete, with minimal impact on accuracy or slight improvement. 
+
+Table 4: Effect of discarding multi-modal tokens on task accuracy and inference efficiency across analyzed task, cross-task, and cross-dataset settings. L denotes the layer after which the tokens are discarded. Multi-input results are reported in both matching directions reference →
+
+candidates ( I →A, A →I). Numbers in parentheses show change from baseline (green = improvement, red = drop); underlined indicates no change. Best per column in bold . Sp. : Speech; Vis. : Visual; 
+
+Rec. : Recognition; Count. : Counting; Vid. : Video; Aud. : Audio; Transp. : Transportation; Ques :non-option Question tokens; All : all token types together.                                                                                                                                    
+
+> Video (AV-SpeakerBench knockout, Discard Video & Audio at L= 26 , Ques at L= 29 ; cross-dataset from WorldSense)
+> Config / Task Tasks in Knockout Cross-task Cross-dataset Avg. Prefill Latency (s) Sp. Rec. Vis. Rec. Vis. Count. Sp. Count. Vid. Emotion Aud. Change
+> Baseline 50.25 46.58 43.9 26.39 66.67 42.22 2288.65 Discard Ques 50.25 46.83 (+0.25) 44.39 (+0.49) 26.39 66.67 40.00 (-2.22) 2279.97 Discard Audio 50.25 47.55 (+0.97) 44.39 (+0.49) 26.74 (+0.35) 66.67 40.00 (-2.22) 2232.45 Discard Video 50.75 (+0.50) 46.10 (-0.48) 43.9 26.74 (+0.35) 66.67 40.00 (-2.22) 2098.75 Discard All 49.75 (-0.50) 46.59 (+0.01) 42.93 (-0.97) 26.04 (-0.35) 66.67 42.22 2089.47
+> Multi-input (AV-Odyssey knockout, Discard Cand at L= 25 , Discard Ref at L= 31 , Discard Ques at L= 29 )
+> Config / Task
+> Tasks in Knockout Cross-task
+> Avg. Prefill Latency (ms) Animal Rec. Bird Rec. Transp. Rec. A→II→AA→II→AA→II→A
+> Baseline 61.00 38.00 29.41 33.67 46.67 23.16 558.75 Discard Ques 62.00 (+1.00) 38.00 30.39 (+0.98) 34.69 (+1.02) 44.76 (-1.91) 24.21 (+1.05) 550.41 Discard Ref 63.00 (+2.00) 40.00 (+2.00) 29.41 33.67 46.67 25.26 (+2.10) 552.11 Discard Cand 63.00 (+2.00) 39.00 (+1.00) 32.35 (+2.94) 31.63 (-2.04) 47.62 (+0.95) 25.26 (+2.10) 533.07 Discard All 63.00 (+2.00) 38.00 32.35 (+2.94) 33.67 46.67 24.21 (+1.05) 530.62
+
+7 Discussion, future works and limitations 
+
+Discussion: We present the first comprehensive analysis of information flow in AVLLMs across single audio-visual video and multi-input interleaved configurations. In both configurations, modality content reaches the prediction by being aggregated into a token positioned later in the sequence. A plausible explanation for this aggregator emergence is causal attention, which makes tokens positioned later in the sequence structurally available to absorb upstream content, paired with the finding from [ 21 ] that modality tokens progressively align with linguistic embeddings at mid layers, which could plausibly provide the semantic basis for cross-modal information transfer. Concurrent work [ 37 ] reports that cross-modal integration concentrates in deep layers in captioning. Our analysis offers an alternative view in the question-answering setting, where attention to video tokens at the late layers is dominated by sinks (Section 3) and discarding different token segments at the distinct layers where their transfer completes has minimal impact on performance (Section 6). The actual integration takes place much earlier, at mid layers where modality tokens transfer to the aggregator. What appears as deep-layer integration in captioning may therefore reflect attention to sinks rather than meaningful integration, though captioning and question-answering may engage distinct routing at late layers. 
+
+Future work: Our findings open several research directions. First, our finding that tokens can be discarded after their information is transferred (Section 6) opens a new direction for AVLLM efficiency through token compression at the LLM’s internal layers, complementing existing input-level methods that compress audio-visual tokens before they enter the LLM [ 13 , 7 , 42 , 23 ]. Second, the task-dependent modality contribution we observe (Section 4) raises the question of whether steering AVLLMs to rebalance modality reliance could improve performance for tasks where one modality 9is underused. Third, visual bias in AVLLMs has been reported from [ 37 ] through counterfactual analysis where audio and video are intentionally mismatched. Extending our information flow analysis to these conditions is a natural next step for understanding where visual bias emerges along the routing pathway. 
+
+Limitations: Our analysis operates in the MCQ setting, where the prediction is a single answer letter. Open-ended generation tasks such as captioning or free-form dialogue may engage distinct pathways that our setup does not capture. 
+
+8 Acknowledgments 
+
+We acknowledge EuroHPC Joint Undertaking for awarding us access to MareNostrum5 as BSC, Spain. Use as many instances of the pattern MareNostrum5 as BSC, Spain as the number of systems awarded via EuroHPC. 
+
+References 
+
+[1] X. An, Y. Xie, K. Yang, W. Zhang, X. Zhao, Z. Cheng, Y. Wang, S. Xu, C. Chen, D. Zhu, et al. Llava-onevision-1.5: Fully open framework for democratized multimodal training. arXiv preprint arXiv:2509.23661 , 2025. [2] S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge, et al. Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 , 2025. [3] S. Basu, M. Grayson, C. Morrison, B. Nushi, S. Feizi, and D. Massiceti. Understanding information storage and transfer in multi-modal large language models. Advances in Neural Information Processing Systems , 37:7400–7426, 2024. [4] Z. Cheng, S. Leng, H. Zhang, Y. Xin, X. Li, G. Chen, Y. Zhu, W. Zhang, Z. Luo, D. Zhao, et al. Videollama 2: Advancing spatial-temporal modeling and audio understanding in video-llms. arXiv preprint arXiv:2406.07476 , 2024. [5] Y. Chu, J. Xu, Q. Yang, H. Wei, X. Wei, Z. Guo, Y. Leng, Y. Lv, J. He, J. Lin, et al. Qwen2-audio technical report. arXiv preprint arXiv:2407.10759 , 2024. [6] A. Das, A. Bulat, A. Baldrati, I. M. Metaxas, B. Schiele, G. Tzimiropoulos, and B. Martinez. More images, more problems? a controlled analysis of vlm failure modes. arXiv preprint arXiv:2601.07812 , 2026. [7] Y. Ding, Y. Ji, J. Li, X. Liu, X. Chen, J. Wu, B. Li, B. Zeng, Y. Shi, Y. Guan, et al. Omnisift: Modality-asymmetric token compression for efficient omni-modal large language models. arXiv preprint arXiv:2602.04804 , 2026. [8] N. Elhage, N. Nanda, C. Olsson, T. Henighan, N. Joseph, B. Mann, A. Askell, Y. Bai, A. Chen, T. Conerly, et al. A mathematical framework for transformer circuits. Transformer Circuits Thread , 1(1):12, 2021. [9] C. Fu, H. Lin, X. Wang, Y.-F. Zhang, Y. Shen, X. Liu, H. Cao, Z. Long, H. Gao, K. Li, et al. Vita-1.5: Towards gpt-4o level real-time vision and speech interaction. arXiv preprint arXiv:2501.01957 , 2025. [10] M. Geva, J. Bastings, K. Filippova, and A. Globerson. Dissecting recall of factual associations in auto-regressive language models. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing , pages 12216–12235, 2023. [11] S. Ghosh, S. Kumar, A. Seth, C. K. R. Evuru, U. Tyagi, S. Sakshi, O. Nieto, R. Duraiswami, and D. Manocha. Gama: A large audio-language model with advanced audio understanding and complex reasoning abilities. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , pages 6288–6313, 2024. [12] A. Goel, S. Ghosh, J. Kim, S. Kumar, Z. Kong, S.-g. Lee, C.-H. H. Yang, R. Duraiswami, D. Manocha, R. Valle, et al. Audio flamingo 3: Advancing audio intelligence with fully open large audio language models. arXiv preprint arXiv:2507.08128 , 2025. [13] C. Gong, D. Wang, Z. Wei, Y. Guo, H. Zhu, and J. Chen. Echoingpixels: Cross-modal adaptive token reduction for efficient audio-visual llms. arXiv preprint arXiv:2512.10324 , 2025. [14] K. Gong, K. Feng, B. Li, Y. Wang, M. Cheng, S. Yang, J. Han, B. Wang, Y. Bai, Z. Yang, et al. Av-odyssey bench: Can your multimodal llms really understand audio-visual information? arXiv preprint arXiv:2412.02611 , 2024. 
+
+10 [15] Y. Gong, H. Luo, A. H. Liu, L. Karlinsky, and J. Glass. Listen, think, and understand. arXiv preprint arXiv:2305.10790 , 2023. [16] X. Gu, T. Pang, C. Du, Q. Liu, F. Zhang, C. Du, Y. Wang, and M. Lin. When attention sink emerges in language models: An empirical view. arXiv preprint arXiv:2410.10781 , 2024. [17] J. Hong, S. Yan, J. Cai, X. Jiang, Y. Hu, and W. Xie. Worldsense: Evaluating real-world omnimodal understanding for multimodal llms. arXiv preprint arXiv:2502.04326 , 2025. [18] A. Hurst, A. Lerer, A. P. Goucher, A. Perelman, A. Ramesh, A. Clark, A. Ostrow, A. Welihinda, A. Hayes, A. Radford, et al. Gpt-4o system card. arXiv preprint arXiv:2410.21276 , 2024. [19] O. Kaduri, S. Bagon, and T. Dekel. What’s in the image? a deep-dive into the vision of vision language models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 14549–14558, 2025. [20] S. Kang, J. Kim, J. Kim, and S. J. Hwang. See what you are told: Visual attention sink in large multimodal models. arXiv preprint arXiv:2503.03321 , 2025. [21] M. Kim, T. Kim, and B. Han. Map the flow: Revealing hidden pathways of information in videollms. 
+
+arXiv preprint arXiv:2510.13251 , 2025. [22] M. Lee, Y. Park, D. Hwang, Y. Kim, S. J. Oh, and J. Choe. Enhancing multi-image understanding through delimiter token scaling. arXiv preprint arXiv:2602.01984 , 2026. [23] B. Li and T. Huang. Dash: Dynamic audio-driven semantic chunking for efficient omnimodal token compression. arXiv preprint arXiv:2603.15685 , 2026. [24] B. Li, Y. Zhang, D. Guo, R. Zhang, F. Li, H. Zhang, K. Zhang, P. Zhang, Y. Li, Z. Liu, et al. Llava-onevision: Easy visual task transfer. arXiv preprint arXiv:2408.03326 , 2024. [25] C. Li, Y. Chen, Y. Ji, J. Xu, Z. Cui, S. Li, Y. Zhang, W. Wang, Z. Song, D. Zhang, et al. Omnivideobench: Towards audio-visual understanding evaluation for omni mllms. arXiv preprint arXiv:2510.10689 , 2025. [26] Y. Li, X. Chen, S. Jiang, H. Shi, Z. Liu, X. Zhang, N. Deng, Z. Xu, Y. Ma, M. Zhang, et al. Uni-moe-2.0-omni: Scaling language-centric omnimodal large model with advanced moe, training and data. arXiv preprint arXiv:2511.12609 , 2025. [27] Y. Li, Y. Ma, G. Zhang, R. Yuan, K. Zhu, H. Guo, Y. Liang, J. Liu, Z. Wang, J. Yang, et al. Omnibench: Towards the future of universal omni-language models. arXiv preprint arXiv:2409.15272 , 2024. [28] H. Liu, C. Li, Y. Li, and Y. J. Lee. Improved baselines with visual instruction tuning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 26296–26306, 2024. [29] Z. Liu, Y. Dong, J. Wang, Z. Liu, W. Hu, J. Lu, and Y. Rao. Ola: Pushing the frontiers of omni-modal language model. arXiv preprint arXiv:2502.04328 , 2025. [30] J. Luo, W.-C. Fan, L. Wang, X. He, T. Rahman, P. Abolmaesumi, and L. Sigal. To sink or not to sink: Visual information pathways in large vision-language models. arXiv preprint arXiv:2510.08510 , 2025. [31] N. Nanda, L. Chan, T. Lieberum, J. Smith, and J. Steinhardt. Progress measures for grokking via mechanistic interpretability. arXiv preprint arXiv:2301.05217 , 2023. [32] C. Neo, L. Ong, P. Torr, M. Geva, D. Krueger, and F. Barez. Towards interpreting visual information processing in vision-language models. arXiv preprint arXiv:2410.07149 , 2024. [33] L. T. P. Nguyen, Z. Yu, S. L. Y. Hang, S. An, J. Lee, Y. Ban, S. Chung, T.-H. Nguyen, J. Maeng, S. Lee, et al. See, hear, and understand: Benchmarking audiovisual human speech understanding in multimodal large language models. arXiv preprint arXiv:2512.02231 , 2025. [34] Y. Nikankin, D. Arad, Y. Gandelsman, and Y. Belinkov. Same task, different circuits: Disentangling modality-specific mechanisms in vlms. arXiv preprint arXiv:2506.09047 , 2025. [35] Y. Park, M. Lee, S. Chun, and J. Choe. Mitigating cross-image information leakage in lvlms for multi-image tasks. arXiv preprint arXiv:2508.13744 , 2025. [36] D. Rai, Y. Zhou, S. Feng, A. Saparov, and Z. Yao. A practical review of mechanistic interpretability for transformer-based language models. arXiv preprint arXiv:2407.02646 , 2024. 
+
+11 [37] R. Selvakumar, K. Jayakumar, S. Sakshi, S. Ghosh, R. Gao, and D. Manocha. Do audio-visual large language models really see and hear? arXiv preprint arXiv:2604.02605 , 2026. [38] L. Sharkey, B. Chughtai, J. Batson, J. Lindsey, J. Wu, L. Bushnaq, N. Goldowsky-Dill, S. Heimersheim, A. Ortega, J. Bloom, et al. Open problems in mechanistic interpretability. arXiv preprint arXiv:2501.16496 ,2025. [39] M. Sun, X. Chen, J. Z. Kolter, and Z. Liu. Massive activations in large language models. arXiv preprint arXiv:2402.17762 , 2024. [40] C. Tang, Y. Li, Y. Yang, J. Zhuang, G. Sun, W. Li, Z. Ma, and C. Zhang. video-salmonn 2: Caption-enhanced audio-visual large language models. arXiv preprint arXiv:2506.15220 , 2025. [41] C. Tang, W. Yu, G. Sun, X. Chen, T. Tan, W. Li, L. Lu, Z. Ma, and C. Zhang. Salmonn: Towards generic hearing abilities for large language models. arXiv preprint arXiv:2310.13289 , 2023. [42] K. Tao, K. Shao, B. Yu, W. Wang, H. Wang, et al. Omnizip: Audio-guided dynamic token compression for fast omnimodal large language models. arXiv preprint arXiv:2511.14582 , 2025. [43] G. Team, R. Anil, S. Borgeaud, J.-B. Alayrac, J. Yu, R. Soricut, J. Schalkwyk, A. M. Dai, A. Hauth, K. Millican, et al. Gemini: a family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 ,2023. [44] Q. Team. Qwen3. 5-omni technical report. arXiv preprint arXiv:2604.15804 , 2026. [45] S. Tong, E. Brown, P. Wu, S. Woo, M. Middepogu, S. C. Akula, J. Yang, S. Yang, A. Iyer, X. Pan, et al. Cambrian-1: A fully open, vision-centric exploration of multimodal llms. Advances in Neural Information Processing Systems , 37:87310–87356, 2024. [46] W. Wang, Z. Gao, L. Gu, H. Pu, L. Cui, X. Wei, Z. Liu, L. Jing, S. Ye, J. Shao, et al. Internvl3. 5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. arXiv preprint arXiv:2508.18265 ,2025. [47] Y. Wei, Y. Miao, D. Zhou, and D. Hu. Moka: Multimodal low-rank adaptation for mllms. arXiv preprint arXiv:2506.05191 , 2025. [48] G. Xiao, Y. Tian, B. Chen, S. Han, and M. Lewis. Efficient streaming language models with attention sinks. 
+
+arXiv preprint arXiv:2309.17453 , 2023. [49] J. Xu, Z. Guo, J. He, H. Hu, T. He, S. Bai, K. Chen, J. Wang, Y. Fan, K. Dang, et al. Qwen2. 5-omni technical report. arXiv preprint arXiv:2503.20215 , 2025. [50] J. Xu, Z. Guo, H. Hu, Y. Chu, X. Wang, J. He, Y. Wang, X. Shi, T. He, X. Zhu, et al. Qwen3-omni technical report. arXiv preprint arXiv:2509.17765 , 2025. [51] Y. Yang, J. Zhuang, G. Sun, C. Tang, Y. Li, P. Li, Y. Jiang, W. Li, Z. Ma, and C. Zhang. Audio-centric video understanding benchmark without text shortcut. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pages 6580–6598, 2025. [52] H. Ye, C.-H. H. Yang, A. Goel, W. Huang, L. Zhu, Y. Su, S. Lin, A.-C. Cheng, Z. Wan, J. Tian, et al. Omnivinci: Enhancing architecture and data for omni-modal understanding llm. arXiv preprint arXiv:2510.15870 , 2025. [53] Q. Ye, Z. Yu, R. Shao, X. Xie, P. Torr, and X. Cao. Cat: Enhancing multimodal large language model to answer questions in dynamic audio-visual scenarios. In European Conference on Computer Vision , pages 146–164. Springer, 2024. [54] B. Zhang, K. Li, Z. Cheng, Z. Hu, Y. Yuan, G. Chen, S. Leng, Y. Jiang, H. Zhang, X. Li, et al. Vide-ollama 3: Frontier multimodal foundation models for image and video understanding. arXiv preprint arXiv:2501.13106 , 2025. [55] Z. Zhang, S. Yadav, F. Han, and E. Shutova. Cross-modal information flow in multimodal large language models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 19781–19791, 2025. [56] Z. Zhou, R. Wang, Z. Wu, and Y.-G. Jiang. Daily-omni: Towards audio-visual reasoning with temporal alignment across modalities. arXiv preprint arXiv:2505.17862 , 2025. 
+
+12 A Related works 
+
+A.1 Audio-visual large language models (AVLLMs) 
+
+Audio-visual large language models (AVLLMs) extend the multimodal LLM paradigm to jointly pro-cess audio and visual inputs. The first generation of AVLLMs [ 4 , 40 , 53 , 29 ] couples dedicated audio and visual encoders with a language model to support text-based audio-visual question answering and dialogue. Building on this foundation, omni models [ 49 , 50 , 44 , 52 , 26 , 9 ] introduce temporal alignment between audio and visual streams and unify perception with end-to-end speech generation, pushing AVLLMs toward real-time multimodal interaction. Alongside these architectural advances, a growing body of work targets the inference efficiency of AVLLMs by compressing audio and visual tokens prior to the language model [ 13 , 7 , 42 , 23 ]. Distinct from these prior works, we perform a mechanistic interpretability study of AVLLMs in this study, tracing how audio and visual information flow through the model to form the prediction. 
+
+A.2 Mechanistic interpretability of LLMs and MLLMs 
+
+Mechanistic interpretability [ 38 , 36 , 31 , 8, 10 ] is the study of how internal computations in neural networks give rise to their behavior, and has become a popular research direction that recently extends from LLMs to MLLMs. In LLMs, prior studies have uncovered the algorithms underlying grokking [ 31 ] and the attention head circuits behind transformer computation [ 8]. Among the methodological tools developed in this field, attention knockout [ 10 ] causally intervenes on attention pathways to identify the routes information takes through the model. Within MLLMs, recent work has examined information storage [ 3], modality-specific circuits [ 34 ], and visual information processing [ 32 , 19 ]. Most relevant to our study, [ 55 ] and [ 21 ] apply attention knockout to trace information flow in image VLMs and VideoLLMs, respectively. Concurrent work [ 37 ] investigates AVLLMs through counterfactual analysis on audio-visual captioning. Distinct from these prior works, we trace the internal mechanism of how audio and visual information flow inside AVLLMs in both audio-visual video and multi-input interleaved scenarios to form the prediction in this study. 
+
+B Additional visualizations of attention sink tokens 0                    
+
+> 50
+> 100
+> 150
+> L2 norm
+> Layer 0
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> L2 norm
+> System Sink Layer 15
+> 0250 500 750 1000 1250 1500 1750
+> Token position
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> L2 norm
+> System Sink Layer 30
+> 0250 500 750 1000 1250 1500 1750
+> Token position
+> 0
+> 1000
+> 2000
+> 3000
+> L2 norm
+> System Sink
+> System Sink
+> Vision Sink
+> Vision Sink
+> Vision Sink Vision Sink Vision Sink
+> Vision Sink
+> Layer 31
+> System Video Audio User Instruction
+
+Figure 7: L2 norm distribution across token positions at four representative layers (0, 15, 30, 31). Tokens are colored by type (system, video, audio, user instruction). High-norm sink tokens are highlighted with red circles. The language sink emerges at layer 15 in the system prompt region, while vision sinks emerge later at layer 31 in the video sequence. To trace when each type of sink emerges across layers, we analyze the L2 norm distribution at four representative layers (0, 15, 30, 31), shown in Figure 7. At layer 0, vision and audio tokens already have higher norms than language tokens, since they have already passed through the modality encoders before entering the LLM. By layer 15, a single high-norm token has emerged in the system prompt region, corresponding to the language sink described in [ 48 ]. This language sink persists through layer 30, while modality tokens remain at low norms with no vision sink yet present. At layer 31, vision sinks emerge sharply at specific positions in the video sequence, marking the layer at 13 which the visual anchors identified in Section 3 first appear. This progression confirms that vision sinks emerge later than the language sink, despite sharing the same mechanical signature. 
+
+C Experimental details 
+
+Models and inputs: We analyze Qwen2.5-Omni 3B [ 49 ] as the primary model, with additional results on its 7B variants and Video-SALMONN2 Plus 3B and 7B [ 40 ] in Appendix G, H and I. All models are loaded from their official Hugging Face checkpoints. Videos are sampled at 2 FPS with up to 128 frames per video, where each frame is represented by up to a 12 ×12 grid of visual tokens, and standalone images are represented by up to a 24 ×24 grid of visual tokens. 
+
+Inference setup: All experiments use greedy decoding ( do_sample=False ) for deterministic outputs and are conducted on a single NVIDIA H100 GPU. To ensure each knockout measures a real degradation rather than a coincidental change, we run all interventions only on samples that the model predicts correctly under the no-knockout baseline. A typical knockout run takes around 30 minutes for the audio-visual video setting and 15 minutes for the multi-input interleaved setting. 
+
+D Dataset details 
+
+This section provides additional details on the datasets used in our analysis. AV-SpeakerBench (Section D.1) is the audio-visual video benchmark used in the main paper, AV-Odyssey (Section D.3) is the multi-input audio-visual benchmark also used in the main paper, and WorldSense (Section D.2) is an additional audio-visual video benchmark used in this appendix to provide further evidence on the generality of our findings. 
+
+D.1 AV-SpeakerBench (audio-visual video) 
+
+AV-SpeakerBench [ 33 ] is a benchmark for evaluating audio–visual reasoning in models that jointly process video and speech. Each sample is a four-way multiple-choice question paired with an audio-visual video, and the benchmark contains 12 tasks across audio-centric, speaker-centric, and visual-centric domains. 
+
+Cross-modal anchor design: A key feature of AV-SpeakerBench is that each question is constructed around an explicit anchor–target structure that forces genuine audio–visual integration. The anchor is a cue described in the question text that points to a specific moment in one modality, and the answer must be read off the opposite modality at that moment. We summarize the three task types as follows: • Audio-centric tasks ( visual anchor → audio answer ): the question describes a visual cue (e.g., “after the man in the grey shirt wiggles his fingers” ), and the model must first locate that visual moment, then listen to the audio within that window to extract the answer (e.g., counting how often a phrase is spoken). • Visual-centric tasks ( audio anchor → visual answer ): the question describes an audio cue, typically a spoken phrase (e.g., “after the woman says This is very datable” ), and the model must locate that moment in the audio, then inspect the video at that timestamp to extract a visual answer (e.g., counting visible people). • Speaker-centric tasks ( mixed ): the question may use either a visual or audio anchor, and the answer choices differ in the opposite modality (e.g., visually distinct speakers who utter different lines). Solving these requires jointly tracking identity, timing, and modality, which prevents unimodal shortcuts. This anchor structure makes AV-SpeakerBench particularly well-suited for our analysis, since the cross-modal pathway is built directly into the question design rather than emerging incidentally from the content. 
+
+Task selection for attention knockout: For our analysis, we focus on tasks that exhibit the cross-modal anchor structure described above and exclude tasks where the question can be largely answered 14 from a single modality without the anchor playing a meaningful role. The 8 selected tasks, totaling 2,281 samples, are organized into 5 categories used throughout Section 4. Table 5 (left) lists the selected tasks with their domain and category, and (right) reports the per-category sample counts. Categories with multiple tasks (Visual Recognition, Speech Attributes) merge tasks that share the same anchor direction and answer modality; the other three categories correspond to a single task each. Table 5: Left: The 8 tasks selected from AV-SpeakerBench, with their domain, sample counts, and the category each task is grouped into for our analysis. Right: The 5 categories with their aggregated sample counts. Domain color indicates the cross-modal direction: visual anchor → audio answer ,audio anchor → visual answer , and mixed .                              
+
+> Domain Task # Samples Category
+> Audio-centric Speech Intensity 206 Speech Attributes Speech Pitch 206 Speech Attributes Speech Rate 209 Speech Attributes Speech Recognition 201 Speech Recognition Speaker-centric Speaker Detection 427 Speaker Detection Speaker Recognition 422 Speaker Recognition Visual-centric Activity Recognition 206 Visual Recognition Attribute Recognition 204 Visual Recognition
+> Total 2,281 Category # Samples
+> Speech Attributes 621 Speech Recognition 201 Visual Recognition 410 Speaker Recognition 422 Speaker Detection 427
+> Total 2,281
+
+Task selection for cross-task evaluation: In addition to the analysis tasks, for Section 6 we use Speech Counting and Visual Counting from AV-SpeakerBench. Table 6 reports the domain and sample count for each. Table 6: Cross-task evaluation tasks from AV-SpeakerBench used in Section 6. Domain color indicates the cross-modal direction: visual anchor → audio answer , audio anchor → visual answer .        
+
+> Domain Task # Samples
+> Audio-centric Speech Counting 288 Visual-centric Visual Counting 205
+> Total 493
+
+D.2 WorldSense (audio-visual video) 
+
+WorldSense [ 17 ] is a benchmark of audio-visual videos paired with multiple-choice questions, designed to evaluate joint reasoning over visual, audio, and temporal information. The benchmark covers 26 task types organized into three task domains: Recognition (identifying entities or events), Reasoning (inferring causal or relational structure), and Understanding (comprehending temporal or contextual states). 
+
+Task selection for attention knockout: WorldSense contains videos ranging from a few seconds to over eight minutes. To keep the audio-visual stream short enough for tractable knockout sweeps and to ensure that all selected samples fit within a comparable input length, we filter to videos under one minute long. From this filtered set, we select the 10 task types listed in Table 7, totaling 418 samples. The selected videos have a mean duration of 47.4 seconds (median 49 seconds, range 17–60 seconds). Compared to AV-SpeakerBench, WorldSense provides substantially fewer samples per task (typically 25–64 per task type, against 200–400 in AV-SpeakerBench). As a result, the per-task knockout curves on WorldSense are visibly noisier than those on AV-SpeakerBench. 15 Table 7: The 10 tasks selected from WorldSense for attention knockout, restricted to videos under one minute. The Domain column indicates the WorldSense category each task belongs to.               
+
+> Domain Task # Samples
+> Recognition Attribute Recognition 52 Audio Counting 38 Audio Source Localization 64 Event Recognition 30 Scene Recognition 27 Reasoning Emotion Change 37 Object State Change 25 Understanding Event Sorting 46 Spatial Relation 58 Text and Diagram Understanding 41
+> Total 418
+
+Task selection for cross-dataset evaluation: In addition to the tasks used for attention knockout, for Section 6 we use Video Emotions and Audio Change from WorldSense as the cross-dataset evaluation. Table 8 reports the domain and sample count for each. Table 8: Cross-dataset evaluation tasks from WorldSense used in Section 6.       
+
+> Domain Task # Samples
+> Reasoning Audio Change 45 Understanding Video Emotions 27
+
+D.3 AV-Odyssey (multi-input audio-visual interleaved) 
+
+AV-Odyssey [ 14 ] is a benchmark for audio-visual understanding that contains 26 tasks spanning multiple reasoning skills, where each sample interleaves multiple independent images and audio clips with text. Among these, we focus on the matching subset where the model selects an answer by comparing a single reference item in one modality against multiple candidate items in the opposite modality, which aligns with the multi-input setting analyzed in Section 5. This appendix provides additional details on how we process AV-Odyssey for our analysis: Section D.3.1 describes the procedure used to assign each sample an input structure label, and Section D.3.2 lists the specific tasks we select and reports the distribution of input structures across them. 
+
+D.3.1 Input structure assignment for AV-Odyssey 
+
+AV-Odyssey samples vary in how the candidate media, reference media, and question text are arranged within the prompt. To support per-ordering analysis, we automatically classify each sample’s input structure through the following procedure: 1. Parse media placeholders. We scan the prompt to locate each media placeholder (e.g., 
+
+[img1] , [audio1] ) and identify the single reference media along with the candidate media in the opposite modality. 2. Split into ordered segments. Using the located media placeholders as boundaries, we split the prompt into an ordered sequence of segments alternating between media spans ( candidates and reference ) and text spans. 3. Identify the question text. Among the text segments, we assign the role of question text to the segment that describes the actual matching task. If the reference media is the final media in the prompt, we prefer the text segment immediately preceding it (which typically contains the matching prompt, e.g., “which best matches” ); otherwise, we select 16 the longest text segment by word count. All remaining text segments are treated as padding and excluded from the analysis. 4. Construct the structure label. The final segment ordering, for example candidates ,question , reference , is recorded as the sample’s structure label. We use the resulting structure labels to bucket samples for both the main-paper analysis (which uses the most common ordering, candidates , question , reference ) and the per-ordering breakdowns reported in this appendix. 
+
+D.3.2 Selected tasks from AV-Odyssey Task selection for attention knockout: For our knockout analysis, we select 7 tasks from AV-Odyssey that use either a single reference media against multiple candidates of the opposite modality or vice versa. Table 9 lists the 7 selected tasks, totaling 1,304 samples. Table 9: The 7 tasks selected from AV-Odyssey for attention knockout. A Ref → I Cand denotes audio reference to image candidates , and I Ref → A Cand denotes image reference to audio candidates .                                
+
+> Task # Samples A Ref →I Cand I Ref →A Cand
+> Instrument Recognition 200 49% 51% Animal Recognition 200 50% 50% Material Recognition 200 100% —Hazard Recognition 108 100% —Action Recognition 196 100% —Music Genre Classification 200 52% 48% Film and Music Matching 200 100% —
+> Total 1,304 77% 23%
+
+Within each task, the prompts can also vary in how the candidates , question text, and reference are ordered. Table 10 shows the aggregate distribution across all selected samples, and Table 11 provides the per-task breakdown. The dominant ordering is candidates , question , reference , which we use for the main paper analysis; the remaining orderings are analyzed individually in this appendix. Table 10: Aggregate distribution of prompt structures across all 1,304 selected samples.                           
+
+> Structure # Samples Proportion
+> candidates ,question ,reference 1,001 77% question ,reference ,candidates 161 12% reference ,candidates ,question 124 10% reference ,question ,candidates 18 1%
+
+Task selection for cross-task evaluation: In addition to the tasks used for attention knockout, for Section 6 we use Bird Recognition and Transportation Recognition from AV-Odyssey. Table 12 reports the sample count and input layout distribution for each. 17 Table 11: Per-task distribution of prompt structures across the 7 selected tasks. Cand = candidates , 
+
+Q = question text, Ref = reference . Each row reports the sample counts for each structure observed in that task. Empty cells indicate the structure does not appear in that task.                                             
+
+> Structure Task Cand , Q , Ref Q , Ref , Cand Ref , Cand , QRef , Q , Cand
+> Instrument Recognition 46 154 ——Animal Recognition 200 ———Material Recognition 151 735 7Hazard Recognition 97 ——11 Action Recognition 196 ———Music Genre Classification 164 —36 —Film and Music Matching 147 —53 —
+> Total 1,001 161 124 18
+
+Table 12: Cross-task evaluation tasks from AV-Odyssey used in Section 6. A Ref → I Cand denotes audio reference to image candidates , and I Ref → A Cand denotes image reference to audio candidates.              
+
+> Task # Samples A Ref →I Cand I Ref →A Cand
+> Bird Recognition 200 51% 39% Transportation Recognition 200 52% 48%
+
+18 E Ablation on window size for attention knockout 0 10 20 30                  
+
+> Layer
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) k=1
+> 010 20 30
+> Layer
+> −30
+> −20
+> −10
+> 0
+> (b) k=3
+> 010 20 30
+> Layer
+> −30
+> −20
+> −10
+> 0
+> (c) k=5
+> 010 20 30
+> Layer
+> −30
+> −20
+> −10
+> 0
+> (d) k=7
+> 010 20 30
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (e) k=9
+> 010 20 30
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> (f) k=11
+> Video↛Question Audio↛Question Question↛Last
+
+Figure 8: Window size ablation on the Speaker Recognition task. Each panel shows the relative change in prediction probability for three pathways (Video ̸→Question, Audio ̸ →Question, Question ̸ →Last) under a different window size k. Source ̸→Target indicates blocking attention edges from source tokens to target tokens. Following [ 10 ], attention knockout is applied within a sliding window of k layers around each target layer. We ablate k ∈ { 1, 3, 5, 7, 9, 11 } on the Speaker Recognition task to select the most informative window size. Figure 8 shows that small windows ( k = 1 , 3) produce shallow noisy drops as the narrow block is easily bypassed by remaining attention edges. Large windows ( k = 11 ) instead blur the layer localization, with the Question →Last drop spanning a much wider range and losing the recovery point where the pathway concludes. Both k = 7 and k = 9 give clean and well-localized drops, but we adopt k = 7 as it preserves the recovery point of the Question →Last pathway, whereas 
+
+k = 9 tends to merge the recovery into the broader drop similarly to k = 11 . The choice of k = 7 
+
+over k = 9 also accounts for model scale. The 7B variants have only 28 layers compared to 36 in the 3B model, so a window of k = 9 would cover a relatively larger portion of the network in 7B and obscure the precise layer where each pathway operates. Adopting k = 7 across both scales preserves localization accuracy in 7B while remaining valid for the 3B model. 19 F Additional results on Qwen2.5-Omni 3B 
+
+This appendix provides additional knockout analyses for Qwen2.5-Omni 3B, extending the AV-SpeakerBench [ 33 ] results from Section 4 and reporting attention knockout on WorldSense [ 17 ]and AV-Odyssey [ 14 ]. While AV-Odyssey is also analyzed in the main paper, the results there are averaged across tasks. Here we instead report per-task knockouts to show that the same pattern holds for each individual task. 
+
+F.1 Extended knockout analyses on AV-SpeakerBench (audio-visual video) 
+
+This subsection extends the AV-SpeakerBench analysis of Section 4 with additional knockouts on cross-modal directions, joint audio-visual routing, and the question’s internal components. 
+
+F.1.1 Further analysis of cross-modal directions and joint audio-visual routing 0 10 20 30                              
+
+> Layer
+> −10
+> −5
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Video↛Audio Audio↛Video 010 20 30
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> V+A↛Question V+A↛Last
+
+Figure 9: Additional knockout analysis on Qwen2.5-Omni 3B. Top: direction-specific cross-modal knockouts (Video ̸ →Audio and Audio ̸→Video). Bottom: joint knockouts where audio and video serve as sources (V+A ̸ →Question and V+A ̸ →Last). Source ̸→Target indicates blocking attention edges from source tokens to target tokens. We extend the analysis of Section 4 with two follow-up analyses. The top panel of Figure 9 decom-poses the bidirectional cross-modal knockout of Section 4.2 into its two unidirectional components, Video ̸ →Audio and Audio ̸→Video. The Video →Audio direction is the dominant one on tasks that require fine-grained audio-visual alignment (Speech Recognition, Speaker Detection), accounting for most of the bidirectional cross-modal effect observed in Section 4.2, while Audio →Video plays a smaller role. The remaining tasks remain near zero in both directions, consistent with Section 4.2. We hypothesize that this asymmetry stems from the input ordering of the time-aligned sequence, where each video frame is followed by its corresponding audio segment. Audio tokens can therefore attend back to the time-aligned video frame, while video tokens can only attend to audio segments from earlier time steps and not to the time-aligned audio segment, weakening the Audio →Video direction. The bottom panel groups audio and video into a single source (V+A ̸→Question and V+A ̸ →Last). V+A ̸→Question produces large mid-layer drops across all tasks, while V+A ̸→Last produces near-zero changes, confirming that audio-visual information reaches the prediction through the question rather than directly, in line with the Modalities → Question → Last route established in Section 4.3. 20 0 10 20 30                                                  
+
+> Layer
+> −25
+> −20
+> −15
+> −10
+> −5
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 010 20 30
+> Layer
+> −60
+> −40
+> −20
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 010 20 30
+> Layer
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last
+
+Figure 10: Component-level question-internal knockouts on Qwen2.5-Omni 3B. Top: 
+
+Source ̸→NonOptQ. Middle: Source ̸→TrueOpt. Bottom: Source ̸→Last. Source ̸→Target indicates blocking attention edges from source tokens to target tokens. 
+
+F.1.2 Further analysis of how audio-visual information reaches the prediction via question components 
+
+Section 4.3 treats the question as a single aggregator. Here we decompose it into three components, the correct-option letter (TrueOpt), the incorrect-option letters (FalseOpt), and the non-option question text (NonOptQ), and trace how audio-visual content reaches the prediction within the question. Figure 10 reveals two routes converging at the correct-option letter. The direct route, Modalities 
+
+→ TrueOpt, sends modality content straight to the option letter. The indirect route, Modalities →
+
+NonOptQ → TrueOpt, first passes through the non-option question text before reaching the option letter. Both routes are active on Visual Recognition, Speech Recognition, Speaker Recognition, and Speaker Detection, while Speech Attributes relies on the direct route only, with negligible flow through the non-option question text. The correct-option letter therefore acts as the local aggregator, absorbing audio-visual content from these routes at mid layers before being read by the last token at late layers. The incorrect-option letters and the non-option question text never flow to the prediction directly, only through the correct-option letter. This component-level view is consistent with previous work in VideoLLMs [ 21 ], which also reports the option token as the decisive integration point with both direct and indirect routes from video to the option. Our analysis extends this observation to the audio-visual setting, where the same dual-route structure governs how both modalities reach the option letter. 21 F.2 WorldSense (audio-visual video) 
+
+Figures 11 and 12 report the WorldSense knockout results. Figure 11 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 12 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20 30 
+
+Layer 
+
+−25 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 0 10 20 30 
+
+Layer 
+
+−60 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last 
+
+Figure 11: Qwen2.5-Omni 3B on WorldSense. Knockout of within- and cross-modal pathways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸→Last, Audio ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 22 0 10 20 30 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−80 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 30 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 30 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 12: Qwen2.5-Omni 3B on WorldSense. Modality and question pathways into the correct option letter (Video ̸→TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸→Last, NonOptQ ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 23 F.3 AV-Odyssey (multi-input audio-visual interleaved) 
+
+This subsection reports per-task multi-input interleaved knockouts on AV-Odyssey. The main paper reports results averaged across tasks, while Figures 13 and 14 break results down by individual task and input ordering (I Ref → A Cand and A Ref → I Cand) to show consistency across the benchmark. Figure 13 covers pathways into the Reference, the Question, and the last token, while Figure 14 covers pathways into the correct option letter and pathways from the correct and incorrect candidates and option letters into the last token. 0 10 20 30 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+Cross-Candidate Candidates↛Reference Question↛Reference Candidates↛Question 0 10 20 30 
+
+Layer 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+Reference↛Last Candidates↛Last Question↛Last 
+
+Figure 13: Qwen2.5-Omni 3B per-task multi-input knockout (AV-Odyssey). Pathways into the Reference and Question (Cross-Candidate, Candidates ̸→Reference, Question ̸ →Reference, Candidates ̸→Question) and pathways into the last token (Reference ̸→Last, Candidates ̸→Last, Question ̸→Last). Each panel shows one task under one input ordering (I Ref → A Cand or A Ref → I Cand). Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 24 0 10 20 30 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+20 
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+CorrectCand↛CorrectOpt IncorrectCand↛CorrectOpt Reference↛CorrectOpt Question↛CorrectOpt 0 10 20 30 
+
+Layer 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+10 
+
+15 
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 30 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 30 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+CorrectCand↛Last IncorrectCand↛Last CorrectOpt↛Last IncorrectOpt↛Last Figure 14: Qwen2.5-Omni 3B per-task multi-input knockout (AV-Odyssey). Pathways into the cor-rect option letter (CorrectCand ̸ →CorrectOpt, IncorrectCand ̸ →CorrectOpt, Reference ̸ →CorrectOpt, Question ̸→CorrectOpt) and finer-grained pathways into the last token (CorrectCand ̸ →Last, IncorrectCand ̸→Last, CorrectOpt ̸→Last, IncorrectOpt ̸→Last). Each panel shows one task under one input ordering (I Ref → A Cand or A Ref → I Cand). Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 25 G Generalization to Qwen2.5-Omni 7B 
+
+This appendix reports knockout analyses for Qwen2.5-Omni 7B across all three datasets used in the paper, AV-SpeakerBench [ 33 ], WorldSense [ 17 ], and AV-Odyssey [ 14 ]. The setup mirrors the analyses on Qwen2.5-Omni 3B in the main paper and Appendix F, allowing a direct comparison across model scales. For AV-Odyssey, we report both the averaged knockouts (matching the main paper’s reporting style) and the per-task knockouts for completeness. 
+
+G.1 AV-SpeakerBench (audio-visual video) 
+
+Figures 15 and 16 report the AV-SpeakerBench knockout results. Figure 15 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 16 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20                         
+
+> Layer
+> −12.5
+> −10.0
+> −7.5
+> −5.0
+> −2.5
+> 0.0
+> 2.5
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20
+> Layer
+> (b) Speech Attributes
+> 010 20
+> Layer
+> (c) Speech Recognition
+> 010 20
+> Layer
+> (d) Speaker Recognition
+> 010 20
+> Layer
+> (e) Speaker Detection
+> Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 010 20
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> 10
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20
+> Layer
+> (b) Speech Attributes
+> 010 20
+> Layer
+> (c) Speech Recognition
+> 010 20
+> Layer
+> (d) Speaker Recognition
+> 010 20
+> Layer
+> (e) Speaker Detection
+> Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last
+
+Figure 15: Qwen2.5-Omni 7B on AV-SpeakerBench. Knockout of within- and cross-modal path-ways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸→Last, Audio ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 26 0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 
+
+Layer 
+
+(e) Speaker Detection 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 
+
+Layer 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 
+
+Layer 
+
+(e) Speaker Detection 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 
+
+Layer 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 
+
+Layer 
+
+(e) Speaker Detection 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 16: Qwen2.5-Omni 7B on AV-SpeakerBench. Modality and question path-ways into the correct option letter (Video ̸ →TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸ →Last, NonOptQ ̸→Last). Source ̸→Target indicates blocking attention edges from source tokens to target tokens. 27 G.2 WorldSense (audio-visual video) 
+
+Figures 17 and 18 report the WorldSense knockout results. Figure 17 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 18 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 0 10 20 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last 
+
+Figure 17: Qwen2.5-Omni 7B on WorldSense. Knockout of within- and cross-modal pathways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸→Last, Audio ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 28 0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−80 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 18: Qwen2.5-Omni 7B on WorldSense. Modality and question pathways into the correct option letter (Video ̸→TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸→Last, NonOptQ ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 29 G.3 AV-Odyssey (multi-input audio-visual interleaved) 
+
+This subsection reports multi-input knockouts on AV-Odyssey for Qwen2.5-Omni 7B in two views, averaged across tasks (Appendix G.3.1) and broken down per task (Appendix G.3.2). 
+
+G.3.1 Averaged Across Tasks 
+
+Figure 19 reports the multi-input knockout averaged across tasks, matching the reporting style of the main paper for Qwen2.5-Omni 3B. The same set of pathways into the Reference, Question, correct option letter, and last token are shown. 0 10 20               
+
+> Layer
+> −60
+> −50
+> −40
+> −30
+> −20
+> −10
+> 0
+> 10
+> % Change in Probability
+> (a) I Ref → A Cand
+> 010 20
+> Layer
+> (b) A Ref → I Cand
+> 010 20
+> Layer
+> −12
+> −10
+> −8
+> −6
+> −4
+> −2
+> 0
+> 2
+> % Change in Probability
+> (c) I Ref → A Cand
+> 010 20
+> Layer
+> (d) A Ref → I Cand
+> Cross-Candidate
+> Candidates↛Reference
+> Question↛Reference
+> Candidates↛Question
+> Reference↛Last
+> Candidates↛Last
+> Question↛Last 010 20
+> Layer
+> −25
+> −20
+> −15
+> −10
+> −5
+> 0
+> 5
+> % Change in Probability
+> (a) I Ref → A Cand
+> 010 20
+> Layer
+> (b) A Ref → I Cand
+> 010 20
+> Layer
+> −8
+> −6
+> −4
+> −2
+> 0
+> 2
+> 4
+> 6
+> % Change in Probability
+> (c) I Ref → A Cand
+> 010 20
+> Layer
+> (d) A Ref → I Cand
+> CorrectCand↛CorrectOpt
+> IncorrectCand↛CorrectOpt
+> Reference↛CorrectOpt
+> Question↛CorrectOpt
+> CorrectCand↛Last
+> IncorrectCand↛Last
+> CorrectOpt↛Last
+> IncorrectOpt↛Last
+
+Figure 19: Qwen2.5-Omni 7B multi-input knockout (AV-Odyssey), averaged across tasks. 
+
+Pathways into the Reference, Question, correct option letter, and last token, mirroring the analyses in the main paper for Qwen2.5-Omni 3B. Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 
+
+G.3.2 Per-task breakdown 
+
+Figures 20 and 21 break the same knockouts down by individual task and input ordering (I Ref →
+
+A Cand and A Ref → I Cand) for completeness. Figure 20 covers pathways into the Reference and Question and pathways into the last token, while Figure 21 covers pathways into the correct option letter and the finer-grained pathways into the last token. 30 0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+Cross-Candidate Candidates↛Reference Question↛Reference Candidates↛Question 0 10 20 
+
+Layer 
+
+−10 
+
+−5 
+
+0
+
+5
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+−12.5 
+
+−10.0 
+
+−7.5 
+
+−5.0 
+
+−2.5 
+
+0.0 
+
+2.5 
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+Reference↛Last Candidates↛Last Question↛Last Figure 20: Qwen2.5-Omni 7B per-task multi-input knockout (AV-Odyssey). Pathways into the Reference and Question (Cross-Candidate, Candidates ̸→Reference, Question ̸ →Reference, Candidates ̸→Question) and pathways into the last token (Reference ̸→Last, Candidates ̸→Last, Question ̸→Last). Each panel shows one task under one input ordering (I Ref → A Cand or A Ref → I Cand). Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 31 0 10 20 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+20 
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+CorrectCand↛CorrectOpt IncorrectCand↛CorrectOpt Reference↛CorrectOpt Question↛CorrectOpt 0 10 20 
+
+Layer 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+10 
+
+> % Change in Probability
+
+(a) Instrument Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(b) Instrument Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(c) Animal Recognition 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(d) Animal Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(e) Material Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+−10 
+
+−5 
+
+0
+
+5
+
+10 
+
+> % Change in Probability
+
+(f) Hazard Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(g) Action Recognition 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(h) Music Genre Classification 
+
+I Ref → A Cand 
+
+0 10 20 
+
+Layer 
+
+(i) Music Genre Classification 
+
+A Ref → I Cand 
+
+0 10 20 
+
+Layer 
+
+(j) Film and Music Matching 
+
+A Ref → I Cand 
+
+CorrectCand↛Last IncorrectCand↛Last CorrectOpt↛Last IncorrectOpt↛Last Figure 21: Qwen2.5-Omni 7B per-task multi-input knockout (AV-Odyssey). Pathways into the cor-rect option letter (CorrectCand ̸ →CorrectOpt, IncorrectCand ̸ →CorrectOpt, Reference ̸ →CorrectOpt, Question ̸→CorrectOpt) and finer-grained pathways into the last token (CorrectCand ̸ →Last, IncorrectCand ̸→Last, CorrectOpt ̸→Last, IncorrectOpt ̸→Last). Each panel shows one task under one input ordering (I Ref → A Cand or A Ref → I Cand). Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 32 H Generalization to Video-SALMONN2 3B Plus 
+
+This appendix reports knockout analyses for Video-SALMONN2 3B Plus on AV-SpeakerBench [ 33 ]and WorldSense [ 17 ], mirroring the analyses on Qwen2.5-Omni 3B in the main paper and Appendix F. 
+
+H.1 AV-SpeakerBench (audio-visual video) 
+
+Figures 22 and 23 report the AV-SpeakerBench knockout results. Figure 22 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 23 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20 30                                  
+
+> Layer
+> −20
+> −15
+> −10
+> −5
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 010 20 30
+> Layer
+> −50
+> −40
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20 30
+> Layer
+> (b) Speech Attributes
+> 010 20 30
+> Layer
+> (c) Speech Recognition
+> 010 20 30
+> Layer
+> (d) Speaker Recognition
+> 010 20 30
+> Layer
+> (e) Speaker Detection
+> Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last
+
+Figure 22: Video-SALMONN2 3B Plus on AV-SpeakerBench. Knockout of within- and cross-modal pathways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸ →Last, Audio ̸ →Last). Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 33 0 10 20 30 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 30 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(e) Speaker Detection 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 30 
+
+Layer 
+
+−25 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 30 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(e) Speaker Detection 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 30 
+
+Layer 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+20 
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 30 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(e) Speaker Detection 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 23: Video-SALMONN2 3B Plus on AV-SpeakerBench. Modality and question path-ways into the correct option letter (Video ̸ →TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸ →Last, NonOptQ ̸→Last). Source ̸→Target indicates blocking attention edges from source tokens to target tokens. 34 H.2 WorldSense (audio-visual video) 
+
+Figures 24 and 25 report the WorldSense knockout results. Figure 24 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 25 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20 30 
+
+Layer 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 0 10 20 30 
+
+Layer 
+
+−60 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+60 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last 
+
+Figure 24: Video-SALMONN2 3B Plus on WorldSense. Knockout of within- and cross-modal path-ways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸→Last, Audio ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 35 0 10 20 30 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 30 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 30 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 30 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 30 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 30 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 30 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 30 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 30 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 30 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 30 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 25: Video-SALMONN2 3B Plus on WorldSense. Modality and question path-ways into the correct option letter (Video ̸ →TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸ →Last, NonOptQ ̸→Last). Source ̸→Target indicates blocking attention edges from source tokens to target tokens. 36 I Generalization to Video-SALMONN2 7B Plus 
+
+This appendix reports knockout analyses for Video-SALMONN2 7B Plus on AV-SpeakerBench [ 33 ]and WorldSense [ 17 ], mirroring the analyses on Qwen2.5-Omni 3B in the main paper and Appendix F. 
+
+I.1 AV-SpeakerBench (audio-visual video) 
+
+Figures 26 and 27 report the AV-SpeakerBench knockout results. Figure 26 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 27 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20                         
+
+> Layer
+> −20
+> −15
+> −10
+> −5
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20
+> Layer
+> (b) Speech Attributes
+> 010 20
+> Layer
+> (c) Speech Recognition
+> 010 20
+> Layer
+> (d) Speaker Recognition
+> 010 20
+> Layer
+> (e) Speaker Detection
+> Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 010 20
+> Layer
+> −40
+> −30
+> −20
+> −10
+> 0
+> % Change in Probability
+> (a) Visual Recognition
+> 010 20
+> Layer
+> (b) Speech Attributes
+> 010 20
+> Layer
+> (c) Speech Recognition
+> 010 20
+> Layer
+> (d) Speaker Recognition
+> 010 20
+> Layer
+> (e) Speaker Detection
+> Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last
+
+Figure 26: Video-SALMONN2 7B Plus on AV-SpeakerBench. Knockout of within- and cross-modal pathways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸ →Last, Audio ̸ →Last). Source ̸ →Target indicates blocking attention edges from source tokens to target tokens. 37 0 10 20 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 
+
+Layer 
+
+(e) Speaker Detection 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 
+
+Layer 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 
+
+Layer 
+
+(e) Speaker Detection 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 
+
+Layer 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(a) Visual Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Speech Attributes 
+
+0 10 20 
+
+Layer 
+
+(c) Speech Recognition 
+
+0 10 20 
+
+Layer 
+
+(d) Speaker Recognition 
+
+0 10 20 
+
+Layer 
+
+(e) Speaker Detection 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 27: Video-SALMONN2 7B Plus on AV-SpeakerBench. Modality and question path-ways into the correct option letter (Video ̸ →TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸ →Last, NonOptQ ̸→Last). Source ̸→Target indicates blocking attention edges from source tokens to target tokens. 38 I.2 WorldSense (audio-visual video) 
+
+Figures 28 and 29 report the WorldSense knockout results. Figure 28 covers within- and cross-modal pathways together with modality and question pathways into the last token, while Figure 29 covers the question-internal pathways and the pathways into the correct option letter and the non-option question text. 0 10 20 
+
+Layer 
+
+−25 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Cross-frame Interaction Cross-audio segment Interaction Audio↮Video 0 10 20 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛Question Audio↛Question Question↛Last Video↛Last Audio↛Last 
+
+Figure 28: Video-SALMONN2 7B Plus on WorldSense. Knockout of within- and cross-modal path-ways (Cross-frame, Cross-audio segment, Audio ↔Video) and of modality and question pathways into the last token (Video ̸ →Question, Audio ̸ →Question, Question ̸ →Last, Video ̸→Last, Audio ̸ →Last). Source ̸→ Target indicates blocking attention edges from source tokens to target tokens. 39 0 10 20 
+
+Layer 
+
+−50 
+
+−40 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛TrueOpt Audio↛TrueOpt V+A↛TrueOpt NonOptQ↛TrueOpt 0 10 20 
+
+Layer 
+
+−25 
+
+−20 
+
+−15 
+
+−10 
+
+−5 
+
+0
+
+5
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−30 
+
+−20 
+
+−10 
+
+0
+
+10 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+Video↛NonOptQ Audio↛NonOptQ V+A↛NonOptQ 0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(a) Attribute Recognition 
+
+0 10 20 
+
+Layer 
+
+(b) Audio Counting 
+
+0 10 20 
+
+Layer 
+
+(c) Audio Source Localization 
+
+0 10 20 
+
+Layer 
+
+(d) Emotion Change 
+
+0 10 20 
+
+Layer 
+
+(e) Event Recognition 
+
+0 10 20 
+
+Layer 
+
+−60 
+
+−40 
+
+−20 
+
+0
+
+20 
+
+40 
+
+> % Change in Probability
+
+(f) Event Sorting 
+
+0 10 20 
+
+Layer 
+
+(g) Object State Change 
+
+0 10 20 
+
+Layer 
+
+(h) Scene Recognition 
+
+0 10 20 
+
+Layer 
+
+(i) Spatial Relation 
+
+0 10 20 
+
+Layer 
+
+(j) Text and Diagram Understanding 
+
+NonOptQ↛Last TrueOpt↛Last FalseOpt↛Last Figure 29: Video-SALMONN2 7B Plus on WorldSense. Modality and question path-ways into the correct option letter (Video ̸ →TrueOpt, Audio ̸ →TrueOpt, NonOptQ ̸ →TrueOpt, V+A ̸ →TrueOpt); modality pathways into the non-option question text (Video ̸ →NonOptQ, Audio ̸ →NonOptQ, V+A ̸ →NonOptQ); and question-internal pathways into the last token (TrueOpt ̸→Last, FalseOpt ̸ →Last, NonOptQ ̸→Last). Source ̸→Target indicates blocking attention edges from source tokens to target tokens. 40

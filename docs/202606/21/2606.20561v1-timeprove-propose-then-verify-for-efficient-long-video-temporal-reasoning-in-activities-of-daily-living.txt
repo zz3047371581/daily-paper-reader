@@ -1,0 +1,580 @@
+Title: TimeProVe: Propose, then Verify for Efficient Long Video Temporal Reasoning in Activities of Daily Living
+
+URL Source: https://arxiv.org/pdf/2606.20561v1
+
+Published Time: Fri, 19 Jun 2026 01:22:37 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+## TIME PRO VE: Propose, then Verify for Efficient Long Video Temporal Reasoning in Activities of Daily Living 
+
+Arkaprava Sinha, Dominick Reilly, Siddharth Krishnan, Hieu Le, Srijan Das 
+
+University of North Carolina, Charlotte 
+
+https://thearkaprava.github.io/timeprove/ 
+
+Abstract 
+
+Long Video Question Answering (LVQA) re-quires identifying sparse, query-relevant ev-idence within hours-long untrimmed videos. Existing approaches either process videos densely with large vision-language models (VLMs), incurring prohibitive computational cost, or rely on sparse caption-based reasoning, which often misses temporally localized and motion-centric evidence. We introduce TIME -PRO VE, a cost-efficient hybrid framework for temporally grounded reasoning in long videos. T IME PRO VE first employs lightweight modules to generate action-grounded answer– evidence hypotheses and subsequently invokes an expensive VLM only for targeted veri-fication. The core of our framework lies in the Action-based Candidate Evidence (ACE) module, which converts temporally lo-calized actions into query-conditioned candi-date answers and supporting evidence windows through lightweight LLM reasoning. We fur-ther introduce OPEN TSUB ENCH (OTB ), an open-ended benchmark designed to evaluate temporally grounded reasoning in real-world Activities of Daily Living (ADL) scenarios. Ex-periments show that T IME PRO VE outperforms the strongest baseline on OTB by 7.3% , while reducing VLM calls by 75% and inference cost by 93% . Furthermore, without explicit tempo-ral grounding training, T IME PRO VE achieves competitive performance on C HARADES -STA, and reaches state-of-the-art results when en-hanced with grounding VLMs. 
+
+1 Introduction 
+
+In long-form Activities of Daily Living (ADL) videos, the answer to a natural-language query may hinge on a few seconds of subtle visual evidence. 
+
+Taking medication, sipping water, or picking up a small object can be easy to miss, and visually similar activities may differ only in fine-grained hand-object interactions. For example, answering 
+
+“Has the person taken their medicine, and did they ⋯ ⋯   
+
+> Long ADL Video (Up to 1 or more hours)
+> Does the person cook any
+> meals throughout the day?
+> Existing Approaches
+> ⋯
+> Long ADL Video User Query
+> Cloud Vision
+> Language Model
+> High Cost $$$ High Latency
+
+TIME PRO VE (Ours)          
+
+> ⋯
+> Long ADL Video User Query
+> Lightweight Modules
+> Action -aware
+> Proposal
+> Generation
+> Query -based
+> Candidate
+> Selection
+> Cloud
+> VLM
+> Low Cost $ Low Latency
+> # Tokens to VLM
+> Video Duration
+> Estimated Cost / Query
+> Video Duration
+> Baseline TIME PRO VE(Ours) Baseline TIME PRO VE(Ours)
+> -75 %
+> -93% 10 !
+> 10 "
+> $1
+> $3
+> $5
+> $7
+
+Figure 1: T IME PRO VE reduces long-video LVQA cost by proposing query-relevant evidence locally before VLM verification. Instead of processing the full video, it sends only short targeted clips to the cloud VLM. 
+
+drink water afterwards?” requires finding the rele-vant moments in a long video and analyzing them closely enough to distinguish the intended actions. This makes ADL Long Video Question Answer-ing (LVQA) fundamentally different from short, curated action recognition benchmarks (Soomro et al., 2012; Liu et al., 2019; Shahroudy et al., 2016; Das et al., 2019; Carreira and Zisserman, 2017), where ∼10 -second clips usually contain a single prominent action. Accurate LVQA there-fore requires both temporal search and fine-grained visual-language reasoning. Large VLMs (Zhang et al., 2025a; Reilly et al., 2025; Wang et al., 2023; Bai et al., 2025; Hurst et al., 2024) are effective for the latter, but applying them directly to hour-long videos is often impractical. For example, for a 60-minute video sampled at 1 FPS, a VLM with a SigLIP-style vision encoder (Zhai et al., 2023) at 
+
+384 × 384 resolution with patch size 14 produces approximately 729 visual tokens per frame. This 1
+
+> arXiv:2606.20561v1 [cs.CV] 18 Jun 2026
+
+yields 3600 ×729 ≈ 2.6×10 6 visual tokens before accounting for text prompts, timestamps, or output tokens. Thus, hour-long videos can consume more than 2 million tokens , making full-video inference difficult to scale. In practice, such inputs may ex-ceed context limits, while cloud-based inference further introduces latency and monetary cost (Co-manici et al., 2025; Achiam et al., 2023). These constraints motivate LVQA approaches that avoid unnecessary processing of the full video while still preserving the fine-grained visual evidence needed for accurate answers. A natural alternative to full-video VLM infer-ence is to first caption the video (Pan et al., 2016; Chen et al., 2023; Wang et al., 2023) and per-form reasoning over the resulting text, which is substantially cheaper to process than dense visual tokens (Pan et al., 2016; Chen et al., 2023; Wang et al., 2023, 2024, 2025d; Zuo et al., 2025; Ma et al., 2025; Kahatapitiya et al., 2025). However, the over-all efficiency of such pipelines critically depends on the captioning model itself: while lightweight captioners can reduce computation, generating cap-tions with large VLMs may still require repeated expensive inference over long videos. Moreover, the effectiveness of such approaches depends crit-ically on whether the generated captions preserve the query-relevant evidence required for accurate reasoning. This is especially difficult in ADL ques-tion answering, where answers may hinge on brief, fine-grained actions rather than salient frame con-tent. Sparse captions often omit temporal ground-ing, subtle motion cues, hand-object interactions, or concurrent activities. Once such evidence is absent from the text, downstream LLM reasoning cannot recover it, leading to wrong responses. Thus, we propose a different paradigm: keep 
+
+visual reasoning instead of converting the video to text, but restrict it to the moments where it mat-ters. We instantiate this idea with Time-aware 
+
+Pro posal and Ve rification ( TIME PRO VE), a cost-efficient hybrid framework for temporal reasoning in long videos. Rather than exhaustively process-ing the entire video, T IME PRO VE first employs lightweight modules to identify answer-relevant evidence and subsequently invokes an expensive VLM only for targeted visual verification. As il-lustrated in Figure 1, T IME PRO VE consists of two components. The first is the Action-based Candi-date Evidence (ACE) module, which efficiently processes the full video in a single pass. ACE employs a lightweight temporal action detector to identify and localize actions, yielding a sparse temporal action timeline describing what actions occur and when they occur. Then, conditioned on both the user query and this action timeline, a lightweight LLM generates candidate answers to-gether with supporting evidence windows, ranked according to query relevance. These evidence win-dows may correspond to individual actions or short merged intervals when broader temporal context is required. The second component is a Temporal Verifier , which invokes an expensive VLM only on selected short RGB evidence clips. Given a can-didate answer and its associated evidence window from ACE, the verifier determines whether suffi-cient visual evidence supports the hypothesis. If verified, T IME PRO VE returns both the answer and its corresponding semantic and visual evidence; otherwise, it proceeds to the next candidate. Con-sequently, T IME PRO VE uses VLMs for targeted verification rather than exhaustive search over long videos. In practice, T IME PRO VE naturally sup-ports a hybrid deployment setting, where ACE op-erates locally on edge devices while the Temporal Verifier leverages powerful remotely hosted VLMs. Finally, existing LVQA benchmarks (Wang et al., 2025a; Wu et al., 2024) are largely restricted to multiple-choice settings, where answer options can implicitly guide evidence selection and tem-poral grounding is not explicitly evaluated. There-fore, we introduce OPEN TSUB ENCH (OTB ), an open-ended LVQA benchmark designed to evalu-ate temporally grounded reasoning in real-world ADL scenarios. OTB requires understanding across both short atomic actions and long-horizon com-posite activities, making it suitable for assessing open-ended reasoning in unstructured home envi-ronments. Empirically, T IME PRO VE outperforms the strongest baseline on OTB by 7.3% while re-ducing VLM invocations by 75% and lowering inference cost by 93% . We further evaluate the generality of our framework on a temporal ground-ing task using C HARADES -STA dataset. Despite not being explicitly trained for temporal grounding, TIME PRO VE achieves performance comparable to specialized temporal grounding VLMs. Moreover, when temporal grounding VLMs are integrated within the ACE module, T IME PRO VE achieves state-of-the-art performance, demonstrating the ro-bustness of our framework. Our key contributions are summarized below: • We introduce TIME PRO VE, a novel hybrid framework that performs lightweight long-2video temporal reasoning to generate action-grounded hypotheses and verifies only sparse RGB evidence using an expensive VLM. • We design the Action-based Candidate Ev-idence (ACE) module, the first module of its kind to transform detected actions into query-conditioned answer-evidence can-didates through lightweight LLM reasoning and structured reranking. • We introduce OPEN TSUB ENCH , an open-ended benchmark for temporally grounded LVQA in real-world untrimmed ADL videos. • TIME PRO VE achieves a 7.3% improvement over the strongest baseline on OTB while re-quiring substantially fewer VLM invocations and lower inference cost. Additionally, T IME -PRO VE achieves state-of-the-art performance on temporal grounding for C HARADES -STA. 
+
+2 Related Works 
+
+Vision Language Models for Long Video Un-derstanding. Long Video VLMs face a token bottleneck, where naïvely, encoding untrimmed videos produces sequences that exceed the con-text window of any language model and dilute rel-evant evidence with irrelevant background. Ex-isting approaches for VLMs can be categorized into three main families. First, token compression methods such as LongVLM (Weng et al., 2024), VideoChat-Flash (Li et al., 2024), Bimba (Islam et al., 2025), and STORM (Jiang et al., 2025) hi-erarchically merge tokens within a fixed budget. Second, frame and token selection methods re-cast the problem as retrieval by ranking frames by query similarity (Liang et al., 2024; Zhang et al., 2025b), combinatorial coverage (Yu et al., 2024) or adaptive policies that decide how many frames to keep (Buch et al., 2025; Tang et al., 2025). A third category builds memory mechanisms (Song et al., 2024; Diko et al., 2025) by maintaining a bounded representation that updates incrementally. How-ever, in these methods the cost of inference scales with video length. Furthermore, token compres-sion discards rare evidence or fine-grained details, token selection is brittle to early selection errors and may fail to capture complex temporal depen-dencies across multiple distant frames. Memory based representations are sensitive to memory up-date strategies and are prone to information drift. TimeChat (Ren et al., 2024), TimeSuite (Zeng et al., 2024) introduce temporal grounding in VLMs by training time-aware encoders. However, these methods depend on dense timestamp-aligned in-struction tuning datasets for training which is ex-pensive for long videos. Time-R1 (Liu et al., 2025) and Time-Zero (Wang et al., 2025c) attempt to re-lax this by training with timestamp aware rewards, but Reinforcement Learning on long videos is un-stable and sample-inefficient. Complementary to these approaches, T IME PRO VE routes the dense computation to a lightweight local temporal action detection module and reserves the VLM for verifi-cation of short, query-relevant clips drawn from a sparse action prior. 
+
+Agentic Frameworks for Long Video Under-standing. Recently, agent-based frameworks for long video understanding decouple the problem into perception and planning where an external LLM iteratively queries a VLM and accumulates evidence until an answer is obtained. VideoA-gent (Wang et al., 2024), LangRepo (Kahatapi-tiya et al., 2025), VideoLucy (Zuo et al., 2025) maintain a semantic store of captions and use an LLM to extract the answer from the cap-tions. VideoTree (Wang et al., 2025d) builds a hierarchical query-adaptive tree of candidate moments. More recent recursive grounding ap-proaches such as RevisionLLM (Hannan et al., 2025) and AIR (Zou et al., 2025) progressively refine temporal boundaries through reason-guided iteration. However, in these systems the choice of which frames to inspect is driven by an LLM oper-ating on sparse captions or similarity scores, hence it is detached from any learned visual prior over which actions occur. Furthermore, the feedback signal between iterations is unstructured chain-of-thought rather than a grounded residual evidence representation. In contrast to these frameworks, TIME PRO VE selects candidate windows from a learned action prior produced by an action detec-tor. Additionally, the feedback loop is structured by an explicit residual signal to the proposal gener-ator for calibrating windows. Unlike prior agentic systems, T IME PRO VE returns both semantic and visual evidence to expose a provenance chain. 
+
+3 Method 
+
+In long video question answering (LVQA), the goal is to answer a free-form natural language query q
+
+over an untrimmed video V of duration L. Let V =
+
+{ft}Tt=1 denote a sequence of T frames. A direct approach is to use a large VLM to estimate a⋆ =
+
+3dd           
+
+> Action Detector
+> Long
+> Input
+> Video
+> Read
+> Drink
+> Walk
+> 12.4s 52.7s 1m4.0s 2m11.0s
+> 58.2s 1m11.1s
+> 1m39.9s 2m32.3s
+> Query -Conditioned Proposal Generator
+> LLM
+> Candidate 1: Walk
+> Candidate 2: Read
+> …
+> Evidence 1:
+> Evidence 2:
+> …
+> 1m39.9s 2m32.3s
+> Answer:
+> Read
+> Evidence Clip:
+> 58.2s 2m11.0s
+> 58.2s 2m11.0s
+> Scoring &
+> Reranking
+> Top
+> Candidate
+
+Vision Language 
+
+Model 
+
+> Confident?
+
+✗
+
+✓  
+
+> Answer: Read
+> Semantic Evidence: The scene
+> shows a person reading a book
+> while drinking from a red mug.
+> Visual Evidence:
+
+Temporal Verifier 
+
+> “What action did the
+> person perform while
+> drinking something ?”
+> Query
+
+Action -based Candidate Evidence (ACE) Figure 2: Overview of T IME PRO VE. ACE constructs a temporal action structure from the full video and proposes query-conditioned hypotheses. Only the selected short evidence clip is sent to the VLM for verification, avoiding full-video VLM inference. 
+
+arg max a p(a | q, V ). However, applying a large VLM over an entire long video is prohibitively expensive, as the number of visual tokens scales with video duration. Therefore, rather than processing the entire video or repeatedly invoking the VLM across many candidate temporal segments, our goal is to iden-tify a small set of candidate windows W = {wk =[sk, e k]}Kk=1 , where ek − sk ≪ L, and verify only the most promising evidence. Consequently, we propose the Time-aware Proposal and Verification 
+
+Framework, T IME PRO VE, a cost-efficient frame-work for LVQA. As shown in Figure 2, T IME -PRO VE consists of two main components: (i) an 
+
+Action-based Candidate Evidence (ACE) Mod-ule , which operates over the full video using lightweight models to obtain query-conditioned candidate hypotheses, and (ii) a Temporal Veri-fier , which performs fine-grained verification only on short RGB clips selected by ACE. This de-sign assigns broad temporal proposal generation to lightweight computation, reserving expensive VLM inference for targeted visual verification. 
+
+3.1 Action-based Candidate Evidence (ACE) 
+
+ACE serves as the lightweight component of T IME -PRO VE. Its objective is to transform a long video into a compact temporal action representation that can be leveraged to generate candidate answer hy-potheses before invoking an expensive VLM. ACE consists of two submodules: (i) Action Detec-tor , which performs a single pass over the video to temporally localize actions, and (ii) Query-conditioned Proposal Generator , which employs an edge LLM to reason over the localized actions and produce query-conditioned candidate answers along with corresponding evidence windows. 
+
+3.1.1 Action Detector 
+
+First, we divide the given video V into T contigu-ous temporal segments. Following prior work in temporal action detection (Dai et al., 2022a; Sinha et al., 2026), each segment is encoded using a frozen visual backbone such as I3D (Carreira and Zisserman, 2017) or CLIP (Radford et al., 2021), producing a feature sequence v ∈ RT ×D, where D
+
+is the feature dimension. The Action Detection Module predicts action probabilities over all temporal segments: 
+
+P = fact (v) ∈ [0 , 1] T ×| C|, (1) where |C| denotes the number of action classes. We threshold P and decode maximal contiguous activations for each class into an event timeline: 
+
+A = {(ci, s i, e i)}Ni=1 , 0 ≤ si < e i ≤ L. (2) Here, ci is the detected action label and [si, e i] is its temporal extent in the original video. This time-line provides a compact temporal structure over the video, indicating which actions occur and when they occur. Importantly, the full video is processed only once by the lightweight Action Detection Module. The original RGB frames are accessed again only after the Action Detector selects a short evidence window for cloud verification. 43.1.2 Query-conditioned Proposal Generator 
+
+The event timeline A provides a compact descrip-tion of which actions occur and when they occur. However, it is not directly tied to the user query. The role of the Proposal Generator is therefore to convert this local action structure into a small set of query-conditioned hypotheses that can later be verified by the VLM. Given the query q and the event timeline A, an edge LLM proposes candidate answers together with supporting temporal windows: 
+
+Hq = {(ai, w i)}Mi=1 , (3) where ai denotes a candidate answer and wi =[si, e i] denotes the corresponding evidence window. The Proposal Generator constructs these evidence windows at two levels of temporal granularity. First, for every detected event (ci, s i, e i) ∈ A ,we create an atomic evidence window, watom  
+
+> i
+
+=[si, e i]. The set of all atomic windows is denoted by Watom = {watom  
+
+> i
+
+}Ni=1 . Atomic windows pre-serve the finest temporal resolution of the Action Detector and are useful when the query can be answered from a single localized action. How-ever, many LVQA queries require context beyond a single detected event. For example, questions involving concurrent actions, object interactions, or temporal relations may require observing mul-tiple neighboring or overlapping actions together. In order to capture such cases, the edge LLM is prompted with the query q and the event timeline A
+
+to identify groups of atomic windows that should be considered jointly. Let Gq = {Gj }Jj=1 denote the groups pro-posed by the edge LLM, where each group Gj ⊆{1, . . . , N } contains the indices of events that are relevant to the query. For each group Gj , we define a merged evidence window: 
+
+wmerge  
+
+> j
+
+=
+
+
+
+min 
+
+> i∈Gj
+
+si, max 
+
+> i∈Gj
+
+ei
+
+
+
+. (4) The set of all merged windows is denoted by 
+
+Wmerge = {wmerge  
+
+> j
+
+}Jj=1 . Wmerge allows the Pro-posal Generator to adapt the temporal extent of the evidence to the query. For instance, for the question 
+
+“What action did the person perform while drinking something?” , the LLM may merge the window cor-responding to drink with nearby or overlapping ac-tions such as read , producing an evidence window that contains the necessary context for verification. The final query-conditioned candidate window set is then Wq = Watom ∪ W merge . Each win-dow in Wq is paired with a candidate answer pro-posed by the edge LLM to form the hypothesis set Hq. This design preserves precise localization through atomic windows while allowing the evi-dence window to expand only when the query re-quires broader temporal context. 
+
+Scoring and Reranking. The hypothesis set Hq
+
+contains candidate answers paired with temporal evidence windows. Although several hypothe-ses may be plausible, sending each corresponding RGB clip to the cloud VLM would be inefficient. Therefore, before any visual evidence is transmit-ted, the Query-conditioned Proposal Generator per-forms a local ranking step that estimates how likely each window is to contain the evidence needed to answer the query. Let A(w) denote the detected events overlapping with window w = [ sw, e w]. For each event a, T (a)
+
+denotes the normalized content-token set derived from its action label, containing lemmatized nouns and verbs after stop-word filtering. We define the window-level token set as T (w) = S 
+
+> a∈A (w)
+
+T (a),and let Q(q) denote the corresponding content-token set extracted from the query. The rank-ing score combines four complementary criteria: whether the window occurs at a temporally plausi-ble position, whether it contains an action strongly related to the query, whether it covers the query concepts collectively, and whether it remains com-pact enough for efficient verification. Let τ = τ (q) denote the temporal intent inferred from the query. We first compute a temporal com-patibility score:                            
+
+> Rtmp (w, q ) =
+> 
+> 1−ew/L, τ=BEFORE ,sw/L, τ=AFTER ,
+> 1−sw/L, τ=FIRST ,sw/L, τ=LAST ,
+> (ew−sw)/L, τ∈ { BETWEEN ,STATE },
+> 1/2,otherwise .
+> (5)
+
+This term acts as a soft temporal prior, biasing the ranking toward windows whose positions are compatible with the query intent. Next, the semantic relevance score rewards the strongest action-level match within the window:      
+
+> Rsem (w, q ) = 1
+> Zq
+> max
+> a∈A (w)
+> |Q (q)∩ T (a)|,(6)
+
+where Zq = max( |Q (q)|, 1) . This best-match form is useful for merged windows, since a highly 5relevant action should not be penalized simply be-cause the window also contains surrounding con-text. In contrast, the coverage score measures how much of the query content is represented by the window as a whole:     
+
+> Rcov (w, q ) = |Q (q)∩ T (w)|
+> Zq
+> .(7)
+
+Thus, Rsem favors a strong local match, while Rcov 
+
+favors windows that jointly cover multiple query-relevant concepts. Finally, we use Rlen (w) =(ew − sw)/L to penalize unnecessarily long clips. The final local ranking score is:         
+
+> R(w|q) = Rtmp (w, q ) + Rsem (w, q )+Rcov (w, q )−Rlen (w).(8)
+
+Consequentially, sorting the candidates by this score yields:       
+
+> H∗
+> q=(a(1) , w (1) ), . . . , (a(M), w (M)),(9)
+
+where R(w(j) | q) ≥ R(w(j+1) | q) for j =1, . . . , M − 1.This scoring function is the main mechanism that turns the raw action timeline into a query-conditioned hypothesis structure. Rather than treat-ing all detected events as equally relevant, it orga-nizes candidate answers by their temporal, seman-tic, and cost-aware compatibility with the query. Consequently, the top-ranked hypothesis serves as the most likely answer-evidence pair and is selected for expensive VLM verification. 
+
+3.2 Temporal Verifier 
+
+In T IME PRO VE, ACE efficiently narrows the search space, but the action timeline alone cannot capture all fine-grained visual details needed for answering, such as objects, attributes, interactions, and scene context. Therefore, T IME PRO VE uses a cloud VLM only as a verifier over selected short clips, rather than as a full-video reasoner. At verification step t, let (at, w t) be the highest-ranked unverified hypothesis from H∗ 
+
+> q
+
+, where wt =[st, e t]. We extract the corresponding RGB ev-idence clip eVt = V [st, e t] and send only this clip, together with the query and candidate answer, to the VLM, (ct, ˆat, d t) = fvlm ( eVt, q, a t). Here, 
+
+ct ∈ { 0, 1} indicates whether the clip contains suf-ficient visual evidence, ˆat is the verified answer, and dt is the semantic evidence extracted from the clip. If ct = 1 , T IME PRO VE returns: 
+
+(a∗, S∗, V∗) = (ˆ at, d t, eVt), (10) where a∗ is the final answer, S∗ is the semantic evidence, and V∗ is the visual evidence clip. If ct =0, the verifier rejects the hypothesis and proceeds to the next candidate in H∗ 
+
+> q
+
+. The process stops when a candidate is accepted or the verification budget is exhausted. 
+
+4 OPEN TSUB ENCH (OTB )
+
+LVQA is most useful when a model can not only answer a question, but also identify the temporal evidence that supports the answer. This require-ment is especially important for ADL, where the relevant evidence may occupy only a few seconds within a long, visually redundant recording. Exist-ing LVQA benchmarks often emphasize multiple-choice evaluation, report aggregate accuracy with-out diagnostic breakdowns, or omit precise tempo-ral evidence. As a result, they make it difficult to evaluate whether a model is genuinely grounded or merely producing the right answer from language priors or dataset biases. Therefore, we introduce OPEN TSUB ENCH 
+
+(OTB ), an open-ended, temporally grounded QA benchmark built on the Toyota Smarthome Untrimmed Dataset (TSU) (Dai et al., 2022b).  
+
+> OTB
+
+contains 3,567 question-answer pairs over 185 
+
+untrimmed ADL videos, with an average video du-ration of 21 minutes. Each question is paired with one or more supporting temporal intervals, allow-ing models to be evaluated both on answer cor-rectness and on whether they localize the evidence used to answer the question. The benchmark is constructed from timestamped TSU action annotations. We first canonicalize each video into an action timeline, instantiate a library of templated questions over the timeline, process them into natural language using a constrained LLM, and then filter them for ambiguity, triviality, and redundancy. Full construction details, prompts, filtering rules, and additional statistics are provided in the Appendix. 
+
+5 System Evaluation 
+
+5.1 Implementation Details 
+
+For the Action Detector in ACE module, we use MS-Temba (Sinha et al., 2026), a lightweight tem-poral action detector with 17M parameters. Videos are divided into contiguous 16-frame windows, and segment-level features are extracted using ei-ther CLIP-L/14 (Radford et al., 2021) or I3D (Car-reira and Zisserman, 2017). MS-Temba is either trained on Toyota Smarthome Untrimmed (Dai 6Table 1: Comparison with State-of-the-Art on O PEN TSUB ENCH .                                                                                                                               
+
+> Method LLM VLM Object Temporal Compositional State Long-Horizon Overall Centric Positioning Actions Transition Sparse Evidence
+> SFT-Based Frameworks
+> VideoLLaMA3 (Zhang et al., 2025a) Qwen 2 -7.8 22.3 21.5 71.9 15.7 22.6 Qwen2.5-VL (Yang et al., 2024) Qwen 2.5 -72.1 40.9 26.6 27.2 35.8 39.3 VideoChat-Flash (Li et al., 2024) InternLM2 -63.6 36.4 29.3 66.7 29.7 37.8 VTimeLLM (Huang et al., 2024) LLaMA-2-7B -55.8 27.0 32.5 65.9 29.7 33.1 TimeChat (Ren et al., 2024) LLaMA-2-7B -62.8 30.7 13.1 55.7 21.2 30.4 Time-R1 (Wang et al., 2025b) Qwen2.5VL -50.8 35.6 26.9 49.2 28.8 34.9 TimeSuite (Zeng et al., 2024) Mistral-7B -68.2 31.4 23.9 80.9 26.7 35.4
+> Agentic Frameworks
+> VideoTree (Wang et al., 2025d) GPT-5.1 -36.8 30.3 19.4 33.7 21.2 27.3 AVP (Wang et al., 2025e) GPT-4o GPT-4o 11.5 20.2 9.4 42.3 3.9 14.4 GPT-4o (Hurst et al., 2024) GPT-4o GPT-4o 27.9 27.3 9.4 67.7 11.2 23.8 Videoagent (Wang et al., 2024) GPT-4o GPT-4o 65.1 35.6 17.5 34.9 28.6 33.9 TIME PRO VE(Ours) Gemma4-2B VLMA3 53.9 33.5 27.7 82.9 31.7 37.3 TIME PRO VE(Ours) Qwen2-7B VLMA3 53.5 42.0 31.7 78.9 36.1 42.7 TIME PRO VE(Ours) Gemma4-2B GPT-4o 49.2 47.9 37.1 70.3 35.7 45.1
+
+et al., 2022b) or Charades (Sigurdsson et al., 2016), depending on the downstream benchmark, and pre-dicts class-wise action probabilities for each tem-poral segment. We threshold the probabilities at 
+
+θ = 0 .5 and decode contiguous activations into the event timeline used by ACE. For the Query-conditioned Proposal Generator, we use Gemma4-2B (DeepMind, 2026) and Qwen2-7B (Bai et al., 2023) to produce candidate answer-evidence pairs from the event timeline. For the Temporal Verifier, we evaluate VideoLLaMA3 (Zhang et al., 2025a) or GPT-4o (Hurst et al., 2024). We provide the complete prompts used for the Proposal Generator and the Temporal Verifier in the Appendix. 
+
+5.2 Comparison with State-of-the-Art 
+
+In Table 1, we compare TIME PRO VE with two families of methods, supervised fine-tuned (SFT) VLMs and agentic VLM-based frame-works. Among SFT-based methods, VideoL-LaMA3 achieves the lowest performance, while temporal grounding models such as TimeChat, VTimeLLM, Time-R1, and TimeSuite improve performance on specific categories through time-aware instruction tuning but remain limited overall. Interestingly, T IME PRO VE with VLMA3 as the verifier achieves stronger overall performance. Us-ing Gemma4-2B in ACE, T IME PRO VE achieves an improvement of 14 .7% over the baseline with the same VLMA3 as Temporal Verifier. With Qwen2-7B in ACE, T IME PRO VE achieves further improve-ment of 5.4% , with gains across temporal position-ing, compositional actions, and long-horizon sparse evidence. Among the agentic frameworks, VideoAgent performs strongly on object-centric questions, but drops on state transitions and sparse-evidence rea-soning, suggesting that frame-level captioning can capture salient objects while missing temporally specific evidence. In contrast, T IME PRO VE with GPT-4o as verifier achieves an improvement of 
+
+21 .3% over the GPT-4o baseline and 11 .2% over VideoAgent. Furthermore, T IME PRO VE consis-tently achieves a performance improvement on Temporal Positioning and Long-Horizon Sparse Evidence category, demonstrating its effectiveness in capturing temporal dependencies among actions in the long videos. 
+
+5.3 System Diagnosis Effect of framework components. Table 2 ablates the main components of T IME PRO VE. Without the Action Detector, edge LLM, or scoring module, the system reduces to a weak caption-style or unguided baseline. Adding the Action Detector improves per-formance considerably, showing that the detected action timeline is a strong source of temporal struc-ture. This validates the central assumption of our approach that grounding evidence in temporally lo-calized actions is essential for temporal reasoning in untrimmed ADL videos. Adding the edge LLM further improves performance by 3.6% . This gain indicates that query-conditioned reasoning is neces-sary to identify which temporal windows should be merged to answer the query. Finally, incorporating proposal scoring and reranking achieves the best performance, indicating that heuristic-guided struc-turing of candidate proposals before verification is crucial for effective temporal reasoning. 
+
+Efficiency Analysis. Table 3 highlights the accuracy-efficiency tradeoff among LVQA methods. Caption-based and uniform-sampling methods process much longer video duration through repeated VLM calls, yet remain less accurate. In contrast, full-video inference has low latency but its comparable accuracy shows that exposing the VLM to more video frames does not necessarily yield better reasoning when 7Table 2: Ablating the Compo-nents of T IME PRO VE.               
+
+> Action Detection Proposal Generator Perf. Edge Score LLM Rerank
+> ✗✗✗24.7
+> ✓✗✗36.4
+> ✓✓✗40.0
+> ✓✓✓42.7
+
+Table 3: Efficiency comparison of T IME -PRO VE with LVQA baselines.                         
+
+> Method Acc. # Calls Dur. Lat.
+> Caption-Based 24.7 16.8 1004.8 55.0 Uniform Sampling 34.7 16.8 1004.8 27.0 Full-Video 35.0 1.0 180.0 17.6 Retrieval-Based 33.9 7.0 10.0 35.0 TIME PRO VE44.8 8.3 123.6 18.7 𝑅 !"#
+> 𝑅 $%"
+> 𝑅 &'(
+> 𝑅 )%*
+> No Score
+> Full Scoring
+> Performance Drop (%)
+
+Figure 3: Scoring Metrics 
+
+evidence is sparse. Retrieval-based selection is efficient in processed duration, but its low performance suggests that generic retrieval often misses action-relevant evidence. In contrast, TIME PRO VE achieves the best accuracy with minimal latency overhead, because ACE narrows the search before VLM verification. This shows that the key efficiency gain is not merely reducing calls or duration in isolation, but selecting clips that are likely to contain the answer. 
+
+Table 4: Temporal Grounding on Charades-STA                                  
+
+> Method R1@0.3 R1@0.5 R1@0.7
+> VideoChat2 (Li et al., 2023) 9.6 3.4 1.4 TimeChat (Ren et al., 2024) -32.2 13.4 VTimeLLM (Huang et al., 2024) 51.0 27.5 11.4 ChatVTG (Qu et al., 2024) 52.7 33.0 15.9 TimeSuite (Zeng et al., 2024) 69.9 45.3 24.0 Time-R1 (Liu et al., 2025) 77.7 61.5 36.8
+> TIME PRO VE(+ Action Detector) 52.1 27.3 10.7 TIME PRO VE(+ TimeSuite) 71.2 50.1 24.6 TIME PRO VE(+ Time-R1) 78.2 62.0 36.1
+
+Effect of scoring metrics. Figure 3 evaluates the drop in performance on the ablation of each term in the local ranking score. The full scoring func-tion performs best, showing that effective evidence selection requires combining temporal, semantic, and cost-aware cues. Temporal compatibility is the most influential since removing it causes the largest drop and brings performance close to the no scor-ing variant. This demonstrates that for long-video temporal reasoning, it is important for the evidence window to be consistent with the temporal intent of the query. Additionally, the remaining terms contribute complementary improvements, substan-tiating that all components of the ranking mecha-nism are essential for refining the final ordering of candidate hypotheses. 
+
+5.4 Generalization to Temporal Grounding 
+
+Although T IME PRO VE is specifically designed for open-ended LVQA, its intermediate representation, i.e., localized evidence window from ACE, is in-herently temporal. This makes it natural to ask whether the same mechanism can transfer to tem-poral grounding, where the task is to localize the interval corresponding to a language query. We evaluate this on Charades-STA in Table 4. Comple-mentary to LVQA, Charades-STA evaluates short, free-form temporal grounding rather than open-ended reasoning over long ADL videos. Accord-ingly, T IME PRO VE with only the Action Detector is limited at stricter IoU thresholds, since action detectors provide event-level segments rather than the fine boundary alignment required by tempo-ral grounding. Nevertheless, this variant remains competitive with several general video-language grounding models, suggesting that action timelines provide useful temporal structure even beyond the target LVQA setting. Notably, while strong base-lines such as TimeSuite and Time-R1 achieve com-petitive performance on C HARADES -STA, they substantially underperform on OTB , highlighting the challenges posed by temporally grounded rea-soning in long ADL videos. Moreover, T IME PRO VE is not tied to a specific detector. When combined with stronger temporal localization backbones, it improves over TimeSuite by 1.3, 4.8, and 0.6 points respectively. With Time-R1, it further improves the looser and medium IoU thresholds while remaining comparable at the strictest threshold. These gains indicate that ACE acts as a reusable query-conditioned evidence se-lection layer that can plug into stronger temporal grounding modules to improve evidence localiza-tion beyond answer generation. 
+
+6 Conclusion 
+
+We propose T IME PRO VE, a cost-efficient frame-work for temporally grounded LVQA. Instead of processing an entire long video with aVLM, T IME PRO VE uses ACE to generate action-grounded answer–evidence hypotheses and invokes an expensive VLM only for targeted verifica-tion of short RGB clips. We further introduce OPEN TSUB ENCH , an open-ended benchmark for evaluating temporal reasoning in real-world ADL videos. Experiments show that T IME PRO VE im-proves accuracy while substantially reducing VLM calls and inference cost, and further generalizes to temporal grounding when combined with stronger temporal localization modules. 87 Limitations 
+
+TIME PRO VE assumes that the answer-relevant evi-dence can be captured by a small number of local-ized or merged action windows. This is well suited to ADL-style reasoning, but questions requiring dif-fuse scene understanding over very long intervals may require broader evidence aggregation. Addi-tionally, while T IME PRO VE substantially reduces VLM usage, the final verification step still depends on the visual reasoning ability of the chosen VLM. Improving adaptive evidence aggregation, and veri-fier calibration are promising directions for future work. 
+
+Acknowledgements 
+
+This work was supported in part by the National Science Foundation (IIS-2245652) and the Univer-sity of North Carolina at Charlotte. Computational resources were provided by the NSF National AI Research Resource Pilot (NAIRR240338) and NC-Share. 
+
+References 
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, and 1 others. 2023. Gpt-4 techni-cal report. arXiv preprint arXiv:2303.08774 .Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. 2023. Qwen-vl: A frontier large vision-language model with versatile abilities. arXiv preprint arXiv:2308.12966 .Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, and 1 others. 2025. Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 .Shyamal Buch, Arsha Nagrani, Anurag Arnab, and Cordelia Schmid. 2025. Flexible frame selection for efficient video reasoning. In Proceedings of the Computer Vision and Pattern Recognition Confer-ence , pages 29071–29082. Joao Carreira and Andrew Zisserman. 2017. Quo vadis, action recognition? a new model and the kinetics dataset. In Conference on Computer Vision and Pat-tern Recognition , pages 4724–4733. IEEE. Jun Chen, Deyao Zhu, Kilichbek Haydarov, Xiang Li, and Mohamed Elhoseiny. 2023. Video chatcaptioner: Towards enriched spatiotemporal descriptions. ArXiv ,abs/2304.04227. Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Mar-cel Blistein, Ori Ram, Dan Zhang, Evan Rosen, and 1 others. 2025. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 .Rui Dai, Srijan Das, Kumara Kahatapitiya, Michael Ryoo, and Francois Bremond. 2022a. MS-TCT: Multi-Scale Temporal ConvTransformer for Action Detection. In CVPR .Rui Dai, Srijan Das, Saurav Sharma, Luca Minciullo, Lorenzo Garattoni, Francois Bremond, and Gianpiero Francesca. 2022b. Toyota smarthome untrimmed: Real-world untrimmed videos for activity detection. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , pages 1–1. Srijan Das, Rui Dai, Michal Koperski, Luca Minciullo, Lorenzo Garattoni, Francois Bremond, and Gianpiero Francesca. 2019. Toyota smarthome: Real-world activities of daily living. In International Conference on Computer Vision .Google DeepMind. 2026. Gemma 4: Open Multimodal Models for Responsible AI Development. Google AI for Developers. Accessed: 2026-05-03. Anxhelo Diko, Tinghuai Wang, Wassim Swaileh, Shiyan Sun, and Ioannis Patras. 2025. Rewind: Un-derstanding long videos with instructed learnable memory. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 13734– 13743. Chaoyou Fu, Yuhan Dai, Yongdong Luo, Lei Li, Shuhuai Ren, Renrui Zhang, Zihan Wang, Chenyu Zhou, Yunhang Shen, Mengdan Zhang, and 1 oth-ers. 2025. Video-mme: The first-ever comprehensive evaluation benchmark of multi-modal llms in video analysis. In Proceedings of the IEEE/CVF confer-ence on computer vision and pattern recognition ,pages 24108–24118. Madeleine Grunde-McLaughlin, Ranjay Krishna, and Maneesh Agrawala. 2021. Agqa: A benchmark for compositional spatio-temporal reasoning. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 11287–11297. Tanveer Hannan, Md Mohaiminul Islam, Jindong Gu, Thomas Seidl, and Gedas Bertasius. 2025. Revision-llm: Recursive vision-language model for temporal grounding in hour-long videos. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 19012–19022. Bin Huang, Xin Wang, Hong Chen, Zihan Song, and Wenwu Zhu. 2024. Vtimellm: Empower llm to grasp video moments. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition , pages 14271–14280. Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, and 1 others. 2024. Gpt-4o system card. arXiv preprint arXiv:2410.21276 .
+
+9Md Mohaiminul Islam, Tushar Nagarajan, Huiyu Wang, Gedas Bertasius, and Lorenzo Torresani. 2025. Bimba: Selective-scan compression for long-range video question answering. In Proceedings of the Computer Vision and Pattern Recognition Confer-ence , pages 29096–29107. Jindong Jiang, Xiuyu Li, Zhijian Liu, Muyang Li, Guo Chen, Zhiqi Li, De-An Huang, Guilin Liu, Zhiding Yu, Kurt Keutzer, and 1 others. 2025. Storm: Token-efficient long video understanding for multimodal llms. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 5830–5841. Kumara Kahatapitiya, Kanchana Ranasinghe, Jongwoo Park, and Michael S Ryoo. 2025. Language repos-itory for long video understanding. In Findings of the Association for Computational Linguistics: ACL 2025 , pages 5627–5646. Kunchang Li, Yali Wang, Yinan He, Yizhuo Li, Yi Wang, Yi Liu, Zun Wang, Jilan Xu, Guo Chen, Ping Luo, and 1 others. 2023. Mvbench: A compre-hensive multi-modal video understanding benchmark. 
+
+arXiv preprint arXiv:2311.17005 .Xinhao Li, Yi Wang, Jiashuo Yu, Xiangyu Zeng, Yuhan Zhu, Haian Huang, Jianfei Gao, Kunchang Li, Yinan He, Chenting Wang, and 1 others. 2024. Videochat-flash: Hierarchical compression for long-context video modeling. arXiv preprint arXiv:2501.00574 .Hao Liang, Jiapeng Li, Tianyi Bai, Xijie Huang, Linzhuang Sun, Zhengren Wang, Conghui He, Bin Cui, Chong Chen, and Wentao Zhang. 2024. Keyvideollm: Towards large-scale video keyframe selection. arXiv preprint arXiv:2407.03104 .Jun Liu, Amir Shahroudy, Mauricio Perez, Gang Wang, Ling-Yu Duan, and Alex C. Kot. 2019. Ntu rgb+d 120: A large-scale benchmark for 3d human activ-ity understanding. IEEE Transactions on Pattern Analysis and Machine Intelligence .Zijia Liu, Peixuan Han, Haofei Yu, Haoru Li, and Ji-axuan You. 2025. Time-r1: Towards comprehen-sive temporal reasoning in llms. arXiv preprint arXiv:2505.13508 .Ziyu Ma, Chenhui Gou, Hengcan Shi, Bin Sun, Shutao Li, Hamid Rezatofighi, and Jianfei Cai. 2025. Drvideo: Document retrieval based long video un-derstanding. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 18936– 18946. Yingwei Pan, Tao Mei, Ting Yao, Houqiang Li, and Yong Rui. 2016. Jointly modeling embedding and translation to bridge video and language. In The IEEE Conference on Computer Vision and Pattern Recognition (CVPR) .Mengxue Qu, Xiaodong Chen, Wu Liu, Alicia Li, and Yao Zhao. 2024. Chatvtg: Video temporal grounding via chat with video dialogue large language mod-els. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 1847–1856. Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. 2021. Learn-ing transferable visual models from natural language supervision. In International Conference on Machine Learning .Dominick Reilly, Rajatsubhra Chakraborty, Arkaprava Sinha, Manish Kumar Govind, Pu Wang, Francois Bremond, Le Xue, and Srijan Das. 2025. Llavidal: A large language vision model for daily activities of living. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 24297– 24308. Shuhuai Ren, Linli Yao, Shicheng Li, Xu Sun, and Lu Hou. 2024. Timechat: A time-sensitive multi-modal large language model for long video under-standing. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition ,pages 14313–14323. Amir Shahroudy, Jun Liu, Tian-Tsong Ng, and Gang Wang. 2016. Ntu rgb+d: A large scale dataset for 3d human activity analysis. In Conference on Computer Vision and Pattern Recognition .Gunnar A. Sigurdsson, Gül Varol, Xiaolong Wang, Ali Farhadi, Ivan Laptev, and Abhinav Gupta. 2016. Hol-lywood in Homes: Crowdsourcing Data Collection for Activity Understanding. In European Conference on Computer Vision(ECCV) .Arkaprava Sinha, Monish Soundar Raj, Pu Wang, Ahmed Helmy, and Srijan Das. 2026. Ms-temba: Multi-scale temporal mamba for efficient temporal action detection. In Proceedings of the IEEE confer-ence on Computer Vision and Pattern Recognition .Enxin Song, Wenhao Chai, Guanhong Wang, Yucheng Zhang, Haoyang Zhou, Feiyang Wu, Haozhe Chi, Xun Guo, Tian Ye, Yanting Zhang, and 1 others. 2024. Moviechat: From dense token to sparse mem-ory for long video understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 18221–18232. Khurram Soomro, Amir Roshan Zamir, and Mubarak Shah. 2012. UCF101: A dataset of 101 human actions classes from videos in the wild. CoRR ,abs/1212.0402. Xi Tang, Jihao Qiu, Lingxi Xie, Yunjie Tian, Jianbin Jiao, and Qixiang Ye. 2025. Adaptive keyframe sam-pling for long video understanding. In Proceedings of the Computer Vision and Pattern Recognition Con-ference , pages 29118–29128. Weihan Wang, Zehai He, Wenyi Hong, Yean Cheng, Xi-aohan Zhang, Ji Qi, Ming Ding, Xiaotao Gu, Shiyu Huang, Bin Xu, and 1 others. 2025a. Lvbench: An extreme long video understanding benchmark. In 
+
+10 Proceedings of the IEEE/CVF International Confer-ence on Computer Vision , pages 22958–22967. Weihan Wang, Qingsong Lv, Wenmeng Yu, Wenyi Hong, Ji Qi, Yan Wang, Junhui Ji, Zhuoyi Yang, Lei Zhao, Xixuan Song, Jiazheng Xu, Bin Xu, Juanzi Li, Yuxiao Dong, Ming Ding, and Jie Tang. 2023. Cogvlm: Visual expert for pretrained language mod-els. ArXiv , abs/2311.03079. Xiaohan Wang, Yuhui Zhang, Orr Zohar, and Serena Yeung-Levy. 2024. Videoagent: Long-form video understanding with large language model as agent. In European Conference on Computer Vision , pages 58–76. Springer. Ye Wang, Ziheng Wang, Boshen Xu, Yang Du, Ke-jun Lin, Zihan Xiao, Zihao Yue, Jianzhong Ju, Liang Zhang, Dingyi Yang, and 1 others. 2025b. Time-r1: Post-training large vision language model for temporal video grounding. arXiv preprint arXiv:2503.13377 .Ye Wang, Boshen Xu, Zihao Yue, Zihan Xiao, Zi-heng Wang, Liang Zhang, Dingyi Yang, Wenxuan Wang, and Qin Jin. 2025c. Timezero: Temporal video grounding with reasoning-guided lvlm. ArXiv ,abs/2503.13377. Ziyang Wang, Shoubin Yu, Elias Stengel-Eskin, Jae-hong Yoon, Feng Cheng, Gedas Bertasius, and Mo-hit Bansal. 2025d. Videotree: Adaptive tree-based video representation for llm reasoning on long videos. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 3272–3283. Ziyang Wang, Honglu Zhou, Shijie Wang, Junnan Li, Caiming Xiong, Silvio Savarese, Mohit Bansal, Michael S Ryoo, and Juan Carlos Niebles. 2025e. Active video perception: Iterative evidence seeking for agentic long video understanding. arXiv preprint arXiv:2512.05774 .Yuetian Weng, Mingfei Han, Haoyu He, Xiaojun Chang, and Bohan Zhuang. 2024. Longvlm: Efficient long video understanding via large language models. In 
+
+European Conference on Computer Vision , pages 453–470. Springer. Haoning Wu, Dongxu Li, Bei Chen, and Junnan Li. 2024. Longvideobench: A benchmark for long-context interleaved video-language understanding. 
+
+Advances in Neural Information Processing Systems ,37:28828–28857. Junbin Xiao, Xindi Shang, Angela Yao, and Tat-Seng Chua. 2021. Next-qa: Next phase of question-answering to explaining temporal actions. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9777–9786. Qwen An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Hao-ran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxin Yang, Jingren Zhou, Jun-yang Lin, and 25 others. 2024. Qwen2.5 technical report. ArXiv , abs/2412.15115. Sicheng Yu, Chengkai Jin, Huanyu Wang, Zhenghao Chen, Sheng Jin, Zhongrong Zuo, Xiaolei Xu, Zhen-bang Sun, Bingni Zhang, Jiawei Wu, and 1 others. 2024. Frame-voyager: Learning to query frames for video large language models. arXiv preprint arXiv:2410.03226 .Zhou Yu, Dejing Xu, Jun Yu, Ting Yu, Zhou Zhao, Yuet-ing Zhuang, and Dacheng Tao. 2019. Activitynet-qa: A dataset for understanding complex web videos via question answering. In Proceedings of the AAAI con-ference on artificial intelligence , volume 33, pages 9127–9134. Xiangyu Zeng, Kunchang Li, Chenting Wang, Xinhao Li, Tianxiang Jiang, Ziang Yan, Songze Li, Yan-song Shi, Zhengrong Yue, Yi Wang, and 1 others. 2024. Timesuite: Improving mllms for long video understanding via grounded tuning. arXiv preprint arXiv:2410.19702 .Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. 2023. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF international conference on computer vision , pages 11975–11986. Boqiang Zhang, Kehan Li, Zesen Cheng, Zhiqiang Hu, Yuqian Yuan, Guanzheng Chen, Sicong Leng, Yuming Jiang, Hang Zhang, Xin Li, and 1 others. 2025a. Videollama 3: Frontier multimodal foun-dation models for image and video understanding. 
+
+arXiv preprint arXiv:2501.13106 .Shaojie Zhang, Jiahui Yang, Jianqin Yin, Zhenbo Luo, and Jian Luan. 2025b. Q-frame: Query-aware frame selection and multi-resolution adaptation for video-llms. In Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision , pages 22056– 22065. Junjie Zhou, Yan Shu, Bo Zhao, Boya Wu, Zhengyang Liang, Shitao Xiao, Minghao Qin, Xi Yang, Yong-ping Xiong, Bo Zhang, and 1 others. 2025. Mlvu: Benchmarking multi-task long video understanding. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pages 13691– 13701. Yuanhao Zou, Shengji Jin, Andong Deng, Youpeng Zhao, Jun Wang, and Chen Chen. 2025. Air: Enabling adaptive, iterative, and reasoning-based frame selection for video question answering. arXiv preprint arXiv:2510.04428 .Jialong Zuo, Yongtai Deng, Lingdong Kong, Jingkang Yang, Rui Jin, Yiwei Zhang, Nong Sang, Liang Pan, Ziwei Liu, and Changxin Gao. 2025. Videolucy: Deep memory backtracking for long video under-standing. arXiv preprint arXiv:2510.12422 .
+
+11 Appendix Overview 
+
+The Supplementary material is organized as fol-lows: • Section A: T IME PRO VE’s robustness to noisy Action Priors. • Section B: Evidence Grounding Capability of TIME PRO VE
+
+• Section C: OpenTSUBench ( OTB ): Construc-tion and Evaluation Details • Section D: Algorithmic Framework of T IME -PRO VE
+
+• Section E: Prompts • Section F: Qualitative Examples        
+
+> 
+> 
+> 
+> 
+> 
+> 
+>  
+> 
+> 
+>   Accuracy Avg #VLM Calls
+> Degree of Corruption (%)
+> Boundary Noise Label Noise
+
+Figure 4: Effect of boundary and label noise on Accu-racy and number of VLM calls. 
+
+A TIME PRO VE’s robustness to noisy Action Priors 
+
+Since T IME PRO VE uses the ACE module to con-struct candidate evidence windows from an action timeline, it is important to understand the sensi-tivity of the framework to imperfect action detec-tion. We therefore evaluate T IME PRO VE under corrupted event timelines. Starting from the de-tected timeline A = {(ci, s i, e i)}Ni=1 , we intro-duce two types of perturbations at increasing noise levels. For label noise , we randomly replace the action labels ci of a fraction p of events with la-bels sampled from the remaining action vocabu-lary, while keeping their temporal boundaries fixed. For boundary noise , we perturb each event bound-ary as ˜si = si + ϵsi and ˜ei = ei + ϵei , where 
+
+ϵsi , ϵ ei ∼ N (0 , σ 2), followed by clipping to the valid video range and enforcing ˜si < ˜ei. We con-duct this analysis on a randomly sampled subset of 1000 QA pairs from OTB .Figure 4 demonstrates T IME PRO VE’s effective-ness in the absence of perfect action timeline. Boundary perturbations have only a limited impact up to moderate corruption levels, indicating that ACE can still propose windows that overlap with the relevant evidence even when temporal bound-aries are imprecise. Label noise is more challeng-ing because it directly affects query-conditioned proposal generation and reranking; nevertheless, the performance drop remains bounded. This is because the Temporal Verifier does not rely solely on action labels, it validates the selected RGB clip with the VLM before producing the final answer. These results show that the local action timeline acts as an efficient guide for evidence selection, while final prediction remains grounded in visual verification, making T IME PRO VE robust to imper-fections in the local temporal model. 
+
+Table 5: Evidence Grounding on OTB      
+
+> Temporal Captioning TIME PRO VE
+> Grounding Based
+> NA 9.1 22.3
+
+B Evidence Grounding Capability of TIME PRO VE
+
+Table 5 evaluates the quality of the temporal ev-idence selected by T IME PRO VE on OTB . Al-though temporal-grounding methods are trained with timestamp-based instruction-tuning data, they fail to reliably localize evidence in long, untrimmed ADL videos. Captioning-based approaches provide a stronger point of comparison: they partition the video into fixed-size clips, generate timestamped clip-level captions, and aggregate them into a video-level description, allowing each answer to be traced back to the corresponding captioned clip. We report the temporal IoU between the selected evidence and the ground-truth evidence intervals, using a 10-second buffer around the reference window. T IME -PRO VE achieves a tIoU of 22.3, more than twice that of the captioning-based baseline. This result shows that ACE identifies answer-relevant evidence more precisely than dense captioning, despite oper-ating through lightweight action-grounded propos-als rather than exhaustive caption generation. 12 Table 6: Comparison of OTB with contemporary long-video QA benchmarks. “Temporal GT” indicates presence of ground-truth supporting intervals. “Open-ended” indicates free-form answers rather than multiple choice. “Multi-interval” indicates support for answers that depend on temporally separated evidence. 
+
+Benchmark Avg. len. Open-ended Temporal GT Multi-interval Stratified Domain AGQA (Grunde-McLaughlin et al., 2021) 30 s ✓ ✗ ✗ ✗ ADL ActivityNet-QA (Yu et al., 2019) 3 min ✓ ✗ ✗ ✗ internet NExT-QA (Xiao et al., 2021) 44 s ✗ (MCQ) weak ✗ ✓ social Video-MME (Fu et al., 2025) 17 min ✗ (MCQ) ✗ ✗ ✓ varied MLVU (Zhou et al., 2025) 12 min partial partial ✗ ✓ varied LongVideoBench (Wu et al., 2024) 12 min ✗ (MCQ) weak ✗ ✓ varied  
+
+> OTB
+
+(ours) 21 min ✓ ✓ ✓ ✓ ADL 2 Temporal Positioning   
+
+> reason about event order
+> What action happened between taking something off the
+> table and putting something on the table?
+> A. Drink from bottle
+> Evidence 20.60 –21.35s: drink from bottle
+
+5 Long -Horizon Sparse Evidence   
+
+> link distant evidence across time
+> What action happened between using laptop and walking?
+> A. Get up
+> Evidence 7.81 –16.80s: get up between laptop use and walking
+
+1 Object -centric Action   
+
+> identify object involved in an action
+> What container did the person pour from?
+> A. Bottle
+> Evidence 175.47 –176.31s: pouring action involving a bottle
+
+3 Co mpositional Acti ons   
+
+> detect simultaneous actions
+> What other action did the person perform while reading?
+> A. Drink from glass
+> Evidence 121.23 –124.12s: reading overlaps with drinking from glass
+
+4 State Transition   
+
+> recognize physical state/posture
+> What is the person’s posture at the end of the video?
+> A. Sitting
+> Evidence Video End :visible seated posture in the final frames
+
+Question Distribution by Category 
+
+... ... ... ... ... 
+
+3567 
+
+> Temporal Positioning
+> Long -Horizon Sparse
+> Evidence Positioning
+> Object -centric Action
+> Compositional Actions
+> State Transition
+
+Figure 5: Overview of O PEN TSUB ENCH (OTB )
+
+C OpenTSUBench ( OTB ): Construction and Evaluation Details 
+
+In this section, we describe OPEN TSUB ENCH 
+
+(OTB ), an open-ended and temporally grounded benchmark for long-horizon Activities of Daily Living (ADL) video question answering. Existing LVQA benchmarks often evaluate models through multiple-choice questions, where answer options can implicitly guide both reasoning and tempo-ral localization. In contrast, OTB is designed to evaluate whether a model can answer free-form questions and identify the temporal evidence that supports its answer, as demonstrated in Table 6. To this end, each question in OTB is paired with one or more supporting video intervals, allowing us to evaluate both answer correctness and tem-poral grounding. Figure 5 illustrates OTB and its different strata. 
+
+Source Data. OTB is built on Toyota Smarthome Untrimmed (TSU) (Dai et al., 2022b), which con-tains untrimmed ADL videos with dense tempo-ral annotations. The videos cover everyday ac-tivities such as preparing drinks, cooking, eating, taking pills, cleaning, posture changes, and device use. Since these activities often overlap and vary substantially in duration, TSU provides a realistic testbed for long-video temporal reasoning. We use the timestamped action annotations as the struc-tural basis for question generation, so every ques-tion remains linked to the action event or events that justify its answer. 
+
+Benchmark Construction. We construct OTB 
+
+through a pipeline, following standard bench-marks (Li et al., 2023), that preserves the temporal structure of TSU while producing natural open-ended questions. First, we canonicalize the raw annotations into an event timeline, where each event contains an 13 Algorithm 1 TIME PRO VE: Local action-guided proposal and temporal verification for LVQA. 
+
+Require: Video V , question q, Action Detector fact , edge LLM fllm , cloud VLM fvlm , verification budget M .
+
+Ensure: Answer a∗, semantic evidence S∗, visual evidence V∗.
+
+Local Action-based Candidate Evidence (ACE) 
+
+1: v ← EXTRACT FEATURES (V )
+
+2: P ← fact (v) ▷ Predict segment-level action probabilities, Eq. 1 
+
+3: A ← DECODE TIMELINE (P, θ ) ▷ Construct event timeline, Eq. 2 
+
+4: Watom ← { [si, e i] : ( ci, s i, e i) ∈ A} 
+
+5: Gq ← fllm (q, A) ▷ Query-conditioned grouping of action windows 
+
+6: Wmerge ← MERGE WINDOWS (Gq, A) ▷ Eq. 4 
+
+7: Wq ← W atom ∪ W merge 
+
+8: Hq ← GENERATE HYPOTHESES (fllm , q, A, Wq) ▷ Hq = {(ai, w i)}Mi=1 
+
+9: H∗
+
+q ← SORT (Hq; R(w | q)) ▷ Scoring and reranking, Eq. 8 
+
+Cloud Temporal Verification 
+
+10: for t = 1 to min( M, |H ∗
+
+q |) do 
+
+11: (at, w t) ← H ∗
+
+q [t], wt = [ st, e t]
+
+12: eVt ← V [st, e t] ▷ Extract selected RGB evidence clip 
+
+13: (ct, ˆat, d t) ← fvlm ( eVt, q, a t) ▷ Verify candidate answer, Eq. 10 
+
+14: if ct = 1 then 
+
+15: S∗ ← dt, V∗ ← eVt
+
+16: return (ˆ at, S∗, V∗)
+
+17: end if 
+
+18: end for 
+
+19: return FALLBACK (H∗
+
+q ) ▷ Return best available candidate if budget is exhausted action label, start and end frame, temporal neigh-bors, and semantic tags such as food , cleaning ,
+
+posture , device , and container . Overlapping actions are retained rather than collapsed, since concurrency is common in ADL videos and of-ten necessary for answering questions. Next, we instantiate syntactic templates over the canonical timeline. Each template is tied to one stratum and parameterized by event indices, so the supporting interval is known at generation time. Then we subsample the generated pool to bal-ance template type, stratum, video, target action, and answer type. An LLM is used to formalize the retained questions while preserving event ref-erences, answer semantics, and temporal support. Finally, we filter questions with ambiguous ref-erences, trivial answers, near-duplicate wording, unreliable temporal adjacency, or paraphrases that alter meaning. To validate the QA construction, two human annotators audit the benchmark for an-swer correctness, temporal support, and stratum assignment. Thus each question is paired with supporting intervals {[sj , e j ]}mq
+
+j=1 . Some questions require a single localized event, while others require multiple intervals, such as verifying that one action occurs after another. These annotations are aimed to dis-tinguish models that merely answer correctly from those that actually retrieve the relevant evidence. 
+
+D Algorithmic Framework of TIME PRO VE
+
+Algorithm 1 demonstrates the algorithmic Frame-work of T IME PRO VE.
+
+E Prompts 
+
+In Figure 6, we provide the prompts used in ACE and the Temporal Verifier. "You decide which detected actions from the numbered list should be merged into one                
+
+> temporal evidence span to answer the question. Output a single JSON object only, no
+> markdown fences or commentary. Schema : { \"merge_groups \": [ { \"action_indices \": [int, ...],
+> \"why \": string } ]}. Each entry lists 0 -based indices that belong together for answering the
+> query; you may merge non -neighboring indices if the question calls for joint evidence. Include
+> only groups with at least two indices; omit unrelated actions and omit singletons .”
+> "Write exactly three detailed sentences describing this video clip. Focus on: (1) what actions
+> occur, especially by any people; (2) the main objects and scene elements visible; (3) how
+> people interact with objects (handling, using, moving, or contacting them). Be concrete and
+> specific. Use exactly three sentences.
+> Write exactly three sentences describing ONLY what is visible in this clip . Prefer details that
+> help answer the question: actions, involved objects, spatial relations, and event order . If the
+> clip does not show enough evidence for the question, still describe the clip faithfully and note
+> that the answer cannot be determined from this clip alone . Do not provide the final answer
+> directly; provide an evidence -focused description ."
+
+Action Conditioned Evidence (ACE) 
+
+Temporal Verifier 
+
+Figure 6: Prompts for ACE and Temporal Verifier in TIME PRO VE
+
+F Qualitative Examples 
+
+We demonstrate the performance of TIME -PRO VE on qualitative examples from the OTB in Figures 7, 8, 9, 10, and 11. 14 Figure 7: Qualitative Example for Object Centric Strata in OTB 
+
+Figure 8: Qualitative Example for Temporal Positioning Strata in OTB 
+
+Figure 9: Qualitative Example for Compositional Actions Strata in OTB 
+
+Figure 10: Qualitative Example for State Transition Strata in OTB 
+
+Figure 11: Qualitative Example for Long Horizon Sparse Evidence Strata in OTB 
+
+15

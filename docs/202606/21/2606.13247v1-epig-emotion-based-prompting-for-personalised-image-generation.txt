@@ -1,0 +1,426 @@
+Title: EPIG: Emotion-Based Prompting for Personalised Image Generation
+
+URL Source: https://arxiv.org/pdf/2606.13247v1
+
+Published Time: Fri, 12 Jun 2026 01:12:27 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# EPIG: Emotion-Based Prompting for Personalised Image Generation 
+
+# Emna Othmen 1* , Mohamed Yassine Landolsi 1 and Lotfi Ben Romdhane 1
+
+> 1*
+
+MARS Research Lab LR17ES05, ISITCom, University of Sousse, Sousse, Tunisia. *Corresponding author(s). E-mail(s): amna.othman@isitc.u-sousse.tn; 
+
+Abstract 
+
+Text-to-image diffusion models have achieved impressive results in synthesiz-ing high-quality images from natural language prompts. However, commonly used prompting strategies remain generic, limiting the model’s ability to accu-rately convey emotional intent and nuanced affective attributes. This work proposes EPIG, a method that enhances emotional expressiveness at the prompt level prior to image generation. Grounded in psychologically informed emotion representations (valence–arousal) and leveraging structured, role-aware prompt enrichment, EPIG enriches emotion-related prompt components without modi-fying or retraining the image generation backbone. The resulting emotion-aware prompts guide the generative process toward emotionally coherent visual outputs, with particular effectiveness in controlling arousal. EPIG is lightweight, training-free, and well suited to resource-constrained and personalised image generation scenarios. Experimental results on a benchmark of 10 diverse prompts demon-strate that EPIG significantly reduces mean arousal error compared to strong baselines: naive insertion and LLM-based expansion, achieving reductions of 14% and 12% respectively, all statistically significant. It also preserves valence align-ment and semantic content as verified by CLIPScore and ablation studies. The effect is even stronger on prompts containing a clear subject such as a person, child, or cat, where the reduction reaches 17%, confirming the subject-centric nature of the method. 
+
+Keywords: Emotion-aware image generation, Emotion lexicon, Personalised prompt engineering 
+
+# 1 INTRODUCTION 
+
+Text-to-image diffusion models have become a dominant paradigm for visual content generation, demonstrating remarkable ability to synthesize high-fidelity images from natural language descriptions. Recent advances have significantly improved realism, diversity, and semantic alignment, enabling widespread adoption in creative, scientific, and human-centered applications. 1
+
+> arXiv:2606.13247v1 [cs.AI] 11 Jun 2026
+
+Despite these advances, controlling high-level semantic attributes, especially emotional tone and affective expression, remains a persistent challenge [1, 2]. Emotion-related prompts are often inherently vague or underspecified, leading diffusion models to interpret them inconsistently and produce outputs lacking clear or coherent emo-tional intent. Affective communication is critical in domains such as psychological research, therapeutic visualization, personalised content creation, and affective com-puting. In these settings, generated images must convey interpretable and semantically consistent emotional cues aligned with user intent, not merely visual realism. Psy-chologically grounded dimensions such as valence, arousal, and dominance offer a structured framework for representing affect [3, 4], yet they are rarely used to condition diffusion models directly. Existing approaches for incorporating emotional awareness into generative models typically rely on architectural modifications, fine-tuning of large diffusion backbones, or the use of additional emotion-labeled datasets [1, 5, 6]. While effective in controlled settings, these strategies introduce substantial computational overhead and reduce flexibility, limiting their applicability in resource-constrained or personalised scenarios [7–10]. Prompt-level control offers a practical, efficient alternative by enabling semantic guidance at inference time without modifying or retraining the underlying generative model [11–13]. Nevertheless, current prompting strategies remain largely unstructured and lack explicit mechanisms for encoding and controlling emotional information [14– 16]. As a result, they provide limited interpretability and weak control over affective attributes, especially when subtle or nuanced emotional variations are required [17–20]. In prior work, we investigated artifact-aware refinement strategies for one-step diffusion models, focusing on improving visual fidelity and structural consistency in emotionally sensitive applications [21]. Although these approaches effectively reduce visual artifacts and enhance perceptual quality, they do not address how emotional intent is specified or controlled at the semantic level during generation. Consequently, even visually refined outputs may fail to reflect the intended affective characteristics when input prompts lack structured emotional guidance. This reveals a fundamental gap between visual quality optimization and affective controllability in efficient text-to-image generation pipelines. To address this gap, we propose EPIG (Emotion-based Prompting for Image Generation), a lightweight, training-free solution designed to enhance emotional con-trol at the prompt level before image generation. Unlike prior structured prompting approaches that focus on object-level control [22, 23], EPIG introduces affective role decomposition, explicitly distinguishing between the entity experiencing the emo-tion (subject), the cause of the emotional state (stimulus), and the surrounding environment (context). Instead of directly injecting discrete emotion labels, EPIG bridges affective lexicons and diffusion models through a geometrically grounded descriptor selection method. This method weights affective terms by their proxim-ity to a target valence-arousal state in continuous VAD space and combines this with a role-aware augmentation strategy that is functionally deterministic under fixed preprocessing. The combination of rule-based semantic partitioning, continuous lexicon-driven descriptor mapping, and structured prompt reconstruction consti-tutes a novel, fully training-free approach to emotion-controllable image generation. EPIG operates entirely at inference time and can be seamlessly integrated with any pretrained diffusion model. Furthermore, by leveraging principles inspired by attention-based prompt manipulation [11, 24], the method guides the generation pro-cess toward emotionally coherent visual outputs. The proposed solution can also be combined with our prior artifact-aware refinement stage [21] to enhance visual fidelity, addressing the dual challenges of visual quality and semantic expressiveness without increasing model complexity. 2The main contributions of this work are fourfold. First, we introduce a role-aware prompt decomposition strategy that separates prompts into subject, stimulus, and context using a fixed linguistic pipeline. This decomposition enables explicit assign-ment of affective adjectives to specific semantic roles and reduces unintended attribute leakage across scene elements. Second, we propose a lexicon-driven descriptor selection method based on the NRC Valence-Arousal-Dominance (VAD) lexicon, where affec-tive terms are chosen by Euclidean proximity to a target emotional state in continuous valence-arousal space. This provides a transparent and interpretable bridge between psychological models of emotion and text-based conditioning. Third, we present a fully training-free pipeline that operates without fine-tuning, learnable parameters, or exemplar images; all transformations are rule-based and, given a fixed preprocessing configuration, ensure reproducibility and compatibility with any pretrained diffusion model or post-processing module. Fourth, through quantitative metrics (CLIPScore and CLIP-based valence/arousal errors) and ablation studies, we demonstrate that EPIG significantly improves arousal alignment compared to naive prompting and LLM-based expansion, while preserving valence fidelity and semantic content. The remainder of this paper is organized as follows. Section 2 reviews related work on prompt-level control and emotion-aware image generation. Section 3 presents the proposed EPIG framework. Section 4 describes the experimental setup and evaluation results, followed by concluding remarks in Section 5. 
+
+# 2 Related Work 
+
+Controlling text-to-image generation models has become a central challenge in genera-tive modeling, particularly when targeting high-level semantic and affective attributes. Following the taxonomy of recent surveys on prompt engineering for vision-language models [25], we organise existing approaches into two main categories: prompt engi-neering (modifying the input prompt) and learning-based approaches (modifying the model’s architecture or fine-tuning it). While these methods improve general controllability, their effectiveness in preserving and regulating emotional attributes remains limited. In particular, existing approaches are rarely evaluated under emotion-specific criteria such as valence consistency (stability of positive/negative affect across generations), arousal controllability (ability to independently adjust intensity or calm-ness), and affective stability (low variance in emotional interpretation under small prompt rephrasings or different random seeds). This section revisits major prompting paradigms through the lens of affective controllability and also surveys prior work on affective image generation outside prompt engineering, identifying their limitations in modeling emotional intent. 
+
+# 2.1 Prompt Engineering Approaches 
+
+2.1.1 Naive and Direct Prompting 
+
+Naive prompting methods rely on directly appending descriptive keywords or attributes to the input text. This strategy is widely adopted due to its simplicity and compatibility with pretrained diffusion models [17]. However, from an affective mod-eling perspective, such prompts provide no explicit mechanism to regulate emotional intensity or ensure consistency. Empirical studies show that minor lexical changes, for instance replacing “happy” with “joyful”, can produce noticeable shifts in perceived sentiment in generated images [18]. Similarly, arousal levels vary unpredictably when synonyms are used [19]. No systematic study has compared this sensitivity across dif-fusion backbones. In our own preliminary analysis (see Appendix A), we observed that SDXL exhibits approximately 30% higher variance in CLIP-based valence scores 3than SD 1.5 under identical prompt perturbations, suggesting that model scale may amplify affective instability. Consequently, naive prompting lacks the stability required for reliable emotion-oriented generation. 
+
+2.1.2 Prompt Expansion and Refinement 
+
+Prompt expansion and refinement techniques aim to enrich user inputs by adding descriptive details, structural templates, or retrieved examples. These methods range from simple template-based expansion to more sophisticated approaches that lever-age large language models (LLMs) to generate semantically richer prompts [14–16]. LLM-based methods, in particular, have been shown to improve semantic diversity and visual quality by filling in missing contextual details [26–28]. However, their impact on emotional attributes is largely incidental and often detrimental to affective control. The fundamental issue is that LLMs are trained to maximize semantic and syntac-tic coherence, not to preserve or modulate emotional dimensions such as valence and arousal. When expanding a prompt, an LLM may introduce descriptors that shift the emotional tone unintentionally. For example, appending “a warm, sunny day” to a sad scene raises the valence and arousal levels, conflicting with the intended low-valence, low-arousal emotion [16]. Conversely, expanding a high-arousal prompt with calm descriptors like “in a peaceful meadow” can dilute the intended intensity. More gen-erally, LLM-based expansion has been observed to produce affectively inconsistent descriptors, terms that are semantically plausible but shift the emotional polarity or introduce incompatible arousal levels [14, 29]. Another limitation is the lack of controllability. Users cannot specify which emo-tional dimensions to preserve or how strongly to weight them during expansion. Some methods attempt to guide LLMs with emotion keywords or sentiment scores [30, 31], but these approaches remain coarse and do not operate on a continuous valence-arousal space. Moreover, the stochastic nature of LLM sampling introduces variability: the same input prompt can yield different expansions across runs, leading to inconsis-tent emotional outputs even when the user’s intent is unchanged [31]. Because these methods do not explicitly model or constrain emotional dimensions, they cannot guar-antee consistent affective output across different expansions, user intents, or random seeds. This unpredictability makes LLM-based expansion unsuitable for applications that demand reliable emotion-oriented generation, such as psychological research or therapeutic visualization. 
+
+2.1.3 Structured and Lexicon-Based Prompting 
+
+Structured prompting decomposes prompts into semantic roles such as subject, action, and setting to improve controllability [22, 23]. Lexicon-based methods, widely used in affective computing, provide standardized emotion dimensions including valence, arousal, and dominance (the NRC VAD lexicon is a typical example) [32]. Despite their potential, integration into diffusion models has been attempted only rarely and with limited success. For example, directly replacing emotion words with continuous valence vectors would likely cause semantic bleeding, where an emotional adjective intended for a specific subject alters the background or other objects, a well-known failure mode in attention-based conditioning [33]. Similarly, inserting arousal scores as special tokens without careful architectural alignment often results in the model ignoring low-magnitude values or producing unpredictable effects (see discussions in EmoGen [1]). These negative results highlight a fundamental mismatch: discrete lex-icons designed for text analysis do not naturally align with the continuous, spatially distributed latent space of diffusion models. No existing structured prompting method incorporates role-aware emotion decomposition (distinguishing causal stimulus from expressive response within a scene), leaving a clear gap. 42.2 Learning-Based Approaches 
+
+2.2.1 Attention-Based Manipulation 
+
+Attention-based methods manipulate cross-attention maps between text tokens and visual features, enabling fine-grained spatial and semantic editing [11]. Extensions such as dynamic attention learning [24] and token-level supervision [34] offer precise control. However, their application to emotion is problematic: emotional expression is a global property not tied to specific spatial regions or tokens. Moreover, these methods require access to the diffusion model’s internal cross-attention layers and per-prompt parameter scheduling, making them unsuitable for black-box API settings where only the final image is observable. Crucially, none provide an explicit representation of emotional states; the user must manually discover which token combinations evoke a desired affect, a trial-and-error process that rarely transfers across scenes [20]. Recent work on emotion-specific attention guidance [5] has attempted to incorporate affective cues into cross-attention maps, but still requires internal model access and does not offer a training-free, lexicon-grounded solution. 
+
+2.2.2 GAN-Based and Fine-Tuned Diffusion Models 
+
+Early GAN-based methods learned latent space directions for valence and arousal, enabling emotion transfer on faces or natural scenes (EmoGAN is one such approach [6]). However, they required per-emotion training, did not support text conditioning, and often produced artifacts when extrapolating beyond training distributions. More recently, diffusion models have been conditioned on emotion classifiers or sentiment scores. EmoGen [1] fine-tunes Stable Diffusion with an additional emotion embedding module, achieving strong valence control in human evaluations but requiring model retraining and lacking interpretability; the learned embedding cannot be easily edited or decomposed into valence/arousal components. 
+
+2.2.3 Textual Inversion for Emotion 
+
+Textual inversion [10] has been used to learn pseudo-words for emotions (for instance, a token representing “sadness”) from a few exemplar images. Although this method requires exemplar images per emotion (optimizing a token embedding), it does not involve full model fine-tuning at test time. The learned pseudo-words can be inserted into prompts to evoke consistent emotional styles. However, control remains coarse: the method does not allow independent manipulation of valence and arousal, and the emotional effect is entangled with the specific exemplars provided. 
+
+2.2.4 Object-Level Personalisation Methods 
+
+A parallel line of research focuses on personalisation of text-to-image models, where methods such as DreamBooth [7], Custom Diffusion [8], and LoRA-based adaptations [9] learn a specific subject or visual style from a few user-provided images. These techniques enable identity-preserving generation but are designed for object-level or style-level personalisation, not for controlling abstract affective attributes. They require per-user fine-tuning (or optimisation) and do not generalise to unseen emo-tional nuances without retraining on new emotion exemplars. In contrast, the proposed method targets affective personalisation, adapting the emotional tone of generated images to user-specified valence–arousal coordinates, without any test-time fine-tuning or exemplar images. 52.3 Discussion 
+
+Table 1 summarises the surveyed methods along dimensions critical for emotion-oriented generation. The table is organised into two blocks corresponding to the two main categories: Prompt Engineering Approaches and Learning-Based Approaches. Across all categories, existing methods improve various aspects of con-trol but fail to provide a unified mechanism for reliable emotional conditioning. Naive prompting lacks stability and interpretability; prompt expansion introduces uncon-trolled emotional drift; structured and lexicon-based approaches suffer from semantic bleeding or misalignment with diffusion latents; attention-based manipulation requires internal access and does not represent emotion explicitly; GAN-based and fine-tuned models require retraining; textual inversion requires exemplar images; and object-level personalisation methods are designed for identity or style, not emotion. Moreover, the severity of these limitations may vary across diffusion backbones (for instance, SD 1.5 versus SDXL); systematic cross-model comparisons remain absent. 
+
+Method Emo. rep. Model access Val. cont. Arous. cont. Key limita-tion Prompt Engineering Approaches 
+
+Naive and Direct Prompting 
+
+> [17, 18]
+
+Word Black-box Poor Poor Sensitive to wording; unsta-ble output Prompt Expan-sion and Refine-ment 
+
+> [14, 16]
+
+Implicit Black-box Moderate Poor Uncontrolled emotional drift Structured and Lexicon-Based Prompting 
+
+> [22, 32]
+
+Lexicon Black-box Moderate Limited Weak align-ment; semantic leakage 
+
+Learning-Based Approaches 
+
+Attention-Based Manipulation 
+
+> [11, 24]
+
+None Internal Low Low Requires model access; no explicit emo-tion control GAN-Based and Fine-Tuned Dif-fusion Models 
+
+> [1, 6]
+
+Latent/Embedding Full High High Needs per-emotion training or retraining; limited inter-pretability Textual Inver-sion for Emotion 
+
+> [10]
+
+Token Black-box ∗ Moderate Low Needs example images; coarse control Object-Level Personalisation Methods 
+
+> [7–9]
+
+None Fine-tuning None None Designed for identity/style, not emotion  
+
+> Table 1 Comparison of existing methods for emotion-oriented image generation. Method names follow the organisation of Section 2.
+
+A key missing component across prior work is a lightweight, training-free mecha-nism that (1) represents emotion using psychologically grounded dimensions (valence, arousal), (2) respects structural affective roles (distinguishing causal stimulus from expressive emotional response, following appraisal-theory decomposition), and (3) operates on pretrained diffusion models without internal access or exemplar images. To the best of our knowledge, existing compositional or structured prompting methods 6focus on object-level or spatial roles but do not explicitly model affective roles. Existing lexicon-based methods fail because they treat emotion words as atomic labels for naive insertion, ignoring the need for role-aware conditioning and latent-space alignment. Prior affective generation methods require retraining or exemplars, limiting scalabil-ity and interpretability. Bridging this gap requires a solution that connects structured prompting with affective lexicons through a novel augmentation strategy, unlike naive lexicon insertion, which would cause semantic bleeding (for instance, the word “angry” turning a park’s trees red). The proposed solution uses role-aware decomposition to localise affective attributes to intended semantic entities while preventing unintended attribute leakage without model modification. 
+
+# 3 Our Proposal EPIG 
+
+# 3.1 Basic Principle 
+
+The analysis of existing prompting strategies in Section 2 reveals a clear gap: no training-free method currently exists that can transform a raw user prompt into an emotionally structured conditioning signal for diffusion models. Standard approaches either ignore affective roles (naive prompting), introduce uncontrolled emotional drift (LLM expansion), or require model retraining (fine-tuned emotion models). EPIG fills this gap as a lightweight, training free pre-processing layer that enriches the input prompt with role-aware, lexicon-grounded emotional descriptors. The motivation is threefold: (i) to enable precise control over valence and arousal without modifying the generator, (ii) to prevent semantic bleeding by binding affective adjectives to specific syntactic components (subject, stimulus, context), and (iii) to ensure high reproducibility for clinical and psychological applications. In summary, EPIG converts an unstructured prompt into a role-aware, lexicon-aligned representation in the valence–arousal space, enabling controllable emotion-driven image generation without model modification. Figure 1 presents the overall architecture. The system takes a raw prompt P
+
+and a target emotional state (a discrete label, continuous VAD coordinates, or a weighted mixture of basic emotions). The enrichment module applies three sequen-tial operations. First, decomposition D parses the prompt into subject, stimulus, and context components (Section 3.4). Second, lexicon mapping M retrieves a ranked set of emotionally congruent adjectives and adverbs from the NRC VAD lexicon. Third, role-aware augmentation A injects these descriptors into the appropriate syntactic roles: subject-centric terms attach to the subject, context-centric terms to the stimu-lus phrase. The resulting augmented prompt ˜P is fed to a pretrained diffusion model (SDXL-Turbo) to generate an emotionally coherent image. All transformations require no training or fine-tuning. 
+
+# 3.2 Problem Modeling 
+
+EPIG acts as a semantic enhancement layer on top of a fixed diffusion backbone. Unlike our prior artifact-aware refinement [21], which improved pixel-level quality but did not modify the input prompt, EPIG transforms the raw prompt into a structured, emotionally enriched conditioning signal before synthesis. The pipeline is training-free and introduces no additional stochastic sampling beyond the diffusion model’s own generation process. It does not learn any model parameters nor require fine-tuning. As a result, it preserves computational efficiency and can offer good reproducibility compared to methods that rely on random prompt expansion (e.g., LLM-based sampling). 7Fig. 1 Overview of the EPIG prompt enrichment pipeline. 
+
+Formally, let P = {t1, t 2, . . . , t n} be a token sequence. The enrichment module produces ˜P = A D(P ), M(LE ), where LE encodes the target emotion. Because all operations are rule-based and free of random sampling, the same input P and target emotion will consistently produce the same ˜P . This property is important for clinical validation and comparative studies, where consistency across runs is highly desirable. 
+
+# 3.3 User-Driven Personalisation 
+
+A key feature that justifies the “personalised” in EPIG is the ability to specify a target emotional state as a weighted combination of the four valence–arousal quadrant pro-totypes: Joy (high valence, high arousal), Calm (high valence, low arousal), Sadness (low valence, low arousal), and Anxiety (low valence, high arousal). Each emotion is assigned an intensity percentage (summing to 100%), and the target centroid is com-puted as a weighted average of the prototype centroids obtained from the NRC VAD lexicon [32]. This allows continuous affective control between the four pure emotions. Let E = {eJoy , e Calm , e Sadness , e Anxiety } with centroids: Joy: (0 .85 , 0.75) , Calm: (0 .70 , 0.20) ,
+
+Sadness: (0 .20 , 0.30) , Anxiety: (0 .30 , 0.80) .
+
+Given weights wi ∈ [0 , 1] with P 
+
+> i
+
+wi = 1, the target is ( vt, a t) = ( P 
+
+> i
+
+wivi, P 
+
+> i
+
+wiai). For example, “70% Joy + 30% Calm” yields (0 .805 , 0.585). This mechanism is deter-ministic and training-free; direct coordinate input and arousal scaling are left as future work. 
+
+# 3.4 Rule-Based Semantic Partitioning 
+
+The decomposition operator D analyses the input prompt using a standard linguistic parser (e.g., spaCy) to identify three functional components: the subject, the stimulus, and the context. The subject is the noun phrase that denotes the entity experienc-ing the emotion. The stimulus comprises any prepositional or subordinate clause that indicates the cause or immediate trigger of the emotional state. All remaining tokens are treated as context, which provides background information but does not directly 8Algorithm 1 EPIG Prompt Enrichment Pipeline 
+
+Require: Raw prompt P , target emotional state LE (label, VAD pair, or weighted emotion mixture) 
+
+Ensure: Enriched prompt ˜P 
+
+> 1:
+
+Compute target valence–arousal ( vt, a t) from LE (Section 3.3)  
+
+> 2:
+
+Decompose P into ( S, Stim , C ) using rule-based partitioning (Section 3.4)  
+
+> 3:
+
+Retrieve candidate adjectives and adverbs from NRC VAD lexicon  
+
+> 4:
+
+for each candidate word w do  
+
+> 5:
+
+Compute Euclidean distance δ(w) = p(vw − vt)2 + ( aw − at)2 
+
+> 6:
+
+Compute relevance score α(w, t ) = exp( −γ · δ(w, t )) with scaling parameter 
+
+γ > 0 
+
+> 7:
+
+end for  
+
+> 8:
+
+Rank words by α(w) (descending)  
+
+> 9:
+
+Select the top k words (where k is a hyperparameter) → descriptor set WE 
+
+> 10:
+
+Split WE into subject-centric W(s) 
+
+> E
+
+and context-centric W(c) 
+
+> E
+
+using pre-annotated flags  
+
+> 11:
+
+if W(s)
+
+> E
+
+̸ = ∅ then  
+
+> 12:
+
+Augment subject: ˜S ← Insert( S, W(s) 
+
+> E
+
+) 
+
+> 13:
+
+else  
+
+> 14:
+
+˜S ← S 
+
+> 15:
+
+end if  
+
+> 16:
+
+if context descriptors enabled and W(c)
+
+> E
+
+̸ = ∅ then  
+
+> 17:
+
+Augment stimulus: ˜Stim ← Insert( Stim , W(c) 
+
+> E
+
+) 
+
+> 18:
+
+else  
+
+> 19:
+
+˜Stim ← Stim  
+
+> 20:
+
+end if  
+
+> 21:
+
+Reconstruct ˜P = ˜S ⊕ ˜Stim ⊕ C return ˜P
+
+carry the emotional expression. If the parser cannot extract a clear subject, the prompt is left unchanged as a fallback. This decomposition allows EPIG to later attach emo-tional descriptors to the most relevant syntactic role, reducing the risk of semantic bleeding. 
+
+# 3.5 Lexicon Mapping 
+
+The mapping operator M translates a target emotional state into a set of natural language descriptors using the NRC Valence–Arousal–Dominance (VAD) lexicon [32]. Each word w in the lexicon is associated with a continuous vector ( vw, a w, d w) ∈ [0 , 1] 3
+
+representing its valence, arousal, and dominance. Given a target valence vt and arousal at (derived from the user-specified emotion), the operator computes the Euclidean distance between the target and each candidate descriptor: 
+
+δ(w, t ) = p(vw − vt)2 + ( aw − at)2.
+
+A relevance score that depends on both the word w and the target t is then assigned: 
+
+α(w, t ) = exp  −γ · δ(w, t ),
+
+where γ is a scaling parameter that controls sensitivity to distance. Descriptors are ranked by α(w, t ), and the top k are selected as the descriptor set WE . Words not present in the lexicon are ignored. 9This deterministic process ensures that the same emotional input always produces the same descriptor set, which is essential for reproducibility. The concrete values of γ
+
+and k are determined empirically and reported in the experiments section (Section 4). 
+
+# 3.6 Role-Aware Structured Augmentation 
+
+Unlike standard prompt expansion that treats emotional descriptors as global modi-fiers, EPIG localizes attributes to specific syntactic roles, reducing semantic leakage. Each descriptor is pre-annotated offline as either subject-centric (e.g., “withdrawn”, “smiling”) or context-centric (e.g., “dim”, “chaotic”). Subject-centric descriptors relate to facial expression, posture, or internal state; context-centric descriptors refer to atmosphere, lighting, or environmental cues. Recall that the decomposition step (Section 3.4) splits the prompt into the subject 
+
+S, the stimulus Stim , and the context C. The lexicon mapping (Section 3.5) provides the set of selected descriptors WE , which is then divided into subject-centric W(s) 
+
+> E
+
+and context-centric W(c) 
+
+> E
+
+based on the offline annotation. We then construct an augmented subject ˜S and an augmented stimulus ˜Stim using the function Insert( X, W), which prepends the descriptors in W as adjectives before the head noun of X (if X = S) or before the whole phrase (if X = Stim ). The context 
+
+C remains unchanged. The final enriched prompt is formed by concatenation: ˜P = ˜S ⊕ ˜Stim ⊕ C. 
+
+By binding emotional cues to specific roles, EPIG is expected to guide cross-attention toward the intended subject while reducing background interference – a form of training-free steering. 
+
+# 3.7 Image Generation 
+
+The enriched prompt ˜P is passed to a pretrained text-to-image diffusion model to synthesise the final image. In this work we use SDXL-Turbo [35], a distilled model that produces high-quality outputs with few inference steps. The model is used in a strict black-box manner: its architecture, weights, and inference procedure remain unchanged. The generation process is deterministic given a fixed random seed, which together with the deterministic prompt enrichment ensures full reproducibility. Optionally, the artifact-aware refinement pipeline introduced in our prior work [21] can be applied post-generation. That pipeline consists of artifact detection followed by localised GAN-based refinement. EPIG and refinement operate on complementary dimensions: EPIG conditions the semantic and affective alignment at the prompt level, while refinement improves pixel-level visual fidelity. This decoupled design adds no model complexity and allows independent optimisation of emotional expressiveness and image quality. In the main experiments of this paper, we evaluate EPIG alone; the refinement stage is optional and can be combined as needed. Figure 2 demonstrates the full pipeline: decomposition, descriptor selection, and augmentation leading to the enriched prompt and the generated image. 
+
+# 4 Experiments 
+
+This section evaluates EPIG in terms of emotional alignment, semantic preservation, and affective controllability. The experimental design is guided by the core objec-tive: improving affective controllability at the prompt level without modifying the underlying diffusion model. All experiments are fully reproducible. 10 Fig. 2 EPIG pipeline for the prompt “a beach at sunset” with target emotion Joy. 
+
+# 4.1 Experimental Setup 
+
+4.1.1 Datasets and Prompt Set 
+
+We evaluate EPIG on a benchmark of 10 neutral base prompts covering diverse every-day scenes (e.g., “A person sitting alone in a room”, “A beach at sunset”, “A foggy mountain landscape”); the full list is provided in the supplementary material. For each base prompt we consider four emotional configurations corresponding to the four valence–arousal quadrants: high–high (Joy), high–low (Calm), low–low (Sadness), and low–high (Anxiety). Each emotion is assigned a continuous target centroid ( vt, a t)computed by averaging the NRC VAD scores of words belonging to each emotion cat-egory in the NRC VAD lexicon [4]: Joy ( v=0 .85 , a =0 .75), Calm ( v=0 .70 , a =0 .20), Sadness ( v=0 .20 , a =0 .30), Anxiety ( v=0 .30 , a =0 .80). To support role-aware descriptor selection, we augment the lexicon with a binary flag indicating whether a word is subject-centric (e.g., “withdrawn”, “smiling”) or context-centric (e.g., “dim”, “chaotic”). This annotation was carried out by two inde-pendent annotators using FrameNet role definitions as guidelines. Each word was labelled as subject-centric (relating to facial expression, posture, or internal state) or context-centric (relating to atmospheric, lighting, or environmental properties). Dis-agreements were resolved by a third annotator acting as a tiebreaker. The process covered all adjectives and adverbs present in the NRC VAD lexicon, yielding a Cohen’s 
+
+κ = 0 .89, indicating near-perfect inter-rater agreement [36]. The augmented lexicon is released with our code. 
+
+4.1.2 Baselines 
+
+We compare EPIG against three training-free baselines grounded in the prompt engi-neering strategies surveyed in Section 2. These baselines represent a progression from the simplest to the most sophisticated prompt-level alternative to EPIG, and each corresponds to a published strategy documented in the literature. 1. Standard (Neutral) [17, 18]: The unmodified base prompt with no emotional conditioning. This follows the evaluation protocol used in prior affective generation studies [17, 18] and serves as a lower-bound reference for content fidelity. 2. Naive Emotion Insertion [18, 19]: A single emotion word is inserted directly into the base prompt (e.g., “a joyful person sitting alone in a room”). This implements the direct keyword strategy documented in [18, 19], which represents the most widely used baseline in affective prompting studies. 3. LLM-Based Emotion Expansion [30]: We use cached prompt expansions gen-erated by an instruction-tuned BeautifulPrompt-style language model [30]. For each base prompt and target emotion, the model produces an emotionally enriched 11 prompt while preserving the original scene content. The resulting expanded prompts are stored in llm expanded prompts.csv and reused across all five seeds to decouple prompt generation variability from image generation stochasticity. This instantiates the unstructured LLM expansion approach analysed in Section 2, where affective descriptors are added without role-aware binding. 4. EPIG (Ours) : Enriches the prompt using VAD-based descriptor selection and role-aware insertion as described in Section 3. The top k = 3 descriptors are selected from the annotated descriptor pool and then separated into subject-centric and context-centric groups. In the main experiments, context descriptor insertion is disabled; therefore, only the subject-centric descriptors among the selected top-k
+
+set are inserted into the subject. All transformations are training-free. Table 2 illustrates the difference between expansion strategies for one representa-tive (prompt, emotion) pair.       
+
+> Table 2 Example augmented prompts for the base prompt “a child in a room” under the Sadness emotion.
+> Method Augmented Prompt
+> Standard a child in a room Naive a sad child in a room LLM Expansion a child in a dimly lit room, sitting quietly with a somber expression, surrounded by a still and melancholic atmo-sphere EPIG (Ours) a withdrawn, dejected, sorrowful child in a room
+
+4.1.3 Implementation Details 
+
+EPIG Configuration. The enrichment module selects the top k = 3 descriptors from the annotated descriptor pool using the relevance score α(w) = exp( −γd (w)), with 
+
+γ = 2 .0. The selected descriptors are then separated into subject-centric and context-centric groups. Context descriptors are disabled in this experiment to isolate subject-only affective modulation. Although EPIG supports both subject-centric and context-centric augmentation, all reported experiments use this subject-only configuration. 
+
+Image Generation. All experiments use SDXL-Turbo [35] as the base text-to-image model in a strict black-box manner: no architecture, weights, or inference procedure are modified. Generation parameters are fixed across all methods: 6 infer-ence steps, guidance scale = 0 .0 (the recommended value for distilled turbo models), and resolution 512 × 512. For each (base prompt, emotion, method) condition we gen-erate 5 images using random seeds {0, 1, 2, 3, 4}; the same seeds are used across all methods for fair comparison. This yields a total of 10 × 4 × 4 × 5 = 800 images. 
+
+Compute Resources. The EPIG enrichment module (lexicon lookup, descrip-tor selection, prompt rewriting) runs entirely on CPU and adds less than 0.01 s per prompt. Image generation is performed on a single NVIDIA T4 GPU (16 GB) via Google Colab; the total benchmark runtime is approximately 45 minutes. All evaluation metrics are computed on CPU to avoid GPU memory contention. 
+
+4.1.4 Evaluation Metrics 
+
+We adopt three complementary metrics. All image and text embeddings are extracted using a frozen CLIP ViT-B/32 model [37] unless otherwise stated. 12 CLIPScore. 
+
+Let I denote the generated image and let P denote the original (non-enriched) base prompt. Let fimg be the CLIP image encoder and ftext the CLIP text encoder, pro-ducing normalised embeddings eI = fimg (I) and eP = ftext (P ). Semantic alignment between I and P is then measured as the cosine similarity: CLIPScore( I, P ) = eI · eP
+
+∥eI ∥ ∥ eP ∥ .
+
+Higher scores indicate better alignment. Because we use SDXL-Turbo with only 6 inference steps, absolute CLIPScore values fall in the 0 .29–0 .31 range, consistent with values reported for SDXL-Turbo under comparable inference budgets and short prompt lengths [35]. 
+
+Valence Error. 
+
+For each generated image we compute a CLIP-based valence score using two textual anchors: “a very negative sad depressing scene” and “a very positive happy joyful scene”. The valence score is the softmax-normalised cosine similarity to the positive anchor (range [0 , 1]). Valence error is the absolute difference between the predicted score and the target centroid vt. Lower is better. 
+
+Arousal Error. 
+
+Arousal is measured analogously using anchors “a very low energy calm sleepy scene” and “a very intense high energy exciting scene”. Arousal error is the absolute difference between the predicted score and the target centroid at. Lower is better. 
+
+# 4.2 Main Results 
+
+4.2.1 Quantitative Comparison 
+
+Table 3 reports the mean valence error, arousal error, and CLIPScore for the full 10-prompt benchmark, averaged per method over 10 prompts, 4 emotions, and 5 seeds (200 images per method, 800 images in total). EPIG achieves the lowest mean arousal error among all training-free baselines, with a reduction of 14% relative to naive inser-tion ( p < 0.001) and 12% relative to LLM-based expansion ( p < 0.001). Valence error remains statistically indistinguishable from naive and LLM ( p > 0.05), indicating that EPIG does not degrade valence alignment. CLIPScore is preserved (0.289), confirm-ing that semantic content is not harmed. Results on the subset of prompts containing a clear subject (e.g., person, child, cat) follow the same pattern and are provided in the supplementary material, where the arousal improvement is even more pronounced (17% reduction vs. naive, p < 0.001).                                            
+
+> Table 3 Quantitative comparison on the full 10-prompt benchmark.
+> Method V-Err ↓A-Err ↓CLIPScore ↑
+> Standard [17, 18] 0.356 ±0.246 ∗∗ 0.465 ±0.270 n.s. 0.301 ±0.014 Naive [18, 19] 0.292 ±0.230 n.s. 0.465 ±0.268 ∗∗∗ 0.296 ±0.013 LLM Expansion [30] 0.281 ±0.227 n.s. 0.458 ±0.263 ∗∗∗ 0.281 ±0.032
+> EPIG (Ours) 0.308 ±0.230 0.402 ±0.250 0.289 ±0.017
+
+Significance: ∗p < 0.05, ∗∗ p < 0.01, ∗∗∗ p < 0.001, n.s. = not significant ( p > 0.05). All values are mean ± standard deviation. Significance markers indicate one-tailed paired Wilcoxon signed-rank tests against EPIG, with samples matched by prompt, emotion, and seed ( N = 200): ∗p < 0.05, ∗∗ p < 0.01, ∗∗∗ p < 0.001. 
+
+13 4.2.2 Qualitative Comparison 
+
+Figure 3 shows generated images for the prompt “a child in a room” across all four emotions (Joy, Calm, Sadness, Anxiety) and all four methods. Standard prompting produces emotionally neutral outputs regardless of the target. Naive insertion intro-duces a single emotional word but often fails to modulate the surrounding environment coherently. LLM-Based Expansion adds descriptors but may introduce affective drift: for Sadness, it appended warm or ambient descriptors that conflict with the intended low-valence, low-arousal target [30]. EPIG produces outputs consistently aligned with the target emotion: for Sadness, a withdrawn child with muted colours and a lonely posture; for Joy, an energetic child with bright, warm surroundings; for Calm, a relaxed posture in a softly lit space; for Anxiety, a tense figure in a visually cluttered environment.  
+
+> Fig. 3 Qualitative comparison across emotions and prompting methods for the prompt “a child in a room” using seed 0.
+
+EPIG is subject-centric : it primarily enriches the emotional expression of the main subject, resulting in posture, expression, and appearance consistent with the tar-get emotion, while maintaining coherence in the surrounding environment. Figure 4 illustrates representative failure cases discussed in Section 4.4. 14 4.3 Ablation and Analysis 
+
+We ablate the number of inserted descriptors k. The exponential weighting parameter 
+
+γ is fixed to 2 .0 because the function α(w) = exp( −γδ (w)) is monotonic with respect to distance; thus, variations in γ do not alter the ranking of descriptors and only affect the numerical relevance scores, which are not used further. Consequently, only k is ablated. Table 4 shows the mean valence error for varying k on a subset of 3 prompts,                   
+
+> Table 4 Ablation of k(valence error ↓, mean over 3 prompts ×4 emotions ×2 seeds).
+> k12345V-Err 0.18 0.14 0.12 0.12 0.13
+
+4 emotions, and 2 seeds. The lowest arousal error (not shown) is also achieved at k = 3. Increasing k beyond 3 provides marginal or no reduction in error while prolonging prompts, so k = 3 is selected as the optimal trade-off. Results are stable across random seeds. 
+
+# 4.4 Discussion and Limitations 
+
+The experimental results show that EPIG improves affective controllability, particu-larly for arousal, while preserving the semantic content of the original prompt. This confirms that role-aware descriptor insertion can provide useful emotional guidance without modifying or fine-tuning the diffusion model. Compared to naive keyword insertion, EPIG reduces semantic bleeding by attaching affective descriptors to specific syntactic roles. Compared to LLM-based expansion, EPIG avoids uncontrolled affec-tive drift by selecting descriptors from a valence–arousal lexicon rather than allowing free-form prompt rewriting. Nevertheless, several limitations remain. First, EPIG is most effective when the prompt contains a clear subject that can plausibly carry emotional expression, such as a person or child. When the subject is non-human (e.g., a cat), the emotional descriptors may not translate into visually interpretable affect. In such cases, the diffusion model may preserve the object but fail to express the target emotional state clearly. Second, EPIG can struggle with prompts describing landscapes or object-centred scenes, where there is no obvious emotional agent. For example, in anxiety-conditioned scenes such as a beach at sunset, the model may increase visual intensity through dark colours, distorted lighting, or implausible objects rather than producing a coherent anxious atmosphere. This reflects a limitation of prompt-level affective control: emo-tions such as anxiety or sadness are easier to express through subjects, posture, and facial cues than through purely environmental scenes. Third, emotional descriptors may sometimes cause semantic drift. In garden or flower scenes, for example, affective modifiers can alter the visual style, colour palette, or scene composition in ways that are not logically implied by the original prompt. Although EPIG reduces this effect compared to naive prompting, it cannot fully pre-vent the diffusion model from associating emotional words with unintended visual patterns. Figure 4 illustrates three representative failure modes. First, in the sadness-conditioned garden scene, emotional descriptors can alter the visual style or introduce scene details that are not implied by the original prompt. Second, in the anxiety-conditioned cat scene, the affective descriptor does not always translate into clearly interpretable visual cues for a non-human subject. Third, in the anxiety-conditioned 15 Fig. 4 Representative EPIG failure cases: semantic drift, non-human affect expression, and arousal mismatch. 
+
+beach scene, the model tends to increase visual intensity rather than producing a coherent anxious atmosphere. These cases show that EPIG is best understood as a prompt-level steering mechanism rather than a guaranteed emotion controller. Additional limitations concern language and evaluation scope. EPIG currently supports English-only prompts via the NRC VAD lexicon; extending the method to multilingual and culturally adapted emotion representations is necessary for broader use. The current evaluation also considers only four pure emotion prototypes: Joy, Calm, Sadness, and Anxiety. Although the framework supports weighted emotion mix-tures (e.g., 70% Joy and 30% Calm), these personalised mixtures require a dedicated perceptual study and are left for future work. Finally, the experiments use five seeds per condition; future work will increase the number of seeds and prompt types to obtain more robust confidence intervals. 
+
+# 5 CONCLUSION 
+
+This work introduced EPIG, a training-free, method for enhancing emotional expres-siveness in text-to-image diffusion models. Unlike prior approaches that rely on manual prompt engineering (unstable and non-reproducible) or expensive fine-tuning (com-putationally heavy and model-invasive), EPIG operates purely at the prompt level. Its core contribution is a psychologically grounded bridge between the continuous valence–arousal space of affective lexicons (the NRC VAD lexicon) and the dis-crete, syntactic structure of natural language prompts. This bridge is built through three operations: role-aware decomposition into subject, stimulus, and context; lex-icon mapping via Euclidean proximity with exponential weighting; and structured augmentation that binds descriptors to specific syntactic roles. Experimental results demonstrate that EPIG significantly reduces arousal error compared to strong baselines, while preserving valence alignment and semantic con-tent. The improvement is particularly pronounced on prompts containing a clear subject, confirming the subject-centric nature of the method. All benefits are achieved without modifying the diffusion model architecture or using additional training data, making EPIG a lightweight, reproducible, and black-box compatible solution. This design provides a level of scientific rigor essential for clinical, psychological, and personalised applications where emotional consistency is critical. Future work will extend EPIG in three directions. First, we will integrate user-adaptive feedback loops that map an individual’s VAD response history to descriptor selection, enabling true personalisation. Second, we will explore role-aware decomposition in cognitive reappraisal therapy by separating stimulus from subject. Third, we will extend the framework to multilingual lexicons and video generation. 16 All code and data are publicly available to support full reproducibility of the reported experiments. 
+
+# Declarations 
+
+# Abbreviations 
+
+VAD: Valence-Arousal-Dominance; NRC: National Research Council Canada; CLIP: Contrastive Language–Image Pre-training; LLM: Large language model; SDXL: Stable Diffusion XL; GAN: Generative adversarial network. 
+
+# Ethics approval and consent to participate 
+
+Not applicable. This study does not involve human participants, human data, or animal experiments. 
+
+# Consent for publication 
+
+Not applicable. 
+
+# Availability of data and materials 
+
+All code, prompt sets, evaluation scripts, the augmented lexicon, and the full set of generated images are publicly available at https://github.com/Emnaaaot/EPIG.git. Random seeds (0–4), preprocessing steps, the LLM expansion cache (ensuring identical expanded prompts across runs), and metadata CSV files are also provided in the repository. 
+
+# Competing interests 
+
+The authors declare that they have no competing interests. 
+
+# Funding 
+
+Not applicable. No external funding was received for this research. 
+
+# Authors’ contributions 
+
+Emna Othmen: Conceptualization, Methodology, Software, Writing – original draft. Mohamed Yassine Landolsi: Supervision, review & editing. Lotfi Ben Romdhane: Supervision, review & editing. 
+
+# Acknowledgements 
+
+The authors thank the members of the MARS Research Lab at the University of Sousse for their insightful discussions and feedback. Computational resources were provided by Google Colab. 
+
+# References 
+
+[1] Yang, J., Feng, J., Huang, H.: Emogen: Emotional image content generation with text-to-image diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2024) 17 [2] Dang, S., He, Y., Ling, L., Qian, Z., Zhao, N., Cao, N.: Emoticrafter: Text-to-emotional-image generation based on the valence–arousal model. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) (2025) [3] Russell, J.A.: A circumplex model of affect. Journal of Personality and Social Psychology 39 (6), 1161–1178 (1980) [4] Mohammad, S.M.: Obtaining reliable human ratings of valence, arousal, and dominance for 20,000 english words. In: Proceedings of the Association for Computational Linguistics (ACL) (2018) [5] Yang, J., Luo, W., Huang, H.: Emoctrl: Controllable emotional image content generation. arXiv preprint arXiv:2512.22437 (2025) [6] Babu, P.R., Kesavan, R.N., Sivaramakrishnan, A., Chaitanya, G.S.: Emogan label-changing approach for emotional state analysis in mobile communication using monkey algorithm. ICTACT Journal on Communication Technology 14 (4), 3050–3056 (2023) [7] Ruiz, N., Li, Y., Jampani, V., Pritch, Y., Rubinstein, M., Aberman, K.: Dream-booth: Fine tuning text-to-image diffusion models for subject-driven generation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2023) [8] Kumari, N., Zhang, B., Zhang, R., Shechtman, E., Zhu, J.-Y.: Multi-concept customization of text-to-image diffusion. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 1931–1941 (2023) [9] Hu, E.J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Chen, W.: Lora: Low-rank adaptation of large language models. In: International Conference on Learning Representations (ICLR) (2022) [10] Gal, R., Alaluf, Y., Atzmon, Y., Patashnik, O., Bermano, A.H., Chechik, G., Cohen-Or, D.: An image is worth one word: Personalizing text-to-image generation using textual inversion. arXiv preprint arXiv:2208.01618 (2022) [11] Hertz, A., Mokady, R., Tenenbaum, J., Aberman, K., Pritch, Y., Cohen-Or, D.: Prompt-to-prompt image editing with cross attention control. arXiv preprint arXiv:2208.01626 (2022) [12] Wang, Y., Shen, S., Lim, B.Y.: Reprompt: Automatic prompt editing to refine ai-generative art towards precise expressions. In: Proceedings of the ACM Conference on Human Factors in Computing Systems (CHI) (2023) [13] Agarwal, A., Karanam, S., Joseph, K.J., Saxena, A., Goswami, K., Srinivasan, B.V.: A-star: Test-time attention segregation and retention for text-to-image syn-thesis. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) (2023) [14] Hao, Y., Chi, Z., Dong, L., Wei, F.: Optimizing prompts for text-to-image gen-eration. Advances in Neural Information Processing Systems 36 , 66923–66939 (2023) [15] Mo, W., Zhang, T., Bai, Y., Su, B., Wen, J.-R., Yang, Q.: Dynamic prompt 18 optimizing for text-to-image generation. In: Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR), pp. 26627–26636 (2024) [16] Brade, S., Wang, B., Sousa, M., Oore, S., Grossman, T.: Promptify: Text-to-image generation through interactive prompt exploration with large language models. In: Proceedings of the ACM Symposium on User Interface Software and Technology (UIST), pp. 1–14 (2023) [17] Rost, M., Andreasson, S.: Stable walk: An interactive environment for exploring stable diffusion outputs. Proceedings of the HAI-GEN Workshop (2023) [18] Du, C., Li, Y., Qiu, Z., Xu, C.: Stable diffusion is unstable. Advances in Neural Information Processing Systems (NeurIPS) 36 , 58648–58669 (2023) [19] Mahajan, S., Rahman, T., Yi, K.M., Sigal, L.: Prompting hard or hardly prompt-ing: Prompt inversion for text-to-image diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 6808–6817 (2024) [20] Liu, B., Wang, C., Cao, T., Jia, K., Huang, J.: Towards understanding cross-and self-attention in stable diffusion for text-guided image editing. In: Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 7817–7826 (2024) [21] Othmen, E., Landolsi, M.Y., Romdhane, L.B.: Enhancing one-step diffusion models using gans with application to mental health mindfulness. In: Eigh-teenth International Conference on Machine Vision (ICMV 2025), vol. 14114, pp. 330–337 (2026). SPIE [22] Qi, W., Liu, S., Zhang, T.: Spire: Structured prompting for interpretable image generation. In: Proceedings of the AAAI Conference on Artificial Intelligence (2024) [23] Dat, D.H., Hyeon-Woo, N., Mao, P.-Y., Oh, T.-H.: Vsc: Visual search com-positional text-to-image diffusion model. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 19153–19162 (2025) [24] Yang, F., Yang, S., Butt, M.A., Weijer, J.: Dynamic prompt learning: Address-ing cross-attention leakage for text-based image editing. Advances in Neural Information Processing Systems 36 , 26291–26303 (2023) [25] Gu, J., Han, Z., Chen, S., Beirami, A., He, B., Zhang, G., Liao, R., Qin, Y., Tresp, V., Torr, P.: A systematic survey of prompt engineering on vision-language foundation models. arXiv preprint arXiv:2307.12980 (2023) [26] Lian, L., Li, B., Yala, A., Darrell, T.: Llm-grounded diffusion: Enhancing prompt understanding of text-to-image diffusion models with large language models. arXiv preprint arXiv:2305.13655 (2023) [27] Qin, J., Wu, J., Chen, W., et al.: Diffusiongpt: Llm-driven text-to-image generation system. arXiv preprint arXiv:2401.10061 (2024) [28] Chen, Z., Zhang, L., Weng, F., Pan, L., Lan, Z.: Tailored visions: Enhancing text-to-image generation with personalized prompt rewriting. In: Proceedings of the 19 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 7727–7736 (2024) [29] Jeon, J., Oh, J., Lee, H., Lee, B.-J.: Iterative prompt refinement for safer text-to-image generation. In: Proceedings of EMNLP, pp. 18091–18107 (2025) [30] Cao, T., Wang, C., Liu, B., Wu, Z., Zhu, J., Huang, J.: Beautifulprompt: Towards automatic prompt engineering for text-to-image synthesis. In: Proceedings of the EMNLP Industry Track, pp. 1–11 (2023) [31] Li, W., Wang, J., Zhang, X.: Promptist: Automated prompt optimization for text-to-image synthesis. In: CCF NLPCC, pp. 295–306 (2024) [32] Mohammad, S.M., Turney, P.D.: Crowdsourcing a word–emotion association lexicon. Computational Intelligence 29 (3), 436–465 (2013) [33] Chefer, H., Alaluf, Y., Vinker, Y., Wolf, L., Cohen-Or, D.: Attend-and-excite: Attention-based semantic guidance for text-to-image diffusion models. In: ACM SIGGRAPH 2023 Conference Proceedings (2023) [34] Wang, Z., Sha, Z., Ding, Z., Wang, Y., Tu, Z.: Tokencompose: Text-to-image dif-fusion with token-level supervision. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 8553–8564 (2024) [35] Sauer, A., Boesel, F., Dockhorn, T., Blattmann, A., Esser, P., Rombach, R.: Adversarial diffusion distillation. arXiv preprint arXiv:2311.17042 (2023) [36] Landis, J.R., Koch, G.G.: The measurement of observer agreement for categorical data. biometrics, 159–174 (1977) [37] Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. : Learning transferable visual models from natural language supervision. In: International Conference on Machine Learning, pp. 8748–8763 (2021). PmLR 20
