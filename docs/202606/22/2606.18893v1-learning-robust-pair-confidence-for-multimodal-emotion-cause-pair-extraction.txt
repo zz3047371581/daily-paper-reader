@@ -1,0 +1,341 @@
+Title: Learning Robust Pair Confidence for Multimodal Emotion-Cause Pair Extraction
+
+URL Source: https://arxiv.org/pdf/2606.18893v1
+
+Published Time: Thu, 18 Jun 2026 00:45:32 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# LEARNING ROBUST PAIR CONFIDENCE FOR MULTIMODAL 
+
+# EMOTION -C AUSE PAIR EXTRACTION 
+
+A P REPRINT 
+
+Zhuangzhuang Pan 
+
+Institute for Advanced Studies Universiti Malaya Kuala Lumpur 50603, Malaysia 
+
+23078403@siswa.um.edu.my 
+
+Ning Dong 
+
+School of Information Engineering Suqian University Suqian 223800, China 
+
+dongning@squ.edu.cn 
+
+Yingna Su 
+
+School of Information Engineering Suqian University Suqian 223800, China 
+
+suyingna@squ.edu.cn 
+
+Yan Xia 
+
+Digitization Department Suzhou University of Technology Suzhou 215500, China 
+
+23072126@siswa.um.edu.my 
+
+## ABSTRACT 
+
+Multimodal emotion-cause pair extraction (MECPE) requires reliable pair confidence over candidate pairs. Existing pair scorers commonly use pair-level cross entropy over valid candidates, which treats links mostly independently. This leaves the relative confidence geometry among competing causes under-constrained, allowing gold pairs to stay close to hard negatives or rely on incidental non-gold context. We study this vulnerability as pair-confidence brittleness and propose RPCL (Robust Pair Confidence Learning), a training-only framework for pair-confidence learning. RPCL encourages pair confidence to be both discriminative and stable: gold pairs are separated from row-wise hard negatives through a confidence-difference margin constraint, and clean pair predictions are aligned with predictions from a corrupted view where non-gold contextual utterance representations are partially corrupted. The original clean pair scorer and decoding pipeline are used unchanged at inference time. On ECF, MECAD, and MEC 4, RPCL improves the three-seed mean Pair F1 over a matched base model by 2.58–2.83 percentage points in the full text-audio-video setting, and improves mean Pair AUPRC on all three datasets. Diagnostic analysis further shows larger gold-negative confidence gaps and lower margin-violation severity. These results suggest that explicitly shaping pair confidence is an effective training strategy for MECPE. 
+
+Keywords Multimodal emotion-cause pair extraction · MECPE · Pair-confidence learning · Row-conditioned margin ranking · Corrupted-context pair stability 
+
+## 1 Introduction 
+
+Multimodal emotion-cause pair extraction (MECPE) in conversations aims to identify which utterances express emotions and which utterances cause them, forming emotion-cause pairs over a dialogue [Xia and Ding, 2019, Wang et al., 2023a]. Compared with text-based emotion-cause pair extraction, it makes pair decisions inside a conversational structure where emotions, causes, speakers, and background turns are interleaved [Li et al., 2023a, Jeong and Bak, 2023, Hu et al., 2024a]. The relevant cause may be separated from the emotion by several turns, spoken by another participant, or supported unevenly by textual, acoustic, and visual cues [Wang et al., 2024a, Wu et al., 2025, Li et al., 2023b, Yu et al., 2025a]. These properties make the task a structured pair decision problem: for a given emotion utterance, multiple candidate causes can be locally plausible, while only a small subset corresponds to annotated causal relations. 
+
+> arXiv:2606.18893v1 [cs.CL] 17 Jun 2026
+
+Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+A common training practice is to supervise candidate pairs as positive or negative pair instances, often with cross-entropy-based objectives over valid candidates [Li et al., 2023a, Cheng et al., 2023, Li et al., 2025, 2024]. This supervision is necessary, but it mainly evaluates each candidate through its own label. It does not directly enforce the relative confidence geometry needed when several causes compete for the same emotion. In difficult cases, a gold pair can remain close to non-gold candidates that share speaker, topic, temporal proximity, or multimodal affective evidence with the true cause [Wang et al., 2025, Ju et al., 2025, Ma et al., 2025]. This vulnerability is referred to as pair-confidence brittleness. This paper studies multimodal emotion-cause pair extraction in conversations from the perspective of reliable pair confidence. A useful pair score should satisfy two complementary requirements. First, for a fixed emotion utterance, the score of a gold cause should be separated from the strongest non-gold alternatives for the same emotion. Second, the pair score should remain stable when contextual utterances outside annotated gold pairs are partially perturbed. These requirements complement recent progress in multimodal interaction, label constraints, memory-inspired modeling, and graph-based structure by directly shaping how a pair scorer allocates confidence among plausible links [Li et al., 2025, Wu et al., 2025, Liang et al., 2025]. To this end, this paper proposes RPCL (Robust Pair Confidence Learning), a training-only framework for pair-scoring emotion-cause models. RPCL adds no inference-time fusion module, decoder, or post-processing step. During training, it encourages two behaviors: gold pairs should stand apart from strong competing causes for the same emotion, and pair predictions should remain consistent when non-gold contextual evidence is partially corrupted. At inference time, the original clean pair scorer and the same decoding pipeline are used unchanged. Evaluation is conducted on ECF, MECAD, and MEC 4 using matched base scorers, identical input features, and unchanged decoding pipelines [Wang et al., 2023a, Wu et al., 2025, Liang et al., 2025]. Overall, the contributions are: • We identify pair-confidence brittleness in MECPE and formulate reliable pair-confidence learning as a training problem beyond independent candidate-pair classification. • We propose RPCL, a training-only framework that improves pair confidence by encouraging separation from strong non-gold alternatives and stability under label-preserving context perturbation. • We verify the proposed mechanism through controlled comparisons and confidence diagnostics, showing improved pair extraction and better gold-negative confidence separation. 
+
+## 2 Related Work 
+
+Structured Emotion-Cause Pair Extraction Emotion-cause pair extraction (ECPE) recasts affect analysis as link prediction between emotion and cause utterances rather than separate emotion/cause detection [Xia and Ding, 2019, Li et al., 2023a]. Conversational extensions add speaker turns and dialogue context, while recent ECPE systems explore guided experts, commonsense generation, and semantic structure for more explicit causal reasoning [Jeong and Bak, 2023, Wang et al., 2023b, Yu et al., 2025b, Wang et al., 2025]. These lines define the extraction space, but leave confidence geometry largely implicit. 
+
+Multimodal Emotion-Cause Pair Modeling Multimodal ECPE further binds causal links to textual, acoustic, and visual evidence, with ECF, SemEval-2024, MECAD, and MEC 4 providing representative benchmarks [Wang et al., 2023a, 2024a, Liang et al., 2025, Wu et al., 2025]. Existing systems strengthen pair modeling through holistic cross-modal interaction, causal prompting, memory-inspired aggregation, heterogeneous graphs, or LLM-enhanced generation [Hu et al., 2024a, Cheng et al., 2024, Luo et al., 2024, Ju et al., 2025, Wang et al., 2024b]. They improve evidence encoding, whereas RPCL studies the confidence surface after scoring. 
+
+Training Objectives for Pair Reliability Several ECPE studies move beyond ordinary pair classification by making supervision more structurally consistent across emotion detection, cause detection, and pair extraction [Feng et al., 2023, Cheng et al., 2023, Hu et al., 2024b]. Another line improves the training signal through stronger representations or sampling strategies for imbalanced candidate pairs [Hu et al., 2024c, Su et al., 2024, Li et al., 2024]. Recent reliability-oriented studies further revisit confidence calibration, negative-sample regularization, and consistency under noisy views [Huang et al., 2026, Luo et al., 2026, He et al., 2026]. However, these objectives regularize labels, tasks, examples, or representations rather than the row-conditioned confidence geometry in which a gold cause must outrank hard alternatives for the same emotion. RPCL adds this missing row-wise pressure and corrupted-context stability while preserving clean inference. 2Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+## 3 Method 
+
+3.1 Problem Formulation 
+
+Given a dialogue D = {ui}ni=1 , each utterance ui may contain textual, acoustic, and visual information. The task of multimodal emotion-cause pair extraction is to identify the set of emotion-cause pairs 
+
+Y = {(i, j ) : ui expresses an emotion and uj is its cause }. (1) Let V ⊆ { 1, . . . , n }2 denote the valid candidate pair set under the adopted decoding scheme, and let 
+
+yij = 1[( i, j ) ∈ Y ], (i, j ) ∈ V , (2) be the pair label. We build on a general multimodal ECPE backbone. For each dialogue, the backbone first produces a multimodal utterance representation ht for each utterance ut. Based on these representations, it outputs emotion logits zei for utterance ui, cause logits zcj for utterance uj , and pair logits sij ∈ R2 for each valid candidate pair (i, j ) ∈ V . The pair scorer can be viewed as a module that consumes the dialogue-level utterance representations and the candidate indices: 
+
+sij = fpair ({ht}nt=1 , i, j ). (3) We denote the pair distribution and the positive pair confidence by 
+
+πij = softmax( sij ), pij = πij, 1. (4) Here, pij is the confidence used by the pair scorer to decide whether uj is the cause of the emotion in ui. The same pair-scoring interface is later used by the corrupted branch, where {ht}nt=1 is replaced with the corrupted representations 
+
+{˜ht}nt=1 .
+
+3.2 Overview of Robust Pair-Confidence Learning 
+
+We view multimodal ECPE as learning a structured pair-confidence surface over valid emotion-cause candidates. Since all candidate pairs in a dialogue share the same conversational context, reliable pair confidence is shaped by two coupled factors: competition among alternative causes for the same emotion and stability when non-causal context is perturbed. Standard pair-level cross entropy supervises each valid pair by its binary label, but it does not explicitly shape this row-wise confidence geometry and trains only on clean dialogues. Consequently, a gold pair may remain close to hard negatives in the same emotion row or depend on incidental non-gold context. RPCL addresses this with two training-only constraints: (i) row-conditioned margin ranking , which separates gold pairs from top-k hard negatives within the same row, and (ii) corrupted-context pair stability , which preserves gold-pair evidence while perturbing non-gold utterances and aligning the resulting pair predictions. Both constraints act on the original pair scorer, and the inference pipeline remains unchanged. Figure 1 summarizes the framework. 
+
+3.3 Row-Conditioned Margin Ranking 
+
+We first make pair confidence discriminative within each emotion row. For an emotion utterance ui, let 
+
+Pi = {j : ( i, j ) ∈ V , y ij = 1 }, Ni = {j : ( i, j ) ∈ V , y ij = 0 }, (5) where Pi and Ni are the gold cause set and the non-gold candidate set for row i, respectively. The constraint is applied only to rows where both sets are non-empty. Among all non-gold candidates, the most informative ones are those that the current model already considers plausible. We therefore mine the top-k hard negatives according to the current pair confidence: 
+
+Hi = TopK j∈Ni (pij ), (6) where Hi contains the indices of the selected negatives. If fewer than k negatives are available, all negatives are used. The TopK operation is used only to select negative candidates in the current forward pass. We do not back-propagate through the discrete selection itself. For each gold cause j+ ∈ Pi and hard negative j− ∈ Hi, the model is encouraged to satisfy 
+
+pij + − pij − ≥ mi,j +,j − . (7) 3Learning Robust Pair Confidence for MECPE A P REPRINT 1 Dialogue Multimodal Encoder (shared) Pair confidence 
+
+2 Pair-confidence scorer Emotion logits Cause logits Pair logits Top-k hard negatives gold cause Candidate p air Confidence map 00.5 1.0 large gap 
+
+4 Learning pair confidence Desired effect Large gold -vs-hard-negative gap Stable across clean / corrupt more stable Inference (clean only) Multimodal Encoder (shared) Pair Scorer (clean) (emotion) (cause) 
+
+> Extracted Emotion -Cause Pairs
+
+3 Training only hard negatives Push gold above negatives Protect gold pair Same pair scorer ppclean corrupted CCPS context stability 
+
+> ……
+> CDMR row-wise ranking
+
+Figure 1: Overview of RPCL. CDMR separates gold pairs from row-wise hard negatives, and CCPS aligns clean/corrupted predictions after protected context corruption. The margin should be larger when the hard negative also appears cause-like. We use the cause classifier as a confidence signal. Let 
+
+qcj = softmax( zcj )1 (8) be the probability that utterance uj is a cause utterance. The adaptive margin is defined as 
+
+mi,j +,j − = m0 exp 
+
+
+
+sg( qcj− − qcj+ )
+
+
+
+, (9) where m0 is a base margin and sg( ·) denotes stop-gradient. Thus, the cause-confidence contrast determines the required pair-confidence gap, but the margin value itself does not back-propagate into the cause classifier. This gives the Confidence-Difference Margin Ranking constraint: 
+
+LCDMR = 1
+
+|Ω|
+
+X
+
+> (i,j +,j −)∈Ω
+
+mi,j +,j − −  pij + − pij −
+
+  
+
+> +
+
+, (10) where [x]+ = max(0 , x ) and 
+
+Ω = {(i, j +, j −) : j+ ∈ Pi, j − ∈ Hi}. (11) If Ω is empty in a mini-batch, we set LCDMR = 0 .The effect of Eq. (10) is local and row-conditioned. It does not replace pair classification; rather, it focuses additional pressure on cases where the pair confidence is most likely to be brittle: gold pairs competing with high-confidence false causes for the same emotion utterance. 
+
+3.4 Corrupted-Context Pair Stability 
+
+The second constraint targets the stability of pair confidence under label-preserving context corruption. A model may classify a pair correctly in the clean dialogue but rely on incidental non-gold context to do so. To discourage this behavior, RPCL constructs a corrupted view that preserves annotated pair evidence while perturbing non-gold utterance representations. Let ht denote the multimodal utterance representation of ut consumed by the pair scorer. We first identify utterances that participate in at least one gold pair: 
+
+G = {t : ∃(i, j ) ∈ Y, t = i or t = j}. (12) 4Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+Utterances in G are protected. For each utterance outside G, we sample a Bernoulli corruption variable rt ∼
+
+Bernoulli( ρ) and construct 
+
+˜ht =
+
+ht, t ∈ G, 
+
+(1 − rt)ht, t / ∈ G. (13) Thus, a sampled non-gold utterance representation is zeroed out with probability ρ, while all utterances involved in annotated gold pairs remain unchanged. The corrupted dialogue view is used only during training. Running the same pair scorer on the corrupted representations yields pair logits ˜sij and pair distributions 
+
+˜πij = softmax(˜ sij ). (14) Because the gold pair evidence is protected, the original pair labels remain valid for the corrupted view. We therefore supervise the corrupted view with the same pair labels and, at the same time, align its pair distribution with the clean prediction: 
+
+LCCPS = λcor CE V (˜ s, y ) + λali 
+
+1
+
+|V| 
+
+X
+
+> (i,j )∈V
+
+∥ ˜πij − sg( πij )∥22 . (15) Here, CE V is the average pair cross-entropy over valid candidates, and λcor and λali control the two parts of the constraint. The stop-gradient operation makes the clean prediction the reference distribution. Consequently, the corrupted branch is trained to preserve clean pair confidence, without forcing the clean branch to move toward a noisier corrupted prediction. 
+
+3.5 Training Objective and Inference 
+
+We train the backbone with the standard supervised extraction objective on the clean dialogue: 
+
+Lsup = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+CE( zei , y ei ) + 1
+
+n
+
+> n
+
+X
+
+> j=1
+
+CE( zcj , y cj ) + CE V (s, y ), (16) where yei and ycj are the utterance-level emotion and cause labels used by the backbone, and CE V (s, y ) denotes the average pair cross-entropy over valid candidate pairs. The full RPCL objective is 
+
+LRPCL = Lsup + λrow LCDMR + LCCPS , (17) where λrow controls the strength of row-conditioned margin ranking, while the internal weights of LCCPS are defined in Eq. (15). All RPCL-specific operations are training-time constraints. At inference time, we use the original clean dialogue, the backbone pair scorer, and the same thresholding or decoding pipeline as the base ECPE model. No hard-negative mining, corrupted view, gold-utterance protection, or additional post-processing is introduced during inference. 
+
+## 4 Experiments and Analysis 
+
+4.1 Datasets and Experimental Setup 4.1.1 Datasets 
+
+We evaluate on three multimodal ECPE benchmarks: ECF, MECAD, and MEC 4. ECF is an English benchmark, whereas MECAD and MEC 4 are Chinese benchmarks [Wang et al., 2023a, Wu et al., 2025, Liang et al., 2025]. All three datasets provide text, audio, and video modalities under the multimodal emotion-cause pair extraction formulation, with split-wise statistics summarized in Table 1. We report Pair F1 and Pair AUPRC on the test split. 
+
+4.1.2 Experimental Settings 
+
+The compared variants use the same datasets, splits, input features, validation-based threshold search, and decoding pipeline. Base denotes the same backbone and pair scorer trained only with Lsup , while RPCL adds the proposed CDMR and CCPS constraints during training. Unless otherwise stated, results are averaged over three seeds: 42, 345, and 456. Thresholds are selected on the validation split to maximize Pair F1 and are then fixed for test evaluation. Implementation details are grouped as follows. (i) For model inputs, we use RoBERTa-base for text, wav2vec 2.0 features for audio, and CLIP features for vision [Liu et al., 2019, Baevski et al., 2020, Radford et al., 2021], with a 5Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+Table 1: Split-wise statistics for ECF, MECAD, and MEC 4. Avg. pair distance denotes the mean absolute utterance-index distance |i − j| within annotated pairs.                                                         
+
+> Metric ECF MECAD MEC 4
+> Train Valid Test Train Valid Test Train Valid Test Conversations 1,001 112 261 684 126 179 1,277 404 443 Utterances 9,966 1,087 2,566 7,516 1,168 1,832 17,513 5,541 6,051 Emotion-cause pairs 7,055 866 1,873 5,788 977 1,312 5,792 1,854 2,115 Speakers 265 48 105 413 86 115 213 122 142 Avg. pair distance 0.85 0.98 0.93 1.02 0.86 0.79 0.80 0.83 0.83
+
+Table 2: Main text-audio-video (TAV) results. Values are mean Pair F1/AUPRC percentages over three seeds, with standard deviation shown as subscript; deltas are computed from the reported means.                           
+
+> Dataset Base F1 RPCL F1 ∆F1 Base AUPRC RPCL AUPRC ∆AUPRC ECF 55.71 ±0.41 58.29 ±0.62 +2.58 54.83 ±0.76 56.46 ±0.41 +1.63 MECAD 49.90 ±0.26 52.49 ±0.81 +2.59 46.05 ±0.39 48.28 ±0.38 +2.23 MEC 435.85 ±0.53 38.68 ±0.83 +2.83 28.02 ±0.31 30.64 ±0.82 +2.62
+
+task-specific hidden size of 400. Dialogues are truncated to at most 35 utterances, and utterances are truncated to at most 512 tokens. (ii) For optimization, all models are trained for up to 30 epochs with early stopping patience 5, batch size 32, weight decay 10 −4, gradient clipping at norm 1.0, learning rate 10 −5 for RoBERTa, and 5 × 10 −5 for non-backbone parameters. (iii) For RPCL, we use one hyperparameter setting across datasets, modality settings, and random seeds: m0 = 0 .05 , k = 8 , corruption probability 0.30 , λrow = 0 .3, λcor = 0 .75 , and λali = 0 .2. Experiments are implemented with PyTorch 2.10.0 and Transformers 5.7.0 on NVIDIA A100-SXM4-80GB GPUs. 
+
+4.2 Main Results on Complete Multimodal Evidence 
+
+Across the complete TAV setting, RPCL consistently improves controlled pair extraction over Base, with mean Pair F1 gains of +2.58 on ECF, +2.59 on MECAD, and +2.83 on MEC 4, together with threshold-independent AUPRC gains on all three datasets (Table 2). Because Base and RPCL share the same validation-based threshold search and inference pipeline, these gains are attributable to the training objective rather than decoding or operating-point changes. The largest F1 and AUPRC gains occur on MEC 4, where Base has the lowest F1, suggesting that the confidence constraints are most useful in the hardest evaluated setting. 
+
+4.3 Comparison with Standard Training Objectives 
+
+Against two conventional objective controls in the same TAV setting, RPCL gives the best Pair F1 on all three datasets and the best AUPRC on MECAD and MEC 4, while Fixed-margin ranking is the only exception on ECF AUPRC (Table 3). Fixed-margin ranking keeps row-wise ranking but replaces the cause-confidence-aware adaptive margin with a fixed margin and removes corrupted-context stability, while Utterance-dropout consistency removes row-wise margin ranking, corrupts utterance-level representations without gold-utterance protection, and aligns clean/corrupted pair distributions without corrupted-view pair supervision. Both controls improve over Base, but their weaker cross-dataset profile suggests that adaptive row-wise separation and protected corrupted-context pair stability are complementary rather than reducible to either standard objective alone. The ECF AUPRC exception suggests fixed margins can sharpen ranking, although RPCL yields stronger balanced extraction. 
+
+4.4 Comparison with Published Systems 
+
+The published-system comparison provides contextual positioning rather than an isolated component test, because the compared ECPE and MECPE systems differ in architectures, modalities, input features, training protocols, and evaluation settings (Table 4). This caveat is especially relevant for MEC 4, where M 3F remains stronger under a different architecture. The selected systems cover heuristic and two-stage extraction methods, multimodal interaction and label-constraint models, graph-based methods, generative frameworks, and large-model-based approaches. We therefore use this comparison as broader literature context, while the controlled analyses below assess the effect of robust pair-confidence learning. 6Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+Table 3: Standard training-objective controls under text-audio-video (TAV). Values are mean Pair F1/AUPRC percent-ages over three seeds; subscripts show standard deviation. 
+
+Variant ECF F1 ECF AUPRC MECAD F1 MECAD AUPRC MEC 4 F1 MEC 4 AUPRC Base 55.71 ±0.41 54.83 ±0.76 49.90 ±0.26 46.05 ±0.39 35.85 ±0.53 28.02 ±0.31 
+
+Fixed-margin ranking 58.10 ±0.75 57.73 ±0.98 51.93 ±0.40 47.71 ±0.33 38.13 ±0.24 30.05 ±0.46 
+
+Utterance-dropout consistency 57.24 ±0.41 56.84 ±0.42 51.49 ±0.96 46.99 ±0.03 38.50 ±0.56 30.42 ±0.37 
+
+RPCL 58.29 ±0.62 56.46 ±0.41 52.49 ±0.81 48.28 ±0.38 38.68 ±0.83 30.64 ±0.82 
+
+Table 4: Published ECPE/MECPE comparison on official splits. Baselines use reported best modality settings; RPCL reports three-seed means. 
+
+(a) Dataset: ECF 
+
+Method Modalities Emotion Extraction Cause Extraction Pair Extraction P R F1 P R F1 P R F1 Heuristic [Wang et al., 2023a] T+A+V 73.62 79.68 76.48 54.91 50.28 52.44 36.99 26.77 31.01 MECPE-2S [Wang et al., 2023a] T+A 76.91 81.68 79.17 67.25 73.91 70.27 57.13 50.34 53.48 HiLo [Li et al., 2025] T+A+V 75.46 83.66 79.35 65.72 80.31 72.28 51.78 59.69 55.45 RPCL T+A+V 79.59 77.14 78.32 69.28 76.39 72.65 52.20 66.00 58.29 
+
+(b) Dataset: MECAD 
+
+Method Modalities Emotion Extraction Cause Extraction Pair Extraction P R F1 P R F1 P R F1 SHARK [Wang et al., 2023b, Liang et al., 2025] T 69.30 67.02 68.14 64.18 66.36 65.24 49.02 42.87 45.74 GPT-4o [Liang et al., 2025] T 71.41 63.69 67.33 65.03 69.26 67.08 39.68 41.77 40.70 M3HG [Liang et al., 2025] T 72.34 67.84 70.02 66.12 70.24 68.12 54.82 46.42 50.27 RPCL T+A+V 72.97 52.95 61.37 62.57 78.12 69.47 40.95 73.09 52.49 
+
+(c) Dataset: MEC 4
+
+Method Modalities Emotion Extraction Cause Extraction Pair Extraction P R F1 P R F1 P R F1 MECPE-2S [Wang et al., 2023a, Wu et al., 2025] T+A+V — — — — — — 33.42 25.34 28.82 HiLo [Li et al., 2025, Wu et al., 2025] T+A+V — — — — — — 32.12 38.70 35.11 M3F [Wu et al., 2025] T+A+V — — — — — — 47.01 42.76 44.79 RPCL T+A+V — — — — — — 29.67 55.68 38.68 
+
+4.5 Pair-Confidence Diagnostics 
+
+The confidence diagnostics are consistent with the proposed mechanism rather than only the downstream F1 gains: RPCL increases the mean gold-minus-negative pair-probability gap by 4.72, 1.69, and 3.46 percentage points on ECF, MECAD, and MEC 4, respectively (Figure 2). The precision-recall movements differ by dataset, with ECF and MEC 4
+
+mainly gaining recall and MECAD mainly gaining precision, suggesting that RPCL does not simply bias the model toward more positive predictions. Gold-pair confidence rises on all three datasets, while hard-negative and all-candidate margin-violation severity decrease, which is consistent with better separation from competing candidates. 
+
+4.6 Modality-Specific Behavior 
+
+Across modality configurations, including text-only input without acoustic or visual evidence, the pair-confidence objective remains useful beyond the complete TAV setting: matched RPCL-Base gains are positive for Pair F1 and Pair AUPRC under T, T+A, T+V, and T+A+V (Figure 3). The T+A+V column corresponds to the complete-evidence setting in Table 2. The other columns show that the objective is not tied to a single input configuration, without isolating the relative contribution of each modality or the design of fusion modules. 7Learning Robust Pair Confidence for MECPE A P REPRINT ECF MECAD MEC 4                   
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50 60 Probability gap (pp)
+> Δ+4.72
+> Δ+1.69
+> Δ+3.46
+> (a) Gold-negative separation
+> Base RPCL
+> 30 35 40 45 50 55 Pair precision (%)
+> 50
+> 55
+> 60
+> 65
+> 70
+> 75 Pair recall (%)
+> ECF
+> ΔP +1.56
+> ΔR +3.92
+> MECAD
+> ΔP +2.89
+> ΔR +0.53
+> MEC 4
+> ΔP +1.90
+> ΔR +5.10
+> (b) Decision operating points
+> Base RPCL
+> Gold-pair confidence lift Hard-negative margin reduction All-candidate margin reduction ECF MECAD
+> MEC 4
+> +7.93 pp +4.37 pp +5.11 pp +0.34 pp +1.54 pp +1.99 pp +3.49 pp +3.69 pp +5.30 pp
+> (c) Diagnostic scorecard
+> 02468Improvement in desired direction
+
+Figure 2: Pair-confidence diagnostics under TAV. Results show gold-negative confidence gaps, precision-recall operating points, and desired-direction changes in gold confidence and margin-violation severity. T T+A T+V T+A+V Evaluation modality ECF MECAD              
+
+> MEC 4
+> Dataset +1.98 +1.91 +2.07 +2.58 +2.90 +2.61 +3.06 +2.59 +3.58 +3.13 +3.95 +2.83
+> (a) Pair F1 gain
+> TT+A T+V T+A+V
+
+Evaluation modality +2.76 +2.29 +2.16 +1.63 +3.36 +2.12 +2.49 +2.23 +3.39 +3.16 +4.41 +2.62 
+
+> (b) Pair AUPRC gain
+> -5 -3 -1 0135RPCL - Base (pp)
+
+Figure 3: RPCL gains over matched Base across modality settings. Cells show Pair F1 and Pair AUPRC changes in percentage points, averaged over three seeds. 
+
+4.7 Ablation Study 
+
+The ablations indicate that discriminative separation and stability both contribute to the final TAV performance: CDMR alone and CCPS alone improve over Base on all datasets, and the full RPCL objective yields the best deltas on all reported metrics (Table 5). Partial removals show the same pattern internally: removing consistency or corrupted-view supervision weakens the CCPS path, while removing the adaptive margin or top-k negative selection weakens CDMR. Overall, removing either hard-negative separation or clean/corrupted stability reduces the RPCL gains. 
+
+## 5 Limitations 
+
+RPCL is limited in three aspects. First, it is a training objective for pair-scoring backbones rather than a new multimodal encoder or decoder, so it may be complementary to stronger architectures. Second, the corrupted-context constraint uses representation-level perturbation and does not fully cover real-world noise such as ASR errors, missing visual frames, domain shift, or cultural variation. Third, because the task involves conversational multimodal emotion data, 8Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+Table 5: TAV ablation deltas over Base. Rows isolate or remove CDMR/CCPS components; positive values indicate percentage-point gains.                                                    
+
+> Variant ECF F1 ECF AUPRC MECAD F1 MECAD AUPRC MEC 4F1 MEC 4AUPRC CDMR only +1.94 +0.80 +2.29 +1.94 +2.51 +2.04 CCPS only +2.17 +1.02 +1.83 +1.89 +2.19 +2.10 RPCL w/o consistency +2.39 +1.27 +2.21 +2.11 +2.17 +2.10 RPCL w/o corrupted CE +2.24 +1.18 +2.08 +1.97 +2.05 +2.03 RPCL w/o adaptive margin +2.33 +1.36 +2.42 +2.08 +2.46 +2.29 RPCL w/o top-knegatives +1.78 +1.23 +2.39 +2.05 +2.21 +2.23 RPCL +2.58 +1.63 +2.59 +2.23 +2.83 +2.62
+
+predictions should be interpreted only as annotated emotion-cause links, rather than as evidence of the underlying internal causes of emotion or as a basis for high-stakes decisions. 
+
+## 6 Conclusion 
+
+This paper addresses pair-confidence brittleness in multimodal emotion-cause pair extraction by framing pair extraction as reliable confidence learning over competing candidate pairs. We propose RPCL, a training-only framework that combines row-conditioned margin ranking with corrupted-context pair stability while leaving the original inference pipeline unchanged. Across ECF, MECAD, and MEC 4, RPCL consistently improves Pair F1 and Pair AUPRC over a matched base model, with diagnostics showing larger gold-negative confidence gaps and reduced margin-violation severity. These results show that explicitly shaping the pair-confidence surface, rather than only enriching representations or decoders, provides an effective and lightweight strategy for multimodal ECPE. 
+
+## References 
+
+Rui Xia and Zixiang Ding. Emotion-Cause Pair Extraction: A new task to emotion analysis in texts. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics , pages 1003–1012, 2019. Fanfan Wang, Zixiang Ding, Rui Xia, Zhaoyu Li, and Jianfei Yu. Multimodal emotion-cause pair extraction in conversations. IEEE Transactions on Affective Computing , 14(3):1832–1844, 2023a. Wei Li, Yang Li, Vlad Pandelea, Mengshi Ge, Luyao Zhu, and Erik Cambria. ECPEC: Emotion-cause pair extraction in conversations. IEEE Transactions on Affective Computing , 14(3):1754–1765, 2023a. DongJin Jeong and JinYeong Bak. Conversational emotion-cause pair extraction with guided mixture of experts. In 
+
+Proceedings of the 17th Conference of the European Chapter of the Association for Computational Linguistics ,pages 3288–3298, Dubrovnik, Croatia, 2023. Association for Computational Linguistics. doi:10.18653/v1/2023.eacl-main.240. Guimin Hu, Zhihong Zhu, Daniel Hershcovich, Lijie Hu, Hasti Seifi, and Jiayuan Xie. UniMEEC: Towards unified multimodal emotion recognition and emotion cause. In Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen, editors, Findings of the Association for Computational Linguistics: EMNLP 2024 , pages 5248–5261, Miami, Florida, USA, November 2024a. Association for Computational Linguistics. doi:10.18653/v1/2024.findings-emnlp.302. Fanfan Wang, Heqing Ma, Rui Xia, Jianfei Yu, and Erik Cambria. SemEval-2024 task 3: Multimodal emotion cause analysis in conversations. In Proceedings of the 18th International Workshop on Semantic Evaluation , pages 2039–2050, 2024a. Dan Wu, Xincheng Ju, Dong Zhang, Shoushan Li, Erik Cambria, and Guodong Zhou. Emotion across modalities and cultures: Multilingual multimodal emotion-cause analysis with memory-inspired framework. In Proceedings of the 33rd ACM International Conference on Multimedia , pages 5775–5783, 2025. Qianer Li, Peijie Huang, Jiawei Chen, Jialin Wu, Yuhong Xu, and Peiyuan Lin. Multimodal emotion recognition in conversation with mutual information maximization and contrastive loss. In Maosong Sun, Bing Qin, Xipeng Qiu, Jing Jiang, and Xianpei Han, editors, Proceedings of the 22nd Chinese National Conference on Computational Linguistics , pages 264–276, Harbin, China, August 2023b. Chinese Information Processing Society of China. In Chinese. Fangxu Yu, Junjie Guo, Zhen Wu, and Xinyu Dai. Beyond verbal cues: Emotional contagion graph network for causal emotion entailment. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar, editors, 9Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+Findings of the Association for Computational Linguistics: ACL 2025 , pages 1755–1767, Vienna, Austria, July 2025a. Association for Computational Linguistics. ISBN 979-8-89176-256-5. doi:10.18653/v1/2025.findings-acl.88. Zifeng Cheng, Zhiwei Jiang, Yafeng Yin, Cong Wang, Shiping Ge, and Qing Gu. A consistent dual-mrc framework for emotion-cause pair extraction. ACM Trans. Inf. Syst. , 41(4):105:1–105:27, 2023. doi:10.1145/3558548. Bobo Li, Hao Fei, Fei Li, Tat-Seng Chua, and Donghong Ji. Multimodal emotion-cause pair extraction with holistic interaction and label constraint. ACM Transactions on Multimedia Computing, Communications, and Applications ,21(11):307:1–307:19, 2025. Min Li, Hui Zhao, Tiquan Gu, Di Ying, and Bin Liao. Class imbalance mitigation: A select-then-extract learning frame-work for emotion-cause pair extraction. Expert Syst. Appl. , 236:121386, 2024. doi:10.1016/J.ESWA.2023.121386. Yuwei Wang, Yuling Li, Kui Yu, and Jing Yang. A semantic structure-based emotion-guided model for emotion-cause pair extraction. Pattern Recognition , 161:111296, 2025. doi:10.1016/J.PATCOG.2024.111296. Xincheng Ju, Dong Zhang, Junhui Li, Shoushan Li, and Guodong Zhou. Enhanced generative framework with LLMs for multimodal emotion-cause pair extraction in conversations. IEEE Transactions on Multimedia , 27:4924–4935, 2025. Heqing Ma, Jianfei Yu, Fanfan Wang, Hanyu Cao, and Rui Xia. From extraction to generation: Multi-modal emotion-cause pair generation in conversations. IEEE Trans. Affect. Comput. , 16(2):586–597, 2025. doi:10.1109/TAFFC.2024.3446646. Qiao Liang, Ying Shen, Tiantian Chen, and Lin Zhang. M3HG: Multimodal, multi-scale, and multi-type node heterogeneous graph for emotion cause triplet extraction in conversations. In Findings of the Association for Computational Linguistics: ACL 2025 , pages 11416–11431, 2025. Fanfan Wang, Jianfei Yu, and Rui Xia. Generative emotion cause triplet extraction in conversations with commonsense knowledge. In Findings of the Association for Computational Linguistics: EMNLP 2023 , pages 3952–3963, 2023b. Zhaoxin Yu, Xinglin Xiao, and Wenji Mao. One unified model for diverse tasks: Emotion cause analysis via self-promote cognitive structure modeling. In Luis Chiruzzo, Alan Ritter, and Lu Wang, editors, Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) , pages 10278–10293, Albuquerque, New Mexico, April 2025b. Association for Computational Linguistics. ISBN 979-8-89176-189-6. doi:10.18653/v1/2025.naacl-long.516. Zebang Cheng, Fuqiang Niu, Yuxiang Lin, Zhi-Qi Cheng, Xiaojiang Peng, and Bowen Zhang. MIPS at semeval-2024 task 3: Multimodal emotion-cause pair extraction in conversations with multimodal language models. In Atul Kr. Ojha, A. Seza Dogruöz, Harish Tayyar Madabushi, Giovanni Da San Martino, Sara Rosenthal, and Aiala Rosá, editors, Proceedings of the 18th International Workshop on Semantic Evaluation, SemEval@NAACL 2024, Mexico City, Mexico, June 20-21, 2024 , pages 667–674. Association for Computational Linguistics, 2024. doi:10.18653/V1/2024.SEMEVAL-1.97. Meng Luo, Han Zhang, Shengqiong Wu, Bobo Li, Hong Han, and Hao Fei. NUS-emo at SemEval-2024 task 3: Instruction-tuning LLM for multimodal emotion-cause analysis in conversations. In Atul Kr. Ojha, A. Seza Do˘ gruöz, Harish Tayyar Madabushi, Giovanni Da San Martino, Sara Rosenthal, and Aiala Rosá, editors, Proceedings of the 18th International Workshop on Semantic Evaluation (SemEval-2024) , pages 1589–1596, Mexico City, Mexico, June 2024. Association for Computational Linguistics. doi:10.18653/v1/2024.semeval-1.226. Fanfan Wang, Heqing Ma, Xiangqing Shen, Jianfei Yu, and Rui Xia. Observe before generate: Emotion-cause aware video caption for multimodal emotion cause generation in conversations. In Jianfei Cai, Mohan S. Kankan-halli, Balakrishnan Prabhakaran, Susanne Boll, Ramanathan Subramanian, Liang Zheng, Vivek K. Singh, Pablo César, Lexing Xie, and Dong Xu, editors, Proceedings of the 32nd ACM International Conference on Multimedia, MM 2024, Melbourne, VIC, Australia, 28 October 2024 - 1 November 2024 , pages 5820–5828. ACM, 2024b. doi:10.1145/3664647.3681601. Huawen Feng, Junlong Liu, Junhao Zheng, Haibin Chen, Xichen Shang, and Qianli Ma. Joint constrained learning with boundary-adjusting for emotion-cause pair extraction. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 1118–1131, Toronto, Canada, 2023. Association for Computational Linguistics. doi:10.18653/v1/2023.acl-long.62. Guimin Hu, Yi Zhao, and Guangming Lu. Unifying emotion-oriented and cause-oriented predictions for emotion-cause pair extraction. Neural Networks , 178:106431, 2024b. doi:10.1016/J.NEUNET.2024.106431. Guimin Hu, Yi Zhao, and Guangming Lu. Improving representation with hierarchical contrastive learning for emotion-cause pair extraction. IEEE Transactions on Affective Computing , 15(4):1997–2011, 2024c. doi:10.1109/TAFFC.2024.3391854. 10 Learning Robust Pair Confidence for MECPE A P REPRINT 
+
+Xinxin Su, Zhen Huang, Yixin Su, Bayu Distiawan Trisedya, Yong Dou, and Yunxiang Zhao. Hierarchical shared encoder with task-specific transformer layer selection for emotion-cause pair extraction. IEEE Transactions on Affective Computing , 15(4):1934–1948, 2024. doi:10.1109/TAFFC.2024.3390223. Jincheng Huang, Jie Xu, Xiaoshuang Shi, Ping Hu, Lei Feng, and Xiaofeng Zhu. Revisiting confidence calibration for misclassification detection in VLMs. In International Conference on Learning Representations , 2026. Jiehui Luo, Yuguo Yin, Yuxin Xie, Jinghan Ru, Xianwei Zhuang, Minghua He, Aofan Liu, Zihan Xiong, and Dongchao Yang. SupCLAP: Controlling optimization trajectory drift in audio-text contrastive learning with support vector regularization. In International Conference on Learning Representations , 2026. Qiyuan He, Yicong Li, Haotian Ye, Jinghao Wang, Xinyao Liao, Pheng-Ann Heng, Stefano Ermon, James Zou, and Angela Yao. reAR: Rethinking visual autoregressive models via token-wise consistency regularization. In 
+
+International Conference on Learning Representations , 2026. Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin Stoyanov. RoBERTa: A robustly optimized BERT pretraining approach. CoRR , abs/1907.11692, 2019. Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, and Michael Auli. wav2vec 2.0: A framework for self-supervised learning of speech representations. Advances in neural information processing systems , 33:12449–12460, 2020. Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In 
+
+International conference on machine learning , pages 8748–8763. PmLR, 2021. 11

@@ -6,100 +6,98 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-21
-- 运行时间：2026-06-21 21:40:57 UTC
+- 最新运行日期：2026-06-22
+- 运行时间：2026-06-22 22:50:00 UTC
 - 运行状态：成功
-- 本次总论文数：26
-- 精读区：13
+- 本次总论文数：25
+- 精读区：12
 - 速读区：13
 
 ### 今日简报（AI）
-今日精读26篇AI前沿成果，聚焦认知图与大模型协同的情感唤起预测、长视频叙事结构解析两大10分突破，以及视听感知决策流、多性格动态切换等8分创新。  
-最值得关注认知图融合LLM通路预测恐慌情绪、长视频的时间叙事事件建模，以及多模态模型从感知到决策的信息流向与人格动态组合。  
-建议深挖认知架构与大模型的交叉潜力，紧抓叙事时间建模与人格模拟方向，它们正重塑情感计算与视频理解的新范式。
-- 详情：[/202606/21/README](/202606/21/README)
+- 今日共生成 25 篇推荐（精读 12 篇，速读 13 篇）
+- 精读：《Native Active Perception as Reasoning for Omni-Modal Understanding》（10.0/10）, 《NEST: Narrative Event Structures in Time for Long Video Understanding》（10.0/10）
+- 速读：《Flex4DHuman: Flexible Multi-view Video Diffusion for 4D Human Reconstruction》（8.0/10）, 《TSA: Temporal Slot Activation for Persistent Object-Centric Video Representation》（8.0/10）, 《Temporal Backtracking Search for Test-time Generative Video Reasoning》（8.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202606/22/README](/202606/22/README)
 
 ### 精读区论文标签
-1. [When Cognitive Graphs Meet LLMs: BDEI Cognitive Pathways for Panic Emotional Arousal Prediction](/202606/21/2606.15121v2-when-cognitive-graphs-meet-llms-bdei-cognitive-pathways-for-panic-emotional-arousal-prediction)  
-   标签：评分：10.0/10、query:affective-kb
-   evidence：将恐慌情绪唤醒预测基于认知评价理论
-2. [NEST: Narrative Event Structures in Time for Long Video Understanding](/202606/21/2606.19706v1-nest-narrative-event-structures-in-time-for-long-video-understanding)  
+1. [Native Active Perception as Reasoning for Omni-Modal Understanding](/202606/22/2606.19341v1-native-active-perception-as-reasoning-for-omni-modal-understanding)  
    标签：评分：10.0/10、query:long-video
-   evidence：NEST数据集用于长篇电影中的叙事事件结构理解，直接应对长视频语义。
-3. [Facial Affect Analysis for Service-Oriented Systems: Advances, Challenges, and Future Visions](/202606/21/2606.15351v1-facial-affect-analysis-for-service-oriented-systems-advances-challenges-and-future-visions)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：面部情感分析的进展：利用CNN、Transformer和图架构进行表情、动作单元和微表情建模
-4. [Open-World Video Segmentation](/202606/21/2606.15632v1-open-world-video-segmentation)  
+   evidence：基于智能体的视频理解通过选择性感知和持久记忆将计算成本与视频时长解耦
+2. [NEST: Narrative Event Structures in Time for Long Video Understanding](/202606/22/2606.19706v1-nest-narrative-event-structures-in-time-for-long-video-understanding)  
+   标签：评分：10.0/10、query:long-video
+   evidence：引入NEST数据集，用于评估长视频叙事结构理解
+3. [Open-World Video Segmentation](/202606/22/2606.15632v2-open-world-video-segmentation)  
    标签：评分：9.0/10、query:long-video
-   evidence：提出Savvy系统，用于零样本开放世界长时域视频分割，推动视频序列建模技术。
-5. [Robust Dual-Signal Fusion: Hybrid Neuro-Symbolic Gating with Compressed Chain-of-Thought Refinement for Irony Detection in Social Media Texts](/202606/21/2606.16845v1-robust-dual-signal-fusion-hybrid-neuro-symbolic-gating-with-compressed-chain-of-thought-refinement-for-irony-detection-in-social-media-texts)  
+   evidence：Savvy在长视频中实现开放世界分割，包含物体发现与身份维护，直接解决长时视频语义理解问题。
+4. [From Parasocial Scripts to Dyadic Persistence in Autonomous AI-Agent Communities](/202606/22/2606.17174v1-from-parasocial-scripts-to-dyadic-persistence-in-autonomous-ai-agent-communities)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：分析自主AI代理社区中的准社会互动线索与情感语言
+5. [Mind Companion: An Embodied Conversational Agent for Process-Based Psychotherapy](/202606/22/2606.17789v1-mind-companion-an-embodied-conversational-agent-for-process-based-psychotherapy)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：基于LLM的具身对话代理系统，集成实时情绪识别以支持心理治疗
+6. [FlowRAG: Synergizing Explicit Reasoning via Frequency-Aware Multi-Granularity Graph Flow](/202606/22/2606.17856v1-flowrag-synergizing-explicit-reasoning-via-frequency-aware-multi-granularity-graph-flow)  
    标签：评分：9.0/10、query:affective-kb
-   evidence：用于反讽检测的混合神经符号架构，结合压缩思维链，解决情感推理任务
-6. [VL-MemKnG: Hybrid Memory with a Spatio-Temporal Knowledge Graph for Question Answering over Long Egocentric Navigation Trajectories](/202606/21/2606.17183v1-vl-memkng-hybrid-memory-with-a-spatio-temporal-knowledge-graph-for-question-answering-over-long-egocentric-navigation-trajectories)  
-   标签：评分：9.0/10、query:long-video
-   evidence：混合记忆与时空知识图谱用于长自中心视频问答
-7. [TivTok: Broadcasting Time-Invariant Tokens for Scalable Video Tokenization](/202606/21/2606.17590v1-tivtok-broadcasting-time-invariant-tokens-for-scalable-video-tokenization)  
-   标签：评分：9.0/10、query:long-video
-   evidence：时不变令牌实现可扩展视频令牌化
-8. [See First, Answer Later: Visual Evidence Pre-Alignment via Sufficiency-Driven RL](/202606/21/2606.17678v1-see-first-answer-later-visual-evidence-pre-alignment-via-sufficiency-driven-rl)  
+   evidence：通过基于图的知识注入实现显式多跳推理的检索增强生成框架
+7. [Hierarchical Multi-Modal Retrieval for Knowledge-Grounded News Image Captioning](/202606/22/2606.18553v1-hierarchical-multi-modal-retrieval-for-knowledge-grounded-news-image-captioning)  
+   标签：评分：9.0/10、query:affective-kb
+   evidence：通过分层多模态检索从新闻文章中注入外部知识的检索增强图像描述
+8. [Learning Robust Pair Confidence for Multimodal Emotion-Cause Pair Extraction](/202606/22/2606.18893v1-learning-robust-pair-confidence-for-multimodal-emotion-cause-pair-extraction)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：为多模态LLM引入视觉证据预对齐阶段以提升视觉接地，推进了视觉与语言的跨模态表征学习。
-9. [LiveStarPro: Proactive Streaming Video Understanding with Hierarchical Memory for Long-Horizon Streams](/202606/21/2606.17798v1-livestarpro-proactive-streaming-video-understanding-with-hierarchical-memory-for-long-horizon-streams)  
-   标签：评分：9.0/10、query:long-video
-   evidence：面向长时间流的主动流式视频理解与分层记忆
-10. [MAJIC: Leveraging Articulatory Motion for Speech-based Emotion Recognition](/202606/21/2606.18228v1-majic-leveraging-articulatory-motion-for-speech-based-emotion-recognition)  
+   evidence：多模态情感-原因对抽取
+9. [Language-Instructed Vision Embeddings for Controllable and Generalizable Perception](/202606/22/2606.19584v1-language-instructed-vision-embeddings-for-controllable-and-generalizable-perception)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：利用发音运动和音频的多模态情感识别系统，用于基于语音的情感识别
-11. [Generating Natural and Expressive Robot Gestures through Iterative Reinforcement Learning with Human Feedback using LLMs](/202606/21/2606.18747v1-generating-natural-and-expressive-robot-gestures-through-iterative-reinforcement-learning-with-human-feedback-using-llms)  
+   evidence：用语言动态指导视觉编码器生成以任务为中心的跨模态嵌入
+10. [Vortex: Multi-Modal Fusion System for Intelligent Video Retrieval](/202606/22/2606.19682v1-vortex-multi-modal-fusion-system-for-intelligent-video-retrieval)  
+   标签：评分：9.0/10、query:long-video
+   evidence：融合音视频和文本的多模态视频检索，使用CLIP和SigLIP2
+11. [Exploring Multi-Modal Large Language Models and Two-Stage Fine-Tuning for Fashion Image Retrieval](/202606/22/2606.19684v1-exploring-multi-modal-large-language-models-and-two-stage-fine-tuning-for-fashion-image-retrieval)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：利用LLM和RLHF生成自然表达性机器人手势，是情感计算中情绪表达生成的技术。
-12. [CARE: Competence-Aware Reward Shaping for Adaptive Reasoning Length in Video-MLLMs](/202606/21/2606.19927v1-care-competence-aware-reward-shaping-for-adaptive-reasoning-length-in-video-mllms)  
-   标签：评分：9.0/10、query:long-video
-   evidence：自适应调整视频多模态大语言模型的推理长度，实现高效长视频理解，减少计算开销。
-13. [TimeProVe: Propose, then Verify for Efficient Long Video Temporal Reasoning in Activities of Daily Living](/202606/21/2606.20561v1-timeprove-propose-then-verify-for-efficient-long-video-temporal-reasoning-in-activities-of-daily-living)  
-   标签：评分：9.0/10、query:long-video
-   evidence：针对长视频问答的高效时序推理与稀疏证据定位
+   evidence：提出使用多模态大模型生成属性感知三元组和两阶段微调的跨模态表示学习方法
+12. [Timage: A Generative Text-in-Image Paradigm for Fine-Tuning Vision-Language Models](/202606/22/2606.19944v1-timage-a-generative-text-in-image-paradigm-for-fine-tuning-vision-language-models)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：基于约束薛定谔桥的文本叠加图像范式，提升多模态细粒度对齐
 
 ### 速读区论文标签
-1. [From Senses to Decisions: The Information Flow of Auditory and Visual Perception in Multimodal LLMs](/202606/21/2606.10147v1-from-senses-to-decisions-the-information-flow-of-auditory-and-visual-perception-in-multimodal-llms)  
+1. [Flex4DHuman: Flexible Multi-view Video Diffusion for 4D Human Reconstruction](/202606/22/2606.13655v2-flex4dhuman-flexible-multi-view-video-diffusion-for-4d-human-reconstruction)  
+   标签：评分：8.0/10、query:affective-ai
+   evidence：提出基于文本到视频Transformer的多视角视频扩散模型，将Transformer视觉模型扩展至4D人体重建。
+2. [TSA: Temporal Slot Activation for Persistent Object-Centric Video Representation](/202606/22/2606.13714v1-tsa-temporal-slot-activation-for-persistent-object-centric-video-representation)  
    标签：评分：8.0/10、query:long-video
-   evidence：研究多模态大模型中听觉和视觉感知的信息流，以理解视听视频处理机制
-2. [Modeling Complex Behaviors: Multi-Personality Composition and Dynamic Switching in Vision-Language Models](/202606/21/2606.11074v2-modeling-complex-behaviors-multi-personality-composition-and-dynamic-switching-in-vision-language-models)  
+   evidence：面向持久对象中心视频表征的时序槽激活，建模长程时序依赖
+3. [Temporal Backtracking Search for Test-time Generative Video Reasoning](/202606/22/2606.13861v1-temporal-backtracking-search-for-test-time-generative-video-reasoning)  
+   标签：评分：8.0/10、query:long-video
+   evidence：提出时间回溯搜索，将测试时生成视频推理的搜索空间转移到时间轴
+4. [A New Multi-Domain Benchmark for Micro-Action Recognition and Detection](/202606/22/2606.14096v1-a-new-multi-domain-benchmark-for-micro-action-recognition-and-detection)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：为多模态LLM引入人格条件控制，通过多性格组合实现情感行为
-3. [RankVR: Low-Rank Structure Perception and Value Recalibration for Robust Composed Image Retrieval](/202606/21/2606.11689v1-rankvr-low-rank-structure-perception-and-value-recalibration-for-robust-composed-image-retrieval)  
+   evidence：用于检测细粒度情感变化的微动作识别基准
+5. [Spatial Priors via Space Filling Curves for Small and Limited Data Vision Transformers](/202606/22/2606.14757v1-spatial-priors-via-space-filling-curves-for-small-and-limited-data-vision-transformers)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：通过低秩结构处理噪声对应关系，实现跨模态（图像+文本）检索。
-4. [EPIG: Emotion-Based Prompting for Personalised Image Generation](/202606/21/2606.13247v1-epig-emotion-based-prompting-for-personalised-image-generation)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：通过心理学导向的效价-唤醒提示增强提升图像生成中的情感表达力
-5. [HYDRA-X: Native Unified Multimodal Models with Holistic Visual Tokenizers](/202606/21/2606.13289v1-hydra-x-native-unified-multimodal-models-with-holistic-visual-tokenizers)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：提出统一的视觉Transformer模型进行图像与视频分词，推动基于Transformer的计算机视觉模型发展
-6. [Task-Instructed Causal Routing of Vision Foundation Models for Multi-Task Learning](/202606/21/2606.15765v1-task-instructed-causal-routing-of-vision-foundation-models-for-multi-task-learning)  
-   标签：评分：7.0/10、query:affective-ai
-   evidence：任务指导的视觉基础模型路由用于多任务学习
-7. [Closed-Loop Triplet Synergistic Generation for Long-Form Video](/202606/21/2606.16184v1-closed-loop-triplet-synergistic-generation-for-long-form-video)  
+   evidence：通过空间填充曲线为ViT引入空间先验，改善小模型和有限数据下的性能
+6. [Closed-Loop Triplet Synergistic Generation for Long-Form Video](/202606/22/2606.16184v1-closed-loop-triplet-synergistic-generation-for-long-form-video)  
    标签：评分：7.0/10、query:long-video
-   evidence：长视频生成的闭环视觉-文本-记忆协同方法，保持长距离一致性和迭代修正。
-8. [Model Graph Inductive Learning for Knowledge Graph Completion](/202606/21/2606.16509v1-model-graph-inductive-learning-for-knowledge-graph-completion)  
-   标签：评分：7.0/10、query:affective-kb
-   evidence：通过实体聚类和图神经网络实现知识图谱链接预测的嵌入方法
-9. [Connecting Speech to Words through Images](/202606/21/2606.16807v1-connecting-speech-to-words-through-images)  
+   evidence：建模长程时序依赖以生成连贯的多镜头长视频
+7. [MuVAP: Multimodal Multiparty Voice Activity Projection for Turn-taking Prediction in the Wild](/202606/22/2606.16731v1-muvap-multimodal-multiparty-voice-activity-projection-for-turn-taking-prediction-in-the-wild)  
+   标签：评分：7.0/10、query:long-video
+   evidence：对音视频流进行多模态序列建模以预测轮流发言，是一种视频理解技术
+8. [Benchmarking Large Vision-Language Models on Fine-Grained Image Tasks: From Evaluation to Diagnosis](/202606/22/2606.19053v1-benchmarking-large-vision-language-models-on-fine-grained-image-tasks-from-evaluation-to-diagnosis)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：基于视觉的跨模态方法连接语音和文本模态
-10. [Text-Driven Fusion for Infrared and Visible Images: Achieving Image Scene Adaptation on Hyperbolic Space](/202606/21/2606.15104v1-text-driven-fusion-for-infrared-and-visible-images-achieving-image-scene-adaptation-on-hyperbolic-space)  
+   evidence：大型视觉语言模型在细粒度图像任务上的综合基准
+9. [ARTEMIS: Agent-guided Reliability-aware Temporal Mask Evolution for Imperfectly Supervised Video Polyp Segmentation](/202606/22/2606.20161v1-artemis-agent-guided-reliability-aware-temporal-mask-evolution-for-imperfectly-supervised-video-polyp-segmentation)  
+   标签：评分：7.0/10、query:long-video
+   evidence：代理引导的可靠性感知时序掩码演化，利用时序动态实现一致的视频分割
+10. [VL2Spike: Spike-driven Distillation from VLMs for Low-Power Visual Perception in Embodied AI](/202606/22/2606.15898v1-vl2spike-spike-driven-distillation-from-vlms-for-low-power-visual-perception-in-embodied-ai)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：文本驱动的双曲流形学习对齐视觉与语言，实现跨模态表示学习
-11. [Cascaded Sparse Autoencoders Learn Multi-Level Visual Concepts in Multimodal LLMs](/202606/21/2606.16193v1-cascaded-sparse-autoencoders-learn-multi-level-visual-concepts-in-multimodal-llms)  
-   标签：评分：6.0/10、query:affective-ai
-   evidence：级联稀疏自编码器学习多模态大语言模型中的层次视觉概念
-12. [Reasoning Text-to-Video Retrieval for Operating Room Clips via Action-Driven Digital Twins](/202606/21/2606.17298v1-reasoning-text-to-video-retrieval-for-operating-room-clips-via-action-driven-digital-twins)  
+   evidence：从视觉-语言模型中蒸馏跨模态知识到脑启发的脉冲神经网络，实现高效视觉感知
+11. [Complementary Attention Head Pruning for Efficient Transformers](/202606/22/2606.19150v1-complementary-attention-head-pruning-for-efficient-transformers)  
    标签：评分：6.0/10、query:long-video
-   evidence：基于动作驱动数字孪生的推理式文本到视频检索用于手术事件
-13. [CIAN: Multi-Stage Framework for Event-Enriched Image Captioning via Retrieval-Augmented Generation](/202606/21/2606.17430v1-cian-multi-stage-framework-for-event-enriched-image-captioning-via-retrieval-augmented-generation)  
+   evidence：注意力头剪枝方法实现高效Transformer
+12. [SA-VIS: Sparse frame Annotations for training Video Instance Segmentation](/202606/22/2606.20140v1-sa-vis-sparse-frame-annotations-for-training-video-instance-segmentation)  
+   标签：评分：6.0/10、query:long-video
+   evidence：提出用于稀疏标注下高效视频序列建模的过去帧特征传播方法
+13. [Spectral Query-Key Product Weight Steering for Training-Free VLM Hallucination Mitigation](/202606/22/2606.20419v1-spectral-query-key-product-weight-steering-for-training-free-vlm-hallucination-mitigation)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：通过检索增强的跨模态生成实现事件丰富图像描述
+   evidence：提出针对视觉语言模型的免训练权重编辑方法，属于最新的基于Transformer的计算机视觉技术
 
 
 <div class="dpr-home-promo-card">
