@@ -3,6 +3,7 @@
 
 * Conference Papers
   * ACL 2025 <!--dpr-conference:acl-2025-->
+  * ICLR 2026 <!--dpr-conference:iclr-2026-->
   * ICML 2025 <!--dpr-conference:icml-2025-->
     * affective-ai <!--dpr-conference-topic:icml-2025:query-affective-ai-->
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/conference/icml-2025/openreview-icml-2025-xmbdaci0xu-affectgpt-a-new-dataset-model-and-benchmark-for-emotion-understanding-with-multimodal-large-language-models" data-sidebar-item="{&quot;title&quot;: &quot;AffectGPT: A New Dataset, Model, and Benchmark for Emotion Understanding with Multimodal Large Language Models&quot;, &quot;link&quot;: &quot;https://openreview.net/forum?id=xmbdACI0xu&quot;, &quot;score&quot;: &quot;10.0&quot;, &quot;selection_source&quot;: &quot;conference_retrieval&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;affective-ai&quot;}], &quot;evidence&quot;: &quot;多模态大语言模型用于情感理解，提供数据集、模型和基准，直接针对多模态情感识别&quot;}">AffectGPT: A New Dataset, Model, and Benchmark for Emotion Understanding with Multimodal Large Language Models</a>
