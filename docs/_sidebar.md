@@ -2,6 +2,7 @@
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 
 * Conference Papers
+  * AAAI 2026 <!--dpr-conference:aaai-2026-->
   * ACL 2025 <!--dpr-conference:acl-2025-->
   * ICLR 2026 <!--dpr-conference:iclr-2026-->
   * ICML 2025 <!--dpr-conference:icml-2025-->
