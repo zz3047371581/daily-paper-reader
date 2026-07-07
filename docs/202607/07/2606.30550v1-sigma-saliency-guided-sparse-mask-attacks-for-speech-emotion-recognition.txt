@@ -1,0 +1,687 @@
+Title: SIGMA: Saliency-Guided Sparse Mask Attacks for Speech Emotion Recognition
+
+URL Source: https://arxiv.org/pdf/2606.30550v1
+
+Published Time: Tue, 30 Jun 2026 02:36:49 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# SIGMA: Saliency-Guided Sparse Mask Attacks for Speech Emotion Recognition 
+
+Qiyang Sun, Yi Chang*, Zixing Zhang Senior Member, IEEE , and Bj¨ orn W. Schuller Fellow, IEEE 
+
+Abstract —Speech conveys rich emotional information. As Speech Emotion Recognition (SER) is usually deployed in privacy-sensitive and reliability-critical environments, adversarial attacks on SER have attracted increasing attention. Existing sparse attacks control the number of perturbed elements, yet, they often lack explainability guidance and explicit measures of explanation consistency. A unified treatment of sparsity and mag-nitude constraints is also uncommon. In addition, transferability across attack families and target models remains limited. Hence, we propose a SalIency-Guided sparse Mask Attack (SIGMA). On self-supervised speech features, we use post-hoc explainable artificial intelligence (XAI) techniques to produce saliency maps and identify the scope of the mask, and then restrict magnitude-bounded updates to this mask. The mask is computed once and can be reused across models and different sparsity attacks to amortise cost. We evaluate on the IEMOCAP and TESS datasets. Under matched budgets and across multiple sparse-attack settings, SIGMA maintains competitive attack success rates, navigating a conscious trade-off between attack efficacy and explanation consistency. SIGMA therefore provides an effi-cient and interpretable framework for analysing the vulnerability and explanation behaviour of SER models under structured perturbations. 
+
+Index Terms —Speech emotion recognition, adversarial attacks, explainable artificial intelligence, sparsity, transferability. 
+
+I. I NTRODUCTION 
+
+# SPEECH emotion recognition (SER) is the task of inferring a speaker’s affective state from acoustic and phonetic cues in the speech signal [1]. As a core component of affective computing, SER is valuable in privacy-sensitive and reliability-critical applications. It is widely used in mental-health screen-ing, video-game interaction, and virtual agents services [2]– [4]. Its outputs can influence downstream decisions and user experience, making the reliability and explainability of SER systems important considerations. Looking towards Artificial General Intelligence (AGI) and Friendly AI, affect sensing and accurate empathy are regarded as key capabilities [5]. Robustness and reliability in SER are therefore essential. 
+
+This research was supported by the National Natural Science Foundation of China under Grant No. 62571184. Qiyang Sun and Yi Chang are with GLAM, Department of Com-puting, Imperial College London, UK. e-mail:q.sun23@imperial.ac.uk; yichang312@gmail.com. Zixing Zhang is with the College of Computer Science and Electronic Engi-neering, Hunan University, China; Zixing Zhang is also with the Shenzhen Re-search Institute, Hunan University, China. e-mail: zixingzhang@hnu.edu.cn. Bj¨ orn W. Schuller is with GLAM, Department of Computing, Imperial College London, UK; CHI – Chair of Health Informatics, Technical University of Munich, Germany; relAI – the Konrad Zuse School of Excellence in Reliable AI, Germany; MDSI – Munich Data Science Institute, Germany; and MCML – Munich Center for Machine Learning, Germany. e-mail: bjoern.schuller@imperial.ac.uk. Corresponding author: Yi Chang. 
+
+Adversarial attacks expose the vulnerability of deep learning models to small perturbations and are now a standard tool for probing and improving robustness [6]. The area is most attractive in computer vision, with established methods and evaluation protocols [7]. Subsequent studies show that small perturbations can also degrade speech systems, including auto-matic speech recognition [8], speaker recognition [9], and SER [10]. In SER, subtle perturbations can alter affect predictions and threaten content moderation and interaction safety. In mental-health screening, they may lead to misclassification and inappropriate interventions. Strengthening the robustness of SER is therefore a practical priority. Yet, research on adversarial methods for SER remains limited. This does not mean that SER is hard to attack; rather, systematic benchmarks and methodologies are lacking on both attack and defense. Adversarial attacks can be grouped by perturbation den-sity into dense and sparse variants [11]. Some attempts at sparsity attacks exist in audio tasks. Weighted-Sampling [12] concentrates changes on a small number of frames or samples to reduce the noise rate and generation time. It relies on heuristic weights and denoising regularisers rather than on model attributions. Consequently, the modification locations lack a principled rule. As a result, perturbation locations often drift across models, and the setting targets attack success rates (ASR) rather than SER. The Audio Injection Attack [13] inserts very short perturbations into silence segments to gain temporal sparsity and stealth. Its support set is a “silence prior”, not evidence derived from the current input. For SER, which depends on cross-frame prosody and semantic cues, silence does not necessarily mark decision-critical regions, so effectiveness and interpretability are not guaranteed. Even within SER, STAA-Net [14] emphasises sparsity, transfer-ability, and single-forward efficiency. It reduces run-time by training a generator to produce sparse perturbations. However, it is a specific attacker rather than a pluggable upper-layer constraint, and it is hard to reuse across different families of sparse attacks. In white-box cross-model settings, mainstream iterative at-tacks must recompute gradients and re-optimise perturbations for each target model [15]. The one-off cost is hard to amortise. In audio, recent studies on speech foundation models show that naively transferring an adversarial segment crafted on one model to another rarely succeeds, underscoring the difficulty of cross-model reuse and the overhead of repeated optimisation [16]. Other work reports that most adversarial examples are crafted around a single model, which yields weak cross-model transfer and requires extra mechanisms to boost transferability, creating a gap with practical needs [17]. Thus,  
+
+> arXiv:2606.30550v1 [cs.SD] 29 Jun 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+even under white-box transfer, the cost and stability of cross-model attacks remain unsatisfactory for real-world use. Moreover, some studies combine explainable artificial in-telligence (XAI) with adversarial attacks. The Focus-Shifting Attack [18] includes the saliency map in the loss. It first derives a manipulated mask from the original saliency, then optimises such that the post-attack saliency matches this mask while constraining the change in logits. The goal is to mislead explanations, not to align perturbations with the model’s original evidence. The Maximal Jacobian-based Saliency Map Attack (JSMA) [19] builds a Jacobian saliency map from gradient sensitivity and iteratively selects a small set of co-ordinates. Its notion of saliency reflects local sensitivity to logits rather than post-hoc attribution, and it does not measure explanation consistency. The Saliency Attack [20] operates in a black-box senario. It uses saliency object detection to localise visually salient regions and refines perturbations within them to improve imperceptibility. Its saliency is perceptual, not model attribution. Furthermore, most research is evaluated on image datasets. To the best of our knowledge, there is little work that treats explanation consistency as both a generation constraint and an evaluation dimension in audio or speech. To address these gaps, we present SIGMA , a Sal Iency-
+
+Guided sparse Mask Attack framework for SER. SIGMA serves as a general and reusable saliency-guided constraint mechanism for existing sparse adversarial attacks. It uses post-hoc XAI techniques to select a top-k mask on audio features and restricts updates bounded in ℓ∞ to this mask, which controls sparsity and magnitude. We emphasise that our study is conducted in the latent feature space of self-supervised speech encoders. This setting serves as a controlled proxy for analysing model behaviour, rather than assuming direct access to internal representations in real-world deployments. In typical SER pipelines, SSL encoders act as fixed front-ends, and downstream classifiers operate on these features. Studying perturbations in this space allows us to isolate the role of salient feature components in model predictions and explanations. It has the following advantages: 1) Pluggable. SIGMA acts as an upper-layer constraint module and requires no change to the attack core. Experiments show effectiveness with different sparsity attacks. 2) Transferable. The saliency mask is generated once from the input and can be reused across models, which reduces transfer cost. Experiments show whitebox to transfer attacks across classifiers; at matched budgets the transfer ASR is not lower than the baseline and is higher in some cases. 3) Explainable. XAI guidance aligns perturbations with model evidence. Experiments show that compared with the baseline method, SIGMA can significantly improve the consistency of explanations. II. R ELATED WORK 
+
+A. Speech Emotion Recognition (SER) 
+
+In recent years, SER has evolved from hand-crafted or often specifically Mel-spectrogram features with traditional classifiers to deep learning (DL) methods. Early methods used engineered acoustic features as input and then applied classifiers for emotion recognition [21]. With the rise of DL, research in audio has shifted towards foundation models [22]. These models are pre-trained on large amounts of unlabelled speech. They are then fine-tuned for downstream emotion recognition or used as frozen feature extractors, which re-duces labelling needs and improves robustness. Representative foundation models in audio tasks include wav2vec 2.0 [23], WavLM [24], and HuBERT [25], also with some variants on SER, including Emotion2Vec [26] and ExHuBERT [27]. Such pre-trained models provide rich high-level speech repre-sentations. They capture prosodic and acoustic cues relevant to emotion and improve SER performance. Existing studies mainly use these models in two ways. The first is end-to-end fine-tuning for emotion classification. Wang et al. [28] report that fully fine-tuned wav2vec 2.0 and HuBERT reach about 73.01% weighted accuracy on the popular IEMOCAP database in a speaker-independent setting, using 4 emotion classes (anger, happiness, sadness, and neutral). This shows the potential of end-to-end adaptation of pre-trained encoders to SER. Another use of foundation models is to freeze the pre-trained encoder as a feature extractor and to train an indepen-dent downstream classifier only on its high-level speech repre-sentations. Pepino et al. [29] use multi-layer wav2vec 2.0 rep-resentations with a shallow network and surpass spectrogram-based and hand-crafted baselines on the IEMOCAP and RAVDESS databases. Furthermore, Emotion2Vec, with only a linear layer trained, outperforms mainstream general SSL models and emotion-specific models on IEMOCAP [26]. This indicates that emotion-oriented self-supervised representations are competitive in low-resource settings. In this work, we adopt the second approach. 
+
+B. Adversarial Attacks 
+
+Adversarial attacks deceive deep neural networks (DNNs) via imperceptible perturbations, spanning white-box (e.g., FGSM [30], PGD [31]) and black-box settings [32]. While traditional dense methods modify the entire input, sparse attacks (e.g., One-pixel attack [33]) selectively alter only a fraction of features. Crucially, sparse perturbations serve as diagnostic tools to pinpoint specific model vulnerabilities while remaining highly effective. Adversarial attacks against audio systems can be broadly classified into two types: iterative gradient-based attacks and generator-based attacks. Iterative gradient-based techniques typically operate with a white-box setting, leveraging gradient information from the victim model to craft minimal perturba-tions that induce misclassification. For instance, Neekhara et al. [34] discovered audio-agnostic universal perturbations by iteratively optimising the nor-malised Levenshtein distance to attack automatic speech recognition (ASR) systems. Similarly, Kim et al. [35] in-vestigated the relationship between adversarial transferability and noise sensitivity, proposing a method that injects additive noise during gradient ascent to enhance transferability. In the JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3SSL Encoder               
+
+> Frame-levelFeaturesXAIBased
+> SaliencyExtractor
+> LIME
+> IG
+> Grad×Input
+> ...
+> SaliencyFramesRaw Waveform
+> Adversarial Features TargetModelsPrediction&Metrics
+> Top-k
+> Masked Update
+> (XAI-Attackers) Mask
+> ...
+> ...
+> Surrogate
+> Model
+> Fig. 1. Workflow of SIGMA for SER. Raw waveforms are first encoded by a self-supervised speech encoder into frame-level features. An XAI saliency extractor on a surrogate classifier assigns per-frame importance. The top-ksalient coordinates define a binary mask under a fixed sparsity budget. Attacks then update only inside the mask under a norm budget for a small number of iterations, yielding adversarial features. The perturbation process is conducted in the feature space as a controlled analytical setting.
+
+domain of speaker verification, Zhang et al. [36] employed a Projected Gradient Descent (PGD) attack with momentum to generate effective, text-independent perturbations. However, a noticeable limitation of iterative methods is their computa-tional expense, often requiring numerous iterations that can take hours to generate a single adversarial example. This high cost can hinder real-time application, and reducing iteration counts frequently compromises the attack success rate. Fur-thermore, adversarial examples crafted via these methods often exhibit poor transferability due to overfitting to the specific architecture of the target model. To address these limitations, recent research has explored generator-based approaches, such as Generative Adversarial Networks (GANs) [37] and diffusion models [38], which learn the underlying data distribution to produce more transferable perturbations in a single forward pass. Xie et al. [39] proposed a targeted attack framework that concatenates target class embeddings with intermediate generator features to attack various audio tasks. More recently, Chen et al. [38] leveraged a conditional diffusion model to reconstruct high-quality adver-sarial audio from an optimised Mel spectrogram, demonstrat-ing superior attack success rate, transferability, and perceptual quality on speaker recognition systems. For black-box ASR scenarios, Yuan et al. [40] introduced a novel perturbation seed derived from a Formant Filter Bank, blending target command formants with original music features to create highly stealthy adversarial examples that are perceptually indistinguishable from benign audio. However, these attacks lack the proper interpretation for the generated perturbations, leading to concerns especially for the reuse of the perturbations on privacy-sensitive data in the healthcare domain. 
+
+C. Explainable Artificial Intelligence (XAI) 
+
+XAI has advanced in deep learning. Common post hoc methods include Gradient×Input (GI), Integrated Gradients (IG), Layer-wise Relevance Propagation (LRP), Grad-CAM and its variants, and model agnostic methods such as LIME and SHAP [41]–[43]. GI multiplies the input by its gradient and serves as a first-order importance estimate [42]. IG uses path integration and satisfies completeness and implementation invariance [44]. LRP provides a layer-wise relevance back-propagation framework [45]. Grad-CAM localises evidence on feature maps [46]. LIME and SHAP offer local surrogate and game theoretic views [47], [48]. Recent studies show that these XAI methods are effective on audio features [49]. Haunschmid et al. [50] propose AudioLIME for music information retrieval. It first performs source separation to obtain interpretable com-ponents, then applies on and off perturbations to train a local linear surrogate and produces listenable local explanations. In SER, Nfissi et al. [51] use SHAP for feature importance and iterative feature enhancement, and report gains on the TESS and EMO-DB databases. This indicates that XAI can support feature selection and model analysis in SER. There are two main approaches to combining XAI with adversarial methods. The first is to manipulate explanations: for example, the Focus-Shifting Attack [18] incorporates saliency maps into the loss, maintaining the original saliency distribution while shifting the explanation to evade detection. The goal is to mislead the explanation rather than align the original evidence. The second is to use explanations to guide or evaluate attacks. In audio tasks, recent research [16] on auto-matic speech recognition uses saliency analysis to characterise the impact of successful/failed samples on sensitive regions of the model, suggesting the feasibility of regionalised inter-vention based on attribution. There is also work proposing to JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4
+
+use adversarial perturbations to evaluate attribution reliability and improve explanation evaluation protocols [52]. However, systematic research on SER using “explanation consistency” as a generation constraint and parallel evaluation dimension remains scarce, which provides room for our approach. III. M ETHOD 
+
+We propose a Sal Iency-Guided sparse Mask Attack (SIGMA) framework, which acts as a pluggable constraint mechanism. Its core idea is to first identify a small number of salient feature elements within the frame-level representation most sensitive to the emotion-recognition model using XAI techniques, and then inject small-magnitude perturbations con-strained by the ℓ∞-norm only within these selected elements. This approach improves explainability and energy concentra-tion while maintaining competitive ASR under strict fairness, and enables efficient transfer by reusing masks computed on a surrogate. 
+
+A. Problem Definition 
+
+Given an original audio input x, it is encoded by a self-supervised speech representation model into a frame-level feature sequence of length T . Typically, each frame-level feature has D dimensions: 
+
+F = {ft ∈ RD | t = 1 , . . . , T }. (1) The attacker targets a pre-trained SER model f (·). Under dual constraints of perturbation magnitude and sparsity, the goal is to construct an adversarial feature sequence: 
+
+˜F = F + δ, (2) such that: 
+
+f ( ˜F )̸ = y, (3) where y is the ground-truth label of x.
+
+Dual Constraints:  
+
+> •
+
+Magnitude constraint: The perturbation magnitude on each feature dimension does not exceed a threshold ε:
+
+∥δ∥∞ ≤ ε. (4)  
+
+> •
+
+Sparsity constraint: The perturbation δ is only applied to a salient element set Ω (determined by top-k saliency scores), where Ω ⊆ { 1, . . . , T }×{ 1, . . . , D } and 
+
+supp( δ) ⊆ Ω, |Ω| = ⌈kT D ⌉, k ∈ (0 , 1] , (5) with k being the predefined sparsity rate. In summary, SIGMA follows the pipeline of “saliency identification → sparse masking → attack optimisation”, and effectively disrupts SER model predictions while modifying only a tiny fraction of feature coefficients, revealing the model’s vulnerability to perturbations on semantically critical regions. We show the workflow in Fig. 1. 
+
+B. Feature Extraction 
+
+The raw utterance x is first passed through a frozen self-supervised speech representation (SSL) encoder to obtain a frame-level representation F .Adversarial perturbations are injected in this latent space in the later steps. The choice of a frame-level represen-tation is motivated by three considerations. First, modern SER pipelines typically adopt a two-stage design: a frozen self-supervised front-end plus a lightweight classifier head. The encoder is often shared across downstream tasks; hence, the practitioner’s primary concern is how much the classifier relies on discriminative feature elements within each frame. Second, frame-level features preserve temporal resolution, enabling attribution methods to identify a compact top subset of salient elements. Perturbing at this granularity confines noise to semantically critical regions, whereas crafting noise directly in the high-dimensional waveform or spectrographic space would disperse over many samples and dilute the mask’s precision. This finer granularity concentrates perturbations on semantically critical regions and improves controllability. Third, compared to raw waveforms, F has far fewer degrees of freedom, which makes gradient estimation and ℓ∞-norm updates practical; moreover, relative to Mel features, it is typically more semantically aligned with the task, which benefits saliency-guided sparsity. 
+
+C. Saliency Identification 
+
+To pinpoint the feature elements that most affect the model’s decision, we apply post-hoc explainability methods to the feature sequence F . Given the downstream SER classifier 
+
+f (·), we derive a saliency map S ∈ RT ×D whose entry St,d 
+
+quantifies the contribution of feature element Ft,d to the logit of the ground-truth label y.Given the downstream SER classifier f (·), we derive a saliency map S ∈ RT ×D whose entry St,d quantifies the contri-bution of element Ft,d to the logit of the ground-truth label y.Specifically, we experiment with three representative methods: Gradient×Input (GI) [42], Integrated Gradients (IG) [44], and LIME [47]. GI directly multiplies the input by the gradient of the target logit, while IG estimates attribution by accumulating gradients along a linear interpolation from a zero baseline to the input. LIME, in contrast, perturbs the input locally and fits a linear surrogate model to approximate frame-level importance, after which the scalar score is broadcast to all D
+
+dimensions of that frame. We then use this saliency map S to select the top-k elements as the masking target for perturbation. 
+
+D. Sparse Masking 
+
+Once the saliency map S is obtained, SIGMA flattens S
+
+and selects a salient element set Ω consisting of the indices of the top-k feature elements with the highest saliency scores. To enforce this sparsity constraint during perturbation, we define a binary mask matrix M ∈ { 0, 1}T ×D element-wise as 
+
+Mt,d =
+
+(
+
+1 if (t, d ) ∈ Ω,
+
+0 otherwise. (6) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+Algorithm 1 SIGMA: Saliency-Guided Sparse Mask Attack (SIGMA-PGD 0 variant) 
+
+Require: input x, SSL encoder E, classifier f , ground-truth 
+
+y, sparsity rate k, ℓ∞ budget ϵ, steps N , XAI method A 
+
+> 1:
+
+F ← E (x) ▷ frame-level features  
+
+> 2:
+
+S ← A (f, F, y ) ▷ compute saliency map  
+
+> 3:
+
+Ω ← TopK indices (S, k ) 
+
+> 4:
+
+M ← I[Ω] ▷ binary mask same shape as F 
+
+> 5:
+
+δ ← 0T ×D 
+
+> 6:
+
+for t = 1 to N do  
+
+> 7:
+
+g ← ∇ F L(f (F + δ), y ) 
+
+> 8:
+
+δ ← clip [−ϵ,ϵ ]
+
+ δ + α · sign (g) ⊙ M  ▷ α = ϵ/N  
+
+> 9:
+
+end for  
+
+> 10:
+
+return adversarial feature F + δ
+
+Here, Mt,d = 1 explicitly denotes that the element Ft,d will be perturbed, while 0 means it remains unchanged. This element-level hard top-k mask serves two purposes. First, it enforces an explicit sparsity budget by ensuring that only a fixed proportion k of the most salient coefficients is sub-ject to perturbation regardless of the perturbation magnitude 
+
+ε. Second, it preserves attribution faithfulness by confining modifications to those fine-grained regions most critical to the classifier’s decision, thereby enhancing attack efficacy while reducing unintended distortion. 
+
+E. Masked Gradient Perturbation 
+
+Having fixed the sparse binary mask M that activates only the K most salient feature elements, we optimise an adversarial perturbation within the masked feasible set using several first-order methods under the same sparsity and ℓ∞
+
+constraints. 
+
+SIGMA -PGD 0. Starting from δ(0) = 0, we perform masked signed-gradient updates with box projection: 
+
+δ(t+1) = clip 
+
+
+
+δ(t) +α sgn  ∇F L(f (F +δ(t)), y )⊙M
+
+
+
+, (7) where α = ε/N is the step size for N iterations, and clips each entry to [−ε, ε ]; because the update is masked by M ,off-mask entries remain zero at all steps. The final adversarial feature is ˜F = F + δ(N ). Because M is data-driven and input-specific, the same mask-guided scheme applies to transfer: M
+
+is computed once on a surrogate via XAI and then reused on target models. Algorithm 1 shows the workflow of SIGMA-PGD 0.
+
+SIGMA -FW-ℓ1. We use the same mask M , per-coordinate cap ε, and aligned ℓ1 budget τℓ1 = εK as in SIGMA-PGD 0.Let F be the clean feature and F (t) the iterate. Define 
+
+m(t) = ∇F
+
+  − L (f (F (t)), y ). (8) Over the masked feasible set SM , the linear oracle constructs a sparse δ⋆ inside M and sets v(t) = F − δ⋆. Sort indices in 
+
+Ω by decreasing |m(t) 
+
+> i
+
+|, let 
+
+Kb = min 
+
+
+
+|Ω|, τℓ1 /ε 
+
+, r = τℓ1 −ε (Kb−1) ∈ [0 , ε ],
+
+(9) and define 
+
+δ⋆i =
+
+
+
+ε sgn  m(t)
+
+> i
+
+, for the first Kb − 1 indices ,r sgn  m(t)
+
+> i
+
+, for the Kb-th index ,
+
+0, otherwise, 
+
+(i ∈ Ω) .
+
+(10) The update is 
+
+F (t+1) = (1 − γt) F (t) + γt v(t), γt ∈ (0 , 1] . (11) This matches the implementation: selection and capping occur only on Ω; at most Kb = ⌈τℓ1 /ε ⌉ coordinates are non-zero (the last takes the remainder); the iterate remains within the masked 
+
+ℓ1 ∩ ℓ∞ budget. A momentum buffer m(t) ← βm (t−1) + (1 −
+
+β)∇F (−L ) may replace m(t) in the sort. 
+
+SIGMA -Sparsefool. We keep the same mask M , the same 
+
+K, and the same budgets as above. At iterate δ(t) and for each 
+
+k̸ = y, define 
+
+wk = ∇F fk
+
+ F + δ(t) − ∇ F fy
+
+ F + δ(t), (12) 
+
+ρk = fy
+
+ F + δ(t) − fk
+
+ F + δ(t). (13) On the mask support, allocate an ℓ1 step with per-coordinate caps by solving 
+
+a⋆k = arg min  
+
+> a≥0
+
+∥a∥1 s.t. ⟨| wk|, a ⟩ ≥ ρk,
+
+0 ≤ a ≤ εM, ∥a∥1 ≤ τrem . (14) Pick k⋆ = arg min k ∥a⋆k∥1 among feasible classes (otherwise choose the one with the largest budget-limited progress), and update with masking and box projection: 
+
+δ(t+1) = clip [−ε,ε ]
+
+
+
+δ(t) + sgn( wk⋆ ) ⊙ a⋆k⋆
+
+
+
+. (15) Stop when misclassified or when no progress is made. The fixed, input-specific mask enforces sparsity and supports trans-fer by reusing it on target models.                 
+
+> TABLE I DATA DISTRIBUTION OF THE IEMOCAP AND TESS DATASETS .
+> Dataset Train Valid Test Total
+> IEMOCAP (4-class) 3,556 890 1,085 5,531 TESS (7-class) 1,260 140 1,400 2,800
+
+F. Evaluation Metrics 
+
+To assess each adversarial strategy under a given pertur-bation budget ε, we report metrics spanning attack effective-ness , explanation consistency , and computational cost . Let 
+
+sc, sa ∈ RT denote element-level saliency scores for the clean and adversarial inputs, both normalised to [0 , 1] .
+
+a) Attack Effectiveness:  
+
+> •
+
+Clean Accuracy. The classification unweighted accuracy (UA) of the model on unperturbed inputs, used as the reference baseline.  
+
+> •
+
+Attack Success Rate (ASR). The proportion of originally correctly classified inputs that are misclassified after the perturbation is applied. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6 
+
+> •
+
+Sparsity. The proportion of perturbed entries over the frame domain grid.  
+
+> •
+
+L2 Avg. For each sample i, we compute the RMS ℓ2
+
+norm of δi over its valid (non-padded) entries and then average over the set. 
+
+b) Explanation Consistency:  
+
+> •
+
+Top-k Intersection ( Top −k∩). Let Sc and Sa be the index sets of the k most salient elements from sc and sa.We compute 
+
+|Sc ∩ Sa|
+
+k ∈ [0 , 1] .
+
+A higher value means the same elements remain salient after the attack.  
+
+> •
+
+Kendall’s τ . The rank correlation between sc and sa,measured using Kendall’s τ coefficient. A value close to 1 indicates strong agreement in the relative ordering of element-level saliency.  
+
+> •
+
+∆Sal (Total Variation Distance). After normalising saliency vectors sc and sa into probability distributions 
+
+p and q (i.e., p = sc/ P 
+
+> t
+
+sct ), compute: 
+
+∆Sal = ∥p − q∥1 ∈ [0 , 2] .
+
+This metric reflects the total variation distance between clean and adversarial saliency distributions. Smaller val-ues indicate better preservation of global attribution pat-terns. 
+
+c) Computational Cost:  
+
+> •
+
+Time. Average per-example attack time over successful cases (excludes XAI precomputation).  
+
+> •
+
+Saliency Time. One-off XAI mask precomputation time (reported as total in all samples), which is reused across targets and not counted in attack rows. IV. E XPERIMENTS 
+
+A. Datasets 
+
+To evaluate the generalisability and robustness of our adver-sarial attack strategy, we conduct experiments on two widely used SER datasets: IEMOCAP and TESS. Table I reports the number of samples in each split. 
+
+IEMOCAP. The Interactive Emotional Dyadic Motion Cap-ture (IEMOCAP) corpus [53] contains 5531 audio utterances from 10 professional actors (5 male, 5 female) recorded over five dyadic sessions. Each utterance is labelled with categorical and dimensional emotion annotations. We adopt a 4-class setting commonly used in SER studies, where happy and excited are merged, alongside neutral, angry, and sad. Following the dataset split strategy of other SER researches [26], [54], we divide the data into five folds of approximately equal size and report results on one held-out fold (Fold 1 in our experiments), with the remaining samples split into training (80%) and validation (20%) sets. 
+
+TESS. The Toronto Emotional Speech Set (TESS) [55] comprises 2800 utterances recorded by two female speakers reading 200 target words under seven emotional conditions. The standard 7-class scheme is used: anger, disgust, fear, happiness, neutral, pleasant surprise, and sadness. To avoid the impact of speaker characteristics, we use a leave-one-speaker-out (LOSO) protocol: in each fold, one speaker is held out for testing (OAF or YAF). The remaining speaker forms the training pool, from which we draw a stratified 10% split for validation, with the rest used for training. The random seed is used for reproducibility. We then report test results for the held-out speaker. Final performance is the average over both folds.                            
+
+> TABLE II CLASSIFICATION BASELINE ACROSS THE CLEAN SSL FEATURES AND DATASETS .SSL Dataset Unweighted Accuracy (UA, %) Zhao19 BaseModel Emo18 Emotion2Vec IEMOCAP 71.56 75.58 70.93 TESS 77.64 69.86 63.79 WavLM IEMOCAP 69.06 68.39 68.19 TESS 89.36 73.64 70.00 HuBERT IEMOCAP 66.19 67.44 66.20 TESS 64.36 57.79 67.14
+
+B. Speech Representations 
+
+We evaluate three widely used self-supervised speech en-coders and use their released checkpoints as frozen feature extractors. We only consume their frame-level features without any further fine-tuning. 
+
+Emotion2vec [26] is a Transformer-based SSL encoder that is first self-supervised pre-trained and then emotion-oriented fine-tuned on large mixed corpora; we use the public 
+
+emotion2vec + base checkpoint and adopt it as a frozen feature extractor with per-frame dimensionality D=768 .
+
+WavLM [24] is a wav2vec 2.0 style masked-prediction Transformer for speech. We adopt the checkpoint 
+
+speechbrain/emotion-diarization-wavlm-large , which is fine-tuned for emotion diarisation across multiple datasets. The length of extracted frame-level features is D=1024 .
+
+HuBERT [25] is a BERT-style masked-prediction speech encoder that predicts hidden units obtained via offline cluster-ing. We adopt the checkpoint superb/hubert-base-superb-er ,which is fine-tuned for the SUPERB Emotion Recognition task, and use its frame-level features with dimensionality 
+
+D=768 .
+
+C. Downstream Classifiers 
+
+We implement three classifier architectures with distinct inductive biases: a two-layer MLP ( BaseModel ), a 1-D CNN (Zhao19 ), and a shallow CNN ( Emo18 ). Each consumes the frame-level SSL representations introduced in the previous section. We train and evaluate all 3 × 3 encoder-classifier combinations under identical optimisation settings and data splits for fair comparison.  
+
+> •
+
+BaseModel [26]: A simple feedforward neural network with two fully connected layers and a ReLU activation in between. Each frame is first projected to 256 dimen-sions. Mask-aware mean pooling is applied across time, followed by a linear output layer. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+TABLE III SPARSE WHITE -BOX COMPARISON UNDER THE SAME BUDGET ON IEMOCAP. “A VG TIME ” IS COMPUTED OVER SUCCESSFUL SAMPLES ONLY .
+
+SSL Model Attack ASR (%) ↑ Avg time (s) ↓ Sparsity ↓
+
+Emotion2Vec basemodel PGD 0 67.13 .0069 .1563 
+
+SIGMA-PGD 0 64.87 .0060 .1562 
+
+FW-ℓ1 69.25 .0472 .1664 
+
+SIGMA-FW-ℓ1 66.25 .0467 .1572 
+
+Sparsefool 61.48 .0315 .0188 SIGMA-Sparsefool 59.47 .0314 .0200 WavLM zhao19 PGD 0 75.66 .0110 .1964 
+
+SIGMA-PGD 0 69.48 .0095 .1963 
+
+FW-ℓ1 63.43 .0554 .1744 
+
+SIGMA-FW-ℓ1 60.62 .0515 .1572 
+
+Sparsefool 58.65 .0445 .0586 SIGMA-Sparsefool 56.26 .0423 .0597 HuBERT basemodel PGD 0 95.22 .0074 .1564 
+
+SIGMA-PGD 0 93.82 .0065 .1563 
+
+FW-ℓ1 97.17 .0344 .1642 
+
+SIGMA-FW-ℓ1 95.30 .0334 .1557 
+
+Sparsefool 52.67 .0325 .0216 SIGMA-Sparsefool 50.28 .0322 .0233 
+
+TABLE IV SPARSE WHITE -BOX COMPARISON UNDER THE SAME BUDGET ON TESS. “A VG TIME ” IS COMPUTED OVER SUCCESSFUL SAMPLES ONLY ; S ALIENCY PRECOMPUTE TIME FOR OURS IS REPORTED ELSEWHERE .
+
+SSL Model Attack ASR (%) ↑ Avg time (s) ↓ Sparsity ↓
+
+Emotion2Vec zhao19 PGD 0 99.17 .0015 .2571 
+
+SIGMA -PGD 0 95.86 .0011 .2459 
+
+FW-ℓ1 89.77 .0078 .2416 
+
+SIGMA-FW-ℓ1 71.09 .0076 .1999 
+
+Sparsefool 79.74 .0136 .0214 SIGMA-Sparsefool 81.68 .0116 .0237 WavLM zhao19 PGD 0 66.10 .0017 .2224 
+
+SIGMA-PGD 0 60.87 .0013 .2219 
+
+FW-ℓ1 58.77 .0101 .2752 
+
+SIGMA-FW-ℓ1 49.52 .0100 .1999 
+
+Sparsefool 55.15 .0433 .0820 SIGMA-Sparsefool 50.16 .0408 .0883 HuBERT emo18 PGD 0 95.10 .0015 .2492 
+
+SIGMA-PGD 0 91.18 .0012 .2410 
+
+FW-ℓ1 94.34 .0085 .2933 
+
+SIGMA-FW-ℓ1 83.68 .0084 .1999 
+
+Sparsefool 81.72 .0156 .0095 SIGMA-Sparsefool 80.52 .0132 .0102  
+
+> •
+
+Zhao19 [56]: Consists of four 1D convolutional layers with increasing channel sizes. Each layer is followed by max pooling and an ELU activation. The output is aligned to the input mask using nearest-neighbour interpolation and aggregated by mask-aware pooling before classifica-tion.  
+
+> •
+
+Emo18 [57]: Uses larger convolutional kernels (8/6/6) and stronger downsampling (stride 10/8/8) to extract more abstract but temporally coarse emotional features. Each layer includes BatchNorm and ReLU activations. During the training stage, the loss is cross-entropy. The opti-miser is RMSprop with learning rate 5×10 −4 and momentum 
+
+0.9. Weight decay is 1 × 10 −5. The scheduler is CyclicLR with base learning rate 5 × 10 −4, maximum learning rate 
+
+10 −3, and step size up = 10. Training runs for 100 epochs. For attribution, GI computes the absolute gradient times input 
+
+|∇ xL⊙ x|; IG uses a zero baseline with SIG = 50 steps; LIME adopts frame-wise grouping with NLIME = 20 perturbation samples. Experiments are performed on a single NVIDIA A30 GPU. All models achieve comparable performance on clean (non-adversarial) data, establishing a fair baseline for subsequent adversarial perturbation experiments. Table II reports the clean unweighted accuracy (UA) for all encoder–classifier combina-tions considered. In the experimental stage, we select the best performing SSL + classifier combination to present. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8                
+
+> TABLE V
+> WHITE -BOX SPARSE PGD 0SHIFT ON EMOTION 2V EC ON IEMOCAP (BASELINE = PGD 0,ε= 0 .02 ,K= 20% ,STEPS = 10 ). M ETRICS
+> (MEAN ±STD )ON TARGET CLEAN -CORRECT SAMPLES WITH TARGET -SIDE SALIENCY .∗DENOTE SIGNIFICANT DIFFERENCES VS BASELINE BY PAIRED TEST (p< 0.001 )
+
+Target Attack TopK ∩ ↑ τb ↑ ∆Sal ↓
+
+BaseModel PGD 0 0.8575 ±0.0369 0.7483 ±0.0485 0.2962 ±0.1308 GI-PGD 0 0.8606 ±0.0382 ∗ 0.7550 ±0.0523 ∗ 0.2921 ±0.1307 ∗
+
+IG-PGD 0 0.8627 ±0.0396 ∗ 0.7584 ±0.0550 ∗ 0.2901 ±0.1306 ∗
+
+LIME-PGD 0 0.8726 ±0.0461 ∗ 0.7714 ±0.0653 ∗ 0.2792 ±0.1299 ∗
+
+Zhao19 PGD 0 0.7372 ±0.0622 0.6098 ±0.0618 0.3767 ±0.1511 GI-PGD 0 0.7437 ±0.0625 ∗ 0.6180 ±0.0632 ∗ 0.3760 ±0.1522 ∗
+
+IG-PGD 0 0.7496 ±0.0657 ∗ 0.6250 ±0.0676 ∗ 0.3755 ±0.1532 ∗
+
+LIME-PGD 0 0.7668 ±0.0746 ∗ 0.6458 ±0.0799 ∗ 0.3721 ±0.1590 ∗
+
+Emo18 PGD 0 0.7285 ±0.0706 0.6016 ±0.0696 0.3739 ±0.1550 GI-PGD 0 0.7375 ±0.0716 ∗ 0.6125 ±0.0718 ∗ 0.3724 ±0.1569 ∗
+
+IG-PGD 0 0.7416 ±0.0728 ∗ 0.6173 ±0.0738 ∗ 0.3715 ±0.1579 ∗
+
+LIME-PGD 0 0.7636 ±0.0835 ∗ 0.6442 ±0.0887 ∗ 0.3656 ±0.1655 ∗              
+
+> TABLE VI
+> WHITE -BOX SPARSE PGD 0SHIFT ON EMOTION 2V EC ON TESS. ( BASELINE = PGD 0,ε= 0 .02 ,K= 20% ,STEPS = 10 ). M ETRICS (MEAN ±STD )
+> ON TARGET CLEAN -CORRECT SAMPLES WITH TARGET -SIDE SALIENCY .∗DENOTE SIGNIFICANT DIFFERENCES VS BASELINE BY PAIRED TEST
+> (p< 0.001 )
+
+Target Attack TopK ∩ ↑ τb ↑ ∆Sal ↓
+
+BaseModel PGD 0 0.9342 ±0.0255 0.8719 ±0.0433 0.2130 ±0.1068 GI-PGD 0 0.9414 ±0.0212 ∗ 0.8930 ±0.0392 ∗ 0.1844 ±0.0939 ∗
+
+IG-PGD 0 0.9524 ±0.0189 ∗ 0.9094 ±0.0344 ∗ 0.1592 ±0.0819 ∗
+
+LIME-PGD 0 0.9637 ±0.0187 ∗ 0.9240 ±0.0346 ∗ 0.1240 ±0.0620 ∗
+
+Zhao19 PGD 0 0.8632 ±0.0242 0.7666 ±0.0339 0.2559 ±0.0961 GI-PGD 0 0.8778 ±0.0213 ∗ 0.7909 ±0.0316 ∗ 0.2342 ±0.0878 ∗
+
+IG-PGD 0 0.8890 ±0.0274 ∗ 0.8063 ±0.0421 ∗ 0.2163 ±0.0801 ∗
+
+LIME-PGD 0 0.9081 ±0.0179 ∗ 0.8298 ±0.0280 ∗ 0.1715 ±0.0590 ∗
+
+Emo18 PGD 0 0.8951 ±0.0353 0.8065 ±0.0496 0.2553 ±0.1368 GI-PGD 0 0.9055 ±0.0342 ∗ 0.8273 ±0.0504 ∗ 0.2332 ±0.1274 ∗
+
+IG-PGD 0 0.9140 ±0.0362 ∗ 0.8395 ±0.0531 ∗ 0.2179 ±0.1209 ∗
+
+LIME-PGD 0 0.9278 ±0.0338 ∗ 0.8588 ±0.0517 ∗ 0.1792 ±0.0984 ∗
+
+D. White- and Black-box Experiments 
+
+We compare three SSL representations and three sparse at-tacks (PGD 0, Frank–Wolfe, Sparsefool) in a white-box setting SIGMA on two datasets. To ensure strict fairness, all methods use the same epsilon, the same top-k sparsity budget, and the same number of iterations. The SIGMA variants update only within a fixed mask M . All other hyper-parameters remain unchanged. Results on the IEMOCAP and TESS databases are reported in Tables III and IV. On IEMOCAP, the trends are consistent across methods under the same epsilon , top-k budget, and iteration count. For PGD 0, SIGMA-PGD 0 shows equal or lower average generation time in all three settings (Emotion2Vec: .0060 vs .0069; WavLM: .0095 vs .0110; HuBERT: .0065 vs .0074). ASR is typically lower than the baseline by about 1–6 percent-age points. For FW-ℓ1, SIGMA-FW-ℓ1 also tends to reduce time and often yields lower sparsity. This suggests a more concentrated use of the same ℓ 1 budget on salient support, with a small drop in ASR. For Sparsefool, time is similar or slightly better and ASR is slightly lower. The sparsity is marginally higher in all three settings (+0.0011 to +0.0017). This likely reflects more coordinates touching very small per-coordinate caps under the ℓ∞ constraint. The values remain comparable within the unified budget. Under matched budgets, we observe similar trends on TESS. For PGD 0, SIGMA-PGD 0 reduces average generation time in all three settings (Emotion2Vec: 0.0011 vs 0.0015 ;WavLM: 0.0013 vs 0.0017 ; HuBERT: 0.0012 vs 0.0015 ). ASR drops modestly ( ≈ 3–5 pp), while sparsity is equal or lower (−0.0112 / − 0.0005 / − 0.0082 ). For FW-ℓ1, SIGMA-FW-
+
+ℓ1 keeps time essentially unchanged and consistently lowers sparsity to ≈ 0.20 , with a larger ASR reduction ( ≈ 9–19 
+
+pp). For Sparsefool, time is similar or better, and ASR is slightly lower in two settings and higher in one (Emotion2Vec: 
+
++1 .94 pp). Sparsity is marginally higher across all three (+0 .0023 , +0 .0063 , +0 .0007 ), indicating more coordinates touching very small per-coordinate caps under the ℓ∞ con-straint. Overall, the TESS results echo IEMOCAP: SIGMA JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9
+
+variants tend to reduce time and concentrate perturbations, reflecting a clear trade-off where a portion of ASR (e.g., for 
+
+F W − l1) is willingly sacrificed for improved sparsity control and explanation consistency. It is worth noting that ”Avg time” purely reflects the online attack generation and does not include the one-off SIGMA mask pre-computation. To avoid overstating efficiency, we must explicitly discuss the total latency” (pre-computation + attack speed) for a single-sample attack scenario. For a completely new input, the initial latency required to com-pute the XAI mask is prohibitive for real-time applications. Consequently, the Total Latency of SIGMA in a single-target, single-sample white-box setting is higher than that of standard iterative baselines. However, the efficiency of SIGMA manifests in its amor-tised cost. The data-driven mask is reusable across different attack methods and target models sharing the same SSL front-end. Therefore, in cross-model transfer scenarios or multi-target evaluations, the high initial Total Latency is heavily amortised. Furthermore, masks can be computed offline and enable rapid online adversarial generation for high-throughput use. 
+
+TABLE VII WHITE-BOX TRANSFER RESULTS ON IEMOCAP. BASELINE RESULTS REPRESENT DIRECT TARGET-SPECIFIC WHITE-BOX ATTACKS (SERVING AS UPPER BOUNDS), AS THEIR SPARSE SELECTION INDICES ARE HIGHLY TARGET-DEPENDENT.                                                                                                    
+
+> SSL & Surrogate Attacker Target model
+> Zhao19 Emo18 ASR (%) ↑Speed (s) ↓ASR (%) ↑Speed (s) ↓
+> Emotion2Vec +basemodel PGD 098.79 .0059 94.28 .0065
+> SIGMA-PGD 094.63 .0049 88.42 .0055
+> FW-ℓ199.46 .4916 95.23 .4918
+> SIGMA-FW-ℓ196.24 .4910 89.78 .4914
+> Sparsefool 73.46 .0462 99.45 .0510
+> SIGMA-Sparsefool 72.25 .0417 98.50 .0512
+> SSL & Surrogate Attacker Target model
+> BaseModel Emo18 ASR (%) ↑Speed (s) ↓ASR (%) ↑Speed (s) ↓
+> WavLM +zhao19 PGD 051.39 .0058 78.30 .0085
+> SIGMA-PGD 045.00 .0049 68.29 .0073
+> FW-ℓ152.78 .0343 73.99 .0425
+> SIGMA-FW-ℓ145.69 .0272 64.26 .0359
+> Sparsefool 17.08 .1646 68.70 .1419
+> SIGMA-Sparsefool 14.31 .1743 60.65 .1578
+> SSL & Surrogate Attacker Target model
+> Zhao19 Emo18 ASR (%) ↑Speed (s) ↓ASR (%) ↑Speed (s) ↓
+> HuBERT +basemodel PGD 099.42 .0059 96.96 .0065
+> SIGMA-PGD 095.67 .0050 92.47 .0040
+> FW-ℓ199.42 .0302 98.40 .0323
+> SIGMA-FW-ℓ196.25 .0248 94.21 .0264
+> Sparsefool 77.37 .0461 98.70 .0527
+> SIGMA-Sparsefool 80.98 .0401 98.12 .0509
+
+We therefore next study the surrogate-to-target transfer SIGMA case, where a single mask is computed on a sur-rogate and reused on targets. Table VII shows the result on IEMOCAP. It is important to clarify the experimental setup here to ensure a fair comparison. Standard sparse baseline methods (e.g., P GD 0, F W − l1, Sparsefool) couple their sparse selection indices tightly with the target model’s specific gradient landscape. Consequently, their support sets do not naturally transfer across models without recomputing the gra-
+
+TABLE VIII BLACK -BOX ONE -SHOT 0-QUERY TRANSFER ON IEMOCAP. T HE SURROGATE IS FIXED TO BaseModel FOR EACH SSL. A DVERSARIAL EXAMPLES ARE CRAFTED ONCE ON THE SURROGATE AND APPLIED TO EACH TARGET WITHOUT ANY QUERIES . B UDGETS ARE ALIGNED WITHIN EACH SSL. S TARS INDICATE A SIGNIFICANT IMPROVEMENT OVER 
+
+MI-FGSM ON THE SAME TARGET BY MCNEMAR ’S EXACT TWO -SIDED TEST (∗p<. 001 ). 
+
+SSL Target Attacker ASR (%) ↑
+
+Emotion2Vec Zhao19 MI-FGSM 69.71 
+
+SIGMA-PGD 0 75.34 ∗
+
+Emo18 MI-FGSM 61.22 
+
+SIGMA-PGD 0 67.07 ∗
+
+WavLM Zhao19 MI-FGSM 61.46 
+
+SIGMA-PGD 0 69.36 ∗
+
+Emo18 MI-FGSM 65.65 GI PGD 0 70.27 ∗
+
+HuBERT Zhao19 MI-FGSM 70.17 SIGMA-PGD 0 62.82 Emo18 MI-FGSM 65.99 SIGMA-PGD 0 58.03 
+
+dients or Top-K elements for each specific target. Therefore, the baseline results reported in this table are computed directly on each target model, representing a target-specific white-box upper bound.In contrast, our SIGMA-based approach fixes the perturbation support via a saliency mask M. We compute the mask once on a surrogate and reuse it on the target. Updates on the target are restricted to this transferred support.Under a matched budget, transferred SIGMA-PGD 0, SIGMA-FW-ℓ1
+
+and SIGMA-Sparsefool achieve ASR close to their baselines. Some settings exceed the baselines; for example, HuBERT 
+
+→ Zhao19 with SIGMA-Sparsefool reaches 80.98% (baseline 77.37%). Average generation time over successful samples is typically comparable or lower. These results indicate that saliency-guided sparse support is compatible with multiple sparse attacks and remains effective under transfer. Reusing a single mask also amortises the total cost. To better approximate realistic scenarios where the target model is inaccessible, we further evaluate SIGMA in transfer-based and black-box settings on the larger and more widely used dataset, that is, IEMOCAP. Table VIII reports black-box one-shot 0-query transfer with the surrogate fixed to BaseModel. Compared with the strong baseline MI-FGSM, SIGMA-PGD 0 achieves a higher ASR than MI-FGSM when transferring to Zhao19 and Emo18 under Emotion2Vec and WavLM, with statistically significant gains. Under HuBERT, MI-FGSM remains stronger on both targets. These results suggest that saliency-guided sparse perturbations can improve transferability for some SSL families and highlight the value of SIGMA for zero-query transfer. 
+
+E. Ablation Study and XAI Analysis 
+
+To validate the choice of saliency method and top-k rate, we evaluate SIGMA-PGD 0 under a fixed ε=0 .02 and a fixed number of iterations. We evaluate three post-hoc explainability methods (GI, IG, LIME) across several k values (Table IX). JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+TABLE IX XAI ABLATION STUDY ON IEMOCAP. ε = 0 .02 
+
+Method Top-k ASR (%) ↑ L2 Avg ↑ Sparsity ↑ Avg Time (s) ↓ Saliency Time (s) ↓
+
+GI-PGD 0
+
+0.02 17.69 .1872 .0200 .0066 10.03 0.05 36.16 .2946 .0499 .0066 6.08 0.10 52.45 .3991 .0953 .0066 6.20 0.20 64.87 .4849 .1562 .0065 6.49 0.30 68.63 .5125 .1877 .0065 6.66 0.40 71.27 .5233 .2048 .0065 6.80 IG-PGD 0
+
+0.02 15.05 .1867 .0200 .0066 42.28 0.05 30.36 .2928 .0498 .0067 41.78 0.10 50.06 .3966 .0951 .0066 41.99 0.20 64.24 .4835 .1560 .0065 42.22 0.30 68.26 .5117 .1876 .0065 42.12 0.40 70.89 .5228 .2047 .0065 42.71 LIME-PGD 0
+
+0.02 3.13 .1389 .0124 .0062 305.44 0.05 11.04 .2260 .0336 .0067 303.94 0.10 34.50 .3542 .0797 .0067 305.87 0.20 60.48 .4733 .1500 .0065 303.58 0.30 66.50 .5084 .1853 .0065 306.30 0.40 69.01 .5215 .2037 .0065 306.07 0 200 400 600 800 1000 1200 1400        
+
+> Time
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> Dim
+> PGD0
+> Dim
+> delta 0200 400 600 800 1000 1200 1400
+> Time
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> Dim
+> XAI-PGD0
+> delta Dim
+> 0.020
+> 0.015
+> 0.010
+> 0.005
+> 0.000
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> delta Dim
+> 0.020
+> 0.015
+> 0.010
+> 0.005
+> 0.000
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> delta
+
+Fig. 2. Perturbations on one test utterance (Emo2Vec+BaseModel) under the same budget ( ϵ = 0 .02 , 10 steps, topk = 0.2). Top: baseline PGD 0; Bottom: SIGMA-PGD 0.
+
+The ASR increases monotonically with k. For GI-PGD 0, it rises from 17 .69% at k=0 .02 to 71 .27% at k=0 .40 . IG and LIME show the same trend. At the same time, the L2 average and sparsity also increase with k, which indicates higher perturbation energy and a higher perturbation sparsity. For computational cost, the SIGMA-PGD 0 Avg Time is nearly constant across k. The outer iteration count is fixed and each step applies element-wise updates with box clipping, 
+
+TABLE X ABLATION COMPARING SIGMA AGAINST A RANDOM SPARSE MASK ON 
+
+IEMOCAP ( ϵ = 0 .02 ). 
+
+Attack Method Sparsity Rate ( k) ASR (%) ↑
+
+SIGMA-GI 0.20 64.87 
+
+Random Mask 0.20 60.35 SIGMA-GI 0.05 36.14 
+
+Random Mask 0.05 21.46 
+
+so the mask rate has little effect on the cost of a forward or backward pass. In contrast, Saliency Time differs markedly. GI needs about 6 to 10 seconds once. IG takes about 42 seconds due to path integration. LIME takes about 300 seconds because it relies on many local perturbations and surrogate fitting. This results in a massive total latency that restricts LIME’s practical deployment for real-time single-sample attacks. GI therefore offers a favourable balance between accuracy and cost. Taking both effectiveness and cost into account, k=0 .20 
+
+is a balanced choice. Relative to k=0 .10 , the ASR improves notably (GI: from 52 .45% to 64 .87% ; IG: from 50 .06% to 
+
+64 .24% ; LIME: from 34 .50% to 60 .48% ). Further increases to k=0 .30 or k=0 .40 yield smaller gains and come with higher perturbation energy and sparsity. In addition, to strictly validate that the attack efficacy stems from the saliency guidance rather than merely from the spatial sparsity constraint, we further conduct an ablation study comparing SIGMA (GI) against a Random Sparse Mask baseline on the Emotion2Vec model (Table X). At a moderate sparsity budget ( k = 0 .20 ), the high-dimensional latent space provides sufficient degrees of freedom for the optimiser to find adversarial directions even within a random support. However, under a highly restrictive budget ( k = 0 .05 ), the Random baseline suffers a severe collapse in ASR (dropping to 21.46%), whereas SIGMA maintains a functional ASR of 36.14%. This striking contrast confirms that randomly perturbing the latent space fails to intersect with the classifier’s JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 
+
+vulnerable directions under strict constraints. Furthermore, we analyse explanation consistency. On E MO -
+
+> TION
+
+2V EC , we evaluate white-box sparse PGD 0 using target-side attribution; results are reported in Table V and VI. On IEMOCAP, compared with the gradient Top k baseline, the GI/IG/LIME variants generally achieve higher TopK ∩ and Kendall’s τb, and lower ∆Sal, across BaseModel, Zhao19, and Emo18. The gains are moderate but statistically significant under paired tests with Bonferroni correction. LIME delivers the largest consistency improvement, but it requires the highest saliency precomputation time; GI and IG offer a more bal-anced accuracy–cost trade-off. Online crafting time remains comparable to the baseline and ASR changes are small. We obesrve the similar trend on the TESS dataset. Overall, selecting the support with XAI and updating only within that support reduces attribution drift and improves explanation consistency. Furthermore, Figure 2 shows perturbations on one test utterance under the same budget. Both methods form band-like patches, but SIGMA-PGD 0 concentrates updates into fewer, cleaner bands and leaves wider zero regions, whereas PGD 0 spreads small updates more diffusely around the bands. This indicates higher energy concentration on salient elements for SIGMA-PGD 0 under the same bound. 
+
+F. Acoustic Analysis of Saliency Masks 
+
+To further examine whether the saliency masks capture affect-relevant information, we conduct a lightweight acoustic analysis. We focus on two fundamental prosodic cues: short-time energy (RMS) and fundamental frequency (F0). These are widely associated with emotional expression in speech . We process all utterances from the IEMOCAP dataset. We group them into high-arousal (e.g., angry, happy) and low-arousal (e.g., sad, neutral) categories. For each utterance, we extract frame-level RMS energy and F0 using standard signal processing tools. We align these with the corresponding SSL feature frames. We then compare the acoustic characteristics of frames selected by the SIGMA saliency mask (top 20%) against those not selected. F0 statistics are computed over voiced frames only to avoid bias from unvoiced regions. Table XI summarises the results. Frames selected by SIGMA consistently exhibit higher energy and pitch levels than non-selected frames. This trend is highly pronounced in high-arousal emotions. Here, prosodic dynamics play a key role. For example, selected frames show an 81.7% relative increase in RMS energy and a +10.9 Hz elevation in F0. In low-arousal emotions, the differences are milder but remain strictly consistent. These results suggest that saliency-guided masks do not select feature dimensions arbitrarily. Instead, they align with acoustically salient regions that correlate with emotional expression. We note that this analysis reflects statis-tical tendencies rather than causal relationships. Nevertheless, it provides strong supporting evidence. It shows that our framework focuses perturbations on regions consistent with established prosodic correlates of affect. This complements our quantitative evaluations. It provides an explainable perspective on why saliency-guided perturbations remain effective under strict sparsity constraints.                      
+
+> TABLE XI ACOUSTIC CHARACTERISTICS OF FRAMES SELECTED BY SIGMA VERSUS NON -SELECTED FRAMES ON THE IEMOCAP DATASET .
+> Arousal Group Feature Selected Non-Selected
+> High-Arousal RMS Energy 0.0482 ↑0.0265 F0 (Hz) 224.4 ↑213.5 Low-Arousal RMS Energy 0.0143 ↑0.0085 F0 (Hz) 173.5 ↑167.4
+
+V. C ONCLUSION 
+
+We introduced SIGMA, a modular framework that uses post-hoc attributions to restrict sparse adversarial updates to the most salient feature elements. Evaluations on two bench-mark databases demonstrate its effectiveness across multiple speech encoders and attack methods. SIGMA perturbs substan-tially fewer features and reduces crafting time. It maintains competitive performance by navigating a controlled trade-off between attack success, sparsity, and explanation consis-tency. Furthermore, its saliency masks can be computed once on a surrogate model and efficiently reused. In zero-query settings, SIGMA improves transferability for Emotion2Vec and WavLM, indicating that saliency-guided masks capture structures that generalise across architectures. Our evaluation targets the SSL feature space as a controlled analytical setting. This isolates the effects of attribution-guided perturbations without being confounded by waveform-level transformations, such as codecs. We do not assume real-world attackers can directly manipulate latent represen-tations. Instead, SIGMA serves as a diagnostic framework for analysing model vulnerability and explanation behaviour in SER pipelines. While transfer remains stable under shared front-ends, representation shifts cause degradation across mis-matched encoders. Future work will extend this framework to waveform-level attacks, cross-front-end generalisation, and human-centred evaluations. All code and models will be released to support reproducibility. All code, trained models, and attack scripts will be released to support reproducibility. REFERENCES [1] Y. Li, Q. Sun, S. M. K. Murthy, E. Alturki, and B. W. Schuller, “GatedxLSTM: A multimodal affective computing approach for emotion recognition in conversations,” arXiv preprint:2503.20919 , pp. 1–9, 2025. [2] H.-C. Li, T. Pan, M.-H. Lee, and H.-W. Chiu, “Make patient consultation warmer: A clinical application for speech emotion recognition,” Applied Sciences , vol. 11, no. 11, 2021. [3] L. Matsouliadis, E. Siamtanidou, N. Vryzas, and C. Dimoulas, “Speech emotion recognition and serious games: An entertaining approach for crowdsourcing annotated samples,” Information , vol. 16, no. 3, p. 238, 2025. [4] J. Hu, Y. Huang, X. Hu, and Y. Xu, “The acoustically emotion-aware conversational agent with speech emotion recognition and empathetic responses,” IEEE Transactions on Affective Computing , vol. 14, no. 1, pp. 17–30, 2022. [5] Q. Sun, Y. Li, E. Alturki, S. M. K. Murthy, and B. W. Schuller, “Towards friendly AI: A comprehensive review and new perspectives on human-AI alignment,” arXiv preprint:2412.15114 , pp. 1–15, 2024. [6] K. Ren, T. Zheng, Z. Qin, and X. Liu, “Adversarial attacks and defenses in deep learning,” Engineering , vol. 6, no. 3, pp. 346–360, 2020. [7] N. Akhtar and A. Mian, “Threat of adversarial attacks on deep learning in computer vision: A survey,” IEEE Access , vol. 6, pp. 14 410–14 430, 2018. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 
+
+[8] X. Zhang, H. Tan, X. Huang, D. Zhang, K. Tang, and Z. Gu, “Adversarial attacks on ASR systems: An overview,” arXiv preprint:2208.02250 , pp. 1–8, 2022. [9] J. Lan, R. Zhang, Z. Yan, J. Wang, Y. Chen, and R. Hou, “Adversarial attacks and defenses in speaker recognition systems: A survey,” Journal of Systems Architecture , vol. 127, p. 102526, 2022. [10] Z. Ren, A. Baird, J. Han, Z. Zhang, and B. W. Schuller, “Generating and protecting against adversarial attacks for deep speech-based emotion recognition models,” in Proc. ICASSP , 2020, pp. 7184–7188. [11] A. Ghosh, S. S. Mullick, S. Datta, S. Das, A. K. Das, and R. Mallipeddi, “A black-box adversarial attack strategy with adjustable sparsity and generalizability for deep image classifiers,” Pattern Recognition , vol. 122, p. 108279, 2022. [12] X. Liu, K. Wan, Y. Ding, X. Zhang, and Q. Zhu, “Weighted-sampling audio adversarial example attack,” in Proc. AAAI , 2020, pp. 4908–4915. [13] X. Liu, X. Chen, M. Yin, Y. Wang, T. Hu, and K. Ding, “Audio injection adversarial example attack,” in Proc. ICML Workshop on Adversarial Machine Learning , 2021. [14] Y. Chang, Z. Ren, Z. Zhang, X. Jing, K. Qian, X. Shao, B. Hu, T. Schultz, and B. W. Schuller, “STAA-net: A sparse and transferable adversarial attack for speech emotion recognition,” IEEE Transactions on Affective Computing , 2024. [15] Y. Dong, F. Liao, T. Pang, H. Su, J. Zhu, X. Hu, and J. Li, “Boosting adversarial attacks with momentum,” in Proc. CVPR , 2018, pp. 9185– 9193. [16] V. Raina, R. Ma, C. McGhee, K. Knill, and M. Gales, “Muting Whisper: A universal acoustic adversarial attack on speech foundation models,” 
+
+arXiv preprint:2405.06134 , pp. 1–18, 2024. [17] W. Jin, J. Su, H. Wang, Y. Ye, and J. Hao, “Boosting the transferability of audio adversarial examples with acoustic representation optimization,” 
+
+arXiv preprint:2503.19591 , pp. 1–16, 2025. [18] Q.-X. Huang, L.-K. Chiang, M.-Y. Chiu, and H.-M. Sun, “Focus-shifting attack: An adversarial attack that retains saliency map information and manipulates model explanations,” IEEE Transactions on Reliability ,vol. 73, no. 2, pp. 808–819, 2023. [19] R. Wiyatno and A. Xu, “Maximal Jacobian-based saliency map attack,” 
+
+arXiv preprint:1808.07945 , pp. 1–5, 2018. [20] Z. Dai, S. Liu, Q. Li, and K. Tang, “Saliency attack: Towards imper-ceptible black-box adversarial attack,” ACM Transactions on Intelligent Systems and Technology. , vol. 14, no. 3, pp. 1–20, 2023. [21] B. Schuller, G. Rigoll, and M. Lang, “Hidden Markov model-based speech emotion recognition,” in Proc. ICASSP , vol. 2, 2003, pp. II–1. [22] A. Akman, Q. Sun, and B. W. Schuller, “Audio explanation synthesis with generative foundation models,” in Proc. ICASSP , 2025, pp. 1–5. [23] A. Baevski, Y. Zhou, A. Mohamed, and M. Auli, “wav2vec 2.0: A framework for self-supervised learning of speech representations,” in 
+
+Proc. KDDNeurIPS , vol. 33, 2020, pp. 12 449–12 460. [24] Y. Wang, M. Ravanelli, A. Nfissi, and A. Yacoubi, “Speech emotion diarization: Which emotion appears when?” arXiv preprint:2306.12991 ,pp. 1–7, 2023. [25] S. w. Yang, P.-H. Chi, Y.-S. Chuang, C.-I. J. Lai, K. Lakhotia, Y.-T. Lin, A. T. Liu, J. Shi, X. Chang, G.-T. Lin et al. , “SUPERB: Speech process-ing Universal PERformance benchmark,” arXiv preprint:2105.01051 ,pp. 1–6, 2021. [26] Z. Ma, Z. Zheng, J. Ye, J. Li, Z. Gao, S. Zhang, and X. Chen, “emotion2vec: Self-supervised pre-training for speech emotion repre-sentation,” in Proc. ACL , 2024, pp. 15 747–15 760. [27] S. Amiriparian, F. Packa´ n, M. Gerczuk, and B. W. Schuller, “Ex-HuBERT: Enhancing HuBERT through block extension and fine-tuning on 37 emotion datasets,” arXiv preprint:2406.10275 , pp. 1–5, 2024. [28] Y. Wang, A. Boumadane, and A. Heba, “A fine-tuned wav2vec 2.0/Hu-BERT benchmark for speech emotion recognition, speaker verification and spoken language understanding,” arXiv preprint:2111.02735 , pp. 1– 7, 2021. [29] L. Pepino, P. Riera, and L. Ferrer, “Emotion recognition from speech using wav2vec 2.0 embeddings,” arXiv preprint:2104.03502 , pp. 1–5, 2021. [30] I. J. Goodfellow, J. Shlens, and C. Szegedy, “Explaining and harnessing adversarial examples,” in Proc. ICLR , 2015. [31] A. Madry, A. Makelov, L. Schmidt, D. Tsipras, and A. Vladu, “Towards deep learning models resistant to adversarial attacks,” in Proc. ICLR ,2018. [32] C. Guo, J. Gardner, Y. You, A. G. Wilson, and K. Weinberger, “Simple black-box adversarial attacks,” in Proc. ICML , vol. 97, 2019, pp. 2484– 2493. [33] J. Su, D. V. Vargas, and K. Sakurai, “One pixel attack for fooling deep neural networks,” IEEE Transactions on Evolutionary Computation ,vol. 23, no. 5, pp. 828–841, 2019. [34] P. Neekhara, S. Hussain, P. Pandey, S. Dubnov, J. J. McAuley, and F. Koushanfar, “Universal adversarial perturbations for speech recogni-tion systems,” in Proc. Interspeech , 2019, pp. 481–485. [35] H. Kim, J. Park, and J. Lee, “Generating transferable adversarial examples for speech classification,” Pattern Recognition , vol. 137, p. 109286, 2023. [36] W. Zhang, S. Zhao, L. Liu, J. Li, X. Cheng, T. F. Zheng, and X. Hu, “Attack on practical speaker verification system using universal adversarial perturbations,” in Proc. ICASSP , 2021, pp. 2575–2579. [37] I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley, S. Ozair, A. Courville, and Y. Bengio, “Generative adversarial networks,” 
+
+Communications of the ACM , vol. 63, no. 11, pp. 139–144, 2020. [38] J. Chen, Y. Dai, and F. Huang, “DiffAttack: Imperceptible and transfer-able audio adversarial attack via diffusion model,” in Proc. IEEE Int. Conf. Acoust., Speech Signal Process. (ICASSP) , 2025, pp. 1–5. [39] Y. Xie, Z. Li, C. Shi, J. Liu, Y. Chen, and B. Yuan, “Enabling fast and universal audio adversarial attack using generative model,” in Proc. AAAI , 2021, pp. 14 129–14 137. [40] X. Yuan, J. Zhang, F. Guo, K. Chen, X. Wang, S. Zhang, Y. Chen, D. Liu, P. Li, Z. Wang, and R. Zhu, “EvilHarmony: Stealthy adversarial attacks against black-box speech recognition systems,” in Proc. IEEE Symp. Secur. Privacy (SP) , 2025, pp. 4569–4587. [41] Q. Sun, A. Akman, and B. W. Schuller, “Explainable artificial in-telligence for medical applications: A review,” ACM Transactions on Computing for Healthcare , vol. 6, no. 2, pp. 1–31, 2025. [42] A. Shrikumar, P. Greenside, and A. Kundaje, “Learning important features through propagating activation differences,” in Proc. ICML ,2017, pp. 3145–3153. [43] Y. Li, Q. Sun, A. Akman, and B. W. Schuller, “Explainable ai for healthcare,” in Handbook on Smart Health . SAGE Publications 1 Oliver’s Yard, 55 City Road, London, EC1Y 1SP, 2025, pp. 632–652. [44] M. Sundararajan, A. Taly, and Q. Yan, “Axiomatic attribution for deep networks,” in Proc. ICML , 2017, pp. 3319–3328. [45] G. Montavon, A. Binder, S. Lapuschkin, W. Samek, and K.-R. M¨ uller, “Layer-wise relevance propagation: An overview,” in Explainable AI: Interpreting, Explaining and Visualizing Deep Learning , ser. Lecture Notes in Computer Science. Springer, 2019, vol. 11700, pp. 193–209. [46] R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and D. Batra, “Grad-CAM: Visual explanations from deep networks via gradient-based localization,” in Proc. ICCV , 2017, pp. 618–626. [47] M. T. Ribeiro, S. Singh, and C. Guestrin, ““Why should I trust you?” explaining the predictions of any classifier,” in Proc. KDD , 2016, pp. 1135–1144. [48] S. M. Lundberg and S.-I. Lee, “A unified approach to interpreting model predictions,” in Proc. NeurIPS , vol. 30, 2017. [49] A. Akman and B. W. Schuller, “Audio explainable artificial intelligence: A review,” Intelligent Computing , vol. 2, p. 0074, 2024. [50] V. Haunschmid, E. Manilow, and G. Widmer, “audiolime: Listenable explanations using source separation,” arXiv preprint:2008.00582 , pp. 1–5, 2020. [51] A. Nfissi, W. Bouachir, N. Bouguila, and B. Mishara, “Unveiling hidden factors: Explainable AI for feature boosting in speech emotion recognition,” arXiv preprint:2406.01624 , pp. 1–36, 2024. [52] L. Nieradzik, H. Stephani, and J. Keuper, “Reliable evaluation of at-tribution maps in CNNs: A perturbation-based approach,” International Journal of Computer Vision , vol. 133, no. 5, pp. 2392–2409, 2025. [53] C. Busso, M. Bulut, C.-C. Lee, A. Kazemzadeh, E. Mower, S. Kim, J. N. Chang, S. Lee, and S. S. Narayanan, “IEMOCAP: Interactive emotional dyadic motion capture database,” Language resources and evaluation ,vol. 42, no. 4, pp. 335–359, 2008. [54] Z. Zhao, K. Wang, Z. Bao, Z. Zhang, N. Cummins, S. Sun, H. Wang, J. Tao, and B. W. Schuller, “Self-attention transfer networks for speech emotion recognition,” Virtual Reality & Intelligent Hardware , vol. 3, no. 1, pp. 43–54, 2021. [55] M. K. Pichora-Fuller and K. Dupuis, “Toronto emotional speech set (TESS),” Scholars Portal Dataverse, 2020. [Online]. Available: https://doi.org/10.5683/SP2/E8H2MF [56] J. Zhao, X. Mao, and L. Chen, “Speech emotion recognition using deep 1D & 2D CNN LSTM networks,” Biomedical Signal Processing and Control , vol. 47, pp. 312–323, 2019. [57] P. Tzirakis, J. Zhang, and B. W. Schuller, “End-to-end speech emotion recognition using deep neural networks,” in Proc. ICASSP , 2018, pp. 5089–5093.
