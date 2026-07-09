@@ -1,0 +1,817 @@
+Title: EmoteGPT: 3D Human Facial Expressions from Natural Language Descriptions
+
+URL Source: https://arxiv.org/pdf/2607.02674v1
+
+Published Time: Tue, 07 Jul 2026 00:06:23 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+# EmoteGPT: 3D Human Facial Expressions from Natural Language Descriptions 
+
+Haoran Wang 1, Mohit Mendiratta 1,Christian Theobalt 1, and Adam Kortylewski 2 
+
+> 1
+
+Max Planck Institute for Informatics, Saarland Informatics Campus  
+
+> 2
+
+CISPA Helmholtz Center for Information Security 
+
+Project Page: https://genintel.github.io/EmoteGPT 
+
+Abstract. Precise control of 3D facial expressions from text is crucial for virtual avatars, animation, and human–computer interaction, yet ex-isting text-to-3D methods jointly generate identity, expression, and tex-ture, making fine-grained expression control difficult. We instead for-mulate text-driven expression synthesis as a regression problem in the disentangled parameter space of a 3D Morphable Model (3DMM). This setting, however, requires paired data linking detailed language to pre-cise expression parameters, which are missing from existing resources. To fill this gap, we introduce Txt2Emote, a benchmark of diverse 3D facial expressions with fine-grained textual annotations obtained from GPT-4o and a high-fidelity face tracker, providing both explicit descriptions detailing facial features and implicit descriptions referencing the situa-tional context behind the expression. Leveraging this dataset, we present EmoteGPT, a text-to-3D expression framework based on a Multimodal Large Language Model (MLLM) with a dedicated <Expr> token to se-mantically ground expression representations, which are then decoded into 3DMM parameters. We further improve EmoteGPT by augmenting training with large-scale image-to-3DMM data, enabling it to surpass state-of-the-art text-to-3D face synthesis methods on emotion recog-nition metrics and in perceived expressiveness. Integrated into avatar pipelines, our method enables photorealistic and stylized 3D avatars, as well as expressive 3D-consistent 2D face synthesis from textual input. 
+
+Keywords: Visual Language Model · Face Synthesis 
+
+## 1 Introduction 
+
+Controllable 3D facial expression synthesis has broad applications in virtual avatars, animation, and human–computer interaction. Traditional control meth-ods such as blendshape editing are labor-intensive and unintuitive for non-experts. In contrast, natural language offers a flexible and universal interface for expression control. Users can describe expressions in diverse ways, using ex-plicit visual cues (e.g., “He is smiling”) or implicit contextual statements 
+
+> arXiv:2607.02674v1 [cs.CV] 2 Jul 2026
+
+2 H. Wang et al. A person has a facial expression characterized by      
+
+> pursed lips, forming an "O" shape . The eyes are
+> slightly widened , and the eyebrows are slightly raised .
+> This expression may suggest surprise .
+> A person argues heatedly with another driver during a
+> traffic altercation.
+> Explicit descriptions
+> Implicit descriptions
+> Text -to -image Text -to -3D head
+> Ours
+> (3DMM)
+> Ours
+> +GaussianAvatars
+> Ours
+> +Diffusion Rig
+> Ours
+> +HeadStudio
+
+Fig. 1: EmoteGPT generates 3D facial expressions from text, supporting two types of descriptions: (1) Explicit ones, which detail physical facial features and overall emotional impressions; (2) Implicit ones, which reference events or situations that evoke facial expressions. The expressions are represented as 3DMM parameters and can be seamlessly integrated into existing frameworks [32, 48, 53] to enable expressive 3D avatars and personalized 2D face synthesis. 
+
+(e.g., “He looks like he just won the lottery”). Explicit descriptions specify ob-servable facial features, while implicit ones encode the situational or emotional context that evokes those features. Handling both forms is crucial for natural in-teraction, as people rarely describe emotions by enumerating muscle movements. Recent works [4,26] have explored generating expressive 3D heads from text, predominantly using diffusion-based text-to-3D pipelines. However, these meth-ods remain limited for 3D expression control: they typically entangle identity, pose, and expression. They also struggle to capture nuanced and diverse language descriptions, and require expensive iterative sampling that limits efficiency. As a result, existing text-to-3D head generation methods fall short in scenarios de-manding accurate, independently controllable, and efficient expression synthesis. We instead address these challenges by formulating the problem as a language-to-expression regression task, where expressions are represented explicitly in the compact and disentangled parameter space of a 3D Morphable Model (3DMM) [2, 7]. This 3DMM-based formulation provides a structured and interpretable representation that decouples expression from identity, enhances controllability and expressive fidelity, and enables efficient inference. A key obstacle is the lack of data linking natural language to precise 3D ex-pression parameters. To address this, we construct Txt2Emote, a dataset of 30k 3DMM expressions paired with diverse textual descriptions. Each expression is annotated with two complementary text types: (1) explicit annotations that de-tail observable facial features (e.g., mouth shape, eye tension), and (2) implicit 
+
+annotations reflecting emotional or situational context. Figure 1 illustrates rep-resentative samples. We also reserve 2.5k expressions as a held-out benchmark for evaluating models on both explicit and implicit language. Building on Txt2Emote, we propose EmoteGPT, a framework for generat-ing 3D facial expressions from natural language. EmoteGPT uses a Multimodal EmoteGPT 3
+
+Large Language Model (MLLM) to directly regress 3DMM expression parame-ters. We introduce a dedicated <Expr> token whose representation can be de-coded by a lightweight expression head into 3DMM parameters, yielding de-terministic, real-time predictions without diffusion-style iterative sampling. Op-erating in the 3DMM expression space allows EmoteGPT to focus exclusively on expression, enabling precise and controllable manipulation while remaining compatible with existing avatar systems. EmoteGPT further supports multimodal supervision, leveraging large-scale image-to-expression data and instruction-following text data to strengthen the alignment between language and facial expression. The resulting model inte-grates seamlessly with existing 3DMM-based avatar pipelines [32, 43, 53], en-abling a wide range of applications including photorealistic avatar synthesis, stylized avatar generation, and personalized facial modeling (Figure 1). Exten-sive experiments demonstrate that EmoteGPT significantly outperforms prior CLIP- and diffusion-based baselines in both emotion recognition accuracy and expressive fidelity. Our contributions are summarized as follows: 
+
+– We propose EmoteGPT, a new method that leverages a Multimodal Large Language Model (MLLM) for generating 3D facial expressions from natural language, enabling precise and expressive facial expression synthesis. 
+
+– We introduce Txt2Emote, a new dataset of 30k 3D facial expressions paired with fine-grained textual annotations, including explicit visual cues and im-plicit contextual text. 
+
+– We demonstrate that EmoteGPT benefits from multimodal face data, which strengthens the link between language and facial expression, and that it substantially outperforms state-of-the-art CLIP-based diffusion models and MLLM baselines on both emotion recognition accuracy and expressiveness. 
+
+## 2 Related work 
+
+Face datasets with text annotations. Several multimodal face datasets with text annotations exist, but most focus on describing static visual attributes or general appearance, offering only limited coverage of facial expressions. CelebA-Dialog [15] provides captions of five attributes for face images in the CelebA dataset where only the smile attribute is related to human facial expressions. MMCelebA-HQ [47] uses an automatic template-based approach to generate captions from attribute annotations in CelebA-HQ, limiting the diversity and expressiveness of the text. CelebAText [37] provides human-labeled captions for 15k images in CelebA-HQ dataset, yet the annotations primarily emphasize high-level visual attributes or overall appearance rather than nuanced expres-sion details. While some datasets include expression-related text annotations, such descriptions tend to be coarse, capturing only basic states, e.g. whether the subject is smiling or has an open mouth, without detailing the underlying facial muscle movements or compound emotions. As a result, current multimodal face 4 H. Wang et al. 
+
+datasets with textual descriptions remain insufficient for studying or modeling fine-grained facial expressions. Such limited annotations hinder the ability of models to learn fine-grained mappings between language and facial expression. Furthermore, existing datasets often lack contextual or situational cues that might evoke expressions. This ab-sence of contextual grounding makes it challenging for generative models to synthesize realistic and expressive faces from text, particularly when the input does not explicitly describe facial expressions. 
+
+Text-to-3D face generation. Early works on text-to-3D face synthesis, such as Describe3D [44], CLIP-Face [1], and CLIP-Head [25], builds on CLIP to achieve text-guided 3DMM face synthesis by aligning the visual features of rendered faces with the semantic meaning of text prompts. Inspired by Dream-Fusion [30], which demonstrated the potential of Score Distillation Sampling (SDS) for 3D object generation, recent methods [13,46,53] have started leverag-ing large pre-trained text-to-image diffusion models for 3D face synthesis from text. However, SDS-based 3D generation often suffers from saturation and noisy artifacts, prompting efforts to address these limitations. For example, Human-Norm [13] introduces a multistep SDS pipeline for progressive 3D human mesh generation, while Portrait3D [46] incorporates a 3D-aware GAN to reduce errors, and HeadStudio [53] uses the FLAME model to improve geometric initialization. Despite these improvements, these methods methods primarily focus on identity and shape while overlooking expressive facial details. Some audio-based head generation works [6, 24, 38, 50] incorporate text as additional guidance for ex-pressive synthesis with 3DMMs, but they typically depend on emotion labels or handle only limited, simple descriptions. In contrast, EmoteGPT explicitly bridges diverse and complex text descriptions to expressive 3D face parameters. 
+
+Multimodal Large Language Models. Multi-Modal Large Language Mod-els extend the capabilities of language models beyond text to include a broader spectrum of modalities, such as images, videos, and audio. Recent research in this area enhances their ability to process and integrate multiple modalities, making these models more versatile. In the realm of image-text understanding, approaches like LLaVA [21] and MiniGPT-4 [54] incorporate vision encoders to interpret images and align their features with language embeddings using pro-jection layers. Furthermore, models such as PandaGPT [36], ImageBind [10], and NeXT-GPT [45] show versatility in handling diverse modalities, aligning embedded text, images, audio and video with language as input and output. Approaches such as LISA [18] connect LLaVA with a decoder to generate text and segmentation masks, while ChatPose [9] specializes in human pose informa-tion. However, there has been no study on integrating MLLMs with 3D human facial expressions, and our work fills this gap. 
+
+Image-based expressive 3D face reconstruction. Expressive 3D face re-construction has been widely explored in the context of image-based approaches. Existing works [5, 35] mainly take a single image as input and output 3D facial expressions in the FLAME head model space [19]. EMOCA [5] incorporates emo-tion consistency and lip articulation constraints to refine expression accuracy, EmoteGPT 5
+
+while SMIRK [35] extends MICA [55] by leveraging an image-to-image trans-lation network for improved expression synthesis. These image-based 3DMM estimation works have been widely integrated in 2D, 3D, or 4D avatar synthesis pipelines [31, 39, 40, 48]. While these methods focus on reconstructing expres-sive 3D faces from images, generating expressive 3D faces directly from text descriptions remains less explored. 
+
+## 3 Text-to-3D Expression Dataset 
+
+Aligned text descriptions for diverse facial expressions are necessary to establish a connection between language and 3D facial expressions. However, few public datasets contain text paired with 3D faces. As mentioned in Section 2, existing face datasets with text annotations [15, 37, 47, 52] provide limited captions for facial expressions, which hinders research on text-to-3D facial expression gen-eration. To fill this gap, we introduce Txt2Emote, a new dataset of expressive faces with individual descriptive captions and identity-isolated 3D meshes.                           
+
+> Table 1: Comparison of our dataset with existing facial-expression datasets containing descriptive text. Partial indicates that descriptions mention only coarse cues (e.g., smil-ing, open mouth) without covering other regions such as the eyes or nose, or conveying the overall emotional context. Our dataset offers fine-grained, localized descriptions and additional implicit texts describing scenarios likely to elicit the expressions. Dataset Samples Indiv. Expr. Explicit Implicit MMCelebA-HQ 30k ✓partial ✗
+> CelebAText-HQ 15k ✗partial ✗
+> FFHQ-Text 760 ✗partial ✗
+> CelebA-Dialog 202k ✓partial ✗
+> Txt2Emote (Ours) 30k ✓✓✓
+
+3.1 Dataset Construction 
+
+We construct our dataset from the AffectNet dataset [27] which contains diverse expressive face images spanning eight emotions. Importantly, we follow the in-tuition that humans describe facial expressions in two main ways: (1) direct 
+
+descriptions of facial attributes, such as movements of the eyes, nose, or mouth, and the overall emotion (e.g. “The face has a smile. This face looks happy”), and (2) indirect descriptions via activities or scenarios that could evoke the expres-sion (e.g “The face looks as if he/she just failed an exam”). In this work, we refer to the first type as explicit descriptions and the second as implicit descriptions. For each expressive facial instance in our dataset, we provide a 3D face mesh along with both forms of text: 6 H. Wang et al. 
+
+Explicit descriptions : These provide comprehensive details of facial fea-tures along with a high-level summary of the associated emotion. Unlike existing datasets, which offer only coarse or partial annotations, our descriptions capture the complexity of expressions by specifying physical attributes in different facial regions and emotional nuances. 
+
+Implicit descriptions : In contrast to existing face datasets, which focus solely on facial features or emotion labels, implicit descriptions depict everyday scenarios or actions that naturally evoke the corresponding facial expression. This offers a more natural, human-centric way of describing expressions and aligns with how people intuitively understand and communicate emotions. To build the dataset, we first subsample AffectNet according to its emotion annotations to obtain a balanced set with a similar number of images per emo-tion category. For each selected image, we reconstruct a 3D facial mesh using a robust expressive face estimator [5] and generate both explicit and implicit descriptions with GPT-4o [28]. We then filter the reconstructed meshes and generated text annotations to reduce noise. The resulting dataset contains 30k expressive facial images, each paired with a 3D mesh and two text annotations. Among them, 27k samples are drawn from the AffectNet training set and 3k from the AffectNet test set. Following the AffectNet protocol, we manually in-spect the 3k test samples and retain 2.5k high-quality samples as the evaluation benchmark. Table 1 compares our dataset with existing face datasets containing text annotations. Further details on data generation and prompting are provided in Supplementary Sec. A. 
+
+## 4 Method 
+
+In this section, we describe the EmoteGPT framework for generating 3D facial expressions from natural language descriptions. Our approach combines a Mul-timodal Large Language Model (MLLM) with a lightweight expression decoder to establish a robust mapping from text to 3D facial expression parameters. We leverage the FLAME model [19] as the face representation, enabling precise con-trol over facial expressions in a structured parameter space. In Section 4.1, we introduce the facial expression parameterization based on FLAME. Section 4.2 details the overall EmoteGPT pipeline, including the use of the 〈Expr 〉 token and its integration within the MLLM. Finally, Section 4.3 outlines the multi-modal training strategy, including supervision from both text and image data, and the overall optimization objective. 
+
+4.1 Facial Expression Representation 
+
+We adopt the 3D Morphable Model (3DMM) framework [2] to represent 3D head geometry with disentangled identity and expression parameters, enabling structured and controllable manipulation. Specifically, we leverage FLAME [19], a statistical head model parameter-ized by identity shape β, facial expression ψ, and pose parameters θ for ro-tations around four joints (neck, jaw, and eyeballs), and the global rotation. EmoteGPT 7Expressive Face images       
+
+> .
+> Applications
+> MLLM
+> Explicit expression description
+> The person has a broad smile ,showing
+> teeth , with slightly narrowed eyes …
+> Yes, It is <Expr>
+> LoRA
+> FLAME
+> Decoder
+> Implicit expression description
+> This person meets an old friend
+> unexpectedly at a social gathering.
+
+Or 
+
+Or 
+
+> Expressive
+> personalized face
+> Expressive 3D Avatar
+> …
+> Expression
+> Decoder
+
+𝜂  ෠𝜓 
+
+> Expr.
+> Param.
+> Text tokens
+> ො𝑦 𝑡𝑥𝑡
+
+Fig. 2: Overview of EmoteGPT. Our framework generates 3D facial expressions from diverse inputs by combining a Multimodal Large Language Model (MLLM) with an expression decoder head (η). EmoteGPT is trained on diverse multimodal supervi-sion, including explicit textual descriptions (e.g., “a broad smile with narrowed eyes”), implicit contextual prompts (e.g., “meeting an old friend unexpectedly”), and images. During training, η is optimized, and the LLM within the MLLM is fine-tuned using LoRA while other components remain frozen. The generated expressions can be seam-lessly integrated with FLAME-based face avatars for diverse applications. 
+
+FLAME effectively disentangles facial expressions from identity and head pose. In EmoteGPT, we focus on predicting expression parameters ( ψ) and jaw rota-tion ( θjaw ), while keeping identity ( β) and head pose ( θhead ) fixed at zero by default. This ensures that generated expressions are consistent, disentangled, and placed on an average-sized, neutrally posed head model, i.e., identity-isolated. 
+
+4.2 Pipeline Overview of EmoteGPT 
+
+To establish a robust and generalizable mapping from language to facial expres-sions, our approach requires a model with strong text understanding capabilities. A core design choice in our model is to build on a powerful multimodal large lan-guage model (MLLM) backbone. Building EmoteGPT on an MLLM enables the model to learn from diverse facial expression data including text-to-3D-face and image-to-3D-face data. As a result, our system can efficiently utilize multimodal inputs (as demonstrated in our experimental results in Section 5.2). 
+
+Representing facial expression in language space. To build a connec-tion between the MLLM and facial expression, we treat human facial expressions as a distinct modality and incorporate its representation into the language space. Specifically, we extend the vocabulary of the MLLM to include a new token 
+
+〈Expr 〉 that uniquely represents human facial expressions. Given an input text prompt xtxt and/or input image ximg , the MLLM f predicts a text response: 
+
+ˆytxt = f (ximg , xtxt ), (1) where ˆytxt = [ t1, . . . , t N ] is the output sequence of tokens with corresponding hidden states [h1, . . . , h N ]. When xtxt contains a textual face generation in-8 H. Wang et al. 
+
+struction, the predicted response ˆytxt should include a ⟨Expr ⟩ token, facilitating further 3D face predictions. 
+
+From 〈Expr 〉 token to 3D facial expression parameters. If one of the output tokens tn in ˆytxt is the designated 〈Expr 〉 token, the model extracts the hidden state as h⟨Expr ⟩ = hn ∈ R4096 and projects it using the expression decoder η into the latent 3D facial expression parameters ˆψ = η(h⟨Expr ⟩) ∈ R50 .The predicted expression parameters ˆψ are combined with a prior head template in the FLAME model [19] to produce a 3D head mesh with diverse expressions. The decoder head η is defined as a lightweight MLP for efficiency and simplicity. 
+
+Combining EmoteGPT with downstream applications. As EmoteGPT predicts facial expression parameters based on the FLAME head model, it can be combined with many existing FLAME-based methods [32, 48, 53] as a condi-tional input to enable diverse applications in facial avatar generation. Examples are presented in Figure 2, where EmoteGPT helps produce expressive 3D avatars and expressive personalized 2D face images. 
+
+4.3 Training Training Data Our training data comprises three primary categories: 
+
+Text-to-3D expression data. The text-to-3D expression dataset contains paired text descriptions and facial expression parameters, enabling direct super-vision for mapping language to expression parameters. We employ the following template to guide the MLLMs during training: "USER: {description}, can you give the FLAME expression parameters of this person? ASSISTANT: Sure, it is 〈Expr 〉." Here, {description} denotes a textual expression de-scription and can be replaced with either an explicit or implicit description. 
+
+Image-to-3D expression data. We collect face images from large-scale public face datasets. The face images are processed with a state-of-the-art image-based expressive 3D face reconstruction method [5] to obtain the corresponding facial expression parameters. To accommodate the face images into the MLLM training pipeline, we format a template as "USER: 〈IMAGE 〉Can you give the FLAME expression parameters of this person? ASSISTANT: Sure, it is 〈Expr 〉." ,where ⟨IMAGE ⟩ represents the face image input. 
+
+Multimodal Instruction-Following Data. Following LLaVA-1.5 [20], we in-clude general-purpose VQA data to preserve the model’s instruction-following capability. 
+
+Overall Training Objective Our overall training objective combines a text-based autoregressive loss with expression reconstruction losses for predicting the ground-truth FLAME expression parameters ψ from either image or text input: 
+
+L = λtxt CE( ytxt , ˆytxt ) + λexpr |ψ − ˆψ|22 + λmesh |w ⊙ (M (ψ) − M ( ˆψ)) |1, (2) where CE( ·, ·) denotes the cross-entropy loss between the predicted text tokens 
+
+ˆytxt and the ground-truth text tokens ytxt , which helps preserve the model’s lan-guage understanding and generation capabilities. The expression reconstruction EmoteGPT 9
+
+objective consists of two terms: an ℓ2 loss on the FLAME expression param-eters and an ℓ1 geometric loss on the FLAME mesh. Specifically, M (·) maps FLAME expression parameters to the corresponding 3D mesh vertices, and w is a region-dependent vertex weight map applied element-wise via ⊙. This weight-ing emphasizes expression-relevant facial regions while reducing the contribution of less relevant head regions. The coefficients λtxt , λexpr , and λmesh balance the contributions of the text, parameter-space, and mesh-space losses, respectively. 
+
+## 5 Experiments 
+
+5.1 Experimental Setup Network Architecture. Our model is built upon the popular MLLM archi-tecture LLaVA-1.5-7B [20], using Vicuna-v1.5 [49] as the language backbone. To enable efficient fine-tuning, we apply Low-Rank Adaptation (LoRA) [12]. On top of the final layer of the MLLM, we attach a lightweight MLP decoder with GeLU activations [11] and channel dimensions [5120 , 5120 , 50] . This module maps the multimodal representations to FLAME expression parameters, serving as the expression decoder for 3D facial expression prediction. 
+
+Implementation Details. We train on 8 NVIDIA A40 GPUs using Deep-Speed [34] with ZeRO [33] optimizer. We use AdamW [23] with a learning rate of 4e−5, no weight decay, and a WarmupDecayLR scheduler with 100 warm-up iterations. The loss weights are set to λtxt = 1 .0, λexpr = 1 .0, and λmesh = 0 .01 .The face-region weight w follows [55]. We use a per-GPU batch size of 8 and 4 gradient accumulation steps. For compatibility with prior FLAME-based meth-ods, we adopt FLAME 2020 model and represent jaw pose with 6D rotations [51]. 
+
+Datasets. As described in Section 4.3, EmoteGPT is trained using a diverse set of multi-modal data sources: (1) Text-to-3D expression data: We use both explicit and implicit textual descriptions from our proposed Txt2Emote dataset as input. The corresponding ground-truth expression parameters are obtained by applying the state-of-the-art expressive face reconstruction method EMO-CAv2 [5] to the associated facial images. (2) Image-to-3D expression data: To improve the model’s ability to interpret real-world expressions, we include facial images from CelebA [22], AffectNet [27], and FFHQ [16], paired with expres-sion parameters extracted using EMOCAv2. (3) VQA-style multi-modal data: 
+
+To preserve the model’s general multi-modal reasoning capabilities, we incorpo-rate instruction-following data from LLaVA-v1.5-mix665k [20]. 
+
+Evaluation Metrics. We evaluate both explicit and implicit text-to-3D facial expression synthesis. Following standard practice in expressive 3D face recon-struction [5,35,42], we assess semantic expression fidelity using an emotion recog-nition network on generated 3D face meshes. This network predicts three types of emotion-related signals from the 3D face mesh: (1) valence : positivity or nega-tivity of the expression, (2) arousal : intensity of the emotion, and (3) the discrete emotion category. We report Concordance Correlation Coefficient (CCC) for va-lence and arousal, and top-1 accuracy for emotion classification, using AffectNet 10 H. Wang et al. 
+
+annotations as ground truth [27]. For methods that predict FLAME parameters, we further report the L1 distance between predicted and ground-truth 3D point clouds over the head, face and lip regions. Additional metric details are provided in the supplementary. 
+
+Table 2: Quantitative results for text-to-3D facial expression generation with different descriptions. The best performance is highlighted with bold font. EmoteGPT outper-forms other baselines across explicit and implicit benchmarks. EmoteGPT also shows the best generalization ability even when trained without implicit descriptions, main-taining strong performance on explicit and unseen inputs. Training Explicit Expression Descriptions Implicit Expression Descriptions Method Exp Imp V-CCC ↑ A-CCC ↑ E-ACC ↑ L1Head ↓ L1F ace ↓ L1Lip ↓ V-CCC ↑ A-CCC ↑ E-ACC ↑ L1Head ↓ L1F ace ↓ L1Lip ↓                                                                                                       
+
+> FLAME ---0.83 1.41 3.53 ---0.83 1.41 3.57 Describe3D 0.48 0.34 0.34 --0.19 0.08 0.19 --CLIP ✓0.61 0.57 0.51 0.66 1.06 2.46 0.36 0.28 0.32 0.84 1.45 3.70 Vicuna-1.5-7b ✓0.56 0.53 0.51 0.66 1.08 2.48 0.47 0.34 0.38 0.80 1.35 3.37 EmoteGPT ✓0.61 0.50 0.51 0.61 1.00 2.36 0.49 0.44 0.41 0.74 1.30 3.27
+> CLIP ✓✓0.64 0.56 0.52 0.65 1.07 2.50 0.49 0.41 0.41 0.73 1.24 3.04 Vicuna-1.5-7b ✓✓0.60 0.55 0.52 0.65 1.08 2.50 0.49 0.39 0.41 0.71 1.21 2.94 EmoteGPT ✓✓0.68 0.62 0.59 0.60 0.98 2.29 0.57 0.48 0.44 0.66 1.09 2.69
+
+We evaluate the effectiveness of EmoteGPT in generating 3D facial expres-sions from natural language prompts. Section 5.1 outlines the experimental setup, including model configurations, datasets, and evaluation metrics. In Sec-tion 5.2, we provide quantitative and qualitative comparisons with state-of-the-art methods on both explicit and implicit facial expression generation. Section 5.3 presents an ablation study that examines the impact of different training data modalities. Finally, Section 5.4 demonstrates downstream applications of our method in photorealistic avatar generation and personalized face synthesis. 
+
+5.2 Text to 3D Facial Expression Generation 
+
+We evaluate our method’s ability to generate 3D facial expressions from diverse textual descriptions by comparing it with baselines from two related paradigms: (1) text-to-expression parameter regression methods, which are most closely aligned with our task setting, and (2) recent text-to-3D head generation meth-ods, which also produce expressive 3D faces. Although our approach follows the text-to-expression regression paradigm, we include the latter category to provide a broader comparison. First, since our method operates within a text-to-expression parameter re-gression framework, we compare it with baselines in this setting. These include an early text-to-3DMM generation method Describe3D [44], as well as two ad-ditional models we design: a CLIP-based regressor and a unimodal LLM-based regressor. These two regressors are trained using the same pipeline as our model to ensure fair and controlled comparison. We also compare EmoteGPT with state-of-the-art text-to-3D head meth-ods synthesizing full head geometry from text, including HumanNorm [13] and EmoteGPT 11 Implicit: “A person  witnesses a                
+
+> sudden and terrifying event unfold
+> in front of them. ”
+> Explicit: “A person has their
+> mouth slightly open with the top
+> teeth visible , and the eyebrows are
+> raised . The eyes appear somewhat
+> wide , possibly indicating
+> confusion .”
+> HumanNorm Portrait3D CLIP Ours Describe3D GT
+> Explicit: “The person has wide -
+> open eyes and raised eyebrows ,
+> with a widely open mouth . This
+> expression is typical of surprise or
+> shock .”
+> Implicit: “This person argues
+> intensely with a friend over a
+> broken toy. ”
+
+Fig. 3: Qualitative comparison of EmoteGPT with relevant methods. Results are vi-sualized in both the 3DMM space and rendered 3D avatars using GaussianAvatar. Existing models often struggle with complex explicit descriptions and even simple implicit ones. In contrast, EmoteGPT produces semantically faithful and expressive results across diverse inputs. Please zoom in for more details. 
+
+Portrait3D [46]. As these methods typically rely on computationally intensive iterative refinement, large-scale quantitative evaluation is impractical. Instead, we provide qualitative comparisons and conduct a perceptual user study against Portrait3D, the strongest representative in this category. 
+
+Quantitative comparison We provide the emotion evaluation results and ge-ometric errors for quantitative comparison on the explicit and implicit-based 3D facial expression synthesis benchmark. To contextualize the difficulty of the benchmark, we also include a static FLAME head with neutral expres-sions as a baseline. As shown in Table 2, the CLIP baseline trained on our Txt2Emote dataset, already surpasses Describe3D in expression generation. No-tably, EmoteGPT consistently outperforms both the CLIP and LLM(Vicuna)-based baselines across both explicit and implicit tasks, demonstrating its superior ability to capture fine-grained and context-dependent expressions. The relatively low performance of the FLAME baseline further indicates that our benchmark comprises diverse and challenging expressions. Interestingly, Table 2 also highlights the strong generalization ability of our MLLM-based approach. Even when trained without implicit descriptions, EmoteGPT generalizes well to unseen implicit inputs, while maintaining high performance on explicit expressions. This suggests that our architecture and training strategy enable robust expression modeling beyond the training distribution. We also try to compare EmoteGPT with diffusion-based text-to-3D head gen-eration methods quantitatively. Since these methods are generally time-consuming 12 H. Wang et al. 
+
+Table 3: Quantitative comparisons to state-of-the-art text-to-3D face genera-tion methods. EmoteGPT obtains the best expression synthesis quality com-pared to other text-driven methods. Eval Method L1Head ↓ L1F ace ↓ L1Lip ↓                  
+
+> Exp HumanNorm 1.03 1.75 4.36 Portrait3D 0.92 1.51 3.64 EmoteGPT 0.62 1.01 2.37
+> Imp HumanNorm 1.05 1.80 4.64 Portrait3D 1.03 1.74 4.43 EmoteGPT 0.70 1.19 2.93
+
+Table 4: User study results comparing EmoteGPT and Portrait3D on explicit and implicit text prompts. ‘++’ indicates strong preference, ‘+’ indicates weak pref-erence. EmoteGPT is preferred in 75% of cases overall, while Portrait3D is pre-ferred in only 14%.                      
+
+> EmoteGPT Indifferent Portrait3D
+> Prompt Type ++ ++++
+> Explicit 42% 33% 7% 6% 10% Implicit 46% 30% 10% 10% 2% Overall 44% 31% 8% 8% 6%
+
+to synthesize a static head with a single query, it would be impractical to per-form large-scale comparison, We therefore sample 50 explicit and 50 implicit descriptions from our benchmark with balanced emotion distributions, and fit FLAME to each generated head using an image-based face tracker [5]. Table 3 presents the comparison results. Portrait3D performs better than HumanNorm on explicit texts but they perform similarly poorly for implicit texts, while EmoteGPT consistently achieves better facial expression synthesis quality than other diffusion-based text-to-3D head methods. 
+
+Qualitative comparison. We qualitatively compare EmoteGPT with state-of-the-art text-to-3D face generation methods, including HumanNorm [13] and Portrait3D [46]. Since these methods jointly synthesize identity, expression, and texture from text, we fit the FLAME model to their outputs to isolate expression quality, as shown in Figure 3. We observe that all models perform better on explicit prompts, which con-tain clearer emotion signals, while implicit prompts remain more challenging. HumanNorm, trained with depth- and normal-adapted diffusion on full-body datasets, struggles to interpret facial expressions from natural language inputs. Portrait3D generalizes better due to its strong 3D-aware GAN prior, but still fails to capture fine-grained expression detail—particularly under complex, nu-anced descriptions. In contrast, both the CLIP-based baseline and EmoteGPT produce more semantically aligned expressions, with EmoteGPT showing clear advantages in subtle and abstract cases. 
+
+Perceptual user study. Evaluating the semantic alignment between textual descriptions and 3D facial expressions remains a challenging task. To assess perceptual quality, we conducted a user study with 25 participants, all with backgrounds in computer graphics. Each participant was shown 20 text prompts along with rendered expressions from EmoteGPT and Portrait3D. Since Por-trait3D outputs full head geometry, we fitted FLAME parameters to its results for a fair comparison. Participants selected the rendering that best matched each prompt. As summarized in Table 4, EmoteGPT was preferred in 76% of cases, while Portrait3D was selected in only 14%, with the remaining 10% indicat-EmoteGPT 13 
+
+ing no clear preference. These results suggest that EmoteGPT produces facial expressions that more accurately reflect both explicit and implicit textual cues. 
+
+Table 5: Ablation study illustrating the impact of different training data modalities on text-to-3D facial expression synthesis. Incorporating facial images data improves EmoteGPT performance on implicit descriptions, demonstrating the effectiveness of multi-modal supervision for enhancing generalization. Training Eval Text VQA Image Exp Imp V-CCC ↑ A-CCC ↑ E-ACC ↑ L1Head ↓ L1F ace ↓ L1Lip ↓                                                
+
+> ✓✓0.58 0.56 0.52 0.64 1.06 2.49
+> ✓✓✓0.66 0.61 0.56 0.60 1.02 2.32
+> ✓✓✓✓0.68 0.62 0.59 0.60 0.98 2.29
+> ✓✓0.55 0.37 0.41 0.71 1.21 2.98
+> ✓✓✓0.55 0.46 0.42 0.67 1.15 2.73
+> ✓✓✓✓0.57 0.48 0.44 0.66 1.09 2.69
+
+5.3 Ablation experiments 
+
+We conduct ablations to evaluate the contributions of different training modali-ties and the design of the expression grounding token. 
+
+Influence of training data As shown in Table 5 and visual examples in supplementary, models trained only on paired text-to-expression data perform worse than those trained with additional multimodal supervision. Incorporating general-purpose VQA data and face image–based expression labels consistently improves performance across input types, demonstrating the effectiveness of our multimodal training strategy. 
+
+Design of 〈Expr 〉 token Table 6 compares our dedicated 〈Expr 〉 token with two alternatives: mean pooling over text hidden states and using the 〈EOS 〉
+
+token as the expression representation. Under the same setting, 〈Expr 〉 achieves the best performance across both explicit and implicit inputs. Mean pooling dilutes expression-relevant cues with unrelated textual information, while 〈EOS 〉
+
+entangles expression grounding with sequence termination. 
+
+5.4 Further applications 
+
+EmoteGPT predicts facial expression within the FLAME model space, mak-ing it directly compatible with existing FLAME-based avatar systems. Beyond qualitative comparisons in Figure 3, here we show two downstream applications. 
+
+– Expressive 3D avatar generation. EmoteGPT enables expressive control of 3D avatars through text, complementing existing 3D identity and texture synthesis pipelines like GaussianAvatar [32] and HeadStudio [53]. 14 H. Wang et al. 
+
+Table 6: Comparison of our 〈Expr 〉 design with other alternative designs. Method Explicit Implicit 
+
+L1Head ↓ L1F ace ↓ L1Lip ↓ L1Head ↓ L1F ace ↓ L1Lip ↓
+
+Mean Pooling 0.62 1.00 2.35 0.68 1.15 2.85 
+
+<EOS> Token 0.75 1.21 3.05 0.84 1.43 3.93 
+
+<Expr> Token 0.60 0.98 2.29 0.66 1.09 2.69 Ours 
+
+> (3DMM)
+
+Ours 
+
+> +HeadStudio
+
+Ours 
+
+> +Diffusion Rig
+
+“This person feels the discomfort of a dirty diaper  and wants it changed immediately.” 
+
+“This person accidentally drops their favorite toy into a puddle .” 
+
+“This person reflects on a deeply personal achievement  that took years to accomplish.” 
+
+Ours 
+
+> +GaussianAvatar
+
+Fig. 4: Diverse applications of EmoteGPT. Combining EmoteGPT with GaussianA-vatar, HeadStudio and DiffusionRig enables downstream tasks such as personalized expressive 3D avatar generation and 2D face image synthesis. 
+
+– Expressive 3D-aware personalized image generation. By combining EmoteGPT with DiffusionRig [48], our method can replace the expression to synthesize identity-preserving, expression-aware face images. Figure 4 demonstrates the versatility of EmoteGPT across diverse pipelines, with additional results provided in the supplementary. 
+
+## 6 Limitations 
+
+Our study adopts FLAME for 3D facial expressions. Although FLAME is widely used and provides a standardized, relatively identity-isolated expression space, it has limited expressiveness. Its training data does not fully cover the diversity EmoteGPT 15 
+
+of human faces across ages, ethnicities, and cultures, and it may miss subtle geometric details such as wrinkles and fine-grained muscle movements. More-over, FLAME does not achieve complete identity–expression disentanglement [8]. Therefore, our predicted FLAME parameters should be viewed as an intermedi-ate expression control signal rather than a final high-fidelity facial representation. Such signals can be instantiated by downstream renderers or avatar-generation methods, and our modular framework can be extended to richer blendshape models, neural facial representations, or future 3D morphable models. Our ground-truth 3D expressions are obtained via a state-of-the-art monoc-ular 3D face estimation method. Although this setup may still struggle under low-quality inputs or extreme poses, it offers a scalable and robust solution for constructing large-scale paired text-to-3D datasets. We employ AffectNet and EMOCAv2 for their diversity and robustness, and anticipate continued improve-ments in 3D expression estimation to further improve our setting. Finally, our textual supervision relies on captions generated by GPT-4o. While these captions may reflect limited cultural or contextual coverage, GPT-4o remains a strong vision–language model for this task. Ongoing advances in large language models are expected to enable richer, fairer, and more inclusive descriptions of facial expressions. 
+
+## 7 Conclusion 
+
+We introduced EmoteGPT, a framework for generating 3D facial expressions from natural language using an MLLM with a dedicated 〈Expr 〉 token and a lightweight decoder. To support this task, we introduced Txt2Emote, a dataset of 3D facial expressions paired with rich textual annotations, including explicit appearance-based captions and implicit contextual cues. On the Txt2Emote benchmark, EmoteGPT produces higher-quality expressions than existing text-to-3D head and expression methods in emotion accuracy, expression realism, and generalization. Experiments and user studies further validate its ability to generate fine-grained 3D facial expressions, and we demonstrate its versatility in 3D avatar generation and personalized 2D editing. Overall, this work advances intuitive, text-driven expressive avatar creation and establishes a foundation for broader exploration of MLLMs in 3D human-centric generation. 
+
+## Acknowledge 
+
+Adam Kortylewski acknowledges support via his Emmy Noether Research Group funded by the German Research Foundation (DFG) under Grant No. 468670075. 16 H. Wang et al. 
+
+## References 
+
+1. Aneja, S., Thies, J., Dai, A., Niessner, M.: Clipface: Text-guided editing of tex-tured 3d morphable models. In: Special Interest Group on Computer Graphics and Interactive Techniques Conference Conference Proceedings. p. 1–11. SIG-GRAPH ’23, ACM (Jul 2023). https://doi.org/10.1145/3588432.3591566 ,
+
+http://dx.doi.org/10.1145/3588432.3591566 
+
+2. Blanz, V., Vetter, T.: A morphable model for the synthesis of 3d faces. In: 26th An-nual Conference on Computer Graphics and Interactive Techniques (SIGGRAPH 1999). pp. 187–194. ACM Press (1999) 3. Bulat, A., Tzimiropoulos, G.: How far are we from solving the 2d & 3d face align-ment problem? (and a dataset of 230,000 3d facial landmarks). In: International Conference on Computer Vision (2017) 4. Comas-Massagué, A., Qiu, D., Chai, M., Bühler, M., Raj, A., Gao, R., Xu, Q., Matthews, M., Gotardo, P., Camps, O., Orts-Escolano, S., Beeler, T.: Magicmirror: Fast and high-quality avatar generation with a constrained search space (2024), 
+
+https://arxiv.org/abs/2404.01296 
+
+5. Daněček, R., Black, M.J., Bolkart, T.: Emoca: Emotion driven monocular face capture and animation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 20311–20322 (2022) 6. Daněček, R., Chhatre, K., Tripathi, S., Wen, Y., Black, M., Bolkart, T.: Emotional speech-driven animation with content-emotion disentanglement. ACM (Dec 2023). 
+
+https://doi.org/10.1145/3610548.3618183 , https://emote.is.tue.mpg.de/ index.html 
+
+7. Egger, B., Smith, W.A., Tewari, A., Wuhrer, S., Zollhoefer, M., Beeler, T., Bernard, F., Bolkart, T., Kortylewski, A., Romdhani, S., et al.: 3d morphable face mod-els—past, present, and future. ACM Transactions on Graphics (ToG) 39 (5), 1–38 (2020) 8. Egger, B., Sutherland, S., Medin, S.C., Tenenbaum, J.: Identity-Expression Am-biguity in 3D Morphable Face Models . In: 2021 16th IEEE International Con-ference on Automatic Face and Gesture Recognition (FG 2021). pp. 1–7. IEEE Computer Society, Los Alamitos, CA, USA (Dec 2021). https://doi.org/ 10.1109/FG52635.2021.9667002 , https://doi.ieeecomputersociety.org/10. 1109/FG52635.2021.9667002 
+
+9. Feng, Y., Lin, J., Dwivedi, S.K., Sun, Y., Patel, P., Black, M.J.: Chatpose: Chatting about 3d human pose. In: CVPR (2024) 10. Girdhar, R., El-Nouby, A., Liu, Z., Singh, M., Alwala, K.V., Joulin, A., Misra, I.: Imagebind: One embedding space to bind them all. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 15180– 15190 (2023) 11. Hendrycks, D., Gimpel, K.: Bridging nonlinearities and stochastic regularizers with gaussian error linear units. CoRR abs/1606.08415 (2016), http://arxiv.org/ abs/1606.08415 
+
+12. Hu, E.J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W.: LoRA: Low-rank adaptation of large language models. In: International Con-ference on Learning Representations (2022), https://openreview.net/forum?id= nZeVKeeFYf9 
+
+13. Huang, X., Shao, R., Zhang, Q., Zhang, H., Feng, Y., Liu, Y., Wang, Q.: Human-norm: Learning normal diffusion model for high-quality and realistic 3d human generation (2024) EmoteGPT 17 14. Indyk, P., Motwani, R.: Approximate nearest neighbors: towards removing the curse of dimensionality. In: Proceedings of the Thirtieth Annual ACM Symposium on Theory of Computing. p. 604–613. STOC ’98, Association for Computing Ma-chinery, New York, NY, USA (1998). https://doi.org/10.1145/276698.276876 ,
+
+https://doi.org/10.1145/276698.276876 
+
+15. Jiang, Y., Huang, Z., Pan, X., Loy, C.C., Liu, Z.: Talk-to-edit: Fine-grained facial editing via dialog. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (2021) 16. Karras, T., Laine, S., Aila, T.: A Style-Based Generator Architecture for Gener-ative Adversarial Networks . IEEE Transactions on Pattern Analysis & Machine Intelligence 43 (12), 4217–4228 (Dec 2021). https://doi.org/10.1109/TPAMI. 2020.2970919 , https://doi.ieeecomputersociety.org/10.1109/TPAMI.2020. 2970919 
+
+17. Labs, B.F.: Flux. https://github.com/black-forest-labs/flux (2024) 18. Lai, X., Tian, Z., Chen, Y., Li, Y., Yuan, Y., Liu, S., Jia, J.: Lisa: Reasoning segmentation via large language model. In: CVPR (2024) 19. Li, T., Bolkart, T., Black, M.J., Li, H., Romero, J.: Learning a model of facial shape and expression from 4D scans. ACM Transactions on Graphics, (Proc. SIGGRAPH Asia) 36 (6), 194:1–194:17 (2017), https://doi.org/10.1145/3130800.3130813 
+
+20. Liu, H., Li, C., Li, Y., Lee, Y.J.: Improved baselines with visual instruction tuning (2023) 21. Liu, H., Li, C., Wu, Q., Lee, Y.J.: Visual instruction tuning. Advances in neural information processing systems 36 (2024) 22. Liu, Z., Luo, P., Wang, X., Tang, X.: Deep learning face attributes in the wild. In: Proceedings of International Conference on Computer Vision (ICCV) (December 2015) 23. Loshchilov, I., Hutter, F.: Decoupled weight decay regularization. In: International Conference on Learning Representations (2019), https://openreview.net/forum? id=Bkg6RiCqY7 
+
+24. Ma, Y., Wang, S., Ding, Y., Ma, B., Lv, T., Fan, C., Hu, Z., Deng, Z., Yu, X.: Talk-clip: Talking head generation with text-guided expressive speaking styles (2024), 
+
+https://arxiv.org/abs/2304.00334 
+
+25. Manu, P., Srivastava, A., Sharma, A.: Clip-head: Text-guided generation of tex-tured neural parametric 3d head models. In: SIGGRAPH Asia 2023 Technical Communications. SA ’23, Association for Computing Machinery, New York, NY, USA (2023). https://doi.org/10.1145/3610543.3626169 , https://doi.org/ 10.1145/3610543.3626169 
+
+26. Mendiratta, M., Pan, X., Elgharib, M., Teotia, K., R, M.B., Tewari, A., Golyanik, V., Kortylewski, A., Theobalt, C.: Avatarstudio: Text-driven editing of 3d dynamic human head avatars. ACM Trans. Graph. 42 (6) (dec 2023). https://doi.org/10. 1145/3618368 , https://doi.org/10.1145/3618368 
+
+27. Mollahosseini, A., Hasani, B., Mahoor, M.H.: Affectnet: A database for facial ex-pression, valence, and arousal computing in the wild. IEEE Trans. Affect. Com-put. 10 (1), 18–31 (Jan 2019). https://doi.org/10.1109/TAFFC.2017.2740923 ,
+
+https://doi.org/10.1109/TAFFC.2017.2740923 
+
+28. OpenAI, Achiam, J., Adler, S., Agarwal, S., Ahmad, L., Akkaya, I., Aleman, F.L., Almeida, D., Altenschmidt, J., Altman, S., Anadkat, S., Avila, R., Babuschkin, I., Balaji, S., Balcom, V., Baltescu, P., Bao, H., Bavarian, M., Belgum, J., Bello, I., Berdine, J., Bernadett-Shapiro, G., Berner, C., Bogdonoff, L., Boiko, O., Boyd, M., Brakman, A.L., Brockman, G., Brooks, T., Brundage, M., Button, K., Cai, T., 18 H. Wang et al. Campbell, R., Cann, A., Carey, B., Carlson, C., Carmichael, R., Chan, B., Chang, C., Chantzis, F., Chen, D., Chen, S., Chen, R., Chen, J., Chen, M., Chess, B., Cho, C., Chu, C., Chung, H.W., Cummings, D., Currier, J., Dai, Y., Decareaux, C., Degry, T., Deutsch, N., Deville, D., Dhar, A., Dohan, D., Dowling, S., Dunning, S., Ecoffet, A., Eleti, A., Eloundou, T., Farhi, D., Fedus, L., Felix, N., Fishman, S.P., Forte, J., Fulford, I., Gao, L., Georges, E., Gibson, C., Goel, V., Gogineni, T., Goh, G., Gontijo-Lopes, R., Gordon, J., Grafstein, M., Gray, S., Greene, R., Gross, J., Gu, S.S., Guo, Y., Hallacy, C., Han, J., Harris, J., He, Y., Heaton, M., Heidecke, J., Hesse, C., Hickey, A., Hickey, W., Hoeschele, P., Houghton, B., Hsu, K., Hu, S., Hu, X., Huizinga, J., Jain, S., Jain, S., Jang, J., Jiang, A., Jiang, R., Jin, H., Jin, D., Jomoto, S., Jonn, B., Jun, H., Kaftan, T., Łukasz Kaiser, Kamali, A., Kanitscheider, I., Keskar, N.S., Khan, T., Kilpatrick, L., Kim, J.W., Kim, C., Kim, Y., Kirchner, J.H., Kiros, J., Knight, M., Kokotajlo, D., Łukasz Kondraciuk, Kondrich, A., Konstantinidis, A., Kosic, K., Krueger, G., Kuo, V., Lampe, M., Lan, I., Lee, T., Leike, J., Leung, J., Levy, D., Li, C.M., Lim, R., Lin, M., Lin, S., Litwin, M., Lopez, T., Lowe, R., Lue, P., Makanju, A., Malfacini, K., Manning, S., Markov, T., Markovski, Y., Martin, B., Mayer, K., Mayne, A., McGrew, B., McKinney, S.M., McLeavey, C., McMillan, P., McNeil, J., Medina, D., Mehta, A., Menick, J., Metz, L., Mishchenko, A., Mishkin, P., Monaco, V., Morikawa, E., Mossing, D., Mu, T., Murati, M., Murk, O., Mély, D., Nair, A., Nakano, R., Nayak, R., Neelakantan, A., Ngo, R., Noh, H., Ouyang, L., O’Keefe, C., Pachocki, J., Paino, A., Palermo, J., Pantuliano, A., Parascandolo, G., Parish, J., Parparita, E., Passos, A., Pavlov, M., Peng, A., Perelman, A., de Avila Belbute Peres, F., Petrov, M., de Oliveira Pinto, H.P., Michael, Pokorny, Pokrass, M., Pong, V.H., Powell, T., Power, A., Power, B., Proehl, E., Puri, R., Radford, A., Rae, J., Ramesh, A., Raymond, C., Real, F., Rimbach, K., Ross, C., Rotsted, B., Roussez, H., Ryder, N., Saltarelli, M., Sanders, T., Santurkar, S., Sastry, G., Schmidt, H., Schnurr, D., Schulman, J., Selsam, D., Sheppard, K., Sherbakov, T., Shieh, J., Shoker, S., Shyam, P., Sidor, S., Sigler, E., Simens, M., Sitkin, J., Slama, K., Sohl, I., Sokolowsky, B., Song, Y., Staudacher, N., Such, F.P., Summers, N., Sutskever, I., Tang, J., Tezak, N., Thompson, M.B., Tillet, P., Tootoonchian, A., Tseng, E., Tuggle, P., Turley, N., Tworek, J., Uribe, J.F.C., Vallone, A., Vijayvergiya, A., Voss, C., Wainwright, C., Wang, J.J., Wang, A., Wang, B., Ward, J., Wei, J., Weinmann, C., Welihinda, A., Welinder, P., Weng, J., Weng, L., Wiethoff, M., Willner, D., Winter, C., Wolrich, S., Wong, H., Workman, L., Wu, S., Wu, J., Wu, M., Xiao, K., Xu, T., Yoo, S., Yu, K., Yuan, Q., Zaremba, W., Zellers, R., Zhang, C., Zhang, M., Zhao, S., Zheng, T., Zhuang, J., Zhuk, W., Zoph, B.: Gpt-4 technical report (2024) 29. Podell, D., English, Z., Lacey, K., Blattmann, A., Dockhorn, T., Müller, J., Penna, J., Rombach, R.: SDXL: Improving latent diffusion models for high-resolution im-age synthesis. In: The Twelfth International Conference on Learning Representa-tions (2024), https://openreview.net/forum?id=di52zR8xgf 
+
+30. Poole, B., Jain, A., Barron, J.T., Mildenhall, B.: Dreamfusion: Text-to-3d using 2d diffusion. In: The Eleventh International Conference on Learning Representations (2023), https://openreview.net/forum?id=FjNys5c7VyY 
+
+31. Prinzler, M., Zakharov, E., Sklyarova, V., Kabadayi, B., Thies, J.: Joker: Condi-tional 3d head synthesis with extreme facial expressions (2024), https://arxiv. org/abs/2410.16395 
+
+32. Qian, S., Kirschstein, T., Schoneveld, L., Davoli, D., Giebenhain, S., Nießner, M.: Gaussianavatars: Photorealistic head avatars with rigged 3d gaussians. In: Proceed-EmoteGPT 19 ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 20299–20309 (2024) 33. Rajbhandari, S., Rasley, J., Ruwase, O., He, Y.: Zero: memory optimizations to-ward training trillion parameter models. In: Proceedings of the International Con-ference for High Performance Computing, Networking, Storage and Analysis. SC ’20, IEEE Press (2020) 34. Rasley, J., Rajbhandari, S., Ruwase, O., He, Y.: Deepspeed: System optimizations enable training deep learning models with over 100 billion parameters. In: Proceed-ings of the 26th ACM SIGKDD International Conference on Knowledge Discov-ery & Data Mining. p. 3505–3506. KDD ’20, Association for Computing Machin-ery, New York, NY, USA (2020). https://doi.org/10.1145/3394486.3406703 ,
+
+https://doi.org/10.1145/3394486.3406703 
+
+35. Retsinas, G., Filntisis, P.P., Danecek, R., Abrevaya, V.F., Roussos, A., Bolkart, T., Maragos, P.: 3d facial expressions through analysis-by-neural-synthesis (2024), 
+
+https://arxiv.org/abs/2404.04104 
+
+36. Su, Y., Lan, T., Li, H., Xu, J., Wang, Y., Cai, D.: Pandagpt: One model to instruction-follow them all. arXiv preprint arXiv:2305.16355 (2023) 37. Sun, J., Li, Q., Wang, W., Zhao, J., Sun, Z.: Multi-caption text-to-face synthesis: Dataset and algorithm. In: Proceedings of the 29th ACM International Conference on Multimedia. p. 2290–2298. MM ’21, Association for Computing Machinery, New York, NY, USA (2021). https://doi.org/10.1145/3474085.3475391 , https: //doi.org/10.1145/3474085.3475391 
+
+38. Tan, S., Ji, B., Pan, Y.: Style2talker: High-resolution talking head generation with emotion style and art style. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 38, pp. 5079–5087 (2024) 39. Taubner, F., Zhang, R., Tuli, M., Bahmani, S., Lindell, D.B.: MVP4D: Multi-view portrait video diffusion for animatable 4D avatars (2025), https://arxiv.org/ abs/2510.12785 
+
+40. Taubner, F., Zhang, R., Tuli, M., Lindell, D.B.: CAP4D: Creating animatable 4D portrait avatars with morphable multi-view diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 5318–5330 (June 2025) 41. Team, Z.I.: Z-image: An efficient image generation foundation model with single-stream diffusion transformer. arXiv preprint arXiv:2511.22699 (2025) 42. Toisoul, A., Kossaifi, J., Bulat, A., Tzimiropoulos, G., Pantic, M.: Estimation of continuous valence and arousal levels from faces in naturalistic conditions. Nature Machine Intelligence (2021), https://www.nature.com/articles/s42256-020-00280-0 
+
+43. Wei, C., Liu, C., Qiao, S., Zhang, Z., Yuille, A., Yu, J.: De-diffusion makes text a strong cross-modal interface. arXiv preprint arXiv:2311.00618 (2023) 44. Wu, M., Zhu, H., Huang, L., Zhuang, Y., Lu, Y., Cao, X.: High-fidelity 3d face generation from natural language descriptions. In: 2023 IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR). pp. 4521–4530. IEEE Computer Society, Los Alamitos, CA, USA (jun 2023). https://doi.org/ 10.1109/CVPR52729.2023.00439 , https://doi.ieeecomputersociety.org/10. 1109/CVPR52729.2023.00439 
+
+45. Wu, S., Fei, H., Qu, L., Ji, W., Chua, T.S.: Next-gpt: Any-to-any multimodal llm. arXiv preprint arXiv:2309.05519 (2023) 46. Wu, Y., Xu, H., Tang, X., Chen, X., Tang, S., Zhang, Z., Li, C., Jin, X.: Portrait3d: Text-guided high-quality 3d portrait generation using pyramid representation and 20 H. Wang et al. gans prior. ACM Trans. Graph. 43 (4) (Jul 2024). https://doi.org/10.1145/ 3658162 , https://doi.org/10.1145/3658162 
+
+47. Xia, W., Yang, Y., Xue, J.H., Wu, B.: Tedigan: Text-guided diverse face image gen-eration and manipulation. In: IEEE Conference on Computer Vision and Pattern Recognition (CVPR) (2021) 48. Zheng, D., Cecilia, Z., Zhihao, X., Lars, J., Zhuowen, T., Xiuming, Z.: Diffusionrig: Learning personalized priors for facial appearance editing. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (2023) 49. Zheng, L., Chiang, W.L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E.P., Zhang, H., Gonzalez, J.E., Stoica, I.: Judging llm-as-a-judge with mt-bench and chatbot arena. In: Proceedings of the 37th International Conference on Neural Information Processing Systems. NIPS ’23, Curran Associates Inc., Red Hook, NY, USA (2023) 50. Zhong, Y., Wei, H., Yang, P., Wang, Z.: Expclip: bridging text and facial expres-sions via semantic alignment. In: Proceedings of the Thirty-Eighth AAAI Confer-ence on Artificial Intelligence and Thirty-Sixth Conference on Innovative Appli-cations of Artificial Intelligence and Fourteenth Symposium on Educational Ad-vances in Artificial Intelligence. AAAI’24/IAAI’24/EAAI’24, AAAI Press (2024). 
+
+https://doi.org/10.1609/aaai.v38i7.28594 , https://doi.org/10.1609/ aaai.v38i7.28594 
+
+51. Zhou, Y., Barnes, C., Jingwan, L., Jimei, Y., Hao, L.: On the continuity of rotation representations in neural networks. In: The IEEE Conference on Computer Vision and Pattern Recognition (CVPR) (June 2019) 52. Zhou, Y., Shimada, N.: Generative adversarial network for text-to-face synthesis and manipulation with pretrained bert model. In: 2021 16th IEEE International Conference on Automatic Face and Gesture Recognition (FG 2021). pp. 01–08 (2021). https://doi.org/10.1109/FG52635.2021.9666791 
+
+53. Zhou, Z., Ma, F., Fan, H., Yang, Z., Yang, Y.: Headstudio: Text to animatable head avatars with 3d gaussian splatting (2024) 54. Zhu, D., Chen, J., Shen, X., Li, X., Elhoseiny, M.: Minigpt-4: Enhancing vision-language understanding with advanced large language models. arXiv preprint arXiv:2304.10592 (2023) 55. Zielonka, W., Bolkart, T., Thies, J.: Towards metrical reconstruction of human faces. In: ECCV (2022) EmoteGPT 21 
+
+# Supplementary Material 
+
+## A Details of data generation 
+
+In this section, we describe the data generation procedure. Both the training and evaluation sets are produced using the automatic pipeline described be-low, while the test set is further verified through additional human inspection. Representative annotated samples from our dataset are shown in Figure 7. 
+
+Image-to-3D expression data We first apply a face detector [3] to the face image dataset to detect 2D facial landmarks, and use the detected landmarks to crop and align the face images. Noisy samples are discarded during this pre-processing stage. We then remove duplicate images from the filtered dataset by computing CLIP embeddings and applying a cosine-similarity threshold of 0.93. For each remaining aligned face image, we run EMOCAv2 to obtain a FLAME reconstruction, and use the estimated FLAME expression and jaw parameters as the corresponding 3D expression representation. To filter inaccurate recon-structions, we compute the mean L1 distance between the detected 68 2D facial landmarks and the projected 68 landmarks from the estimated FLAME mesh. Samples are discarded if the mean L1 distance exceeds 17.9 over the full face or 1.25 over the lip region. The final filtered set of face images, together with their corresponding FLAME expression and jaw parameters, is used for training. 
+
+Text-to-3D expression data We follow the same filtering procedure as in the image-to-3D expression data generation stage to remove noisy face im-ages and unreliable expression representations. We then subsample the images uniformly according to their emotion annotations and query GPT-4o to gen-erate both explicit and implicit textual descriptions for each image, using the prompts shown in Fig. 11 and Fig. 12, respectively. To reduce redundancy and hallucination, we deduplicate the GPT-4o outputs using the MinHash LSH algo-rithm [14] with a threshold of 0.9. Following EmoNet [42], we retain test samples whose emotion labels are consistent with the corresponding valence and arousal annotations. 
+
+## B Evaluation protocol 
+
+Emotion recognition metrics : In the main paper, we evaluate the perfor-mance on valence and arousal in the same setting as described in [5, 42]: The computation of Concordance correlation coefficient (CCC) requires to compute Pearson correlation coefficient (PCC), which measures the correlation between Y and ˆY :
+
+P CC (Y, ˆY ) = E(Y − μY )( Y − μ ˆY )
+
+σY σ ˆY
+
+, (3) 22 H. Wang et al. 
+
+CCC consists of the PCC with a penalty to the correlated signals with dif-ferent means: 
+
+CCC (Y, ˆY ) = 2σY σ ˆY P CC (Y, ˆY )
+
+σY 2 + σ ˆY 2 + ( μY − μ ˆY )2 , (4) 
+
+Emotion Recognition Network : To evaluate the emotion recognition metrics, we have to fit an individual emotion recognition network for the predictions from different methods. Following [5], we fit a 4-layer MLP with batch normalization for regressing valence and arousal levels and classifying emotion categories. The emotion recognition network would take the predicted output 3DMM parame-ters from each text-to-3D face generation method as input. For each emotion recognition network, we train for 50 epoches and report the results with the last checkpoint. 
+
+Optimization of Emotion Recognition Network : We utilize the same over-all losses as described in [42] for optimization: 
+
+L(Y, ˆY ) = CE (Y, ˆY ) + αα + β + γ LM SE (Y, ˆY )+ βα + β + γ LP CC (Y, ˆY ) + γα + β + γ LCCC (Y, ˆY ),
+
+(5) where α, β and γ are shake-shake regularization coefficients uniformly sampled from the interval [0 , 1] for each training batch. CE (Y, ˆY refers to emotion classi-fication loss between predicted emotion category and the ground truth category. And: 
+
+LM SE (Y, ˆY ) = M SE valence (Y, ˆY ) + M SE arousal (Y, ˆY ), (6) 
+
+LP CC (Y, ˆY ) = 1 − P CC valence (Y, ˆY ) + P CC arousal (Y, ˆY )2 , (7) 
+
+LCCC (Y, ˆY ) = 1 − CCC valence (Y, ˆY ) + CCC arousal (Y, ˆY )2 , (8) The training batch size for emotion network is 64. An Adam optimizer with a learning rate of 0.0001, β1 = 0 .9 and β2 = 0 .999 
+
+## C Comparison with text-based 2D generative models 
+
+Recent progress in text-to-image generation has greatly improved image quality and text alignment. A natural baseline for text-driven 3D facial expression gen-eration is to first synthesize a 2D expressive face image from text and then fit a 3DMM to the generated image. To evaluate this alternative, we compare EmoteGPT with three strong text-to-image baselines, SDXL [29], Flux.1[dev] [17] and Z-Image-Turbo [41]. For a EmoteGPT 23 Explicit     
+
+> Implicit
+> Overall
+> 48%
+> 45%
+> 46%
+> 32%
+> 30%
+> 31%
+> 1%
+> 6%
+> 4%
+> 8%
+> 12%
+> 10%
+> 7%
+> 4%
+> 6%
+> User Preference for Text-Facial Expression Alignment
+> Strongly Ours Weak Ours Indifferent Weak Flux.1[dev] Strongly Flux.1[dev]
+
+Fig. 5: Perceptual study comparing EmoteGPT and Flux.1[dev]. Participants pre-ferred EmoteGPT in both explicit and implicit input settings. overall, EmoteGPT was selected in 77% of cases, compared with 16% for Flux. 
+
+Table 7: Quantitative comparison with text-to-image generative model. Exp stands for Explicit descriptions and Imp represents Implicit descriptions. Eval Method L1Head ↓ L1F ace ↓ L1Lip ↓
+
+Exp SDXL 1.27 2.10 5.38 Flux.1[dev] 1.13 1.92 4.88 Z-image-Turbo 0.89 1.50 3.57 EmoteGPT 0.60 0.98 2.29 
+
+Imp SDXL 1.34 2.22 5.33 Flux.1[dev] 1.43 2.33 5.50 Z-image-Turbo 1.26 2.12 5.22 EmoteGPT 0.66 1.09 2.69 
+
+fair comparison in 3D expression space, we fit FLAME models to the images generated by these methods using EMOCAv2 [5]. Table 7 reports the quantitative comparison. EmoteGPT consistently outper-forms SDXL, Flux.1[dev] and Z-Image-Turbo in facial expression quality across all metrics, highlighting the advantage of directly predicting 3D facial expres-sions from text instead of relying on 2D image synthesis followed by 3D fitting. Figure 5 shows the perceptual comparison between Flux.1[dev] and EmoteGPT. Participants preferred EmoteGPT under both explicit and implicit input set-tings. Overall, EmoteGPT was selected in 77% of cases, whereas Flux was chosen in only 16%, indicating that EmoteGPT produces facial expressions that more faithfully match the textual descriptions. 
+
+## D Ablation on loss function 
+
+In Eq.2 of main paper, our training objective consists of a cross-entropy loss for text generation, together with an ℓ2 FLAME parameter loss and a weighted 
+
+ℓ1 geometry loss for facial expression prediction. To study the effect of the ex-pression prediction losses, we compare our facial expression objective with two 24 H. Wang et al. 
+
+Table 8: Ablation study on the loss function for facial expression prediction. Method Explicit Impicit 
+
+L1Head ↓ L1F ace ↓ L1Lip ↓ L1Head ↓ L1F ace ↓ L1Lip ↓
+
+FLAME loss 0.62 1.02 2.42 0.75 1.14 2.85 Geo. loss 0.61 0.99 2.32 0.67 1.13 2.80 FLAME loss + Geo. loss(Ours) 0.60 0.98 2.29 0.66 1.09 2.69 Table 9: Running time of different methods for processing a single prompt. Although prior methods target full 3D head or image synthesis, while EmoteGPT predicts only 3DMM expression parameters, EmoteGPT remains highly efficient and can be readily integrated into 3DMM-based 3D head synthesis pipelines. Method Running Time SDXL 4s Flux.1[dev] 120s Describe3D 40s HumanNorm 120min Portrait3D 33min EmoteGPT 0.5s 
+
+variants that use only the FLAME loss or only the geometry loss, while keeping all other training settings unchanged. As shown in Table 8, using either loss alone leads to inferior performance. The FLAME loss provides direct supervision in the parametric expression space, while the geometry loss constrains the resulting facial surface, making them com-plementary. Combining both losses consistently achieves the best performance on both explicit and implicit prompts, demonstrating the effectiveness of our loss design. 
+
+## E Runtime of Different Approaches 
+
+Table 9 summarizes the runtime of the compared methods, measured on a single L40s GPU. Although the models produce outputs in different formats, EmoteGPT exhibits a clear efficiency advantage, generating facial expressions from text substantially faster than competing approaches. 
+
+## F Qualitative results of ablation study 
+
+Figure 6 illustrates the results of models trained with different data settings. Multimodal training data enable the model to better capture textual semantics and generate more accurate expressions compared to unimodal training. EmoteGPT 25 “This person sees their favorite cartoon character  come to life in front of             
+
+> them.”
+> “This person witnesses a close friend leaving forever with no chance of
+> return.”
+> txt txt+vqa txt+vqa+img
+> “This person reacts immediately after being gently scolded or denied
+> something they want .”
+> “This person sternly addresses a group about a serious mistake that must be
+> corrected immediately .”
+> “This person nervously waits for the results of a critical evaluation or test
+> they have recently taken.”
+> GT txt txt+vqa txt+vqa+img GT
+> “This person playfully pretends to have a mustache with their finger. ”
+
+Fig. 6: Ablation on the training data. Visual comparison of EmoteGPT trained with different training data on text-to-3D expression synthesis. The inclusion of facial images and VQA data improves expression synthesis, demonstrating how multi-modal inputs enhance the performance for both explicit and implicit-based expressions. 
+
+## G Setting of perceptual study 
+
+We provide the screenshot of our perceptual study in Figure 8. For a fair compar-ison, we fit the FLAME model [19] to the prediction of Portrat3D and compare our results with the fitted FLAME model. 
+
+## H Failure Cases 
+
+We provide several failure cases of EmoteGPT in Fig. 9. Most failures occur when the prompt is emotionally ambiguous or underspecifies the intended reac-tion, allowing multiple plausible expressions such as surprise, concern, anger, or sadness. In such cases, EmoteGPT may generate a semantically reasonable but more subdued expression, while the ground truth exhibits a stronger reaction. We also observe that EmoteGPT may miss fine-grained facial details in complex scenarios, especially around the eyes and mouth. 
+
+## I More qualitative results 
+
+We provide additional qualitative results with zoomed-in facial details in Fig. 10. The examples show that EmoteGPT can generate diverse expressions condi-tioned on different textual descriptions. Even within the same broad affective category, the predicted expressions vary according to the prompt semantics. The 26 H. Wang et al. 
+
+zoomed-in regions further show that EmoteGPT captures fine-grained variations around the eyes and mouth, producing results that are generally consistent with the ground-truth expressions. These results suggest that our method supports fine-grained expression control beyond coarse emotion categories. We include additional qualitative comparisons with other methods in Fig-ure 13. For explicit prompts, EmoteGPT better matches fine-grained compo-sitional cues in the text, jointly controlling mouth opening, eye openness, and eyebrow configuration. In contrast, competing methods often overemphasize a single attribute or miss secondary cues, producing expressions that are exagger-ated and ambiguous. This is particularly evident in the first two rows, where EmoteGPT more accurately captures nuanced states such as confusion and mild surprise. For implicit prompts, EmoteGPT also infers more plausible affective states from scenario-level descriptions. It produces restrained satisfaction, dis-comfort, and sadness in the corresponding examples, while several baselines re-main near-neutral or inconsistent with the prompt. The exported results on GaussianAvatar, HeadStudio, and DiffusionRig further preserve these seman-tics, indicating that the expression control generated by EmoteGPT is robust and transferable across rendering backbones. In Figure 14, we also present additional results generated by EmoteGPT in response to a variety of implicit textual inputs. We also include examples where EmoteGPT is combined with other FLAME-based methods. These re-sults present EmoteGPT effectively complements existing approaches, enabling the creation of more expressive 3D avatars and facilitating personalized image generation. EmoteGPT 27 Explicit :
+
+The person's facial expression is characterized by a  wide -open smile, showing 
+
+teeth . The eyes appear wide and bright . This expression is typical of  excitement or 
+
+happiness .
+
+Implicit :
+
+This person  unexpectedly reunites with a long -lost friend at a social gathering. 
+
+Explicit :
+
+The person has  wide -open eyes with raised eyebrows , and their  mouth is open 
+
+with lips parted , forming an "O" shape . This facial expression suggests  surprise or 
+
+shock .
+
+Implicit :
+
+This person watches a dramatic and unexpected twist  unfold in a performance. 
+
+Explicit :
+
+The person has furrowed brows and slightly narrowed eyes . The  lips are pressed to 
+
+gether with a subtle downward turn . This expression may suggest  concentration or 
+
+concern .
+
+Implicit :
+
+This person encounters an unexpected error or problem  during a crucial presentati 
+
+on. 
+
+Explicit :
+
+The person has slightly furrowed brows , with their eyes partially open . The  mouth 
+
+is parted , showing a hint of tension in the lips. This expression may suggest 
+
+concern or confusion .
+
+Implicit :
+
+This person searches desperately for someone  in a chaotic environment. 
+
+Explicit :
+
+The person is characterized by slightly downturned lips and a relaxed mouth . The 
+
+eyes appear somewhat drooped , and there is no discernible movement in the 
+
+eyebrows. This expression possibly suggests mild displeasure or tiredness .
+
+Implicit :
+
+This person realizes they have lost an important personal item .
+
+Explicit :
+
+The person has tightly pressed lips and raised eyebrows , with  eyes appearing water 
+
+y and slightly squinted . This combination suggests an expression of intense emotio 
+
+n, possibly sadness or distress .
+
+Implicit :
+
+This person witnesses an emotional reunion  of long -lost loved ones. 
+
+Explicit :
+
+The person has a facial expression characterized by  wide -open eyes and raised 
+
+eyebrows . The mouth is slightly open with lips parted , conveying an expression 
+
+that may suggest surprise or fear .
+
+Implicit :
+
+This person narrowly avoids a major accident  while driving. 
+
+Explicit :
+
+The person has a facial expression characterized by  wide -open eyes and raised eye 
+
+brows . The mouth is open, with lips slightly parted . This expression may suggest  s
+
+urprise or shock .
+
+Implicit :
+
+This person witnesses a surprising plot twist  in a movie they are watching. 
+
+Face image  GT 3DMM  Text descriptions 
+
+Fig. 7: Examples of paired data in Txt2Emote 28 H. Wang et al. 
+
+Fig. 8: Screenshot of our perceptual study EmoteGPT 29 Prompt: This person witnesses an emotional reunion of long -l
+
+ost loved ones. 
+
+Ours  GT  Ours  GT 
+
+Prompt: This person hears someone making an implausible 
+
+claim during a conversation. 
+
+Prompt: This person confronts a colleague about a serious m 
+
+istake. 
+
+Prompt: This person accidentally discovers that an important 
+
+project file has been permanently deleted. 
+
+Fig. 9: Ablation on the training data. Visual comparison of EmoteGPT trained with different training data on text-to-3D expression synthesis. The inclusion of facial images and VQA data improves expression synthesis, demonstrating how multi-modal inputs enhance the performance for both explicit and implicit-based expressions. Prompt: This person enjoys a pleasant conversation at a 
+
+social event. 
+
+Ours  GT  Ours  GT 
+
+Prompt : This person eagerly shows off their newly applied 
+
+braces to their friends. 
+
+Prompt: This person smells something unusually unpleasant 
+
+in the room. 
+
+Prompt: This person angrily responds to an unexpected and 
+
+frustrating interruption during an important conversation. 
+
+Fig. 10: Additional visual comparisons with zoomed-in details. The examples cover diverse prompt-conditioned expressions, including positive and negative affective states. 30 H. Wang et al. You are an advanced AI model specializing in analyzing and describing facial expressions with high accuracy. Your task is to 
+
+generate a detailed yet concise textual description of the facial expression observed in the given face image. 
+
+Instructions: 
+
+1. Describe the facial expression precisely and comprehensively based on visible facial features. 
+
+2. Keep the description concise yet rich in detail. Focus only on the expression and avoid mentioning unrelated attributes su ch as 
+
+head position, glasses, hairstyle, or back -ground. 
+
+3. Use clear, natural language to convey the emotion or state of mind suggested by the facial features. 
+
+4. If the expression conveys a mix of emotions, describe the balance and interplay between them. 
+
+Example Output Formats: 
+
+1. The person has a facial expression characterized by an open, wide smile, showing teeth. The eyes appear bright and slightl y
+
+narrowed, which is typical in expressions of happiness or joy. 
+
+2. The person has wide -open eyes with slightly raised eye -brows. Their mouth is slightly open, with lips curved in a small smile . This 
+
+expression may suggest surprise or eager -ness. 
+
+3. The person’s facial expression is neutral. The mouth is relaxed without any discernible smile or frown, and the eyes appea r c alm 
+
+and straightforward. 
+
+4. The person’s facial expression shows furrowed brows and a scrunched nose, with lips pressed together, possibly indicating 
+
+disgust or displeasure. 
+
+5. The person’s facial expression displays slight furrowing of the brow and slight parting of the lips, which may suggest 
+
+concentration or concern. 
+
+Now, generate a detailed facial expression description for the given image. 
+
+Fig. 11: Prompts for querying GPT4o to generate explicit facial expression descriptions on face images. You are an expert in analyzing facial expressions, posture, and contextual clues to infer human actions and events. You will be 
+
+provided with an image of a face, and your task is to predict the most likely action or event they are involved in. 
+
+I will provide an image of a person's face. Based on this image, infer the single most likely general activity or action the per son is 
+
+experiencing. 
+
+Your response must: 
+
+1.  Be one specific activity or action (no multiple guesses). 
+
+2.  Start with 'This person...’ 
+
+3.  Avoid describing emotions —focus only on the action or situation. 
+
+4.  Avoid overly simple actions like 'laugh' or 'cry.’ 
+
+5.  Be concise and natural, similar to these examples: 
+
+• This person catches someone taking credit for their hard work in front of others. 
+
+• This person receives news of a canceled long -anticipated event. 
+
+• This person bites into a piece of food that tastes completely spoiled. 
+
+• This person realizes his fellow misplaced an important document moments before a critical meeting. 
+
+• This person watches as their favorite team scores a game -winning point. 
+
+Please infer activities for this face image: 
+
+Fig. 12: Prompts for querying GPT4o to generate implicit facial expression descrip-tions on face images EmoteGPT 31 Explicit: “The person has their mouth slightly open with the top teeth visible , and the eyebrows are raised . The eyes appear somewhat wide , possibly 
+
+indicating confusion .” 
+
+Implicit: “This person feels the discomfort of a dirty diaper  and wants it changed immediately.” 
+
+Explicit: “ The person has  slightly parted lips and wide -open eyes , with eyebrows in a natural position . This expression may suggest mild surprise .” 
+
+Implicit: “ This person reflects on a deeply personal achievement  that took years to accomplish.” 
+
+Ours(HS) HumanNorm  Portrait3D  Ours(3DMM)  Ours(GA) Describe3D  Ours(DR) Flux.1[dev] 
+
+Ours(HS) HumanNorm  Portrait3D  Ours(3DMM)  Ours(GA) Describe3D  Ours(DR) Flux.1[dev] 
+
+Ours(HS) HumanNorm  Portrait3D  Ours(3DMM)  Ours(GA) Describe3D  Ours(DR) Flux.1[dev] 
+
+Ours(HS) HumanNorm  Portrait3D  Ours(3DMM)  Ours(GA) Describe3D  Ours(DR) Flux.1[dev] 
+
+Implicit: “This person witnesses a close friend leaving forever  with no chance of return.” 
+
+Ours(HS) HumanNorm  Portrait3D  Ours(3DMM)  Ours(GA) Describe3D  Ours(DR) Flux.1[dev] 
+
+Fig. 13: Qualitative comparison of outputs from EmoteGPT and other relevant meth-ods. For EmoteGPT, we additionally show results after exporting the generated expres-sions to GaussianAvatar (GA), HeadStudio (HS), and DiffusionRig (DR). Compared with existing methods, EmoteGPT produces more semantically faithful and expres-sive results across diverse inputs. It accurately captures subtle composite expressions specified by complex explicit text prompts and also generates expressive results from implicit descriptions. 32 H. Wang et al. Ours  Ours 
+
++GaussianAvatars 
+
+Ours 
+
++HeadStudio 
+
+Ours 
+
++Diffusion Rig 
+
+Prompt: This person witnesses a loud and unexpected noise nearby. 
+
+Ours  Ours 
+
++GaussianAvatars 
+
+Ours 
+
++HeadStudio 
+
+Ours 
+
++Diffusion Rig 
+
+“This person accidentally walks in on a surprising and unexpected 
+
+scene. ”
+
+“This person performs passionately on stage during a concert.” 
+
+“This person listens closely as someone speaks directly to them for 
+
+the first time.” 
+
+“This person witnesses an unexpected turn of events during a live 
+
+performance they are watching. ”
+
+“This person witnesses a loud and unexpected noise nearby. ”
+
+“This person prepares to take a selfie during a winter outing.” 
+
+“This person receives unsatisfactory results after a medical check -
+
+up.” 
+
+“This person intensely focuses on an incoming tennis ball to make a 
+
+crucial return shot.” 
+
+“This person realizes they have left their phone in a cab that just 
+
+drove away.” 
+
+“This person experiences a strenuous and exhausting physical 
+
+challenge. ”
+
+“This person listens as someone unexpectedly compliments his 
+
+work.” 
+
+“This person reacts to seeing something unfamiliar for the very first 
+
+time. ”
+
+Fig. 14: Additional qualitative results generated by EmoteGPT from implicit textual descriptions. EmoteGPT effectively complements existing approaches by synthesizing vivid and realistic facial expressions across a range of contexts.
