@@ -1,0 +1,1518 @@
+Title: GeoTrace: Geometry-Aware Trajectory Token Compression for Video Large Language Models
+
+URL Source: https://arxiv.org/pdf/2607.09080v1
+
+Published Time: Mon, 13 Jul 2026 01:03:30 GMT
+
+Number of Pages: 29
+
+Markdown Content:
+# GeoTrace: Geometry-Aware Trajectory Token Compression for Video Large Language Models 
+
+Guohuan Xie 1,2 , Mengqi Lei 1,2 , Chuan Shi 3,Wei Bao 1,2 , Yue Gao 1,2 , Siqi Li 1,2 
+
+> 1
+
+BNRist, THUIBCS, BLBCI, School of Software, Tsinghua University 
+
+> 2
+
+Yangtze Delta Region Institute, Tsinghua University 
+
+> 3
+
+Beijing University of Posts and Telecommunications, Beijing, China 
+
+stuxiem01@gmail.com, leimq25@mails.tsinghua.edu.cn, shichuan@bupt.edu.cn baoweivvv@gmail.com, kevin.gaoy@gmail.com, lisiqi19971013@gmail.com 
+
+## Abstract 
+
+Although Video Large Language Models (Video LLMs) have shown strong perfor-mance in video understanding, their efficiency is still limited by the large number of visual tokens. Existing video token compression methods typically rely on frame-wise saliency or heuristic token merging, which can over-focus on locally salient regions and produce ambiguous fused features. To address these issues, we propose GeoTrace, a training-free spatiotemporal token compression frame-work that decomposes video evidence into exact skeleton tokens and traceable residual event tokens. Specifically, Contextual Farthest-Point Anchoring (CFPA) preserves salient, context-consistent, and high-coverage skeleton tokens, while Trajectory-Constrained Residual Condensation (TCRC) compresses residual tokens through one-to-one temporal trajectories and constrained near-manifold conden-sation, producing traceable event tokens with reduced ambiguity. We evaluate GeoTrace on four Video LLMs across four video understanding benchmarks, and the results demonstrate its effectiveness and generalization across different model architectures and scenarios. On LLaVA-OneVision, with only 10% visual tokens retained, GeoTrace achieves a 12 .99 × TFLOPs reduction while preserving 99.1% of the vanilla performance. Overall, GeoTrace offers a compact and traceable token representation for efficient and robust Video LLM inference. Code is available at 
+
+Code .
+
+## 1 Introduction 
+
+Recent advances in Video Large Language Models (Video LLMs) have substantially improved video understanding capability [ 19 , 47 , 11 , 5 , 4, 39 , 48 ], yet their efficiency remains constrained by the length of visual token sequences. A typical Video LLM samples frames from an input video, encodes them into visual tokens, and feeds the visual tokens together with text tokens into a large language model. Unlike text, video often contributes tens of thousands of tokens. Since the attention mechanism scales quadratically with sequence length, visual tokens frequently dominate the computational cost of Video LLMs and limit their practical deployment. Visual token compression [ 7, 8, 42 , 46 ] is therefore a natural remedy: by removing or merging redundant visual evidence, one can shorten the input sequence while preserving the information needed for downstream tasks. Existing token compression methods for images [ 8, 31 , 42 , 46 , 17 , 3] reduce spatial redundancy within a single frame, but they do not directly address the structure of video. Video contains both spatial redundancy and temporal redundancy, and they are often tightly coupled: whether a token is redundant depends not only on its importance within one frame, but also on how it relates to other    
+
+> Preprint. arXiv:2607.09080v1 [cs.CV] 10 Jul 2026 (a1) CLS-Attention Top-k (a2) CFPA feature
+> manifold (b1) Heuristic fusion feature
+> manifold (b2) TCRC
+
+Figure 1: Motivation overview for GeoTrace. Left module (a) compares frame-wise token selection behavior between CLS-Attention Top-k and CFPA. Right module (b) compares residual token condensation behavior between heuristic fusion and TCRC. Yellow stars denote raw tokens, and magenta stars denote fused tokens. tokens across frames. Directly applying image-oriented token compression to each frame therefore risks discarding temporal evidence or retaining locally salient but globally redundant regions. These observations call for compression mechanisms designed specifically for Video LLM inputs. Recent Video LLM compression methods [ 16 , 33 , 27 ] typically follow three stages: temporal chunking, frame-wise token selection, and subsequent spatiotemporal compression. However, this paradigm still has two critical limitations. First, frame-wise selection is often driven by [CLS] attention scores. Such criteria tend to concentrate tokens around a few salient entities, rather than capturing the skeleton semantics of the entire frame or modeling which tokens collectively support the chunk-level spatiotemporal structure as shown in Fig. 1(a1). As a result, the retained tokens may overrepresent a few salient entities while failing to form a compact semantic skeleton for the whole video chunk. Second, after frame-wise selection, existing methods often further split the remaining tokens into anchors and non-anchors, and then either discard the non-anchor tokens or simply aggregate them into nearby anchors. However, directly discarding residual tokens loses fine-grained temporal evidence, while heuristic aggregation can produce ambiguous features that deviate from the original feature manifold and weaken semantic discriminability, as shown in Fig. 1(b1). These limitations motivate two questions: how can we identify skeleton tokens that represent the global structure of a video, and how can we compress the remaining non-skeleton tokens into discriminative, structure-preserving event tokens ?To address these challenges, we propose GeoTrace , a training-free spatiotemporal visual token compression framework for Video LLMs. GeoTrace preserves a chunk-level semantic skeleton while compacting non-skeleton information under explicit temporal and spatial constraints. It centers on two core compression modules: Contextual Farthest-Point Anchoring (CFPA) and Trajectory-Constrained Residual Condensation (TCRC). First, CFPA selects skeleton tokens using feature coverage, token saliency, and chunk-level contextual consistency. As shown in Fig. 1(a2), CFPA retains semantically stable and complementary cues. Second, TCRC builds high-confidence one-to-one trajectories via Hungarian matching between adjacent frames to avoid many-to-one collapse and semantic mismatch, then performs trajectory-consistent temporal pooling and balanced spatial aggregation. As shown in Fig. 1(b2), TCRC produces compact event tokens that stay close to the original feature manifold, preserving manifold consistency between compressed and uncompressed representations. Together, skeleton tokens and event tokens form a shorter video evidence sequence that reduces redundancy while preserving semantic discriminability and the spatiotemporal structure of video chunks. Extensive experiments are conducted on four representative Video LLMs, including LLaVA-OneVision [ 19 ], LLaVA-Video [ 47 ], Qwen2.5-VL [ 5 ], and Qwen3-VL [ 4 ], across widely used video understanding benchmarks including VideoMME [ 12 ], LongVideoBench [ 38 ], MVBench [ 22 ], and EgoSchema [ 28 ]. Notably, on LLaVA-OneVision, GeoTrace achieves a 12 .99 × TFLOPs reduc-tion while preserving 99 .1% of the vanilla accuracy with only 10% of visual tokens retained. Overall, these results demonstrate the effectiveness and generalizability of GeoTrace across diverse Video LLMs and video understanding scenarios. To summarize, our main contributions are threefold: • We identify two key limitations of existing video token compression methods: biased token selection that over-focuses on locally salient regions, and residual token handling that may discard temporal evidence or produce ambiguous fused features. • We propose GeoTrace, a training-free spatiotemporal token compression framework that uses CFPA to preserve exact skeleton tokens and TCRC to condense residual evidence into traceable event tokens. 2• Extensive experiments across four Video LLMs and multiple video understanding bench-marks show that GeoTrace maintains near-lossless accuracy under low visual-token retention ratios and generalizes across diverse Video LLMs and video understanding scenarios. 
+
+## 2 Related Work 
+
+Video LLMs. Recent progress in large language models (LLMs) [ 1, 14 , 11 ] and multimodal large language models (MLLMs) [ 2, 13 , 15 , 21 , 26 , 25 , 35 ] has driven growing interest in extending these capabilities to video understanding, leading to the rapid development of Video LLMs [ 43 , 47 , 19 , 36 ,9, 37 , 10 , 5, 4, 48 , 11 ]. Existing Video LLMs support a wide range of tasks, such as video question answering, long-video understanding, and open-world multimodal reasoning, by encoding sampled video frames into visual tokens and feeding them together with text tokens into an LLM. They can be divided into general Video LLMs and Video LLMs with visual token compression during training time. General Video LLMs [ 19 , 5 , 10 , 47 , 48 , 11 ] directly process visual tokens extracted from raw video frames, typically with lightweight pooling or temporal modeling to handle spatiotemporal information. Video LLMs with visual token compression during the training-time [ 18 , 23 , 34 , 41 , 49 ]aim to reduce the number of video tokens and thereby improve scalability to longer videos. Despite these advances, complex video understanding still imposes substantial spatiotemporal demands, and visual tokens often dominate the computational and memory overhead of LLM inference, especially for long videos with extremely large token counts. Moreover, methods that improve token efficiency during training usually require additional model adaptation and considerable hardware resources. These limitations highlight the need for training-free visual token compression methods that can improve Video LLM efficiency at inference time without costly retraining, which motivates our GeoTrace framework. 
+
+Visual Token Compression. Visual token compression has emerged as an effective approach to reduce the cost of vision-language models by shortening the visual sequence consumed by the LLM. Image-oriented methods mainly exploit spatial redundancy: ToMe [ 6] merges similar tokens, SparseVLM [ 46 ] performs sparse selection and recycling, FastV [ 8] prunes shallow-layer tokens by text relevance, and VisionZip [ 42 ] removes encoder-side redundancy by separating informative and redundant tokens. Other methods explore adaptive retention, attention scoring, informative token selection, or graph-based redundancy analysis [ 40 , 31 , 17 , 24 ]. However, these image-oriented methods mainly target intra-frame redundancy, while videos require modeling cross-frame repetition, trajectories, event transitions, and long-range dependencies. Recent video-specific methods exploit spatiotemporal redundancy in different ways: PruneVid [ 16 ] distinguishes static and dynamic tokens, FastVID [ 33 ] employs density-based token pruning, AOT [ 20 ] builds local-global token anchors to aggregate pruned context and preserve temporal evidence, and ST-SimDiff [ 27 ] builds a spatiotempo-ral token graph to jointly preserve static and dynamic evidence. Still, existing methods largely rely on heuristic, attention-based, or clustering-based strategies for token retention and merging, without explicitly separating structural evidence for preservation and residual evidence for condensation. GeoTrace fills this gap via skeleton preservation and trajectory-constrained residual condensation, yielding compact, traceable, and spatiotemporally faithful visual tokens in a training-free setting. 
+
+## 3 Method 
+
+3.1 Overview and Setup 
+
+GeoTrace is a training-free visual-token compression method. Given frame-level visual tokens 
+
+X = {xt,i ∈ Rd}T,N t=1 ,i =1 and [CLS] attention, GeoTrace outputs a shorter visual sequence together with inherited global indices. As shown in Fig. 2, GeoTrace centers on two modules: CFPA preserves exact skeleton tokens, and TCRC condenses the residual tokens into traceable event tokens. Temporal chunking defines the local scope for context estimation and trajectory matching, while global indices are used to assemble compressed tokens back in the original video order before LLM prefill. We form temporal chunks from adjacent-frame similarity to restrict CFPA and TCRC to locally coherent intervals. For each frame, we compute a mean frame descriptor and measure the transition 3Similarity over time  
+
+> Time
+> 1
+> 0
+> Avg
+> Pool
+> Contextual Farthest-Point
+> Anchoring(CFPA)
+> Candidate-weighted Separation Matrix
+> …
+> Select
+> Trajectory-Constrained Residual
+> Condensation(TCRC)
+> ET
+> Entropy-regularized
+> Transport(ET)
+> Cost Matrix
+> Transport Plan
+> Source Slot
+> Vision Encoder
+> Projector
+> Pooling
+> Chunking
+> CFPA
+> TCRC
+> GeoTrace
+> LLM
+> Query
+> Output
+> Visual Tokens
+> Slot Tokens
+> Skeleton Tokens
+> Compressed Tokens
+> Global Tokens
+> Event Tokens
+> Transport
+> Aggregation
+
+Figure 2: Overview of the overall pipeline and the two core components of GeoTrace. The visual encoder first converts sampled video frames into visual tokens. The video is then partitioned into locally coherent temporal chunks according to adjacent-frame similarity. GeoTrace operates on these chunks through two modules: CFPA preserves exact skeleton tokens, while TCRC condenses non-skeleton residual evidence into compact event tokens. The resulting visual tokens are assembled in the original video order and concatenated with text tokens before LLM inference. similarity between neighboring frames: 
+
+¯xt = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+xt,i , st = cos(¯ xt, ¯xt+1 ) . (1) Low-similarity transitions are used as chunk cuts. This chunk-local operating scope avoids estimating context or temporal correspondences across unrelated events. Implementation details for chunk construction are provided in Appendix C.1. Within a chunk C, GeoTrace decomposes visual evidence as 
+
+ZC = SC
+
+|{z} 
+
+> exact skeleton
+
+∪ Φ( RC )
+
+| {z } 
+
+> traceable residual events
+
+, RC = XC \ S C . (2) Here SC denotes the skeleton tokens selected by CFPA, RC denotes the non-skeleton residual tokens, and Φ( ·) denotes the TCRC residual condensation operator. 
+
+3.2 Contextual Farthest-Point Anchoring 
+
+Video frames often contain a set of stable objects, layout cues, and event-relevant regions that form the semantic skeleton. However, saliency-only selection tends to concentrate on a few prominent regions, context-only selection may overlook locally important visual evidence, and coverage-only selection may preserve visually dispersed noise. To preserve this skeleton without corrupting the original visual evidence, we propose CFPA. CFPA selects exact skeleton tokens that are simultaneously salient, context-consistent, and high-coverage. CFPA first obtains a saliency matrix AC ∈ R|C|× N , which records the saliency scores of all visual tokens in each frame of the chunk. When the visual encoder exposes [CLS] attention, we construct the saliency matrix directly from the head-averaged [CLS] attention. For encoders without an explicit 4[CLS] token (e.g., SigLIP [44]), we derive token saliency from the visual self-attention matrix: 
+
+Ht = Softmax 
+
+ QtK⊤
+
+> t
+
+√dh
+
+
+
+∈ RN ×N , At,j = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+Ht,ij . (3) This saliency matrix captures the frame-wise importance of visual tokens within the chunk. CFPA then estimates the context consistency of each token within the chunk: 
+
+Rt,j = 1
+
+|C| 
+
+X
+
+> u∈C
+
+⟨xt,j , ¯xu⟩ . (4) A higher value indicates that the token is more consistent with the local video chunk, rather than salient only within an isolated frame. Combining feature-space coverage, saliency, and context consistency, CFPA defines a candidate-weighted separation matrix: 
+
+Ψtij =  1 − cos( xt,i , xt,j ) · At,j · Rt,j . (5) The weighting is applied on the candidate side: a token becomes a strong skeleton candidate only if it expands feature-space coverage, has high saliency, and is consistent with the local temporal context. Thus, Ψt is interpreted as a candidate-weighted token separation score, not as a purely metric distance. CFPA performs a beam-style farthest-point search under Ψt. This design is conceptually inspired by farthest-point sampling in point cloud processing [ 29 ], but operates on candidate-weighted token separation rather than metric distance alone. Given a partial skeleton set S, each candidate expansion 
+
+S ∪ { v} is scored by its bottleneck margin: 
+
+mt(v | S) = min  
+
+> u∈S
+
+Ψtuv . (6) Instead of committing to the single best candidate at each step, CFPA ranks all candidate expansions in the beam by this bottleneck margin and keeps a small set of high-scoring partial skeletons. Because every skeleton token is copied directly from the visual encoder output, the skeleton branch provides uncorrupted anchors for stable visual structure. The full CFPA procedure, including saliency matrix construction, context consistency estimation, candidate-weighted separation computation, and beam-style farthest-point search, is specified in detail in Appendix C.2. 
+
+3.3 Trajectory-Constrained Residual Condensation 
+
+After skeleton preservation, the residual tokens still contain fine-grained temporal and contextual evi-dence. While many are redundant across nearby frames, directly discarding them removes informative details, whereas unconstrained merging may entangle unrelated regions into ambiguous features and weaken semantic discriminability. To compact this residual evidence while preserving provenance, we propose TCRC. TCRC first constructs high-confidence one-to-one temporal trajectories and then condenses trajectory-level residual features into event tokens. For adjacent frames t and t + 1 in the same chunk, TCRC first extracts the non-skeleton residual indices It and It+1 , then solves a one-to-one assignment on their cosine-similarity matrix: 
+
+Mt+1 = arg max 
+
+> M∈ Π
+
+X
+
+> (i,j )∈M
+
+cos( xt+1 ,i , xt,j ) , (7) where i ∈ It+1 , j ∈ It, and Π is the set of valid bipartite matchings between the two residual-token sets. We solve this maximum-similarity assignment with Hungarian matching. A matched pair is accepted only when its similarity exceeds the effective temporal threshold. The one-to-one assignment prevents multiple residual tokens in frame t + 1 from matching to the same residual token in frame t,while thresholding rejects weak or ambiguous temporal correspondences. These accepted token links define temporal trajectories over residual tokens. For a trajectory Tℓ,TCRC averages the features along the trajectory: 
+
+˜yℓ = 1
+
+|T ℓ|
+
+X
+
+> (t,i )∈T ℓ
+
+xt,i . (8) 5Tokens that are not linked to any token in the previous frame form singleton trajectories and are processed in subsequent steps. The complete temporal trajectory construction procedure is detailed in Appendix C.3.1. After temporal trajectory construction, frames may still contain many trajectory-level representations. Let Yt = {yt,i }Mt 
+
+> i=1
+
+denote the set of trajectory features associated with frame t, where each yt,i 
+
+is a re-indexed trajectory feature ˜yℓ, and let Zt = {zt,k }Bt 
+
+> k=1
+
+denote the event tokens after spatial condensation. TCRC then applies entropy-regularized transport (ET): 
+
+P ⋆t = arg min  
+
+> P∈U t
+
+X
+
+> i,k
+
+Pik ∥yt,i − zt,k ∥22 + ε X
+
+> i,k
+
+Pik log Pik . (9) Here P denotes the transport plan, and Ut is the feasible polytope with uniform source and target marginals. We solve the objective with a Sinkhorn barycenter update. Specifically, the event tokens are updated as transport-weighted barycenters, and each condensed event token inherits the global index of the source feature with the largest transport mass: 
+
+zt,k ←
+
+P 
+
+> i
+
+P ⋆t,ik yt,i 
+
+P 
+
+> i
+
+P ⋆t,ik 
+
+, g(zt,k ) = g
+
+
+
+yt, arg max i P ⋆t,ik 
+
+
+
+. (10) Thus, every event token preserves explicit evidence: its temporal evidence comes from trajectories, while its spatial evidence is dominated by source features with transport mass. Under local feature-manifold assumptions, Appendix D shows that TCRC event tokens stay close to the original feature manifold, preserving semantic discriminability. The solver details are given in Appendix C.3.2. 
+
+Output assembly. For each chunk, GeoTrace returns exact skeleton tokens from CFPA and con-densed residual event tokens from TCRC, each paired with an inherited global index. We concatenate outputs from all chunks and sort them by these indices before LLM prefill. This preserves the original video order while shortening the visual sequence. The complete procedure of GeoTrace is summarized in Appendix C.1. Complexity details are provided in Appendix F. 
+
+## 4 Experiments 
+
+4.1 Experimental Settings Benchmarks. We evaluate GeoTrace on four widely used video understanding benchmarks: MVBench [ 30 , 22 ], LongVideoBench [ 38 ], EgoSchema [ 28 ], and VideoMME [ 12 ]. VideoMME further reports results on its official short, medium, and long splits. Together, these benchmarks cover diverse video durations and scenarios, allowing us to assess both effectiveness and generalization. 
+
+Compared baselines. We compare GeoTrace with six representative training-free visual token compression baselines. FastV [ 8 ] and VisionZip [ 42 ] are image-oriented methods that reduce visual tokens through attention-based pruning or encoder-side redundancy removal. PruneVid [ 16 ], FastVID [ 33 ], AOT [ 20 ], and ST-SimDiff [ 27 ] are video-oriented methods that exploit spatiotemporal redundancy through dynamic/static token selection, density-based pruning, local-global anchoring, or spatiotemporal token graphs. 
+
+Implementation details. We evaluate GeoTrace on four Video LLMs: LLaVA-OneVision [ 19 ], LLaVA-Video [ 47 ], Qwen2.5-VL [ 5], and Qwen3-VL [ 4 ], covering different model architectures. Following official settings, LLaVA-OneVision and LLaVA-Video uniformly sample 32 and 64 frames, producing 32 × 196 and 64 × 169 visual tokens, respectively. For Qwen2.5-VL and Qwen3-VL, we uniformly sample 32 frames and keep official video-processor settings unchanged, so their visual-token counts are determined by the dynamic-resolution processor and generated video grid. For fair comparison with baselines, we match the average number of visual tokens processed per Transformer layer across methods. This layer-wise token count serves as a proxy for comparable computational cost in Video LLMs. Default hyperparameters and the detailed budget-alignment formulation are provided in Appendix C and E. We conduct all evaluations using LMMs-Eval [45] on A100 GPUs. 6Table 1: Comparison of training-free visual token compression methods on LLaVA-OneVision and LLaVA-Video. Best scores within each retention-ratio block are highlighted in bold. Avg. Rel. Acc. is normalized by the vanilla model. Method Retention Ratio R
+
+VideoMME EgoSchema LongVideo Bench MVBench Avg. Short Medium Long Overall Score Rel. Acc. (%) 
+
+LLaVA-OneVision 
+
+Vanilla 100% 69.9 56.7 48.9 58.5 60.3 56.6 58.3 58.4 100.0 FastV 25% 68.1 54.7 46.8 56.5 57.8 55.4 56.4 56.5 96.7 VisionZip 68.8 57.3 48.2 58.1 60.4 56.4 57.8 58.2 99.7 PruneVID 67.3 54.8 47.2 56.4 58.1 55.4 56.8 56.7 97.1 FastVID 69.9 56.3 47.4 57.9 59.5 55.9 58.1 57.8 99.0 AOT – – – 56.9 61.0 56.0 58.5 58.1 99.5 
+
+GeoTrace 70.9 55.8 49.8 58.8 60.4 57.1 58.3 58.7 100.5 
+
+FastV 20% 66.3 53.9 46.9 55.7 57.6 56.0 56.0 56.3 96.4 VisionZip 68.6 57.0 48.3 58.0 60.0 55.4 57.6 57.7 98.8 PruneVID 67.2 53.9 48.2 56.4 60.2 55.2 56.2 57.0 97.6 FastVID 69.9 56.3 47.4 57.9 59.5 55.9 58.1 57.9 99.1 AOT – – – 56.8 61.4 56.1 58.3 58.2 99.7 
+
+GeoTrace 70.2 56.7 47.3 58.1 60.0 56.3 58.6 58.3 99.8 
+
+FastV 15% 64.6 54.0 45.3 54.6 56.6 54.8 55.0 55.2 94.5 VisionZip 63.8 54.6 48.3 55.6 60.0 54.1 53.5 55.8 95.5 PruneVID 67.2 52.8 46.7 56.1 57.7 54.5 55.1 55.7 95.4 FastVID 69.7 55.8 47.7 57.7 58.9 56.7 58.2 57.9 99.1 
+
+AOT – – – 56.1 61.3 55.1 57.7 57.6 98.6 
+
+GeoTrace 68.8 56.2 47.7 57.6 59.6 56.8 57.5 57.9 99.1 
+
+FastV 10% 60.9 52.2 44.9 52.7 56.0 52.4 53.4 53.6 91.8 VisionZip 60.3 52.9 46.7 53.3 58.5 49.4 54.8 54.0 92.5 PruneVID 65.9 52.8 45.6 54.7 57.2 54.0 53.7 54.9 94.0 FastVID 68.1 55.7 47.8 57.2 58.7 55.7 57.0 57.1 97.8 AOT – – – 56.6 60.3 53.8 57.2 57.0 97.6 
+
+GeoTrace 67.8 55.4 48.1 57.1 60.2 56.6 57.5 57.9 99.1 
+
+LLaVA-Video 
+
+Vanilla 100% 77.0 62.1 53.3 64.2 57.3 59.5 61.9 60.7 100.0 FastV 20% 69.3 58.3 49.9 59.2 54.1 56.0 58.4 56.9 93.7 VisionZip 72.3 59.6 53.3 61.7 56.4 58.0 59.8 59.0 97.2 FastVID 74.6 60.8 52.3 62.6 55.0 57.1 60.2 58.7 96.7 ST-SimDiff 73.7 60.8 52.1 62.2 55.5 57.3 59.3 58.6 96.5 
+
+GeoTrace 73.8 59.7 51.8 61.7 56.5 59.0 60.0 59.3 97.7 
+
+FastV 10% 64.3 53.8 49.2 55.8 51.1 53.6 56.2 54.2 89.3 VisionZip 69.4 57.9 51.2 59.5 53.9 54.5 58.5 56.6 93.2 FastVID 71.8 57.3 50.2 59.8 52.4 56.9 59.3 57.1 94.1 ST-SimDiff 71.7 58.7 50.4 60.5 54.6 56.8 58.9 57.7 95.1 
+
+GeoTrace 72.0 58.9 51.6 60.8 54.9 57.9 59.7 58.3 96.0 
+
+4.2 Main Results 
+
+We evaluate GeoTrace under different retention ratios R. The main paper reports all results for LLaVA-OneVision at the 10% , 15% , 20% , and 25% retention settings, as well as the representative 
+
+20% /10% settings for the other Video LLMs in Tabs. 1 and 2. Results for the other Video LLMs and compared baselines at the remaining 25% and 15% settings are provided in Appendix A. 
+
+Results on LLaVA-OneVision. Tab. 1 shows that GeoTrace achieves the best performance across all retention ratios R. It retains 99 .1% of vanilla accuracy at R = 10% , while surpassing the vanilla model at R = 25% . Compared with baselines, GeoTrace degrades more gracefully as the token budget shrinks. This pattern suggests that preserving skeleton evidence and compacting residual temporal evidence can remove redundant video tokens with only mild performance degradation. 
+
+Results on LLaVA-Video. Tab. 1 further shows that GeoTrace achieves the best average score on LLaVA-Video at both 20% and 10% retention. Since LLaVA-Video samples more frames than LLaVA-OneVision, the visual sequence contains denser cross-frame redundancy and finer temporal 7Table 2: Comparison of training-free visual token compression methods on Qwen2.5-VL and Qwen3-VL. Best scores within each retention-ratio block are highlighted in bold. Avg. Rel. Acc. is normalized by the vanilla model. Method Retention Ratio R                                                                                                                                                       
+
+> VideoMME EgoSchema LongVideo Bench MVBench Avg. Short Medium Long Overall Score Rel. Acc. (%)
+> Qwen2.5-VL
+> Vanilla 100% 72.6 61.4 49.9 61.3 58.3 58.9 68.0 61.6 100.0 FastV 20% 69.4 57.0 51.2 59.2 57.1 54.2 66.8 59.3 96.3 VisionZip 69.6 57.2 50.2 59.0 56.6 56.3 66.4 59.6 96.8 FastVID 69.9 56.3 49.7 58.6 56.4 57.8 64.7 59.4 96.4
+> GeoTrace 69.1 57.1 48.4 58.2 57.0 58.6 67.0 60.2 97.7
+> FastV 10% 63.7 54.7 49.3 55.9 54.9 51.1 63.6 57.3 91.6 VisionZip 67.0 54.7 47.6 56.4 55.5 54.5 64.3 57.7 93.7 FastVID 66.3 53.6 49.0 56.3 55.6 55.4 62.3 57.4 93.2
+> GeoTrace 65.4 55.9 47.3 56.2 55.4 57.5 65.5 58.7 95.3
+> Qwen3-VL
+> Vanilla 100% 75.8 60.3 56.7 64.3 68.8 60.3 68.5 65.5 100.0 FastVID 20% 69.1 57.0 53.4 59.9 66.1 59.8 63.0 62.2 95.0 AOT 69.3 56.6 53.9 59.8 66.1 58.6 67.0 62.9 96.0
+> GeoTrace 72.2 57.1 53.9 61.1 66.3 59.8 67.2 63.6 97.1
+> FastVID 10% 63.7 60.1 58.6 60.8 64.0 58.0 58.6 60.4 92.2 AOT 62.3 54.8 55.2 57.8 63.9 57.1 62.3 60.3 92.1
+> GeoTrace 69.3 55.0 52.6 59.0 65.2 58.4 66.0 62.2 95.0
+
+Table 3: Effect of increasing sampled frames under a matched visual-token budget on Qwen3-VL. The 80-frame and 160-frame settings use GeoTrace with lower retention ratios so that the retained token count is comparable to the 16-frame vanilla setting. Setting Sampled Frames Retention Ratio R VideoMME EgoSchema LongVideo Bench MVBench Avg. Score Qwen3-VL Vanilla 16 100% 60.5 66.7 57.2 66.9 62.8 Qwen3-VL + GeoTrace 80 20% 63.6 68.1 59.8 67.2 64.7 Qwen3-VL + GeoTrace 160 10% 63.5 67.5 62.3 68.3 65.4 
+
+evidence. GeoTrace is strongest at R = 10% , where it outperforms all baselines on every metric. This suggests that TCRC is useful when dense video-frame sequences are compressed aggressively. 
+
+Results on Qwen2.5-VL. Tab. 2 shows that GeoTrace achieves the best average score and accuracy on Qwen2.5-VL at both 20% and 10% . Although it is not always the best on VideoMME, it improves LongVideoBench and MVBench, which involve broader temporal and task diversity. This indicates that GeoTrace is not tied to fixed-grid LLaVA architecture. Its chunk-level skeleton selection and residual condensation remain effective under dynamic-resolution visual layouts. 
+
+Results on Qwen3-VL. Tab. 2 also confirms the benefit of GeoTrace on the stronger Qwen3-VL backbone. GeoTrace achieves the best average score at both 20% and 10% , improving relative accuracy to 97 .1% and 95 .0% , respectively. While FastVID remains competitive on some VideoMME scores, GeoTrace is more balanced across EgoSchema, LongVideoBench, and MVBench. These gains show that the proposed GeoTrace remains useful even with a stronger underlying VLLM. 
+
+Using GeoTrace to increase temporal coverage. GeoTrace can also trade redundant per-frame tokens for broader temporal coverage under a matched visual-token budget. On Qwen3-VL, increasing sampled frames from 16 to 80 and 160 improves the average score from 62 .8 to 64 .7 and 65 .4,respectively. The 160-frame setting is especially beneficial on LongVideoBench, where longer temporal evidence can matter. This suggests that compression is useful not only for acceleration but also for exposing the LLM to a longer temporal context. 84.3 Ablation Study Overview. We ablate the main design choices of GeoTrace on LLaVA-OneVision. The study examines the effectiveness of the CFPA skeleton branch and the TCRC residual branch, analyzes the skeleton allocation ratio α, and reports efficiency under different retention ratios. 
+
+Ablation study on CFPA module. We ablate CFPA at R = 10% on LLaVA-OneVision. In Tab. 4, Sal., Cons., and Cov. denote saliency-only, context-consistency-only, and coverage-only selection. The two removal variants test whether context consistency and saliency are both needed in the full CFPA score. This isolates how each component contributes to stable skeleton preservation. Table 4: Ablation study of CFPA at R = 10% .Sal., Cons., and Cov. denote saliency-only, context-consistency-only, and coverage-only se-lection.                                          
+
+> Method VideoMME EgoSchema LongVideo Bench MVBench Avg. Score Rel. Acc. Sal. 55.7 59.6 53.8 55.7 56.2 96.2 Cons. 53.4 56.7 55.1 55.1 55.1 94.3 Cov. 56.1 58.9 54.4 55.2 56.2 96.2 w/o Cons. 55.7 60.2 55.3 56.2 56.9 97.4 w/o Sal. 56.2 58.9 56.6 57.0 57.2 97.9
+> CFPA 57.1 60.2 56.6 57.5 57.9 99.1
+
+Table 5: Ablation study of TCRC at R = 10% .M2O replaces one-to-one temporal matching with many-to-one matching, while K-means re-places ET condensation.                              
+
+> Method VideoMME EgoSchema LongVideo Bench MVBench Avg. Score Rel. Acc. M2O 57.0 59.9 56.5 57.2 57.7 98.8 K-means 57.0 59.7 56.4 57.2 57.6 98.6 M2O + K-means 56.9 59.8 56.3 57.3 57.6 98.6
+> TCRC 57.1 60.2 56.6 57.5 57.9 99.1
+
+Table 6: Ablation study on the skeleton alloca-tion ratio α at R = 10% .                                        
+
+> αVideoMME EgoSchema LongVideo Bench MVBench Avg. Score 0/TCRC 56.6 59.9 56.6 56.9 57.5 0.2 56.3 59.4 56.9 56.7 57.3 0.4 56.1 59.6 54.8 57.1 56.9 0.6 56.4 59.7 55.1 56.8 57.0 0.8 56.7 59.9 56.0 56.9 57.4 0.9 57.1 60.2 56.6 57.5 57.9
+> 1/CFPA 56.9 60.3 55.7 57.2 57.5
+
+Table 7: Efficiency on VideoMME using LLaVA-OneVision. Speedups are relative to vanilla; Avg. Rel. Acc. follows Tab. 1.                                     
+
+> RTFLOPs TFLOPs Speedup Prefill (ms) Prefill Speedup TTFT (ms) TTFT Speedup Avg. Rel. Acc. (%) Vanilla 113.43 1.00x 1339.8 1.00x 2007.7 1.00x 100.0 25% 23.05 4.92x 346.5 3.87x 677.3 2.96x 100.5
+> 20% 17.83 6.36x 320.0 4.19x 650.5 3.09x 99.8 15% 13.20 8.60x 266.0 5.04x 596.4 3.37x 99.1 10% 8.73 12.99x 264.1 5.07x 594.4 3.38x 99.1
+
+The full CFPA achieves the best average score and relative accuracy, improving the average score over Sal./Cov. by 1.7 and over Cons. by 2.8. Removing either context consistency or saliency also reduces the average score, showing that neither term is redundant. These results show that saliency, context consistency, and coverage play complementary roles: saliency identifies important evidence, context filters frame-local noise, and coverage avoids redundant local regions. 
+
+Ablation study on TCRC module. We ablate TCRC at R = 10% on LLaVA-OneVision in Tab. 5. M2O replaces one-to-one temporal matching with many-to-one matching, while K-means replaces ET condensation. Both variants reduce the average score, and their combination does not recover the loss. This supports the two-part TCRC design: one-to-one temporal trajectory construction keeps residual evidence traceable, while ET condensation provides a more stable spatial summary. 
+
+Ablation study on skeleton allocation ratio α. We use α to allocate the retained token budget between CFPA skeleton tokens and TCRC event tokens. Tab. 6 evaluates different α values at 
+
+R = 10% on LLaVA-OneVision. The best average score is obtained at α = 0 .9, where most of the budget preserves exact skeleton evidence while a small portion remains for residual temporal evidence. Both endpoints, 0/TCRC and 1/CFPA , underperform in this mixed setting, indicating that CFPA and TCRC provide complementary benefits. 
+
+Efficiency under different retention ratios. We measure efficiency on LLaVA-OneVision using VideoMME, with latency measured on an A100 GPU, as shown in Tab. 7. At R = 10% , GeoTrace reduces computation from 113 .43 to 8.73 TFLOPs and improves TTFT from 2007 .7 ms to 594 .4 ms. The TTFT speedup is smaller than the TFLOPs reduction because it includes non-prefill overheads, but the end-to-end gain is still substantial. Since this setting retains 99 .1% relative accuracy, the efficiency gains translate into practical acceleration rather than merely stronger pruning. 95 Conclusion 
+
+We introduced GeoTrace, a training-free visual-token compression framework for Video LLMs. GeoTrace separates video evidence into exact skeleton tokens selected by CFPA and traceable event tokens condensed by TCRC, preserving core visual structure while compacting redundant residual temporal evidence without weakening semantic discriminability. Across multiple Video LLM backbones and video understanding benchmarks, GeoTrace maintains strong accuracy under aggressive retention ratios and delivers substantial prefill and TTFT speedups. These results highlight the value of geometry-aware skeleton preservation and trajectory-constrained residual condensation for efficient video-language understanding. Future work may extend GeoTrace toward adaptive token budgeting, streaming video inference, and broader model-specific deployment settings. 
+
+## References 
+
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 , 2023. [2] Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, et al. Flamingo: a visual language model for few-shot learning. Advances in Neural Information Processing Systems , 35:23716–23736, 2022. [3] Saeed Ranjbar Alvar, Gursimran Singh, Mohammad Akbari, and Yong Zhang. Divprune: Diversity-based visual token pruning for large multimodal models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 9392–9401, 2025. [4] Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, et al. Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 , 2025. [5] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, et al. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 , 2025. [6] Daniel Bolya, Cheng-Yang Fu, Xiaoliang Dai, Peizhao Zhang, Christoph Feichtenhofer, and Judy Hoffman. Token merging: Your ViT but faster. In International Conference on Learning Representations , 2023. [7] Daniel Bolya, Cheng-Yang Fu, Xiaoliang Dai, Peizhao Zhang, Christoph Feichtenhofer, and Judy Hoffman. Token merging: Your vit but faster. In The Eleventh International Conference on Learning Representations ,2023. [8] Liang Chen, Haozhe Zhao, Tianyu Liu, Shuai Bai, Junyang Lin, Chang Zhou, and Baobao Chang. An image is worth 1/2 tokens after layer 2: Plug-and-play inference acceleration for large vision-language models. In European Conference on Computer Vision , pages 19–35, 2024. [9] Lin Chen, Xilin Wei, Jinsong Li, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Zehui Chen, Haodong Duan, Bin Lin, Zhenyu Tang, et al. Sharegpt4video: Improving video understanding and generation with better captions. Advances in Neural Information Processing Systems , 37:19472–19495, 2024. [10] Zesen Cheng, Sicong Leng, Hang Zhang, Yifei Xin, Xin Li, Guanzheng Chen, Yongxin Zhu, Wenqi Zhang, Ziyang Luo, Deli Zhao, et al. Videollama 2: Advancing spatial-temporal modeling and audio understanding in video-llms. arXiv preprint arXiv:2406.07476 , 2024. [11] Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier with ad-vanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 , 2025. [12] Chaoyou Fu, Yuhan Dai, Yongdong Luo, Lei Li, Shuhuai Ren, Renrui Zhang, Zihan Wang, Chenyu Zhou, Yunhang Shen, Mengdan Zhang, et al. Video-mme: The first-ever comprehensive evaluation benchmark of multi-modal llms in video analysis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24108–24118, 2025. [13] Zhangwei Gao, Zhe Chen, Erfei Cui, Yiming Ren, Weiyun Wang, Jinguo Zhu, Hao Tian, Shenglong Ye, Junjun He, Xizhou Zhu, et al. Mini-internvl: a flexible-transfer pocket multi-modal model with 5% parameters and 90% performance. Visual Intelligence , 2(1):32, 2024. 
+
+10 [14] Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd of models. 
+
+arXiv preprint arXiv:2407.21783 , 2024. [15] Wei Huang, Xingyu Zheng, Xudong Ma, Haotong Qin, Chengtao Lv, Hong Chen, Jie Luo, Xiaojuan Qi, Xianglong Liu, and Michele Magno. An empirical study of llama3 quantization: From llms to mllms. 
+
+Visual Intelligence , 2(1):36, 2024. [16] Xiaohu Huang, Hao Zhou, and Kai Han. Prunevid: Visual token pruning for efficient video large language models. In Findings of the Association for Computational Linguistics: ACL 2025 , pages 19959–19973, 2025. [17] Yutao Jiang, Qiong Wu, Wenhao Lin, Wei Yu, and Yiyi Zhou. What kind of visual tokens do we need? training-free visual token pruning for multi-modal large language models from the perspective of graph. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 4075–4083, 2025. [18] Peng Jin, Ryuichi Takanobu, Wancai Zhang, Xiaochun Cao, and Li Yuan. Chat-univi: Unified visual representation empowers large language models with image and video understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 13700–13710, 2024. [19] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Ziwei Liu, et al. Llava-onevision: Easy visual task transfer. Transactions on Machine Learning Research , 2025. [20] Jinlong Li, Liyuan Jiang, Haonan Zhang, and Nicu Sebe. Token reduction via local and global contexts optimization for efficient video large language models. arXiv preprint arXiv:2603.01400 , 2026. [21] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In International conference on machine learning ,pages 19730–19742, 2023. [22] Kunchang Li, Yali Wang, Yinan He, Yizhuo Li, Yi Wang, Yi Liu, Zun Wang, Jilan Xu, Guo Chen, Ping Luo, et al. Mvbench: A comprehensive multi-modal video understanding benchmark. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 22195–22206, 2024. [23] Yanwei Li, Chengyao Wang, and Jiaya Jia. Llama-vid: An image is worth 2 tokens in large language models. In European Conference on Computer Vision , pages 323–340, 2024. [24] Zhihang Lin, Mingbao Lin, Luxi Lin, and Rongrong Ji. Boosting multimodal large language models with visual tokens withdrawal for rapid inference. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 5334–5342, 2025. [25] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in Neural Information Processing Systems , 36:34892–34916, 2023. [26] Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction tuning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 26296–26306, 2024. [27] Bingjun Luo, Tony Wang, Chaoqi Chen, and Xinpeng Ding. ST-simdiff: Balancing spatiotemporal similarity and difference for efficient video understanding with MLLMs. In International Conference on Learning Representations , 2026. [28] Karttikeya Mangalam, Raiymbek Akshulakov, and Jitendra Malik. Egoschema: A diagnostic benchmark for very long-form video language understanding. Advances in Neural Information Processing Systems ,36:46212–46244, 2023. [29] Charles Ruizhongtai Qi, Li Yi, Hao Su, and Leonidas J Guibas. Pointnet++: Deep hierarchical feature learning on point sets in a metric space. Advances in Neural Information Processing Systems , 30, 2017. [30] Amir Shahroudy, Jun Liu, Tian-Tsong Ng, and Gang Wang. Ntu rgb+ d: A large scale dataset for 3d human activity analysis. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition ,pages 1010–1019, 2016. [31] Yuzhang Shang, Mu Cai, Bingxin Xu, Yong Jae Lee, and Yan Yan. Llava-prumerge: Adaptive token reduction for efficient large multimodal models. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 22857–22867, 2025. 
+
+11 [32] Kele Shao, Keda Tao, Can Qin, Haoxuan You, Yang Sui, and Huan Wang. Holitom: Holistic token merging for fast video large language models. In Advances in Neural Information Processing Systems , 2025. [33] Leqi Shen, Guoqiang Gong, Tao He, Yifeng Zhang, pengzhang liu, Sicheng Zhao, and Guiguang Ding. FastVID: Dynamic density pruning for fast video large language models. In Advances in Neural Information Processing Systems , 2025. [34] Xiaoqian Shen, Yunyang Xiong, Changsheng Zhao, Lemeng Wu, Jun Chen, Chenchen Zhu, Zechun Liu, Fanyi Xiao, Balakrishnan Varadarajan, Florian Bordes, et al. Longvu: Spatiotemporal adaptive compression for long video-language understanding. arXiv preprint arXiv:2410.17434 , 2024. [35] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al. Gemini: a family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 , 2023. [36] Junke Wang, Dongdong Chen, Chong Luo, Xiyang Dai, Lu Yuan, Zuxuan Wu, and Yu-Gang Jiang. Chatvideo: A tracklet-centric multimodal and versatile video understanding system. arXiv preprint arXiv:2304.14407 , 2023. [37] Yuetian Weng, Mingfei Han, Haoyu He, Xiaojun Chang, and Bohan Zhuang. Longvlm: Efficient long video understanding via large language models. In European Conference on Computer Vision , pages 453–470, 2024. [38] Haoning Wu, Dongxu Li, Bei Chen, and Junnan Li. Longvideobench: A benchmark for long-context interleaved video-language understanding. Advances in Neural Information Processing Systems , 37: 28828–28857, 2024. [39] Guohuan Xie, Syed Ariff Syed Hesham, Wenya Guo, Bing Li, Ming-Ming Cheng, Guolei Sun, and Yun Liu. A comprehensive survey on video scene parsing: Advances, challenges, and prospects. arXiv preprint arXiv:2506.13552 , 2025. [40] Long Xing, Qidong Huang, Xiaoyi Dong, Jiajie Lu, Pan Zhang, Yuhang Zang, Yuhang Cao, Conghui He, Jiaqi Wang, Feng Wu, et al. Pyramiddrop: Accelerating your large vision-language models via pyramid visual redundancy reduction. arXiv preprint arXiv:2410.17247 , 2024. [41] Lin Xu, Yilin Zhao, Daquan Zhou, Zhijie Lin, See Kiong Ng, and Jiashi Feng. Pllava: Parameter-free llava extension from images to videos for video dense captioning. arXiv preprint arXiv:2404.16994 , 2024. [42] Senqiao Yang, Yukang Chen, Zhuotao Tian, Chengyao Wang, Jingyao Li, Bei Yu, and Jiaya Jia. Visionzip: Longer is better but not necessary in vision language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 19792–19802, 2025. [43] Pengpeng Zeng, Haonan Zhang, Lianli Gao, Jingkuan Song, and Heng Tao Shen. Video question answering with prior knowledge and object-sensitive learning. IEEE Transactions on Image Processing , 31:5936– 5948, 2022. [44] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF international conference on computer vision , pages 11975–11986, 2023. [45] Kaichen Zhang, Bo Li, Peiyuan Zhang, Fanyi Pu, Joshua Adrian Cahyono, Kairui Hu, Shuai Liu, Yuanhan Zhang, Jingkang Yang, Chunyuan Li, et al. Lmms-eval: Reality check on the evaluation of large multimodal models. In Findings of the Association for Computational Linguistics: NAACL 2025 , pages 881–916, 2025. [46] Yuan Zhang, Chun-Kai Fan, Junpeng Ma, Wenzhao Zheng, Tao Huang, Kuan Cheng, Denis A Gudovskiy, Tomoyuki Okuno, Yohei Nakata, Kurt Keutzer, et al. Sparsevlm: Visual token sparsification for efficient vision-language model inference. In International Conference on Machine Learning , pages 74840–74857, 2025. [47] Yuanhan Zhang, Jinming Wu, Wei Li, Bo Li, Zejun MA, Ziwei Liu, and Chunyuan Li. Llava-video: Video instruction tuning with synthetic data. Transactions on Machine Learning Research , 2025. [48] Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian, Yuchen Duan, Weijie Su, Jie Shao, et al. Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479 , 2025. [49] Orr Zohar, Xiaohan Wang, Yann Dubois, Nikhil Mehta, Tong Xiao, Philippe Hansen-Estruch, Licheng Yu, Xiaofang Wang, Felix Juefei-Xu, Ning Zhang, et al. Apollo: An exploration of video understanding in large multimodal models. In Proceedings of the Computer Vision and Pattern Recognition Conference ,pages 18891–18901, 2025. 
+
+12 Appendix 
+
+CONTENTS 
+
+A Additional VLLM Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 
+
+B Additional Ablation Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 
+
+C Supplementary Method Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15 C.1 GeoTrace Pipeline and Bookkeeping . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15 C.2 Contextual Farthest-Point Anchoring Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 C.3 Trajectory-Constrained Residual Condensation Details . . . . . . . . . . . . . . . . . . . . . . . . . 17 
+
+D Near-Manifold Preservation of TCRC . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 
+
+E Token Budget Alignment . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 
+
+F Complexity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 
+
+G Qualitative Demonstrations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 
+
+H Limitations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29 
+
+13 A Additional VLLM Results 
+
+Table 8: Additional results on LLaVA-Video, Qwen2.5-VL, and Qwen3-VL under 25% and 15% 
+
+visual-token retention ratios. Best scores within each retention-ratio block are highlighted in bold. Avg. Rel. Acc. is normalized by the vanilla model. Method Retention Ratio R
+
+VideoMME EgoSchema LongVideo Bench MVBench Avg. Short Medium Long Overall Score Rel. Acc. (%) 
+
+LLaVA-Video 
+
+Vanilla 100% 77.0 62.1 53.3 64.2 57.3 59.5 61.9 60.7 100.0 FastV 25% 71.7 59.2 50.9 60.6 54.8 56.4 59.1 57.7 95.1 VisionZip 74.0 60.3 52.9 62.4 57.0 58.3 60.0 59.4 97.9 
+
+FastVID 74.7 60.1 53.6 62.8 55.4 58.2 60.5 59.2 97.5 ST-SimDiff 74.2 61.4 52.5 62.7 55.7 57.4 59.6 58.9 97.0 AOT – – – 62.4 55.6 55.9 59.2 58.3 96.0 
+
+GeoTrace 74.6 60.0 51.2 61.9 56.4 59.5 59.8 59.4 97.9 
+
+FastV 15% 67.9 56.9 50.8 58.5 53.1 54.5 57.5 55.9 92.1 VisionZip 72.9 58.1 51.9 61.0 55.7 57.2 59.6 58.4 96.2 FastVID 73.4 58.1 51.8 61.1 54.1 57.7 60.3 58.3 96.0 ST-SimDiff 73.2 60.1 51.4 61.5 55.1 56.9 59.2 58.2 95.9 AOT – – – 61.9 54.8 54.6 57.7 57.3 94.4 
+
+GeoTrace 72.4 58.9 50.7 60.7 55.9 58.4 60.4 58.9 97.0 
+
+Qwen2.5-VL 
+
+Vanilla 100% 72.6 61.4 49.9 61.3 58.3 58.9 68.0 61.6 100.0 FastV 25% 
+
+71.2 57.8 51.6 60.2 57.2 54.6 67.4 59.8 97.1 VisionZip 70.7 57.9 51.2 59.9 57.0 57.1 67.3 60.3 97.9 FastVID 71.2 57.8 49.9 59.6 56.7 58.0 65.5 60.0 97.4 
+
+GeoTrace 71.2 57.9 49.2 59.4 57.1 58.7 67.1 60.6 98.4 
+
+FastV 15% 67.4 55.2 51.1 57.9 56.5 52.2 65.9 58.1 94.3 VisionZip 68.8 56.7 49.1 58.2 55.7 56.3 66.0 59.0 95.8 FastVID 68.2 56.9 49.4 58.2 56.0 56.8 63.6 58.6 95.1 
+
+GeoTrace 68.6 55.7 47.8 57.3 56.3 57.6 66.3 59.4 96.4 
+
+Qwen3-VL 
+
+Vanilla 100% 75.8 60.3 56.7 64.3 68.8 60.3 68.5 65.5 100.0 FastVID 25% 71.4 57.9 53.7 60.3 64.0 59.6 64.8 62.2 95.0 AOT 70.8 57.1 53.7 60.9 65.8 59.0 66.8 63.1 96.3 
+
+GeoTrace 73.8 57.9 53.0 61.6 66.7 60.0 67.5 64.0 97.7 
+
+FastVID 15% 65.0 56.0 55.3 59.1 65.0 58.5 62.1 61.2 93.4 AOT 64.9 55.6 56.6 59.0 65.4 57.9 64.4 61.7 94.2 
+
+GeoTrace 72.1 56.1 53.7 60.6 66.0 58.9 67.0 63.1 96.3 
+
+## B Additional Ablation Results 
+
+Ablation study on temporal threshold τ . TCRC uses the temporal threshold τ to decide whether a matched residual-token edge should be accepted into a one-to-one trajectory. A lower threshold preserves more temporal links but may admit ambiguous correspondences, while a higher threshold keeps only more confident matches but may break useful trajectories. Tab. 9 reports the sensitivity of GeoTrace to τ at R = 10% on LLaVA-OneVision. 14 Table 9: Ablation study on the TCRC temporal threshold τ at R = 10% .                         
+
+> τVideoMME EgoSchema LongVideo Bench MVBench Avg. Score 0.6 57.1 60.1 55.7 56.8 57.4 0.7 57.2 59.9 56.6 57.4 57.8
+> 0.8 57.1 60.1 56.6 57.5 57.8
+> 0.9 56.9 60.1 56.1 57.2 57.6
+
+Table 10: Ablation study on the CFPA beam size 
+
+B at R = 10% .                    
+
+> BVideoMME EgoSchema LongVideo Bench MVBench Avg. Score 157.0 60.1 56.4 57.6 57.8 357.1 60.1 56.6 57.5 57.8 557.2 60.2 56.5 57.6 57.9
+
+The results are stable across a broad range of thresholds, with τ = 0 .7 and τ = 0 .8 achieving the best average score. We use τ = 0 .8 by default because it matches the best average score while giving the strongest MVBench result and tied-best EgoSchema and LongVideoBench results. This suggests that TCRC benefits from relatively strict temporal matching, which filters weak correspondences without overly fragmenting residual trajectories. 
+
+Ablation study on CFPA beam size. CFPA uses beam-style farthest-point search to avoid commit-ting to a single greedy skeleton expansion at each step. Tab. 10 reports the effect of the beam size B
+
+at R = 10% on LLaVA-OneVision. Increasing the beam size from 1 to 3 improves LongVideoBench and slightly improves VideoMME, showing that maintaining multiple candidate skeletons helps avoid locally suboptimal selections. A larger beam size B = 5 gives a marginally higher average score, but the gain over B = 3 is only 
+
+0.1 while requiring more beam expansions. We therefore use B = 3 as the default setting, which balances accuracy and efficiency. 
+
+## C Supplementary Method Details 
+
+This appendix provides implementation-level details omitted from the main Method section. Sec. C.1 specifies the GeoTrace pipeline, including temporal chunk construction, budget bookkeeping, residual-mask construction, and final assembly. Sec. C.2 gives the complete CFPA skeleton selection procedure. Sec. C.3 describes TCRC residual condensation, with temporal trajectory construction in Sec. C.3.1 and Sinkhorn barycenter condensation in Sec. C.3.2. 
+
+Default hyperparameters. Unless otherwise specified, GeoTrace uses beam size B = 3 for CFPA, temporal threshold τ = 0 .8 for TCRC, and skeleton allocation ratio α = 0 .9. These choices are supported by the ablations in Tabs. 6, 9 and 10: B = 3 provides nearly the same accuracy as a larger beam with fewer beam expansions, τ = 0 .8 gives the best average score while maintaining strict temporal matching, and α = 0 .9 preserves most of the budget as exact skeleton evidence while retaining a small residual-event channel. For temporal chunking, we set the minimum number of chunks to Mmin = 8 , which avoids overly long chunks and keeps trajectory matching within locally coherent video intervals. For Sinkhorn barycenter condensation, we use entropy strength ε = 0 .05 
+
+and Lot = 3 outer barycenter iterations. This small iteration count is sufficient because Sinkhorn condensation is only used after CFPA and temporal routing have already restricted the residual groups to local evidence. Throughout this appendix, we use one-indexed notation for readability. The implementation may use zero-indexed tensors without changing the algorithm. For a token at frame t and spatial position i, its global index is: 
+
+g(t, i ) = ( t − 1) N + i. (11) 
+
+C.1 GeoTrace Pipeline and Bookkeeping 
+
+GeoTrace constructs temporal chunks from adjacent-frame similarities. Given visual features X ∈
+
+RT ×N ×d, the frame descriptor and transition similarity are 
+
+¯xt = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+xt,i , st = cos(¯ xt, ¯xt+1 ), t = 1 , . . . , T − 1. (12) 15 Positions with st < θ are used as chunk boundaries. If fewer than the required number of chunks are produced, GeoTrace adds the lowest-similarity unselected transitions as complementary cuts. Zero-length chunks caused by duplicate cuts are removed. Given retention ratio R, skeleton allocation ratio α, and N visual tokens per frame, the per-frame budgets are 
+
+K = ⌈RN ⌉, Ks = ⌈αK ⌉, Kr = K − Ks. (13) For a chunk C, CFPA selects Ks skeleton tokens per frame. These selected positions are removed from the residual mask before TCRC is applied. Algorithm 1 summarizes the complete GeoTrace pipeline. 
+
+Algorithm 1 GeoTrace Compression 
+
+Require: Video features X ∈ RT ×N ×d; [CLS] attention A ∈ RT ×N ; retention ratio R; skeleton allocation ratio α; chunk threshold θ; temporal threshold τ ; beam size B; optional minimum chunk number Mmin 
+
+Ensure: Compressed visual sequence Z and inherited global indices G 
+
+> 1:
+
+Compute frame descriptors ¯xt ← N −1 PNi=1 xt,i  
+
+> 2:
+
+Compute transition similarities st ← cos(¯ xt, ¯xt+1 ) 
+
+> 3:
+
+Initialize cut set B ← { t : st < θ } 
+
+> 4:
+
+if |B| + 1 < M min then  
+
+> 5:
+
+Add the lowest-similarity unselected positions to B until the minimum chunk number is reached  
+
+> 6:
+
+end if  
+
+> 7:
+
+Sort B, remove duplicate cuts, and convert cuts into temporal chunks {C m}Mm=1  
+
+> 8:
+
+Set K ← ⌈ RN ⌉, Ks ← ⌈ αK ⌉, and Kr ← K − Ks 
+
+> 9:
+
+Construct global-index map Gt,i ← g(t, i ) 
+
+> 10:
+
+Initialize output token list Z ← ∅ and output index list G ← ∅  
+
+> 11:
+
+for each chunk Cm do  
+
+> 12:
+
+Extract chunk features XCm , attention ACm , and global indices GCm 
+
+> 13:
+
+(SCm , I s) ← CFPA( XCm , ACm , K s, B ) 
+
+> 14:
+
+Gather skeleton indices Gs ← GCm [Is] 
+
+> 15:
+
+Initialize residual mask Mt,i ← 1 for all local frames and token positions in Cm 
+
+> 16:
+
+for each local frame t in Cm do  
+
+> 17:
+
+Set Mt,i ← 0 for i ∈ Its 
+
+> 18:
+
+end for  
+
+> 19:
+
+(ECm , G e) ← TCRC( XCm , M, G Cm , K r , τ ) 
+
+> 20:
+
+Append SCm and ECm to Z 
+
+> 21:
+
+Append Gs and Ge to G 
+
+> 22:
+
+end for  
+
+> 23:
+
+Sort Z according to ascending indices in G 
+
+> 24:
+
+return Z, G
+
+C.2 Contextual Farthest-Point Anchoring Details 
+
+CFPA selects skeleton tokens using a candidate-weighted farthest-point objective. For a chunk with 
+
+L frames, the chunk-context agreement of token xt,j is 
+
+ρt,j = 1
+
+L
+
+> L
+
+X
+
+> u=1
+
+⟨xt,j , ¯xu⟩ . (14) Let at,j denote the [CLS] attention score of token j in frame t. CFPA defines 
+
+Dtij = 1 − cos( xt,i , xt,j ), ψt(i → j) = Dtij · at,j · ρt,j . (15) In the implementation, attention scores are multiplied by a positive constant for numerical stability; this constant does not change the ranking induced by the score. For a partial skeleton set S, the farthest-point margin is: 
+
+mt(v | S) = min  
+
+> u∈S
+
+ψt(u → v). (16) 16 The beam search approximates the context-aware max-min subset selection: 
+
+Its ≈ arg max   
+
+> S⊆{ 1,...,N },|S|=Ks
+
+min  
+
+> v∈S
+
+min  
+
+> u∈S\{ v}
+
+ψt(u → v). (17) Algorithm 2 gives the full selection procedure. 
+
+Algorithm 2 Contextual Farthest-Point Anchoring (CFPA) 
+
+Require: Chunk features X ∈ RL×N ×d; [CLS] attention A ∈ RL×N ; skeleton budget Ks; beam size B
+
+Ensure: Skeleton tokens S and selected local indices Is 
+
+> 1:
+
+if Ks = 0 then  
+
+> 2:
+
+return empty skeleton tokens and empty index sets  
+
+> 3:
+
+end if  
+
+> 4:
+
+Store original features Xorig ← X 
+
+> 5:
+
+Cast X and A to floating point  
+
+> 6:
+
+Set B′ ← min( B, N ) 
+
+> 7:
+
+Compute frame descriptors ¯xu ← N −1 PNi=1 xu,i  
+
+> 8:
+
+for each frame t = 1 , . . . , L do  
+
+> 9:
+
+Compute pairwise cosine separation Dtij ← 1 − cos( xt,i , xt,j ) 
+
+> 10:
+
+Compute context agreement ρt,j ← L−1 PLu=1 ⟨xt,j , ¯xu⟩ 
+
+> 11:
+
+Compute weighted separation ψt(i → j) ← Dtij · At,j · ρt,j  
+
+> 12:
+
+Compute initial score hj ← 2ndmin i ψt(i → j) 
+
+> 13:
+
+Initialize B′ beams with the top-B′ tokens under hj 
+
+> 14:
+
+For each beam b, initialize selected set Sb, bottleneck score qb ← +∞, and candidate margin 
+
+db(v) ← ψt(Sb[1] → v) 
+
+> 15:
+
+for k = 2 , . . . , K s do  
+
+> 16:
+
+for each beam b and candidate token v do  
+
+> 17:
+
+if v ∈ Sb then  
+
+> 18:
+
+p(b, v ) ← −∞  
+
+> 19:
+
+else  
+
+> 20:
+
+p(b, v ) ← min( qb, d b(v)) + ϵtie db(v) 
+
+> 21:
+
+end if  
+
+> 22:
+
+end for  
+
+> 23:
+
+Keep the top-B′ beam-candidate pairs (b, v ) according to p(b, v ) 
+
+> 24:
+
+for each retained pair (b, v ) do  
+
+> 25:
+
+Update selected set Sb ← Sb ∪ { v} 
+
+> 26:
+
+Update bottleneck qb ← min( qb, d b(v))  
+
+> 27:
+
+Update candidate margin db(w) ← min( db(w), ψ t(v → w)) for all w 
+
+> 28:
+
+end for  
+
+> 29:
+
+end for  
+
+> 30:
+
+Choose the best beam b⋆ 
+
+> 31:
+
+Sort selected indices Its ← sort( Sb⋆ ) 
+
+> 32:
+
+Gather skeleton tokens St ← Xorig  
+
+> t,I ts
+> 33:
+
+end for  
+
+> 34:
+
+return S = {S t}Lt=1 , Is = {Its}Lt=1 
+
+C.3 Trajectory-Constrained Residual Condensation Details 
+
+TCRC operates only on non-skeleton residual tokens indicated by the residual mask M. It first constructs high-confidence one-to-one trajectories across adjacent frames, then performs budget-balanced spatial condensation when the surviving residual roots exceed the residual-event budget. 
+
+C.3.1 Temporal Trajectory Construction 
+
+For adjacent frames t and t + 1 , let It = {i : Mt,i = 1 } and It+1 = {i : Mt+1 ,i = 1 }. TCRC computes the residual similarity matrix 
+
+St+1  
+
+> ab
+
+= cos  xt+1 ,I t+1 [a], xt,I t[b]
+
+ , (18) 17 and solves Hungarian matching on −St+1 . A matched current-frame residual token is routed to its predecessor only when the matched similarity exceeds an effective threshold τeff .The threshold starts from τ . If too many residual tokens are routed backward and the number of surviving residual roots falls below Kr L, GeoTrace raises the threshold so that at most 
+
+nmax = X
+
+> t,i
+
+Mt,i − Kr L (19) Residual tokens are routed. This prevents temporal condensation from exceeding the residual-event budget. 
+
+Algorithm 3 Trajectory-Constrained Residual Condensation (TCRC) 
+
+Require: Chunk features X ∈ RL×N ×d; residual mask M ∈ { 0, 1}L×N ; global indices G ∈ NL×N ; residual budget Kr ;temporal threshold τ
+
+Ensure: Residual event tokens E and event indices Ge
+
+1: if Kr = 0 then 
+
+2: return empty event tokens and empty event indices 3: end if 
+
+4: Normalize features ˆxt,i ← xt,i /∥xt,i ∥2; initialize pred t,i ← − 1, sim t,i ← − 1
+
+5: for t = 1 , . . . , L − 1 do 
+
+6: Iprev ← { i : Mt,i = 1 }, Icur ← { i : Mt+1 ,i = 1 }
+
+7: if Iprev ̸ = ∅ and Icur ̸ = ∅ then 
+
+8: Sab ← ˆx⊤ 
+
+> t+1 ,I cur [a]
+
+ˆxt,I prev [b], (R, C ) ← Hungarian( −S)
+
+9: For each matched pair, set pred t+1 ,I cur [Rq ] ← Iprev [Cq ] and sim t+1 ,I cur [Rq ] ← SRq ,C q
+
+10: end if 
+
+11: end for 
+
+12: τeff ← τ , nres ← P 
+
+> t,i
+
+Mt,i , nmax ← max( nres − Kr L, 0) 
+
+13: nroute ← P 
+
+> t,i
+
+1[Mt,i = 1] 1[sim t,i > τ ]
+
+14: if nroute > n max then 
+
+15: Raise τeff using sorted similarities so that at most nmax residual tokens are routed 16: end if 
+
+17: route t,i ← 1[Mt,i = 1] 1[sim t,i > τ eff ]
+
+18: Initialize accumulators Ft,i ← xt,i , counts Ct,i ← 1
+
+19: for t = L, . . . , 2 do 
+
+20: for each token i with route t,i = 1 do 
+
+21: j ← pred t,i 
+
+22: Ft−1,j ← Ft−1,j + Ft,i , Ct−1,j ← Ct−1,j + Ct,i , Ct,i ← 0
+
+23: end for 
+
+24: end for 
+
+25: Initialize temporal root lists Yt ← ∅ and root index lists Ht ← ∅ 
+
+26: for t = 1 , . . . , L do 
+
+27: Append Ft,i /C t,i and Gt,i to Yt, H t for all i with Mt,i = 1 and Ct,i > 0
+
+28: end for 
+
+29: Rtot ← PLt=1 |Yt|, η ← Kr L/ max( Rtot , 1) ; initialize E ← ∅ , Ge ← ∅ 
+
+30: for t = 1 , . . . , L do 
+
+31: Bt ← min( |Yt|, ⌈η|Yt|⌉ )
+
+32: if 0 < B t < |Yt| then 
+
+33: (Zt, P t) ← SinkhornBarycenter( Yt, B t)
+
+34: for k = 1 , . . . , B t do 
+
+35: i⋆ ← arg max i Pt,i,k 
+
+36: Append Zt,k and Ht[i⋆] to E, G e
+
+37: end for 
+
+38: else if Bt = |Yt| then 
+
+39: Append all Yt and Ht to E, G e
+
+40: end if 
+
+41: end for 
+
+42: return E, G e
+
+Let route t,i indicate whether the residual token (t, i ) is routed to a predecessor. Backward accumula-tion defines each surviving event root as 
+
+˜rq = 1
+
+|T q |
+
+X
+
+> r∈T q
+
+r, (20) 18 where Tq is the residual trajectory ending at root q. TCRC then allocates the residual-event budget across frames proportionally: 
+
+Bt = min Mt,
+
+&
+
+Kr L
+
+PLu=1 Mu
+
+Mt
+
+'! 
+
+, (21) where Mt is the number of surviving temporal roots in frame t. Frames with Mt > B t are further compressed by Sinkhorn barycenter condensation. Algorithm 3 gives the full residual condensation procedure, including Hungarian matching, adaptive thresholding, backward accumulation, proportional budget allocation, and spatial condensation. 
+
+C.3.2 Sinkhorn Barycenter Condensation 
+
+For a frame with M residual roots Y = {yi}Mi=1 and target budget K, GeoTrace computes K
+
+barycenters Z = {zk}Kk=1 using entropy-regularized optimal transport. With uniform source and target marginals ai = 1 /M and bk = 1 /K , the transport plan solves 
+
+P ⋆ = arg min  
+
+> P∈U (a,b )
+
+X
+
+> i,k
+
+Pik ∥yi − zk∥22 + ε X
+
+> i,k
+
+Pik log Pik . (22) The barycenters are updated by 
+
+zk =
+
+PMi=1 P ⋆ik yi
+
+PMi=1 P ⋆ik 
+
+. (23) Each barycenter inherits the global index of the source residual root with the largest transport mass: 
+
+g(zk) = g yarg max i P ⋆ik 
+
+ . (24) Algorithm 4 provides the solver used in TCRC. 
+
+Algorithm 4 Sinkhorn Barycenter 
+
+Require: Residual features Y = {yi}Mi=1 ∈ RM ×d; number of barycenters K; entropy strength ε;outer iterations Lot ; inner Sinkhorn iterations Q
+
+Ensure: Barycenters Z = {zk}Kk=1 ∈ RK×d and transport plan P ∈ RM ×K 
+
+> 1:
+
+Initialize barycenter indices I ← TopK i ∥yi∥2 
+
+> 2:
+
+Initialize zk ← yIk for k = 1 , . . . , K  
+
+> 3:
+
+Set source marginal ai ← 1/M and target marginal bk ← 1/K  
+
+> 4:
+
+for ℓ = 1 , . . . , L ot do  
+
+> 5:
+
+Compute cost Cik ← ∥ yi − zk∥22 
+
+> 6:
+
+Compute log-kernel log Kik ← − Cik /(εd ) 
+
+> 7:
+
+Initialize log ui ← 0, log vk ← 0 
+
+> 8:
+
+for q = 1 , . . . , Q do  
+
+> 9:
+
+log vk ← log bk − logsumexp i(log Kik + log ui) 
+
+> 10:
+
+log ui ← log ai − logsumexp k(log Kik + log vk) 
+
+> 11:
+
+end for  
+
+> 12:
+
+Pik ← exp(log ui + log Kik + log vk) 
+
+> 13:
+
+for k = 1 , . . . , K do  
+
+> 14:
+
+zk ←
+
+PMi=1 Pik yi
+
+
+
+/
+
+PMi=1 Pik 
+
+ 
+
+> 15:
+
+end for  
+
+> 16:
+
+end for  
+
+> 17:
+
+return Z, P 
+
+## D Near-Manifold Preservation of TCRC 
+
+This section formalizes the manifold-fidelity intuition behind TCRC. The result is stated as a near-manifold guarantee rather than an exact manifold-membership guarantee, since TCRC only assumes that matched trajectory features and transport-assigned source features lie within local neighborhoods where the visual feature manifold is approximately linear. 19 Notation. For a closed set M ⊂ Rd, let 
+
+dist( x, M) = inf  
+
+> p∈M
+
+∥x − p∥2. (25) When the nearest point is unique, we denote it by πM(x). For a finite set A, let 
+
+diam( A) = sup 
+
+> x,y∈A
+
+∥x − y∥2. (26) 
+
+Assumption D.1 (Local visual feature manifold) . The clean residual-token features are supported on a compact m-dimensional C2 submanifold M ⊂ Rd. The manifold has reached at least ρM > 0.The observed raw residual tokens are near M: for every residual token r,
+
+dist( r, M) ≤ η, ∥r∥2 ≤ R. (27) 
+
+We assume η < ρ M, so the nearest-point projection is well-defined in the relevant tubular neighbor-hood. 
+
+Assumption D.2 (Temporal locality of accepted trajectories) . For every temporal trajectory Tℓ
+
+induced by TCRC, the manifold projections of its raw residual tokens lie in a local chart of radius 
+
+δtemp :
+
+diam ( {πM(r) : r ∈ T ℓ}) ≤ δtemp , δtemp ≤ cρ M, (28) 
+
+where c > 0 is a sufficiently small universal constant. 
+
+Assumption D.3 (Spatial locality of transport columns) . Let Yt = {yt,i }Mt 
+
+> i=1
+
+be the temporally surviving residual roots in frame t. For the k-th Sinkhorn barycenter, define normalized column weights 
+
+λt,ik = P ⋆t,ik 
+
+P 
+
+> j
+
+P ⋆t,jk 
+
+, X
+
+> i
+
+λt,ik = 1 . (29) 
+
+For each column k, there exists a local index set It,k ⊆ { 1, . . . , M t} such that 
+
+X
+
+> i∈It,k
+
+λt,ik ≥ 1 − γt,k , (30) 
+
+and the projected local sources satisfy 
+
+diam ( {πM(yt,i ) : i ∈ It,k }) ≤ δsp , δsp ≤ cρ M. (31) 
+
+We also assume the temporally surviving roots are bounded and lie in the projection neighborhood: 
+
+∥yt,i ∥2 ≤ R, dist( yt,i , M) < ρ M. (32) 
+
+When the transport column is entirely local, γt,k = 0 .
+
+Lemma D.1 (Local Euclidean barycenters are near the manifold) . Let M ⊂ Rd be a C2 submanifold with reach at least ρM. There exists a universal constant C0 > 0 such that the following holds. Suppose x1, . . . , xn ∈ Rd satisfy 
+
+dist( xi, M) ≤ ξ, (33) 
+
+and their projections pi = πM(xi) lie in a common local chart with 
+
+diam {p1, . . . , pn} ≤ δ, δ ≤ cρ M. (34) 
+
+Then for any convex weights λi ≥ 0, P 
+
+> i
+
+λi = 1 , the Euclidean barycenter 
+
+¯x =
+
+> n
+
+X
+
+> i=1
+
+λixi (35) 
+
+satisfies 
+
+dist(¯ x, M) ≤ ξ + C0
+
+δ2
+
+ρM
+
+. (36) 
+
+Proof. Write each point as 
+
+xi = pi + ei, pi = πM(xi), ∥ei∥2 ≤ ξ. (37) Then 
+
+¯x = X
+
+> i
+
+λipi + X
+
+> i
+
+λiei. (38) 20 Since the weights are convex, 
+
+X
+
+> i
+
+λiei
+
+> 2
+
+≤ X
+
+> i
+
+λi∥ei∥2 ≤ ξ. (39) It remains to bound the distance from P 
+
+> i
+
+λipi to M.Choose a reference point p0 ∈ M in the local neighborhood and let Tp0 M be the tangent space. Since M has reached at least ρM, for δ ≤ cρ M, the local patch of M around p0 can be represented as the graph of a C2 map 
+
+h : Tp0 M → Tp0 M⊥, (40) with 
+
+h(0) = 0, Dh (0) = 0, ∥D2h∥ ≤ CρM
+
+, (41) for a universal constant C > 0. Thus, each projected point can be written as 
+
+pi = p0 + ui + h(ui), (42) where ui ∈ Tp0 M and ∥ui − uj ∥2 = O(δ).Let 
+
+¯u = X
+
+> i
+
+λiui, q = p0 + ¯ u + h(¯ u) ∈ M . (43) Then 
+
+X
+
+> i
+
+λipi − q
+
+> 2
+
+= X
+
+> i
+
+λih(ui) − h(¯ u)
+
+> 2
+
+. (44) By Taylor’s theorem and the Hessian bound, 
+
+X
+
+> i
+
+λih(ui) − h(¯ u)
+
+> 2
+
+≤ CρM
+
+X
+
+> i
+
+λi∥ui − ¯u∥22 ≤ C0
+
+δ2
+
+ρM
+
+. (45) Therefore, 
+
+dist X
+
+> i
+
+λipi, M
+
+!
+
+≤ C0
+
+δ2
+
+ρM
+
+. (46) Combining this with the noise bound gives the claim. 
+
+Theorem D.1 (Near-manifold preservation of TCRC event tokens) . Under Assumptions D.1 to D.3, every TCRC event token zt,k satisfies 
+
+dist( zt,k , M) ≤ η + C0
+
+δ2temp + δ2sp 
+
+ρM
+
++ 2 Rγ t,k . (47) 
+
+In particular, when the transport column is entirely local, i.e., γt,k = 0 ,
+
+dist( zt,k , M) ≤ η + C0
+
+δ2temp + δ2sp 
+
+ρM
+
+. (48) 
+
+Proof. Consider a temporal trajectory 
+
+Tℓ = {rℓ, 1, . . . , rℓ,n ℓ }. (49) TCRC produces the temporal root 
+
+˜rℓ = 1
+
+nℓnℓX
+
+> a=1
+
+rℓ,a . (50) By Assumption D.1, each raw residual token satisfies 
+
+dist( rℓ,a , M) ≤ η. (51) 21 By Assumption D.2, the projected trajectory lies in a local chart of diameter at most δtemp . Applying Lemma D.1 with uniform weights gives 
+
+dist(˜ rℓ, M) ≤ η + C0
+
+δ2temp 
+
+ρM
+
+. (52) Define 
+
+ηtemp = η + C0
+
+δ2temp 
+
+ρM
+
+. (53) Thus every temporally surviving residual root yt,i is within distance ηtemp of M.For the k-th event token in frame t, the Sinkhorn update uses normalized column weights 
+
+λt,ik = P ⋆t,ik 
+
+P 
+
+> j
+
+P ⋆t,jk 
+
+, X
+
+> i
+
+λt,ik = 1 , (54) and forms 
+
+zt,k = X
+
+> i
+
+λt,ik yt,i . (55) Let It,k be the local source set from Assumption D.3, and define its total mass 
+
+βt,k = X
+
+> i∈It,k
+
+λt,ik . (56) By assumption, βt,k ≥ 1 − γt,k . Define local normalized weights 
+
+¯λt,ik = λt,ik 
+
+βt,k 
+
+, i ∈ It,k , (57) and the purely local barycenter 
+
+zloc  
+
+> t,k
+
+= X
+
+> i∈It,k
+
+¯λt,ik yt,i . (58) The sources in It,k have projected diameter at most δsp , and each yt,i is within distance ηtemp of M.Applying Lemma D.1 again gives 
+
+dist  zloc  
+
+> t,k
+
+, M ≤ ηtemp + C0
+
+δ2sp 
+
+ρM
+
+. (59) Entropy-regularized transport can assign small positive mass to nonlocal sources, so we account for the tail explicitly. If βt,k < 1, let 
+
+ztail  
+
+> t,k
+
+= 11 − βt,k 
+
+X
+
+> i / ∈It,k
+
+λt,ik yt,i ; (60) Otherwise, this term is unused. Then 
+
+zt,k = βt,k zloc  
+
+> t,k
+
++ (1 − βt,k )ztail  
+
+> t,k
+
+. (61) Since both zloc  
+
+> t,k
+
+and ztail  
+
+> t,k
+
+are convex combinations of vectors with norm at most R,
+
+∥zloc  
+
+> t,k
+
+∥2 ≤ R, ∥ztail  
+
+> t,k
+
+∥2 ≤ R. (62) Therefore, 
+
+∥zt,k − zloc  
+
+> t,k
+
+∥2 = (1 − βt,k )∥ztail  
+
+> t,k
+
+− zloc  
+
+> t,k
+
+∥2 ≤ 2R(1 − βt,k ) ≤ 2Rγ t,k . (63) Using the triangle inequality, 
+
+dist( zt,k , M) ≤ dist  zloc  
+
+> t,k
+
+, M + ∥zt,k − zloc  
+
+> t,k
+
+∥2. (64) Substituting the previous bounds yields the theorem. 
+
+Corollary D.1 (Temporal threshold controls trajectory diameter) . Assume residual features are 
+
+ℓ2-normalized before temporal matching. If an accepted temporal edge satisfies 
+
+cos( rt+1 ,i , rt,j ) ≥ τeff , (65) 22 then 
+
+∥rt+1 ,i − rt,j ∥2 ≤ p2(1 − τeff ). (66) 
+
+Consequently, if an accepted trajectory has at most H temporal edges, then its raw Euclidean diameter is bounded by 
+
+diam( Tℓ) ≤ Hp2(1 − τeff ). (67) 
+
+Up to the near-manifold noise radius, the projected trajectory diameter δtemp is therefore controlled by the temporal threshold and the maximum trajectory length. Proof. For normalized vectors a and b,
+
+∥a − b∥22 = ∥a∥22 + ∥b∥22 − 2⟨a, b⟩ = 2(1 − cos( a, b)) . (68) Thus an accepted edge with cosine similarity at least τeff has Euclidean length at most p2(1 − τeff ).The trajectory-diameter bound follows from the triangle inequality along a path with at most H
+
+edges. 
+
+Corollary D.2 (Why TCRC is more manifold-faithful than unconstrained fusion) . Consider an unconstrained residual fusion rule that averages a group of residual tokens whose projected diameter is ∆. Under the same manifold assumptions, Lemma D.1 gives the generic drift bound 
+
+dist(¯ r, M) ≤ η + C0
+
+∆2
+
+ρM
+
+. (69) 
+
+TCRC replaces the unconstrained group diameter ∆ by the controlled temporal and spatial radii 
+
+δtemp and δsp . Therefore, when 
+
+δ2temp + δ2sp ≪ ∆2, (70) 
+
+TCRC has a strictly smaller near-manifold drift bound. Proof. The unconstrained bound follows directly from Lemma D.1 by setting the group diameter to 
+
+∆. The TCRC bound follows from Theorem D.1. Thresholded one-to-one temporal routing prevents tree-like many-to-one collapse across frames, so each temporal event is a path of high-confidence local correspondences rather than an arbitrary mixture of residual tokens. The Sinkhorn step further penalizes long transport through the squared Euclidean cost, and Assumption D.3 captures the resulting local transport-column concentration. Comparing the two bounds gives the claim. 
+
+Traceability of inherited indices. The dominant-source index assignment 
+
+g(zt,k ) = g
+
+
+
+yt, arg max i P ⋆t,ik 
+
+
+
+(71) does not by itself imply manifold membership. Its role is provenance: every spatially condensed event token is associated with the source residual root that contributes the largest transport mass. Together with one-to-one temporal routing, this provides a traceable chain from each event token back to observed residual evidence. 
+
+Limitations. The result is local. It does not prove that Euclidean averages lie exactly on M, nor does it guarantee a small drift when residual groups span distant semantic modes. The essential assumptions are: raw residual features are near a regular feature manifold, accepted temporal trajectories remain local, and each transport column has most of its mass on a local residual group. Entropic transport assigns positive mass broadly in principle, so Theorem D.1 explicitly includes the tail term 2Rγ t,k . If γt,k , δtemp , or δsp becomes large, the bound correspondingly weakens. This is why TCRC uses thresholded one-to-one matching and transport-based condensation rather than unconstrained residual fusion. 
+
+## E Token Budget Alignment 
+
+GeoTrace adopts an expansion-then-pruning protocol for fair token-budget alignment. It first retains a mildly expanded visual sequence before LLM prefill, and then applies inner-LLM pruning from layer ℓp onward so that the average number of visual tokens processed by each Transformer layer 23 matches the target budget. We use this average layer-wise token count as a proxy for comparable computational cost between prefill-stage compression and inner-LLM acceleration methods. For the Video LLMs evaluated in this paper, the Transformer FLOPs can be approximated as 
+
+FLOPs = L ×  2nd 2(1 + g/h ) + 2 n2d + 3 ndm  , (72) where L is the number of Transformer layers, n is the sequence length, d is the hidden dimension, 
+
+m is the FFN intermediate dimension, g is the number of key/value heads, and h is the number of attention heads. Since visual tokens dominate the sequence length in our video setting, n is approximated by the number of visual tokens. Let ¯Navg denote the target average number of visual tokens per Transformer layer, M the number of visual tokens entering LLM prefill after GeoTrace compression, ℓp the first layer where inner-LLM pruning is applied, and Nret the number of visual tokens retained after pruning. The total layer-wise visual-token count satisfies 
+
+¯Navg L = M ℓ p + Nret (L − ℓp). (73) Under the expansion stage, the prefill-stage token count is parameterized as 
+
+M = fe ¯Navg , (74) where fe is the expansion factor. Substituting Eq. (74) into Eq. (73) gives the number of visual tokens retained after inner-LLM pruning: 
+
+Nret = ¯Navg (L − feℓp)
+
+L − ℓp
+
+. (75) The corresponding inner-LLM visual-token retention ratio is 
+
+ρLLM = Nret 
+
+M = L − feℓp
+
+fe(L − ℓp) . (76) This alignment allows GeoTrace to preserve a richer visual sequence before LLM prefilling, while subsequent layer-wise pruning restores the same average layer-wise visual-token budget used by competing acceleration methods. In all main experiments, we instantiate this protocol with expansion factor fe = 1 .25 , inner-LLM pruning layer ℓp = 20 , and inner-LLM visual-token retention ratio ρLLM = 0 .3. In other words, GeoTrace first keeps a mildly expanded visual sequence before the LLM, begins layer-wise visual-token pruning at the 20th Transformer layer, and keeps 30% of the expanded visual tokens after this pruning step. These three hyperparameters control only the budget-alignment protocol: they determine how the expanded GeoTrace output is reconciled with the target average layer-wise token budget, while CFPA and TCRC determine which visual evidence is preserved or condensed before LLM inference. 
+
+## F Complexity 
+
+Let L be the number of frames in a chunk, N the number of visual tokens per frame, d the feature dimension, B the CFPA beam size, and Ks the skeleton budget. CFPA computes pairwise cosine similarities within each frame and then runs beam expansion, giving the dominant cost 
+
+O(LN 2d + LBK sN ). (77) TCRC computes adjacent-frame residual similarities and performs one-to-one matching. If Rt is the number of residual tokens in frame t, the similarity computation costs 
+
+O
+
+> L−1
+
+X
+
+> t=1
+
+RtRt+1 d
+
+!
+
+, (78) and Hungarian matching adds a cubic term in the smaller residual-set size for each adjacent frame. Sinkhorn barycenter condensation is applied only to frames whose temporal residual roots exceed their allocated budgets. For a frame with Mt temporal roots, target budget Bt, Lot outer iterations, and Q Sinkhorn iterations, the dominant cost is 
+
+O(Lot QM tBt + Lot MtBtd). (79) 24 All operations are performed once before LLM prefill. The compressed visual sequence then reduces subsequent attention computation and KV-cache usage in the language model. 
+
+## G Qualitative Demonstrations 
+
+This section provides qualitative demonstrations of the two GeoTrace components. The visualizations are intended to make the behavior of CFPA and TCRC easier to inspect beyond aggregate benchmark numbers. CFPA is expected to preserve a compact set of exact skeleton tokens that jointly cover salient, context-consistent, and complementary evidence. TCRC is expected to compress the non-skeleton residual evidence through locally coherent temporal routes, so that the resulting event tokens remain traceable to concrete source regions rather than becoming unconstrained mixtures. 
+
+CFPA skeleton tokens. Fig. 3 visualizes CFPA selections on three video instances. Each row corresponds to one video, showing its original frames and the corresponding CFPA-selected skeleton tokens. The selected skeleton tokens cover salient foreground evidence such as faces, hands, and task-relevant objects, while also retaining complementary context tokens from the surrounding scene. This behavior is consistent with the CFPA objective: skeleton tokens are not selected only by saliency alone, but by the combination of saliency, contextual consistency, and feature-space coverage. Compared with a purely attention-based selector, this qualitative behavior is important because the visual budget should not collapse onto a small number of locally dominant regions. The preserved tokens instead form a sparse but spatially distributed scaffold for the video chunk, giving the downstream LLM access to exact visual features that summarize both the central object evidence and the surrounding layout needed for reasoning. 
+
+TCRC temporal routes. Fig. 4 shows successful TCRC routing examples. Colored boxes and lines indicate residual-token trajectories accepted by one-to-one temporal matching. In these cases, the routed tokens follow visually coherent evidence across adjacent frames, so temporal pooling condenses repeated residual information while preserving a traceable path back to observed video tokens. These examples illustrate the intended role of TCRC as a residual-event compressor rather than a generic token merger. By enforcing one-to-one matching before temporal pooling, TCRC avoids many-to-one collapse, where several visually distinct residual regions from the current frame are absorbed into the same predecessor. The accepted routes, therefore, behave like short local trajectories: they remove repeated evidence across nearby frames while keeping a clear provenance chain for each condensed event token. Fig. 5 shows two challenging cases. These examples contain larger viewpoint changes, ambiguous local appearance, or semantic transitions that can make residual matching less reliable. Such cases motivate the use of an effective temporal threshold and one-to-one matching: weak or ambiguous correspondences should be filtered or fragmented rather than merged aggressively into a single residual event token. They also clarify why TCRC is paired with CFPA. Even when residual trajectories are incomplete, the exact skeleton tokens preserved by CFPA still provide stable visual anchors, while TCRC only condenses the residual evidence that satisfies the matching criterion. This design makes the failure mode more localized: uncertain residual evidence may lead to incomplete or fragmented event tokens, but it is less likely to overwrite the exact skeleton anchors preserved by CFPA or dominate the final visual representation. 25 Visualization of CFPA (Example 1) 
+
+> Visualization of CFPA (Example 2)
+> Visualization of CFPA (Example 3)
+
+Figure 3: Qualitative CFPA demonstrations. Each row shows one video instance, with white boxes indicating selected skeleton tokens in three frames. CFPA preserves exact visual tokens that jointly cover salient entities and complementary scene context, rather than collapsing the budget onto only the most salient local region. 26 Visualization of TCRC (Example 1) 
+
+> Visualization of TCRC (Example 2)
+> Visualization of TCRC (Example 3)
+
+Figure 4: Successful TCRC trajectory demonstrations. Accepted residual-token routes connect high-confidence, one-to-one temporal correspondences across frames. The examples illustrate how TCRC compresses repeated residual evidence while keeping event tokens traceable to concrete source regions. 27 Visualization of TCRC (Example 4) 
+
+> Visualization of TCRC (Example 5)
+
+Figure 5: Challenging TCRC routing cases. Large appearance changes or ambiguous regions can make residual trajectories less reliable. These cases illustrate why TCRC uses thresholded one-to-one routing instead of unconstrained many-to-one fusion. 28 H Limitations 
+
+GeoTrace is evaluated on four representative Video LLMs and four widely used video understanding benchmarks, covering both fixed-grid and dynamic-resolution visual processing settings. Due to computational constraints, we have not yet evaluated GeoTrace on substantially larger Video LLMs, larger-scale benchmark suites, or extremely long-context video settings. Extending the evaluation to larger models and more diverse deployment scenarios would further clarify how the proposed skeleton preservation and residual condensation mechanisms scale. GeoTrace is designed as a training-free framework and therefore relies on the visual features provided by the frozen vision encoder. This design makes the method easy to deploy across different Video LLMs without additional training, but its behavior may still depend on the geometry and domain coverage of the underlying visual feature space. Future work may study feature-space diagnostics for token compression, such as estimating when saliency, context consistency, or trajectory matching is reliable, and using these signals to adapt the balance between skeleton preservation and residual condensation. In the current implementation, GeoTrace uses fixed token allocation, temporal thresholding, and budget-alignment settings across videos. These fixed settings are chosen for simplicity and fair comparison, and they work well across the evaluated benchmarks. Nevertheless, videos can vary substantially in motion density, scene complexity, and temporal structure. Adaptive token budgeting or video-dependent compression policies may further improve the accuracy-efficiency trade-off. Finally, our experiments focus on offline video understanding. Applying GeoTrace to streaming video inference, online token updating, and memory-constrained real-time deployment remains an interesting direction. These settings may require incremental trajectory construction and dynamic budget adjustment, which we leave for future work. 29

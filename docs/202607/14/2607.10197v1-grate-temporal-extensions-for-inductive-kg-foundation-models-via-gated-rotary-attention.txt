@@ -1,0 +1,920 @@
+Title: GRATE: Temporal Extensions for Inductive KG Foundation Models via Gated Rotary Attention
+
+URL Source: https://arxiv.org/pdf/2607.10197v1
+
+Published Time: Tue, 14 Jul 2026 00:53:03 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# GRATE : Temporal Extensions for Inductive KG Foundation Models via Gated Rotary Attention 
+
+Jiaxin Pan 1 Osama Mohammed 1 Daniel Hern´ andez 1 Steffen Staab 1 2 
+
+## Abstract 
+
+Knowledge graph foundation models such as U L- 
+
+> TRA
+
+and T RIX achieve strong inductive transfer by learning relation-graph representations that generalise to unseen entities and relations. Ex-tending this transferability to temporal knowledge graphs (TKGs) remains challenging: existing temporal models tie their parameters to dataset-specific entities, relations, or timestamps and are not designed to transfer to TKGs with disjoint vocabularies. We propose G RATE (Gated Rotary Attention for Temporal Encoding), an entity-side message function that adds no learnable param-eters and encodes time through relative time dif-ferences by rotating each edge message accord-ing to its time gap to the query and applying a query-conditioned gate to select temporally rel-evant signals. GRATE integrates into NBFNet-style KG foundation models while preserving structural transferability. Existing TKG bench-marks evaluate within shared train/test vocabular-ies and cannot directly test cross-dataset temporal transfer; we therefore construct GDELTI ND Tand WIKII ND T, inductive transfer benchmark suites with disjoint entities, relations, and times-tamps spanning both interpolation and extrapo-lation. Across these benchmarks and held-out forecasting datasets, a single jointly pretrained GRATE checkpoint improves over the static base model in most settings. 
+
+## 1. Introduction 
+
+Recent knowledge graph (KG) foundation models (Galkin et al., 2024; Zhang et al., 2025; Du et al., 2026) learn 
+
+Accepted at the ICML 2026 Workshop on Graph Foun-dation Models: A New Era for Graph Machine Learning. 
+
+> 1
+
+Analytic Computing, Institute for Artificial Intelligence, Univer-sity of Stuttgart, Stuttgart, Germany 2University of Southampton, Southampton, United Kingdom. Correspondence to: Jiaxin Pan 
+
+<jiaxin.pan@ki.uni-stuttgart.de >.
+
+Preprint. July 14, 2026. 
+
+vocabulary-agnostic representations that transfer to graphs with unseen entities and relations, supporting link predic-tion queries such as “who did Obama engage in negotiation with?” Many facts are also inherently temporal: tempo-ral knowledge graphs (TKGs) attach a timestamp to each fact, so the same query is only meaningful when paired with a year (“. . . in 2010”). Existing TKG models (Zhang et al., 2022; Li et al., 2021; Sun et al., 2021) learn dataset-specific embeddings for entities, relations, and timestamps and must be retrained whenever new ones appear, making them unsuitable for settings such as emerging political ac-tors, newly discovered scientists, or rapidly evolving event streams, where new vocabulary arrives continuously. A natural alternative is to apply an inductive KG foundation model directly to a TKG. However, temporal reasoning re-quires similarity judgements that are not purely structural. Inductive KG foundation models transfer by comparing new entities and relations through their graph contexts, but in a TKG the usefulness of a supporting fact also depends on its time and its relevance to the query. For a query such as “who did the US president meet in 2024?”, a meeting from 2024 is usually more similar to the query context than one from 1974, even if both have similar graph structure. Likewise, among same-day events, a meeting with a head of state is more relevant to a diplomatic query than a meeting with a sports figure. Thus, inductive temporal reasoning requires the model to judge supporting facts not only by structural similarity, but also by relative temporal displacement and query-conditioned relevance. Existing inductive KG founda-tion models do not provide this: they define similarity only through static graph structure, treating facts from all times-tamps as equally aligned with the query and aggregating all supporting facts indiscriminately. Therefore, we propose G RATE (Gated Rotary Attention for Temporal Encoding), a parameter-free temporal message function for NBFNet-style (Zhu et al., 2021) KG foundation models. G RATE improves the temporal similarity judgement of the base model in two complementary ways. First, it ro-tates each supporting fact’s message according to its relative time gap to the query, so temporal alignment is expressed as a function of relative displacement rather than absolute timestamp identity. Second, it applies a query-conditioned 1arXiv:2607.10197v1 [cs.AI] 11 Jul 2026 GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+gate that weights each rotated message by its alignment with the query, allowing the model to emphasise temporally and semantically relevant evidence. Because both mechanisms depend only on relative time differences and existing hidden representations, G RATE adds no learnable parameters and preserves the transferability of the underlying model. To evaluate temporal reasoning in inductive transfer set-tings, we construct a suite of TKG benchmarks with disjoint entities, relations, and timestamps between training and in-ference graphs. Experiments show that G RATE improves zero-shot temporal reasoning in most settings over strong inductive base models. Together, G RATE and our inductive transfer benchmarks demonstrate that temporal reasoning can be added to inductive KG foundation models without sacrificing parameter-free transferability. 
+
+## 2. Related Work 
+
+2.1. Temporal Knowledge Graph Embedding Transductive interpolation (TKG completion). TKG com-pletion models predict missing facts at timestamps drawn from within the training time range. Early methods incor-porate time as an additional component in the scoring func-tion, including TTransE (Leblay & Chekol, 2018) and TA-DistMult (Garc ´ıa-Dur ´an et al., 2018). Later works such as TComplEx and TNTComplEx (Lacroix et al., 2020) extend tensor-factorisation approaches to better capture temporal dependencies. Geometric extensions include rotation-based encodings for time embedding such as TeRo (Xu et al., 2020). 
+
+Transductive extrapolation (TKG forecasting). TKG forecasting models predict facts at strictly future timestamps via GNN-based subgraph evolution (Li et al., 2021; 2022; Han et al., 2021; Sun et al., 2021; Liang et al., 2023) or rule-based and explainable reasoning (Liu et al., 2022; Gastinger et al., 2024). 
+
+LLM-based inductive TKG reasoning. Recent approaches explore inductive inference on TKGs using textual descrip-tions and large language models. ICL (Lee et al., 2023a) and GenTKG (Liao et al., 2024) leverage entity descriptions, relation names, or in-context temporal reasoning to transfer across unseen temporal facts, but their transferability arises from textual semantics rather than structural representations. GRATE is purely structure-driven, learning transferable tem-poral patterns directly from graph structure without textual annotations or language models. 
+
+2.2. KG Foundation Models 
+
+Recent work has moved toward inductive, vocabulary-agnostic foundation models. NBFNet (Zhu et al., 2021), GraIL (Teru et al., 2020), and INDIGO (Liu et al., 2021) introduce query-conditioned message passing for unseen entities but assume a fixed relation vocabulary; INGRAM (Lee et al., 2023b) lifts this by modelling relations as nodes in a relation graph. U LTRA (Galkin et al., 2024) and T RIX 
+
+(Zhang et al., 2025) build on this idea, learning transferable relational structure that lets a single pretrained checkpoint operate across graphs with disjoint entity and relation vo-cabularies. None of these models address time; lifting them to temporal graphs without sacrificing transferability is the open challenge G RATE addresses. 
+
+## 3. Problem Definition 
+
+3.1. Temporal Knowledge Graphs 
+
+A TKG is a structure G = ( V, R, T, Q ), where Q is a set of quadruples (s, r, o, τ ) ∈ V ×R×V ×T (the observed facts), with s, o ∈ V subject and object entities, r ∈ R a relation, and τ ∈ T a timestamp. We model the timestamp set T as a finite subset of N, with each dataset’s calendar granularity (e.g. daily, yearly) absorbed into the integer encoding. The reasoning task studied in this work is temporal link prediction: given a query (s, r, ?, τ ) or (? , r, o, τ ), predict the missing entity at the specified timestamp τ .
+
+3.2. Inference Settings 
+
+We define an inference setting as the combination of assump-tions governing the relationship between the training graph and the inference graph. In temporal knowledge graphs, this relationship has two orthogonal dimensions: (i) the over-lap between training and inference vocabularies, and (ii) the temporal relationship between training and inference timestamps. 
+
+Vocabulary condition. We denote a training TKG as 
+
+Gtrain = ( Vtrain , R train , T train , Q train ) and an inference TKG as Ginf = ( Vinf , R inf , T inf , Q inf ). Transductive set-tings share the entity and relation vocabularies between train-ing and inference, Vtrain = Vinf and Rtrain = Rinf ; this is the regime in which existing TKG embedding methods learn per-entity, per-relation, and per-timestamp embeddings. In-ductive transfer settings (referred to as the fully-inductive setting in KG foundation models (Galkin et al., 2024; Zhang et al., 2025)) make the three sets disjoint (i.e., Vtrain ∩ Vinf ,
+
+Rtrain ∩ Rinf , and Ttrain ∩ Tinf are all empty), so represen-tations tied to the entity, relation, or timestamp vocabularies are, by construction, not applicable at inference time. The model is trained on a source Gtrain and applied, without fine-tuning, to a target Ginf .
+
+Temporal condition. We evaluate two regimes, both de-fined within the inference graph Ginf : interpolation , where test-fact timestamps fall within the time range of the ob-served inference subgraph, and extrapolation , where they 2GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+fall strictly after it. 
+
+Existing benchmarks vs. our setting. GRATE targets the inductive transfer setting under both interpolation and ex-trapolation evaluation regimes, a combination not addressed by prior TKG models. 
+
+## 4. NBFNet-Style KG Foundation Models 
+
+We build on inductive knowledge graph foundation models based on NBFNet-style (Zhu et al., 2021) message passing, including U LTRA (Galkin et al., 2024) and T RIX (Zhang et al., 2025). Given a query (s, r, ?) , the model initialises the source entity 
+
+s with the query relation r. Message passing then proceeds over directed edges (u → v) in the knowledge graph. At layer ℓ, each edge produces a message 
+
+m(ℓ) 
+
+> uv
+
+= ϕ
+
+
+
+h(ℓ−1)  
+
+> u
+
+, r uv 
+
+
+
+, (1) where ϕ is a KG scoring function (e.g. DistMult or TransE), 
+
+h(ℓ−1)  
+
+> u
+
+is the representation of node u from the previous layer, and ruv is the embedding associated with edge (u →
+
+v). Messages from neighbouring nodes are then aggregated to update node v:
+
+h(ℓ) 
+
+> v
+
+= AGG 
+
+m(ℓ) 
+
+> uv
+
+: u ∈ N (v)
+
+
+
+. (2) Traditional KG models learn a separate embedding for every relation type, which prevents transfer to unseen relations. Inductive KG foundation models instead construct a rela-tion graph GR, derived from the original knowledge graph, in which relations themselves are treated as nodes. Two relation nodes are connected when they exhibit compatible structural interaction patterns in the original graph, such as sharing head or tail entities. The relation graph therefore captures higher-order dependencies between relation types independently of specific entities. ULTRA and T RIX compute relation representations by per-forming message passing over this relation graph: 
+
+{ruv }(u,v )∈E = RelGNN( GR | r). (3) ULTRA constructs relation representations using a single-pass aggregation over four relation interaction types (h2h, h2t, t2h, t2t), producing a count-based structural summary for each relation. T RIX instead iteratively refines the relation graph representations across layers and interleaves relation-graph updates with entity-graph message passing, yielding more expressive query-conditioned relation representations. In temporal knowledge graphs, each edge additionally car-ries a timestamp, which the standard message m(ℓ) 
+
+> uv
+
+in Equa-tion (1) does not incorporate. 
+
+## 5. Method: G RATE 
+
+We propose G RATE (Gated Rotary Attention for Tempo-ral Encoding), a parameter-free mechanism that augments NBFNet-style KG foundation models with temporal infor-mation. Figure 1 illustrates the G RATE component. 
+
+5.1. Rotary Relative-Time Encoding 
+
+Temporal knowledge graph reasoning depends not only on structural connectivity, but also on how supporting facts evolve relative to the query time. In many temporal rea-soning tasks, facts closer to the query timestamp are often more informative than temporally distant ones, and different supporting events contribute unequally depending on their temporal displacement from the query. A temporal message function should therefore capture relative temporal evolu-tion and encode the varying influence of supporting facts according to their time difference from the query. Concretely, for an observed edge (u, r uv , v, t uv ), where tuv 
+
+is the timestamp of edge (u → v), we define the relative time gap regarding query time τ as: 
+
+∆tuv = τ − tuv . (4) The temporal transformation should depend on ∆tuv rather than on learned timestamp embeddings, so that the model can generalise to timestamps not observed during training. To implement this relative-time transformation, we adopt rotary position embedding (RoPE) (Su et al., 2024), orig-inally introduced for positional encoding in Transformer models. RoPE rotates vector representations in a fixed fre-quency basis according to an input offset. In our setting, the offset corresponds to the relative time gap ∆tuv , allowing supporting facts at different timestamps to be represented as temporally shifted versions of the same structural message. Let d denote the (even) hidden dimension of the message function and define the frequency vector 
+
+ωk = 110000 2k/d , k = 0 , 1, . . . , d/ 2 − 1. (5) The rotation matrix R(δ) ∈ Rd×d is block-diagonal, 
+
+R(δ) = diag  R0(δ), . . . , R d/ 2−1(δ), (6) where each 2×2 block rotates the k-th frequency pair by angle θk = ωk δ:
+
+Rk(δ) = 
+
+cos θk − sin θk
+
+sin θk cos θk
+
+
+
+. (7) Partitioning a vector x ∈ Rd into consecutive pairs 
+
+(x2k, x 2k+1 ), the rotation acts independently on each pair: 
+
+ R(δ) x 
+
+> 2k
+
+= x2k cos θk − x2k+1 sin θk,
+
+ R(δ) x 
+
+> 2k+1
+
+= x2k sin θk + x2k+1 cos θk. (8) 3GRATE : Gated Rotary Attention for Temporal KG Foundation Models (a) Overview of GRATE (b) Integration into NBFNet-style KG Foundation Model Query q = (s , r , ?, τ )(BarackObama, engage_in_negotiation, ?, Dec 2014) query vector Qq 1) Observed supporting facts (uᵢ, rᵢ, vᵢ, tᵢ) 2) Semantic base messages (from KG score function φ) mᵢ = φ(uᵢ, rᵢ, vᵢ) ∈ ℝᵈ 3) Relative-time rotation (temporal evolution) Δtᵢ = tᵢ − τ mᵢʳᵒᵗ = R(Δtᵢ)mᵢ 1BarackObama Nov 2014 visit Cuba 2BarackObama Nov 2010 engage_in_ negotiation Iran 3BarackObama Dec 2014 make_statement USCongress 4Putin Dec 2014 engage_in_ negotiation Cuba Qqm1m2m3m4m1m2m3m4m1ʳᵒᵗ m2ʳᵒᵗ m3ʳᵒᵗ m4ʳᵒᵗ Δt 1Δt 2QqRelation Encoder {ruv }(u,v) ∈E= RelGNN( GR|r)Entity Encoder with GRATE Message muv Update Rank Candidate Score Bar 1Cuba 0. 6 123Iran 0. 28 0.1 1USCongress GRATE aggregate over N(v)from N(v)Cuba 0.88 m₁ʳᵒᵗ Iran 0.2 1 m₂ʳᵒᵗ USCongress 0.15 m₃ʳᵒᵗ Cuba 0.4 3 m₄ʳᵒᵗ 4) Query-conditioned gate (query relevance) Temporal-transformed message muv rot Query vector QqQq= h s(ℓ−1) + r qmuv rot σ( ·)guv ×Gated message muv to base model guv =σ( QqTmuv rot / √ d)m~uv =guv ·muv rot (see panel (a)) muv rot =R(Δ t)· muv muv =guv ·muv rot ~
+
+Figure 1. GRATE mechanism and integration. (a) Overview of the four processing steps for an example query (Barack Obama, 
+
+engage in negotiation , ?, Dec 2014). (1) Observed supporting facts from the message graph. (2) Semantic base messages muv =
+
+ϕ(hu, r uv ) computed by the KG score function. (3) Relative-time rotation: each base message is rotated by R(∆ tuv ), where ∆tuv =
+
+τ − tuv , encoding temporal displacement at multiple frequencies. (4) Query-conditioned gate: the rotated message is scored against the query state Qq via g = σ(Q⊤
+
+q mrot /√d), producing a gated message forwarded to the base model. (b) GRATE integrates into NBFNet-style KG foundation models by replacing only the entity-side message function. 
+
+GRATE then rotates the base message muv 1 in Equation (1) according to the relative time gap: 
+
+mrot 
+
+uv = R(∆ tuv ) muv . (9) This construction transforms each structural message as a continuous function of its temporal displacement from the query, enabling temporally distinct supporting facts to produce different message representations while remaining independent of absolute timestamp identities. 
+
+5.2. Query-Conditioned Gating 
+
+The rotation in Equation (9) incorporates the relative time gap ∆t into each message, but does not yet address a second requirement: selecting which temporally shifted edges are relevant to the current query. In temporal knowledge graphs, 
+
+1Following U LTRA and T RIX , the base model instantiates ϕ
+
+in Equation (1) as DistMult: muv = hu ⊙ ruv ∈ Rd, where ⊙
+
+denotes the element-wise Hadamard product. 
+
+multiple supporting facts may exist at different time offsets, and not all contribute equally to the prediction. To model query-dependent relevance, we introduce a gat-ing mechanism with no learnable parameters that depends jointly on the query and the rotated message. Let h(ℓ−1) head( q)
+
+denote the representation of the query head entity at layer 
+
+ℓ − 1, and let rq be the query relation embedding. We define the query state 
+
+Qq = h(ℓ−1) head( q) + rq , (10) which summarises the query context. This additive form mirrors NBFNet-style initialisation, where the query rela-tion is placed at the source node; Qq therefore represents the same query signal that drives message propagation from the source. 4GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+Algorithm 1 GRATE forward pass for layer ℓ, query (s, r, ?, τ ).
+
+Require: node states {h(ℓ−1)  
+
+> u
+
+},query relation embedding rq ,edges u ruv 
+
+−−→ v with timestamps {tuv },hidden dimension d (even), RoPE base b=10000 .
+
+Ensure: updated node states {h(ℓ) 
+
+> v
+
+}.1: ωk ← b−2k/d for k = 0 , . . . , d/ 2−1
+
+2: Qq ← h(ℓ−1)  
+
+> s
+
++ rq {query state }
+
+3: for all edges u ruv 
+
+−−→ v with timestamp tuv do 
+
+4: ∆tuv ← τ − tuv 
+
+5: m ← h(ℓ−1)  
+
+> u
+
+⊙ ruv {base message }
+
+6: mrot ← R(∆ tuv ) m via Equation (8) 7: g ← σ Q⊤ 
+
+> q
+
+mrot /√d {gate }
+
+8: mGRATE  
+
+> uv
+
+← g · mrot 
+
+9: end for 
+
+10: for all nodes v do 
+
+11: h(ℓ) 
+
+> v
+
+← AGG  {mGRATE  
+
+> uv
+
+: u ∈ N (v)}
+
+12: end for 
+
+13: return {h(ℓ) 
+
+> v
+
+}
+
+Given the rotated message mrot  
+
+> uv
+
+, we compute a scalar gate 
+
+guv = σ Q⊤ 
+
+> q
+
+mrot 
+
+> uv
+
+√d
+
+!
+
+, (11) where σ denotes the sigmoid function. The 1/√d scaling matches scaled dot-product attention (Vaswani et al., 2017) and stabilises gate magnitudes as d grows. The final G RATE 
+
+message is 
+
+mGRATE  
+
+> uv
+
+= guv · mrot  
+
+> uv
+
+. (12) The gate measures the alignment between the query and the rotated message, allowing the model to emphasise tempo-rally relevant signals while suppressing irrelevant ones. Unlike softmax attention, which couples edge weights within a neighbourhood, the sigmoid gate evaluates each edge independently. This matches the additive aggregation structure of NBFNet-style message passing, where support-ing evidence is accumulated rather than normalised across neighbours. Independent gating is also more stable under inductive transfer, where neighbourhood-size distributions may differ substantially from training graphs. Because the gate depends only on the alignment between the rotated mes-sage R(∆ tuv ) m and the query state Qq in the shared RoPE basis, the notion of temporal relevance remains consistent across training and inference graphs without introducing timestamp-specific parameters. Both the rotation and gating rely only on relative time differences and existing learned representations ( hu, ruv ,
+
+hhead( q), rq ), so G RATE adds zero learnable parameters over the base model (Section D) while incorporating temporal and query-dependent reasoning. Algorithm 1 summarises the full per-layer forward pass. 
+
+5.3. Multi-TKG Pretraining 
+
+Because G RATE applies rotary encoding over ordered time IDs, jointly training on multiple source TKGs introduces a conflict: different datasets often reuse the same local indices (e.g., starting from 0) for different timestamps or granularities. We therefore remap the timestamps of each source onto disjoint integer ranges before joint training, so no two datasets share an ID. Since G RATE depends only on relative gaps ∆t, this remapping preserves per-source temporal relationships. 
+
+## 6. Experimental Setup 
+
+6.1. Evaluation Regimes 
+
+We evaluate G RATE under three regimes: (1) transductive fine-tuning on ICEWS14 and ICEWS05-15; (2) inductive transfer on the GDELT and WIKI inductive benchmarks we construct; (3) held-out zero-shot transfer on ICEWS18 and YAGO under the standard single-step extrapolation protocol. Regime (2) tests the central claim of G RATE ; the same jointly pretrained checkpoint is used in all three regimes. 
+
+6.2. Datasets Pretraining sources. We jointly pretrain on ICEWS14 and ICEWS05-15 (Garc ´ıa-Dur ´an et al., 2018; Lautenschlager et al., 2015), two political-event TKGs from ICEWS with daily timestamps. Both use interpolation splits and are the only data the trained G RATE checkpoint sees. 
+
+Inductive transfer benchmarks. We construct GDELTI ND T from GDELT (Trivedi et al., 2017) (one year of high-density daily events, April 2015–March 2016) and WIKII ND T from WIKI (Jin et al., 2020) (232 years of yearly encyclopaedic facts). Construction details follow in Section 6.3. 
+
+Held-out forecasting. ICEWS18 (daily political events, January–October 2018) and YAGO (yearly encyclopaedic facts under a chronological split), both from Jin et al. (2020), are too small in relation and entity vocabulary to admit our V/R/T-disjoint construction. We therefore use them only for zero-shot evaluation under the standard single-step extrapolation protocol. Per-dataset statistics for all six TKGs are in Table 5 (Section C). 
+
+6.3. Inductive transfer benchmark Split protocol. The model is trained on the source TKG 
+
+Gtrain and hyper-parameters are selected on a held-out vali-dation set Qvalid , where Qvalid ∩ Qtrain = ∅ but Vvalid ⊆
+
+Vtrain and Rvalid ⊆ Rtrain .2 At inference, the model is 
+
+> 2
+
+Two protocols exist in inductive KG evaluation: holding the validation set out from the inference graph (Lee et al., 2023b), or 
+
+5GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+applied to the target Ginf = ( Vinf , R inf , T inf , Q inf ) with-out fine-tuning: an observed subset QO ⊂ Qinf serves as the message-passing graph, and predictions are scored on a disjoint held-out Qtest ⊂ Qinf , with QO ∩ Qtest = ∅,which the model never sees during any forward pass. 
+
+Benchmark construction. We extend INGRAM Algo-rithm 2 (Lee et al., 2023b) to quadruples. The procedure varies two orthogonal axes: ptri ∈ { 0.25 , 0.50 , 0.75 , 1.00 }
+
+(the fraction of inference-graph edges using unseen R and 
+
+unseen T )3 and a temporal mode ∈ { inter , extra } (ran-dom shuffle vs. chronological message/test split). Full al-gorithmic details are in Section C; per-variant sizes are in Tables 7 and 8. 
+
+6.4. Evaluation Protocol and Baselines Metrics. We report Mean Reciprocal Rank (MRR) and Hits@ 1/10 averaged over both tail prediction (s, r, ?, τ )
+
+and head prediction (? , r, o, τ ), under the time-aware filter of Goel et al. (2020) which masks only the candidate entities matching known facts at the specific query timestamp τ .
+
+Baselines per regime. (i) Transductive : the main table reports U LTRA (Galkin et al., 2024) and T RIX (Zhang et al., 2025) retrained on the same temporal data without the GRATE module, isolating the contribution of the temporal mechanism. A full comparison with transductive interpo-lation baselines is in Section F. (ii) Inductive transfer : no existing structural TKG model is directly applicable, as the V/R/T-disjoint construction rules out any model that learns per-entity, per-relation, or per-timestamp parameters. We therefore use the count-based recurrency predictor of Gastinger et al. (2024) as a learning-free reference point; despite requiring no learning, it reaches performance com-parable to state-of-the-art trained TKG forecasting methods on standard benchmarks (Gastinger et al., 2024). (iii) Held-out forecasting : LLM-based forecasting methods ICL (Lee et al., 2023a) and GenTKG (Liao et al., 2024), matching GRATE ’s zero-shot evaluation protocol. A full comparison with transductive forecasting baselines is in Section E. 
+
+Implementation. Base model hyperparameters, optimiser, batch size, and hardware are in Section B; zero-shot eval-uation is deterministic, so we report single-run numbers throughout. 4
+
+from the training graph (Zhou et al., 2023). We adopt the latter to keep the inference graph fully unseen during training and hyper-parameter selection, eliminating leakage from the target. 
+
+> 3
+
+V/R/T-disjoint transfer is a deliberate stress test, it is most representative of rapidly-evolving domains where new entities, relations continually appear over time. 
+
+> 4
+
+Code and benchmarks: https://anonymous.4open. science/r/GRATE-F431/ .                                     
+
+> ICEWS14 ICEWS05-15 Method MRR H@1 H@10 MRR H@1 H@10 ULTRA .495 .373 .731 .451 .316 .720
+> +GRATE .620 .520 .793 .621 .500 .819
+> % ∆ +25 .3% +39 .4% +8 .5% +37 .7% +58 .2% +13 .8%
+> TRIX .486 .366 .719 .456 .322 .722
+> +GRATE .609 .507 .793 .617 .501 .830
+> % ∆ +25 .3% +38 .5% +10 .3% +35 .3% +55 .6% +15 .0%
+
+Table 1. Transductive link prediction on ICEWS14 and ICEWS05-15. Base models retrained without G RATE on the same pretraining mix; % ∆ rows show relative improvement. Full comparison with transductive baselines in Section F. Best per column bold .
+
+## 7. Results 
+
+We report results across the three evaluation regimes intro-duced in Section 6.1: transductive in-distribution perfor-mance on the pretraining sources (Section 7.1), inductive transfer on the GDELT and WIKI benchmarks we construct (Section 7.2), and zero-shot transfer to the held-out fore-casting benchmarks ICEWS18 and YAGO (Section 7.3). Section 7.4 then isolates the contribution of each design choice in G RATE .
+
+7.1. Transductive in-distribution performance 
+
+Table 1 reports transductive link prediction on ICEWS14 and ICEWS05-15 under the time-aware filter. Adding GRATE consistently improves both U LTRA and T RIX across all metrics, with relative gains of +25 –+38% MRR and 
+
++38 –+58% Hits@ 1 over the corresponding base models without temporal modelling. Gains are largest on Hits@ 1,indicating that relative-time alignment primarily improves top-rank precision, and consistent across both base models, suggesting they arise from the temporal message function itself. 
+
+7.2. Inductive transfer 
+
+Figure 2 reports zero-shot transfer of a single jointly pretrained G RATE checkpoint to all 16 variants of the GDELTI ND T and WIKII ND T inductive transfer bench-marks; full numerical results and supporting figures are in Section A. Across all 16 variants, T RIX + G RATE consis-tently outperforms the recurrency-only baseline, demonstrat-ing that the relational gate captures predictive signal beyond pure recurrence matching, even on high-recurrence sources where a recurrence-only strategy is known to be competitive (Gastinger et al., 2024). On GDELT, the static T RIX base model performs at par-ity with the recurrency baseline ( 0.22 –0.24 MRR across variants), yet T RIX + G RATE improves over recurrency by 
+
++0 .16 to +0 .21 MRR on interpolation and +0 .12 to +0 .18 
+
+MRR on extrapolation. GDELT is a dense event graph 6GRATE : Gated Rotary Attention for Temporal KG Foundation Models 25 50 75 100                      
+
+> ptri (%)
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> MRR
+> (a) GDELTINDT interpolation
+> 25 50 75 100
+> ptri (%)
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> MRR
+> (b) GDELTINDT extrapolation
+> 25 50 75 100
+> ptri (%)
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> MRR
+> (c) WIKIINDT interpolation
+> 25 50 75 100
+> ptri (%)
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> MRR
+> (d) WIKIINDT extrapolation
+> Recurrency Ultra Ultra + GRATE Trix Trix + GRATE
+
+Figure 2. Zero-shot inductive transfer MRR on GDELTI ND T and WIKII ND T as a function of ptri . Hits@ 1/Hits@ 10 variants are in Figure 3 and the full table is in Section A. 
+
+(460 –990 edges per entity in the benchmark variants), in which any given entity participates in many co-occurring events with different actors and relations. This rich neighbor-hood gives G RATE ’s gate abundant evidence to discriminate among; the model can selectively up-weight temporally rel-evant messages from a large candidate pool, which is the regime the mechanism is designed for. U LTRA + G RATE de-livers consistent but smaller gains ( +0 .025 to +0 .040 MRR on interpolation); T RIX ’s iterative refinement appears better suited to preserving this discriminative neighborhood struc-ture for the gate than U LTRA ’s single-pass count summary. On WIKI, facts are largely isolated temporal assertions, a single (s, r, o ) triple recurring across yearly timestamps, yielding a sparse graph of only 7–21 edges per entity. With few neighboring facts to discriminate among, G RATE ’s gate has limited evidence to work with, and gains over the re-currency baseline are correspondingly smaller. Where the gate does add value is when DRec is high: DRec, defined by Gastinger et al. (2024) as the fraction of test triples whose literal (s, r, o ) match in the inference history sits at the im-mediately preceding timestamp, rises from 0.45 at p25 to 
+
+0.95 at p100 across the WIKII ND T interpolation variants. At p100 , nearly every recurrent triple has its match exactly one year prior; G RATE anchors on these, and T RIX + G RATE 
+
+leads all methods ( +0 .029 MRR over static T RIX , +0 .338 
+
+MRR over recurrency). At low DRec ( p25 –p50 ), the static TRIX base already captures the relational signal effectively through flat aggregation; G RATE ’s decay down-weights older matches the static model relied on, and T RIX + G RATE 
+
+trails static T RIX by up to 0.116 MRR, while still outper-forming the recurrency baseline throughout. Figure 4 in Section A.3 visualises this DRec–gain relationship across all 18 evaluated distributions.                                                          
+
+> ICEWS18 YAGO Method MRR H@1 H@10 MRR H@1 H@10 ICL —.182 .414 —.726 .846 GenTKG —.243 .421 —.792 .843 ULTRA .180 .092 .369 .726 .647 .872
+> +GRATE .228 .128 .444 .792 .736 .886
+> % ∆ +26 .7% +39 .1% +20 .3% +9 .1% +13 .8% +1 .6%
+> TRIX .274 .170 .484 .800 .740 .916
+> +GRATE .273 .179 .461 .858 .822 .905
+> % ∆ −0.4% +5 .3% −4.8% +7 .3% +11 .1% −1.2%
+
+Table 2. Zero-shot transfer to ICEWS18 and YAGO compared with LLM-based forecasting methods. A full comparison with transductive baselines is in Section E. 
+
+7.3. Zero-shot transfer 
+
+Table 2 reports zero-shot evaluation on ICEWS18 and YAGO under the single-step extrapolation protocol, using the same pretrained checkpoint without fine-tuning. We compare against the vocabulary-agnostic LLM-based fore-casters ICL (Lee et al., 2023a) and GenTKG (Liao et al., 2024); MRR is omitted as they decode candidates rather than rank all entities. A full comparison with transductive baselines is in Section E. Despite being a purely structure-driven model with no access to textual descriptions or language-model priors, GRATE outperforms both LLM-based methods on Hits@ 10 
+
+on ICEWS18 and achieves higher Hits@ 1 and MRR on YAGO. GenTKG attains higher Hits@ 1 on ICEWS18 (0.243 vs. 0.179 ), partly because it pre-filters candidates using entity–relation co-occurrence statistics that narrow the prediction space; G RATE applies no such filtering and ranks over all candidate entities. The gain pattern from Section 7.2 extends to the held-out targets. YAGO sits in the same regime as WIKII ND T-100-inter ( DRec = 0 .93 ): nearly every recurrent test triple has its literal match exactly one year prior, and T RIX + G RATE 
+
+gains +7 .3% MRR. ICEWS18 sits in the opposite regime (DRec = 0 .108 , median recurrence gap 13 days): literal recurrence is diffuse across timescales rather than concen-trated at the preceding timestamp, giving the gate little sig-nal to exploit, and T RIX + G RATE is accordingly near-flat (−0.4% MRR). The asymmetry between U LTRA + G RATE (+26 .7% MRR) and T RIX + G RATE (−0.4% ) on ICEWS18 reflects the dif-ference in relation-graph expressiveness between the two base models. T RIX ’s iteratively refined relation graph with four-way directional message passing captures more of the available structural signal on ICEWS18 than U LTRA ’s single-pass count-based relation graph construction, leav-ing less room for G RATE ’s temporal channel to contribute additional gains. 7GRATE : Gated Rotary Attention for Temporal KG Foundation Models                       
+
+> ICEWS14 GDELT-100 I
+> Configuration (transd. MRR) (zs MRR) TRIX (distmult) .486 .231
+> +m⊙SinCos(∆ t).560 .320 + rotation .589 .377 rotation + rel. gate .603 .410
+> +GRATE .609 .444
+> Table 3. Component ablation of G RATE on T RIX . GDELT-100 I=GDELTI ND T-100-INTER (zero-shot).
+
+7.4. Component ablation 
+
+Table 3 isolates the contribution of each G RATE component by incrementally augmenting the T RIX base model. All vari-ants share the same architecture and training setup, differing only in the entity-side message function. Replacing the static DistMult message with its rotated form 
+
+R(∆ t) yields gains of +0 .103 MRR on ICEWS14 and 
+
++0 .146 MRR on GDELTI ND T-100-INTER without adding parameters, showing that most of the temporal signal can be captured by relative-time alignment alone. Rotation also outperforms an element-wise sinusoidal alternative 
+
+m ⊙ SinCos(∆ t) by 0.029 / 0.057 MRR, since rotation preserves the message norm whereas sinusoidal modulation rescales each dimension independently. Adding a relation-conditioned gate on top of rotation yields further gains of 
+
++0 .014 MRR transductively and +0 .033 MRR under in-ductive transfer evaluation; the effect is larger in the zero-shot setting, where structural and recurrent cues are weaker. Switching to query-conditioned gating yields modest in-distribution gains ( +0 .006 MRR) and larger inductive trans-fer gains ( +0 .034 MRR), confirming the value of query-aware edge selection. Each step in Table 3 adds a single design choice; removing any one degrades performance, and the gap widens under the strictest inductive transfer regime, indicating that the four design choices function together rather than additively. 
+
+## 8. Conclusion 
+
+We introduced G RATE , a parameter-free message function that lifts inductive KG foundation models to the temporal setting via relative-time rotation and query-conditioned gat-ing. Across three evaluation regimes, G RATE improves performance in most settings, with the largest gains where recurrence and dataset-specific patterns are unavailable, and its impact scales with the richness of the base model’s rela-tion graph. 
+
+## Limitations 
+
+GRATE encodes time purely through relative index differ-ences and does not explicitly model temporal granularity or irregular intervals, which weakens its effect on coarse-grained datasets. In addition, while G RATE adds no pa-rameters, the underlying NBFNet-style message passing remains computationally expensive on large TKGs. Com-bining relative-time encoding with more scalable propa-gation strategies, and broader pretraining mixes including GDELT or interval-style TKGs, is a natural direction for future work. The current pretraining sources share daily granularity; extending to mixed-granularity pretraining is left to future work. 
+
+## Acknowledgements 
+
+We gratefully acknowledge computing time on the HoreKa supercomputer at the National High-Performance Comput-ing Center at KIT (NHR@KIT), jointly funded by the Ger-man Federal Ministry of Education and Research (BMBF), the Ministry of Science, Research, and the Arts of Baden-W ¨urttemberg, and the German Research Foundation (DFG). Jiaxin Pan and Osama Mohammed acknowledge funding from the EU Chips Joint Undertaking (GA 101140087, SMARTY) and from the BMBF sub-project 16MEE0444. Daniel Hern ´andez is funded by the German Research Foun-dation (DFG) – SFB 1574 – 471687386. 
+
+## References 
+
+Du, E., Liu, S., and Zhang, Y. Graphoracle: Efficient fully-inductive knowledge graph reasoning via relation-dependency graphs. In Proceedings of the AAAI Con-ference on Artificial Intelligence , volume 40, pp. 19055– 19063, 2026. Galkin, M., Yuan, X., Mostafa, H., Tang, J., and Zhu, Z. Towards foundation models for knowledge graph reason-ing. In The Twelfth International Conference on Learning Representations , 2024. Garc ´ıa-Dur ´an, A., Duman ˇci ´c, S., and Niepert, M. Learn-ing sequence encoders for temporal knowledge graph completion. In Riloff, E., Chiang, D., Hockenmaier, J., and Tsujii, J. (eds.), Proceedings of the 2018 Confer-ence on Empirical Methods in Natural Language Pro-cessing , pp. 4816–4821, Brussels, Belgium, October-November 2018. Association for Computational Lin-guistics. doi: 10.18653/v1/D18-1516. URL https: //aclanthology.org/D18-1516/ .Gastinger, J., Sztyler, T., Sharma, L., Schuelke, A., and Stuckenschmidt, H. Comparing apples and oranges? on the evaluation of methods for temporal knowledge graph forecasting. In Joint European conference on machine learning and knowledge discovery in databases , pp. 533– 549. Springer, 2023. Gastinger, J., Meilicke, C., Errica, F., Sztyler, T., Sch ¨ulke, 8GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+A., and Stuckenschmidt, H. History repeats itself: A baseline for temporal knowledge graph forecasting. In 
+
+IJCAI , 2024. Goel, R., Kazemi, S. M., Brubaker, M., and Poupart, P. Diachronic embedding for temporal knowledge graph completion. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 34, pp. 3988–3995, 2020. Han, Z., Ding, Z., Ma, Y., Gu, Y., and Tresp, V. Learning neural ordinary equations for forecasting future links on temporal knowledge graphs. In Proceedings of the 2021 conference on empirical methods in natural language processing , pp. 8352–8364, 2021. Jin, W., Qu, M., Jin, X., and Ren, X. Recurrent event net-work: Autoregressive structure inferenceover temporal knowledge graphs. In Proceedings of the 2020 Confer-ence on Empirical Methods in Natural Language Pro-cessing (EMNLP) , pp. 6669–6683, 2020. Lacroix, T., Obozinski, G., and Usunier, N. Tensor decom-positions for temporal knowledge base completion. In 
+
+International Conference on Learning Representations ,2020. URL https://openreview.net/forum? id=rke2P1BFwS .Lautenschlager, J., Shellman, S., and Ward, M. Icews event aggregations. Harvard Dataverse , 3(595):28, 2015. Leblay, J. and Chekol, M. W. Deriving validity time in knowledge graph. In Companion proceedings of the the web conference 2018 , pp. 1771–1776, 2018. Lee, D.-H., Ahrabian, K., Jin, W., Morstatter, F., and Pu-jara, J. Temporal knowledge graph forecasting without knowledge using in-context learning. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing , pp. 544–557, 2023a. Lee, J., Chung, C., and Whang, J. J. Ingram: Inductive knowledge graph embedding via relation graphs. In In-ternational Conference on Machine Learning , pp. 18796– 18809. PMLR, 2023b. Li, Y., Sun, S., and Zhao, J. Tirgn: Time-guided recurrent graph network with local-global historical patterns for temporal knowledge graph reasoning. In IJCAI , pp. 2152– 2158, 2022. Li, Z., Jin, X., Li, W., Guan, S., Guo, J., Shen, H., Wang, Y., and Cheng, X. Temporal knowledge graph reasoning based on evolutional representation learning. In Proceed-ings of the 44th international ACM SIGIR conference on research and development in information retrieval , pp. 408–417, 2021. Liang, K., Meng, L., Liu, M., Liu, Y., Tu, W., Wang, S., Zhou, S., and Liu, X. Learn from relational correlations and periodic events for temporal knowledge graph reason-ing. In Proceedings of the 46th international ACM SIGIR conference on research and development in information retrieval , pp. 1559–1568, 2023. Liao, R., Jia, X., Li, Y., Ma, Y., and Tresp, V. Gentkg: Generative forecasting on temporal knowledge graph with large language models. In NAACL-HLT (Findings) , 2024. Liu, S., Grau, B., Horrocks, I., and Kostylev, E. Indigo: Gnn-based inductive knowledge graph completion using pair-wise encoding. Advances in Neural Information Processing Systems , 34:2034–2045, 2021. Liu, Y., Ma, Y., Hildebrandt, M., Joblin, M., and Tresp, V. Tlogic: Temporal logical rules for explainable link fore-casting on temporal knowledge graphs. In Proceedings of the AAAI conference on artificial intelligence , volume 36, pp. 4120–4127, 2022. Su, J., Ahmed, M., Lu, Y., Pan, S., Bo, W., and Liu, Y. Roformer: Enhanced transformer with rotary position embedding. Neurocomputing , 568:127063, 2024. Sun, H., Zhong, J., Ma, Y., Han, Z., and He, K. Timetraveler: Reinforcement learning for temporal knowledge graph forecasting. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing , pp. 8306–8319, 2021. Teru, K., Denis, E., and Hamilton, W. Inductive relation prediction by subgraph reasoning. In International con-ference on machine learning , pp. 9448–9457. PMLR, 2020. Trivedi, R., Dai, H., Wang, Y., and Song, L. Know-evolve: Deep temporal reasoning for dynamic knowledge graphs. In international conference on machine learning , pp. 3462–3471. PMLR, 2017. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. At-tention is all you need. Advances in neural information processing systems , 30, 2017. Xu, C., Nayyeri, M., Alkhoury, F., Yazdi, H. S., and Lehmann, J. Tero: A time-aware knowledge graph em-bedding via temporal rotation. In Proceedings of the 28th International Conference on Computational Linguistics ,pp. 1583–1593, 2020. Zhang, F., Zhang, Z., Ao, X., Zhuang, F., Xu, Y., and He, Q. Along the time: Timeline-traced embedding for tem-poral knowledge graph completion. In Proceedings of the 31st ACM International Conference on Information & Knowledge Management , pp. 2529–2538, 2022. 9GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+Zhang, Y., Bevilacqua, B., Galkin, M., and Ribeiro, B. Trix: A more expressive model for zero-shot domain transfer in knowledge graphs. In The Third Learning on Graphs Conference , 2025. Zhou, J., Bevilacqua, B., and Ribeiro, B. A multi-task perspective for link prediction with new relation types and nodes. In NeurIPS 2023 Workshop: New Frontiers in Graph Learning , 2023. Zhu, Z., Zhang, Z., Xhonneux, L.-P., and Tang, J. Neural bellman-ford networks: A general graph neural network framework for link prediction. Advances in neural infor-mation processing systems , 34:29476–29490, 2021. 10 GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+# Appendix 
+
+## A. Full Numerical Results 
+
+A.1. Inductive Transfer Benchmark Tables 
+
+Table 4 reports the full numerical results underlying Fig-ure 2, including Hits@ 1 and Hits@ 10 alongside MRR for every cell of the GDELTI ND T and WIKII ND T benchmark suites. We highlight four cross-cutting observations. 
+
+GDELT interpolation (Table 4a). TRIX + G RATE achieves the strongest results across all ptri levels, with gains over the static T RIX base model growing monotonically from 
+
++0 .155 MRR at p25 to +0 .213 MRR at p100 . This mono-tone increase confirms that G RATE ’s gate becomes more valuable as the inference graph contains a larger fraction of relation- and timestamp-disjoint edges, where direct re-currence matching is less reliable. U LTRA + G RATE also improves consistently ( +0 .025 to +0 .040 MRR) but at a smaller scale, consistent with the relation-graph difference discussed in Section 7.2. 
+
+GDELT extrapolation (Table 4b). Gains persist under the stricter extrapolation split but are smaller than under interpolation, reflecting that temporal patterns transfer less directly to future timestamps. TRIX + G RATE maintains consistent positive gains ( +0 .063 to +0 .085 MRR) while ULTRA + G RATE is near-flat at high ptri , reinforcing the role of T RIX ’s richer relation graph. 
+
+WIKI interpolation (Table 4c). WIKI is highly recur-rent (DRec 85 .6% ) and static base models already perform strongly. At low ptri , G RATE provides no benefit as the dominant signal is pure entity recurrence rather than tempo-ral patterning. At ptri = 1 .0, where every test edge involves entirely unseen relations and timestamps, T RIX + G RATE 
+
+achieves the best MRR ( 0.991 ) and Hits@ 1 (0.988 ), demon-strating that relative-time alignment is most effective when prediction cannot fall back on memorised facts. 
+
+WIKI extrapolation (Table 4d). Results are more mixed at intermediate ptri , but T RIX + G RATE regains the lead at ptri = 1.0 (+0 .035 MRR, +0 .064 Hits@ 1). UL- 
+
+> TRA
+
++ G RATE shows modest positive gains at the two high-est ptri levels ( +0 .025 and +0 .012 MRR), suggesting that even a weaker relation graph benefits from temporal gating under strict disjointness. 
+
+A.2. Additional Hits@K Results 
+
+Figure 3 plots Hits@ 1 and Hits@ 10 in the same format as the MRR-based Figure 2. 
+
+A.3. DRec as a Predictor of G RATE ’s Lift 
+
+Figure 4 plots the per-variant G RATE gain ( ∆ MRR over the static T RIX base model) against DRec across all 16 induc-tive transfer benchmarks and the two held-out targets from Section 7.3. Within each (source × mode) block, the gain is monotone in DRec: as a larger fraction of test triples have their literal (s, r, o ) match at the immediately preceding timestamp, G RATE ’s relative-time gate has more concen-trated evidence to anchor on, and the lift grows accordingly. The ICEWS18 and YAGO held-out points fall onto the same band defined by the sweep variants, confirming that DRec is a consistent predictor across datasets. Rec (any-history occurrence) does not share this property: on WIKII ND T-interpolation, Rec stays at ≈ 0.99 across all four ptri levels while the gain spans −0.116 to +0 .029 MRR. 
+
+## B. Implementation and Base Model Details 
+
+Unless explicitly noted otherwise, we follow the original ULTRA (Galkin et al., 2024) and T RIX (Zhang et al., 2025) configurations and training recipes. 
+
+B.1. Training Configuration Frequency basis. GRATE uses the standard rotary fre-quency vector ωk = 1 /10000 2k/d with k = 0 , 1, . . . , d/ 2 −
+
+1. We keep the RoPE base at 10000 in all experiments and do not tune it. 
+
+Relative time scale. We pass the integer relative time gap 
+
+∆tuv = τ − tuv 
+
+directly to the RoPE rotation, without normalising it by the dataset time range. This choice follows the design goal of keeping G RATE dataset-agnostic. RoPE already contains frequencies spanning several orders of magnitude, so low-frequency components can respond to large tem-poral gaps while high-frequency components capture finer differences. Moreover, normalising by a dataset-specific time range would require access to target-graph statistics at inference time. In our inductive transfer setting, target timestamps are disjoint from training and may use differ-ent granularities, such as daily timestamps in ICEWS and yearly timestamps in WIKI. We therefore avoid dataset-level rescaling and keep the temporal transformation dependent only on relative time gaps. 
+
+Base models. ULTRA and T RIX use L = 6 message-passing layers, PNA aggregation, and hidden dimension d = 32 
+
+(Galkin et al., 2024). G RATE operates entirely inside the per-edge message function and requires no changes to the aggregation or update steps of the base model. 11 GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+(a) GDELTI ND T: interpolation mode 
+
+p25 p50 p75 p100 
+
+Method MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 Recurrency .220 .000 .502 .216 .000 .495 .222 .000 .492 .242 .000 .537 ULTRA .207 .118 .383 .206 .118 .377 .210 .121 .383 .221 .128 .402 
+
++ GRATE .239 .141 .435 .246 .150 .434 .235 .135 .434 .247 .149 .436 
+
+∆ (U LTRA ) +.032 +.023 +.052 +.040 +.032 +.057 +.025 +.014 +.051 +.026 +.021 +.034 
+
+TRIX .225 .134 .407 .218 .123 .403 .239 .138 .433 .231 .126 .440 
+
++ GRATE .380 .263 .615 .394 .275 .636 .432 .312 .671 .444 .310 .723 
+
+∆ (T RIX ) +.155 +.129 +.208 +.176 +.152 +.233 +.193 +.174 +.238 +.213 +.184 +.283 
+
+(b) GDELTI ND T: extrapolation mode 
+
+p25 p50 p75 p100 
+
+Method MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 Recurrency .119 .000 .272 .159 .000 .358 .184 .000 .401 .169 .000 .369 ULTRA .196 .116 .347 .207 .122 .367 .229 .143 .394 .212 .127 .375 
+
++ GRATE .216 .119 .401 .215 .121 .403 .222 .127 .408 .220 .127 .403 
+
+∆ (U LTRA ) +.020 +.003 +.054 +.008 −.001 +.036 −.007 −.016 +.014 +.008 ±.000 +.028 
+
+TRIX .232 .139 .414 .220 .128 .395 .229 .130 .421 .203 .112 .379 
+
++ GRATE .295 .188 .503 .285 .177 .498 .308 .197 .527 .288 .182 .501 
+
+∆ (T RIX ) +.063 +.049 +.089 +.065 +.049 +.103 +.079 +.067 +.106 +.085 +.070 +.122 
+
+(c) WIKII ND T: interpolation mode 
+
+p25 p50 p75 p100 
+
+Method MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 Recurrency .477 .000 .813 .524 .000 .855 .572 .000 .888 .653 .000 .993 ULTRA .838 .751 .964 .835 .743 .962 .851 .767 .966 .856 .775 .968 
+
++ GRATE .811 .706 .959 .834 .745 .961 .832 .733 .963 .842 .750 .967 
+
+∆ (U LTRA ) −.027 −.045 −.005 −.001 +.002 −.001 −.019 −.034 −.003 −.014 −.025 −.001 
+
+TRIX .623 .505 .819 .760 .691 .860 .858 .826 .899 .962 .937 .996 
+
++ GRATE .507 .414 .680 .650 .557 .782 .872 .847 .917 .991 .988 .997 
+
+∆ (T RIX ) −.116 −.091 −.139 −.110 −.134 −.078 +.014 +.021 +.018 +.029 +.051 +.001 
+
+(d) WIKII ND T: extrapolation mode 
+
+p25 p50 p75 p100 
+
+Method MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 MRR H@1 H@10 Recurrency .416 .000 .624 .528 .000 .794 .598 .000 .903 .588 .000 .891 ULTRA .724 .660 .821 .721 .655 .827 .689 .600 .829 .737 .674 .832 
+
++ GRATE .717 .652 .815 .727 .661 .822 .714 .640 .821 .749 .691 .831 
+
+∆ (U LTRA ) −.007 −.008 −.006 +.006 +.006 −.005 +.025 +.040 −.008 +.012 +.017 −.001 
+
+TRIX .790 .671 .980 .916 .867 .971 .959 .945 .978 .931 .895 .974 
+
++ GRATE .795 .678 .955 .888 .808 .974 .874 .766 .983 .966 .959 .976 
+
+∆ (T RIX ) +.005 +.007 −.025 −.028 −.058 +.003 −.085 −.179 +.005 +.035 +.064 +.001 
+
+Table 4. Zero-shot inductive transfer to the GDELTI ND T and WIKII ND T benchmark suites under the time-aware filter. Each ptri column reports MRR / H@1 / H@10. Rows grouped by base model, with ∆ rows showing the G RATE − no-G RATE difference per cell. All learned methods use the same joint checkpoint pretrained on ICEWS14 + ICEWS05-15; the U LTRA and T RIX rows are retrained on the same temporal data without the G RATE module. Recurrency baseline from Gastinger et al. (2024); U LTRA from Galkin et al. (2024); TRIX from Zhang et al. (2025). Best per column bold .
+
+12 GRATE : Gated Rotary Attention for Temporal KG Foundation Models 25 50 75 100 
+
+ptri (%) 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Hits@1
+
+(a) GDELTINDT interpolation    
+
+> 25 50 75 100
+
+ptri (%) 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Hits@1
+
+(b) GDELTINDT extrapolation    
+
+> 25 50 75 100
+
+ptri (%) 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Hits@1
+
+(c) WIKIINDT interpolation    
+
+> 25 50 75 100
+
+ptri (%) 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Hits@1
+
+(d) WIKIINDT extrapolation 
+
+Recurrency Ultra Ultra + GRATE Trix Trix + GRATE 
+
+(a) Hits@ 1. The recurrency baseline sits at 0 across all panels because the count-based predictor breaks ties uniformly and never returns the gold tail at exact rank 1.25 50 75 100 
+
+ptri (%) 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Hits@10
+
+(a) GDELTINDT interpolation    
+
+> 25 50 75 100
+
+ptri (%) 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Hits@10
+
+(b) GDELTINDT extrapolation    
+
+> 25 50 75 100
+
+ptri (%) 
+
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Hits@10
+
+(c) WIKIINDT interpolation    
+
+> 25 50 75 100
+
+ptri (%) 
+
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Hits@10
+
+(d) WIKIINDT extrapolation 
+
+Recurrency Ultra Ultra + GRATE Trix Trix + GRATE 
+
+(b) Hits@ 10 . On WIKII ND T-interpolation the curves saturate near the ceiling, compressing the differences visible under MRR. 
+
+Figure 3. Hits@ 1 (top) and Hits@ 10 (bottom) counterparts of Figure 2. 
+
+13 GRATE : Gated Rotary Attention for Temporal KG Foundation Models 0.0 0.2 0.4 0.6 0.8 1.0       
+
+> DRec (literal-triple match at t1: t1 native unit)
+> 0.10
+> 0.05
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> MRR  (+GRATE  vanilla, TRIX base)
+> 25
+> 50
+> 75
+> 100
+> 25 50
+> 75
+> 100
+> 25 50
+> 75
+> 100 25
+> 50
+> 75
+> 100
+> ICEWS18
+> YAGO
+> GRATE's lift by DRec
+> GDELT inter
+> GDELT extra
+> WIKI inter
+> WIKI extra
+> ICEWS18 (held-out)
+> YAGO (held-out)
+
+Figure 4. GRATE gain ( ∆ MRR over static T RIX ) against DRec across all 16 GDELTI ND T/WIKII ND T variants and the two held-out targets (ICEWS18, YAGO). Each point is labelled by its ptri 
+
+level. 
+
+B.2. Base Model Integration 
+
+GRATE integrates into any NBFNet-style base model as a replacement for the per-edge message function ϕ. We instantiate on two: • ULTRA +G RATE replaces ULTRA’s (Galkin et al., 2024) DistMult entity message with mGRATE  
+
+> uv
+
+from Equation (12). ULTRA’s count-aggregated relation graph is unchanged. • TRIX +G RATE performs the same swap on the TRIX base model (Zhang et al., 2025), which uses a role-aware relation graph that distinguishes head- and tail-side incidences. GRATE performs no surgery on the relation graph; it is purely an entity-side modification. Whatever relation fea-tures the base model produces, whether single-pass like ULTRA or iterative like T RIX , are consumed by the G RATE -replaced message function without modification. 
+
+B.3. Hardware and Reproducibility 
+
+All joint pretraining runs on ICEWS14 + ICEWS05-15 use 2× NVIDIA A100-80G GPUs. For U LTRA and ULTRA + G RATE we use batch size 8; for T RIX and TRIX + G RATE we use batch size 2. Detailed per-epoch runtimes, memory usage, and wall-clock time to peak MRR are reported in Table 10. Code and the con-structed GDELTI ND T and WIKII ND T datasets are avail-able at https://anonymous.4open.science/r/ GRATE-F431/README.md .
+
+## C. Dataset Construction and Statistics 
+
+C.1. Source Dataset Statistics 
+
+Table 5 lists statistics for the six TKGs used in this paper. The inductive transfer splits we construct from GDELT and WIKI are reported separately in Tables 7 and 8. 
+
+C.2. Inductive Transfer Construction Procedure 
+
+Starting from a source TKG (V, R, T, Q ), we extend IN-GRAM Algorithm 2 (Lee et al., 2023b) to quadruples and add a chronological time split: 1. Restrict to the giant connected component on the entity-level graph. 2. Partition R = Rtr ∪ Rinf disjointly with |Rinf |/|R| =
+
+pR.3. Partition timestamps chronologically : Ttr contains the earliest (1 − pT ) · | T | timestamps, Tinf the remaining 
+
+pT · | T |.4. Sample ntr seed entities and BFS-expand with a per-hop neighbour cap to obtain a candidate Vtr . The train-ing edge set is Etr = {(s, r, o, τ ) : s, o ∈ Vtr , r ∈
+
+Rtr , τ ∈ Ttr }; we take its giant component and define 
+
+Vtr as the entities appearing in it. 5. Remove Vtr from the source graph; sample ninf seeds from the giant component of the remainder; expand to a candidate Vinf .6. Form Epool inf = {(s, r, o, τ ) : s, o ∈ Vinf } and partition it into X = {r ∈ Rtr , τ ∈ Ttr } (seen relation and 
+
+seen time) and Y = {r ∈ Rinf , τ ∈ Tinf } (strictly disjoint). Subsample to obtain |X| : |Y | = (1 − ptri ) : 
+
+ptri . At ptri = 1 the inference graph is fully V/R/T-disjoint; smaller values mix in seen edges as additional supporting context. 7. Split Etr into train.txt / valid.txt (90/10) and split Einf 
+
+into msg.txt / test.txt (80/20). The inter mode uses a random shuffle (msg and test span the same time window); the extra mode uses a chronological cut with 
+
+Tmsg ≤ Ttest .
+
+C.3. Per-source Sampling Parameters 
+
+Table 6 lists the per-source sampling parameters. Both sources use pT = 0 .3 and split seed 0; pR = 0 .5 on GDELT and pR = 0 .25 on WIKI (lowered because WIKI’s 24 rela-tions would otherwise leave too few for both Rtr and Rinf 
+
+post-GCC). 
+
+Temporal split boundaries. On GDELT, Ttr covers 2015-04-01 to 2015-12-12 ( 256 days) and Tinf covers 2015-12-13 to 2016-03-31 ( 110 days). On WIKI, Ttr covers the first 162 
+
+years and Tinf the remaining 70 years. The split is by date or 14 GRATE : Gated Rotary Attention for Temporal KG Foundation Models                                                                     
+
+> Dataset ICEWS14 ICEWS05-15 GDELT ICEWS18 YAGO WIKI Entities 7,128 10,488 500 23,033 10,623 12,554 Relations 230 251 20 256 10 24 Times 365 4,017 366 303 189 232 Train 72,826 386,962 2,735,685 373,018 161,540 539,286 Validation 8,941 46,275 341,961 45,995 19,523 67,538 Test 8,963 46,092 341,961 49,995 20,026 63,110 Granularity Daily Daily 15 min Daily Yearly Yearly
+> Table 5. Source dataset statistics for the six TKGs used in this paper. Source pRntr ninf hop cap hops tr hops inf
+> GDELT 0.50 50 300 511WIKI 0.25 2000 1000 20 12
+> Table 6. Per-source sampling parameters used to generate the GDELTI ND T and WIKII ND T benchmark suites.
+
+year (not by quadruple count), so the inference timestamps are strictly later than every training timestamp. 
+
+C.4. GDELTI ND T Statistics 
+
+Table 7 reports per-variant entity, edge, and split sizes for the eight GDELTI ND T variants. All eight share the V/R/T-disjoint partition; only the inference-edge mix and the msg/test split differ. 
+
+C.5. WIKII ND T Statistics 
+
+Table 8 reports per-variant statistics for the eight WIKI-IND T variants. The drop in |Vinf | at ptri = 1 reflects that strict V/R/T disjointness on WIKI’s small 24 -relation vo-cabulary leaves a smaller candidate inference set after the chronological time split. 
+
+## D. Parameter and Complexity Analysis 
+
+D.1. Theoretical Analysis Parameter count. GRATE adds no learnable parameters over the base model. The rotation R(∆ t) in Equation (9) is parameterised entirely by the fixed RoPE frequency vec-tor ωk = 1 /10000 2k/d ; the gate guv in Equation (11) is a parameter-free composition of a dot product between Qq
+
+(which reuses the layer-ℓ−1 head state and the existing query relation embedding) and the rotated message, fol-lowed by a 1/√d scaling and a sigmoid. Table 9 reports parameter counts on the two transductive ICEWS sources at the dimension d = 32 used in the main paper. TKGE methods learn per-entity, per-relation, and per-timestamp embeddings, so their counts grow with |V |, |R|, and |T |
+
+and vary substantially across datasets. U LTRA and T RIX 
+
+are vocabulary-agnostic foundation models whose counts at fixed (L, d ) are dataset-independent, and G RATE adds zero on top of either. GRATE -augmented base models use roughly an order of magnitude fewer parameters than the TKGE baselines on ICEWS14 ( 1.7–3.4×10 5 vs. ∼2.7×10 6) and ICEWS05-15 (1.7–3.4 × 10 5 vs. ∼3.9 × 10 6). A parameter-free mecha-nism in time also has a structural advantage under inductive transfer evaluation: there is no parameter to mismatch when 
+
+Tinf ∩ Ttrain = ∅, whereas TKGE methods maintain a per-timestamp vocabulary of size |Ttrain | that is by definition unusable when the inference timestamps are disjoint. 
+
+Time complexity. A static NBFNet-style base model per-forms O(M d ) work per layer for the entity-side message and aggregation (Zhu et al., 2021; Galkin et al., 2024). GRATE adds, per edge: • O(1) to compute ∆tuv = τ − tuv ;• O(d) to apply the pair-wise rotation R(∆ tuv )m (Equa-tion (8)); • O(d) for the dot product Q⊤ 
+
+> q
+
+mrot  
+
+> uv
+
+in the gate; • O(1) for the sigmoid and the gate multiply. Summing over edges, G RATE contributes O(M d ) per layer (the same order as the host base model), so the total per-query forward time is O(LM d ), matching the static base model asymptotically. 
+
+Space complexity. GRATE carries one persistent float per edge for te, contributing O(M ) persistent storage. Per-layer transient tensors are O(M d ) for the cos/sin rotation factors and the rotated message, and O(M ) for the per-edge gate scalars (the same order as the base model’s per-layer activation memory). 
+
+D.2. Empirical Efficiency 
+
+Table 10 reports empirical training efficiency on joint ICEWS14 + ICEWS05-15 pretraining. GRATE does not increase GPU memory usage in our implementation: U L- 
+
+> TRA
+
+and U LTRA + G RATE both use 32 GB, while T RIX 
+
+and T RIX + G RATE both use 70 GB. The per-epoch run-time increases because the rotation and gate introduce addi-tional per-edge tensor operations. For T RIX , this overhead 15 GRATE : Gated Rotary Attention for Temporal KG Foundation Models 
+
+Variant ptri mode |Vtr | |Vinf | train valid msg test -25-inter 0.25 inter 226 274 250.8 27.9 272.6 68.1 -50-inter 0.50 inter 226 274 209.9 23.3 268.4 67.1 -75-inter 0.75 inter 235 265 245.7 27.3 152.3 38.1 -100-inter 1.00 inter 230 270 220.2 24.5 123.8 30.9 -25-extra 0.25 extra 225 275 209.4 23.3 318.4 79.6 -50-extra 0.50 extra 235 265 235.1 26.1 212.6 53.2 -75-extra 0.75 extra 227 273 237.9 26.4 172.0 43.0 -100-extra 1.00 extra 233 267 239.2 26.6 114.6 28.6 
+
+Table 7. GDELTI ND T benchmark suite ( pR = 0 .5, pT = 0 .3). Edge counts in thousands. Variant ptri mode |Vtr | |Vinf | train valid msg test -25-inter 0.25 inter 722 1,089 27.7 3.1 20.3 5.1 -50-inter 0.50 inter 765 942 28.2 3.1 9.9 2.5 -75-inter 0.75 inter 743 821 30.6 3.4 5.2 1.3 -100-inter 1.00 inter 784 235 35.2 3.9 4.7 1.2 -25-extra 0.25 extra 873 1,040 34.6 3.8 19.4 4.8 -50-extra 0.50 extra 851 909 37.2 4.1 7.6 1.9 -75-extra 0.75 extra 768 843 33.4 3.7 6.3 1.6 -100-extra 1.00 extra 855 240 35.8 4.0 4.8 1.2 
+
+Table 8. WIKII ND T benchmark suite ( pR = 0 .25 , pT = 0 .3). Edge counts in thousands.                                       
+
+> Model ICEWS14 ICEWS05-15 TComplEx 2.6×10 63.8×10 6
+> TNTComplEx 2.7×10 63.9×10 6
+> ULTRA (Galkin et al., 2024) 1.7×10 5(dataset-independent)
+> +GRATE 1.7×10 5(G RATE adds 0)TRIX (Zhang et al., 2025) 3.4×10 5(dataset-independent)
+> +GRATE 3.4×10 5(G RATE adds 0)
+
+Table 9. Trainable parameter counts on the two transductive ICEWS sources. TKGE baselines (Lacroix et al., 2020) are dataset-specific. Base model counts at L = 6 , d = 32 , PNA aggregation are dataset-independent. Model Params Mem Ep. (min) Wall to peak ULTRA 1.7×10 5 32 GB 59 2 h 05 min 
+
++ GRATE same 32 GB 85 3 h 10 min TRIX 3.4×10 5 70 GB 75 7 h 47 min 
+
++ GRATE same 70 GB 107 8 h 30 min 
+
+Table 10. Efficiency comparison of static backbones vs. G RATE -augmented variants on joint ICEWS14 + ICEWS05-15 pretraining. 
+
+Wall to peak is total training time to the epoch with highest MRR on the held-out validation set. 
+
+is largely offset by faster convergence to the best valida-tion checkpoint, yielding a similar wall-clock time to peak performance (8 h 30 min vs. 7 h 47 min). For U LTRA , the temporal extension reaches peak performance in 3 h 10 min vs. 2 h 05 min for the static backbone, remaining within a single-node training budget. Overall, G RATE preserves the parameter efficiency and memory footprint of the base models, while adding moder-ate per-edge computation. This supports the main design goal: introducing temporal reasoning into inductive KG foundation models without adding timestamp-specific pa-rameters or sacrificing transferability. 
+
+## E. Transductive Forecasting Comparison on ICEWS18 and YAGO 
+
+Table 11 places G RATE in the context of transductive fore-casting baselines on ICEWS18 and YAGO. The two groups are not directly comparable: fine-tuned methods are trained on each target dataset and have full access to its entity, rela-tion, and timestamp vocabulary; G RATE uses a single check-point pretrained on ICEWS14 + ICEWS05-15 and is evalu-ated without any target-specific fine-tuning. The % SOTA rows report each zero-shot variant’s score as a percentage of the strongest fine-tuned baseline in that column, quantifying how much of the supervised ceiling is recovered at zero cost. Despite the setting mismatch, T RIX + G RATE recovers 
+
+97 .8% / 97 .2% / 99 .2% of the fine-tuned SOTA in MRR / Hits@ 1 / Hits@ 10 on YAGO, and 83 .7% / 79 .9% / 87 .6% 
+
+on ICEWS18. ULTRA + G RATE reaches 90 .3% MRR on YAGO and 69 .9% on ICEWS18. The larger gap on ICEWS18 is consistent with that dataset being harder to generalise to zero-shot, as discussed in Section 7.3. 
+
+## F. Full Transductive Comparison 
+
+Table 12 extends Table 1 with dataset-specific transduc-tive TKG embedding baselines trained and evaluated on 16 GRATE : Gated Rotary Attention for Temporal KG Foundation Models                                                                            
+
+> ICEWS18 YAGO Method MRR H@1 H@10 MRR H@1 H@10
+> Fine-tuned on target
+> RE-GCN .326 .224 .526 .822 .787 .885 xERTE .292 .209 .463 .873 .842 .912 TLogic .296 .204 .481 .765 .740 .792 TANGO .284 .191 .463 .624 .590 .678 TimeTraveler .291 .213 .439 .877 .846 .912
+> Zero-shot (single pretrained checkpoint)
+> ULTRA .180 .092 .369 .726 .647 .872
+> +GRATE .228 .128 .444 .792 .736 .886 % SOTA (U LTRA )69 .9% 57 .1% 84 .4% 90 .3% 87 .0% 97 .1%
+> TRIX .274 .170 .484 .800 .740 .916
+> +GRATE .273 .179 .461 .858 .822 .905 % SOTA (T RIX )83 .7% 79 .9% 87 .6% 97 .8% 97 .2% 99 .2%
+
+Table 11. Zero-shot transfer to ICEWS18 and YAGO vs. transduc-tive forecasting baselines from Gastinger et al. (2023) under the single-step extrapolation protocol. Fine-tuned methods are trained directly on each target; zero-shot methods use a single pretrained checkpoint with no fine-tuning. % SOTA rows report the zero-shot score as a percentage of the best fine-tuned baseline per column. Best per column bold .                                                           
+
+> ICEWS14 ICEWS05-15 Method MRR H@1 H@10 MRR H@1 H@10 TA-DistMult .477 .363 .686 .474 .346 .728 TeRo .562 .468 .732 .586 .469 .795 TComplEx .610 .530 .770 .660 .590 .800 TNTComplEx .620 .520 .760 .670 .590 .810 ULTRA .495 .373 .731 .451 .316 .720
+> +GRATE .620 .520 .793 .621 .500 .819
+> % ∆ +25 .3% +39 .4% +8 .5% +37 .7% +58 .2% +13 .8%
+> TRIX .486 .366 .719 .456 .322 .722
+> +GRATE .609 .507 .793 .617 .501 .830
+> % ∆ +25 .3% +38 .5% +10 .3% +35 .3% +55 .6% +15 .0%
+
+Table 12. Transductive link prediction on ICEWS14 and ICEWS05-15, including dataset-specific TKG embedding baselines. U LTRA 
+
+and T RIX are retrained on the joint ICEWS14 + ICEWS05-15 pretraining mix without the G RATE module. % ∆ rows show the relative improvement of G RATE over the corresponding base model. Best per column bold .
+
+each dataset independently. These methods learn per-entity, per-relation, and per-timestamp embeddings and are not transferable across datasets; they serve as an in-distribution SOTA reference. 
+
+Comparison with TA-DistMult. TA-DistMult also uses a DistMult-style message function but incorporates time as a static additive component in the scoring function, which cannot model the varying relevance of facts at different time offsets. G RATE improves substantially over TA-DistMult on both datasets, showing that encoding temporal displacement via relative-time rotation provides a stronger temporal signal than additive time features alone. 
+
+Comparison with TeRo. TeRo also injects a rotation into the temporal scoring function, but applies a per-timestamp rotation that must be learned during training, making it in-applicable to unseen timestamps. G RATE instead rotates by the relative time gap using a fixed frequency basis (RoPE), requiring no timestamp-specific parameters and generalising to arbitrary timestamps at inference. G RATE outperforms TeRo on both datasets despite this additional constraint. 
+
+Comparison with TComplEx and TNTComplEx. TCom-plEx and TNTComplEx are the strongest transductive base-lines, relying on per-entity, per-relation, and per-timestamp embeddings that scale with vocabulary size (on the order of 10 6 parameters). G RATE adds zero learnable parameters over its base model (U LTRA + G RATE : 1.7×10 5 parameters at dim 32; T RIX + G RATE : 3.4×10 5), yet matches or comes within a few points of their performance on both datasets, demonstrating that temporal signal can be captured through relative-time alignment without dataset-specific embedding tables. 17

@@ -1,0 +1,783 @@
+Title: Benchmarking Dynamic Affective Reasoning: A Viewer-Centric Video Emotion Dataset
+
+URL Source: https://arxiv.org/pdf/2607.10238v1
+
+Published Time: Tue, 14 Jul 2026 00:59:29 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Benchmarking Dynamic Affective Reasoning: A Viewer-Centric Video Emotion Dataset 
+
+Zhiyan Zhang 1 , Peipei Song 1 ⋆, Jinpeng Hu 2 , Jingyang Jia 1 , Xun Yang 1 , and Xiaojun Chang 1 
+
+> 1
+
+University of Science and Technology of China, Hefei, China 
+
+zzyhang02@gmail.com, beta.songpp@gmail.com, jjygood@mail.ustc.edu.cn, xyang21@ustc.edu.cn, xjchang@ustc.edu.cn  
+
+> 2
+
+Hefei University of Technology, Hefei, China 
+
+135858hjp@gmail.com 
+
+Abstract. Video emotion analysis is typically framed as a static clas-sification problem, treating each clip as an independent labeled unit. However, such a formulation overlooks a key psychological fact: emotions change as a result of cumulative reactions to consecutive causal events. To bridge this gap, we introduce DAR (Dynamic Affective Reasoning), the first large-scale benchmark for viewer-centric affect transitions and causal reasoning over consecutive video events. DAR contains 15,087 videos and 36,908 event-aligned affective segments annotated with 27 emotion cat-egories. Unlike existing video-based emotion datasets, DAR presents a new viewer-centric perspective on fine-grained emotional expressions and transitions, and provides dense, temporally grounded, and causally ex-plicit reasoning chains. Based on DAR, we formally define three challeng-ing tasks: affective segmentation, fine-grained emotion classification, and affective reasoning. Complementing this benchmark, we propose DAR-R1 , a two-stage framework that combines supervised fine-tuning with Group Relative Policy Optimization. Experiments across 10+ MLLMs show that DAR-R1 sets a new state-of-the-art for dynamic affective rea-soning, in terms of both emotional localization and affective reasoning. Project page: https://github.com/Zhang-Zhiyan/DAR. 
+
+Keywords: Dynamic Affective Reasoning · Video Emotion Analysis ·
+
+Large-scale Dataset · Reinforcement Learning 
+
+1 Introduction 
+
+Affective computing [31] aims to equip machines with the ability to perceive, interpret, and reason about human affect, enabling applications from human– computer interaction [13] to psychological counseling and psychotherapy [27,43, 44,48]. As AI systems become embedded in everyday products [45], robust emo-tion understanding is increasingly essential for natural, adaptive, and socially aware interaction [37]. Recent Multimodal Large Language Models (MLLMs) [1,  
+
+> ⋆
+
+Corresponding author. arXiv:2607.10238v1 [cs.CV] 11 Jul 2026 2 Z. Zhang et al. Task 1: Affective Segmentation                                                         
+
+> Temporal Localization
+> Task 2: Fine -grained Emotion Classification
+> From 27 Categories
+> Task 3: Affective Reasoning
+> Causal Logic Explanation
+> 0.0s -5.5s 5.5s -8.5s 8.5 -16.1s
+> Split 1 Split 2
+> [{0.0 s-5.5 s, Anxiety ,The viewer feels anxiety due to the stark …} ,
+> {5.5 s-8.5 s, Fear ,The viewer’s emotion shifts from anxiety to fear …},
+> {8.5 s-16.1 s, Empathic Pain, The viewer now feels Empathic Pain…}]
+> [{ Start :0.0 s,End :5.5 s.} ,
+> {Start :5.5 s,End :8.5 s.},
+> {Start :8.5 s,End :16.1 s.}]
+> Anxiety Fear Empathic Pain
+> 5.5s 8.5s 0.0s 16.1s
+> [{Start :0.0 s,End :5.5 s,Emotion : Anxiety.} ,
+> {Start :5.5 s,End :8.5 s,Emotion : Fear.},
+> {Start :8.5 s,End :16.1 s,Emotion : Empathic Pain .}]
+> 0.0s 5.5s 8.5s 16.1s
+> Due to …Because... The man is…
+> 5.5s 8.5s 0.0s 16.1s Anxiety Fear Empathic Pain
+
+Fig. 1: Overview of the DAR Benchmark Tasks. We formulate three hierarchical tasks: (1) Affective Segmentation for locating temporal boundaries of emotion shifts; (2) Fine-grained Emotion Classification utilizing a 27-category viewer-centric taxon-omy; and (3) Affective Reasoning for generating causal explanations grounded in visual evidence. 
+
+9, 46, 47] have further advanced video-based emotion understanding and recog-nition [10, 16]. Foundational benchmarks such as DFEW [19] and VCE [29] enabled systematic evaluation of video emotion understanding, while Social-IQ [50] extended evaluation to broader social and contextual cues. More recently, MER [10, 24] incorporated evidence-based reasoning into emotion recognition. However, key aspects of affect remain underexplored in current benchmarks. Prior works either emphasize describing visual content [25, 28, 36, 54] or improve character-centric emotion recognition [23, 52], but rarely model how consecutive events drive moment-to-moment shifts in a viewer’s emotional state. Further-more, most datasets adopt coarse taxonomies following Ekman’s theory [12], which are often insufficient to represent the diversity of real-world emotion re-actions. As a result, video emotion analysis is still largely treated as assigning a single label to an entire clip [17, 24] or focusing primarily on character emo-tions [23], without explicit boundaries for emotion shifts or explanations of why they occur. These omissions hinder the deployment of emotionally intelligent agents, which are expected to respond continuously and causally to users. There-fore, we advocate reframing the video emotion analysis problem as fine-grained dynamic affective reasoning. To support this paradigm shift, we draw inspiration from the Affective Events Theory (AET) [40], which views emotions as reactions to consecutive events that accumulate over time: a viewer’s current affect is shaped by preceding stimuli. Guided by AET, we introduce DAR , a large-scale viewer-centric video emotion benchmark, designed to support multi-level emotion cognitive tasks. As illus-trated in Figure 1, we define three challenging tasks based on DAR: (1) Affective Segmentation, locating temporal boundaries of emotional shifts; (2) Fine-grained Emotion Classification, identifying specific emotional states from 27 categories; Dynamic Affective Reasoning 3
+
+and (3) Affective Reasoning, explaining the causal logic behind each emotion. To scale annotation while preserving temporal precision, we adopt a coarse-to-fine data construction pipeline that couples high-level semantic boundary proposals with low-level visual cut refinement. Extensive evaluations on 10+ mainstream MLLMs reveal that neither general-purpose models [28, 46] nor existing emotion-specialized models [23, 52] satisfy the requirements of dynamic affective reasoning. Generalist models often strug-gle with strict temporal schemas and boundary localization, whereas emotion-focused models typically lack the generative capacity to produce temporally grounded, viewer-centric explanations. To provide a strong baseline, we pro-pose DAR-R1 , a two-stage tuning pipeline consisting of cold-start supervised training for structural adaptation followed by GRPO-based reinforcement learn-ing [14]. By explicitly rewarding boundary precision and reasoning quality, DAR-R1 better aligns MLLMs with fine-grained affect dynamics, yielding consistent gains over state-of-the-art baselines on DAR .In summary, our contributions are fourfold: 1. New Task: We introduce a task of Dynamic Affective Reasoning , refram-ing video emotion analysis from static classification to temporally grounded segmentation and causal explanation. 2. Large-scale Dataset: We present DAR , the first large-scale, viewer-centric emotion dataset based on Affective Events Theory, with 15,087 videos, event-aligned segments, and verified causal reasoning chains. 3. Construction Method: We develop a scalable data construction pipeline that combines coarse-to-fine event segmentation, incremental differential cap-tioning, and multi-dimensional quality verification to produce dense and re-liable annotations. 4. Strong Baseline: We propose DAR-R1 , a two-stage tuning approach that leverages reinforcement learning to improve temporal boundary localization and reasoning quality, establishing a strong baseline for this benchmark. 
+
+2 Related Work 
+
+2.1 Video Emotion Analysis 
+
+Traditional Video Emotion Analysis [35,49] is often formulated as static emotion recognition on short clips or constrained scenarios [19], where a video segment is assigned a single categorical label [7] or emotions are inferred from affective facial cues [20]. While these benchmarks have driven progress in classification, they typically provide coarse temporal supervision and rarely evaluate whether a model can explain why an emotion arises or when it shifts. With the emer-gence of MLLMs, recent datasets and benchmarks have pushed VEA toward richer, language-based evaluation: AffectGPT [23] promotes descriptive emotion understanding at scale, and MME-Emotion [51] benchmarks both recognition and emotion-related reasoning. Despite these advances, fine-grained temporal localization and event-level causal attribution remain under-explored in stan-dard VEA settings. 4 Z. Zhang et al. 
+
+Table 1: Comparison of Video Emotion Datasets. Descriptive datasets allow for more diverse labels, facilitating the modeling of fine-grained dynamic emotions.                                                                       
+
+> Dataset Video Data Classes Description Reason Timestamp Dynamic Emotion
+> DFEW [19] 16,372 16,372 7✗✗✗✗
+> CREMA-D [7] 7,442 7,442 6✗✗✗✗
+> FERV39k [39] 38,935 38,935 7✗✗✗✗
+> MER2023 [24] 5,030 5,030 6✗✗✗✗
+> VCE [29] 61,046 61,046 27 ✗✗✗✗
+> MELD [32] 13,708 13,708 7✗✗✓✗
+> MERR [10] 28,618 28,618 113 ✓✗✗✗
+> MER-Caption+ [23] 31,327 31,327 1,972 ✓✗✗✗
+> DAR (Ours) 15,087 36,908 27 ✓✓✓✓
+
+2.2 viewer-Centric Affective Reasoning 
+
+Beyond character-centric recognition, viewer-centric affect modeling studies emo-tions induced in the observer by visual stimuli. For images, ArtEmis [3] col-lects large-scale emotion attributions with free-form explanations for artworks, ArtEmis v2.0 [30] reduces emotional bias via contrastive data collection, and Affection [2] scales affective explanations to real-world images. For videos, VCE provides viewer-centric emotion annotations, highlighting the subjectivity of au-dience reactions, while StimuVAR [15] formulates video affective reasoning by predicting viewer emotions and generating rationales with stimuli-aware model-ing. However, these resources often operate at the image level or provide video-level affect without dense, event-aligned boundaries, making it difficult to bench-mark fine-grained affect transitions. In contrast, DAR provides event-aligned, temporally grounded annotations with explicit causal supervision for dynamic affective reasoning. 
+
+2.3 Multimodal Large Language Models 
+
+MLLMs connect visual encoders with LLM backbones and are adapted via in-struction tuning [41], while video-oriented MLLMs extend the interface to tem-poral inputs [25, 28, 36]. Post-training methods, including reinforcement learn-ing [34] and group-based optimization [14], have been explored to improve struc-tured outputs and reasoning quality. Importantly, this paper does not focus on designing new policy optimization algorithms; instead, we emphasize crafting task-specific reward signals for fine-grained emotion recognition and dynamic affective reasoning. 
+
+3 The DAR Dataset 
+
+Table 1 summarizes representative video emotion datasets, most of which frame emotion recognition as static classification over short clips, overlooking the tem-poral dynamics and causal nature of affective experience. To bridge this gap, we introduce DAR , a large-scale, viewer-centric dataset designed for dynamic Dynamic Affective Reasoning 5Data Acquisition             
+
+> & Preprocessing
+> Raw Videos
+> （61046 videos ）
+> Preprocessing Filters
+> 1. Duration Filtering
+> 2.Static Frame Removal
+> Boundary Alignment
+> ±0.5s Snapping
+> Candidate Emotion -
+> Reason Pair Generation
+> {Emotion, Reason} 1
+> {Emotion, Reason} 2
+> {Emotion, Reason} 3
+> {Emotion, Reason} 4
+> Segments
+> Ei== Ei-1
+> Yes
+> No
+> Dual -Consistency
+> Verification
+> Committee of MLLMs
+> Visual Grounding
+> Causal Logic
+> Viewer Centricity
+> Temporal Consistency
+> Answer Consistency
+> Best Pair
+> Score
+> Stage 1: E vent -Aligned
+> Affective Segmentation
+> Stage 2: Incremental
+> Differential Captioning
+> Stage 3: Stream -of -Affect
+> Reasoning Generation
+> Event -Aligned
+> Segmentation
+> Gemini
+> Segment Integrity
+> Verification
+> Verify/ Resegment /Merge
+> Event Boundary
+> Detection
+> PySceneDetect
+> Current
+> Segment Si
+> Previous
+> Description Di-1
+> Incremental Captioning
+> {S i, D i}
+> Focus on Changes
+> S2S1StS...
+> Timeline
+> Visual Grounding Filter
+> Verify Noun Phrases
+> against Frames
+> Grounding DINO
+> {S i, D i}
+> Dataset {S i, E i, R i}i=1, 2, ..., t
+> Score>T
+> Score<T
+> Feedback
+> with
+> Rewriting
+> Suggestions
+> High Quality Videos
+> Top -3 candidate
+> emotions
+
+Fig. 2: Data Construction Pipeline of DAR. The process consists of three stages: (1) Coarse-to-fine event segmentation combining semantic proposals with visual cuts; (2) Incremental differential captioning to reduce redundancy; and (3) Stream-of-affect reasoning generation grounded in AET. A dual-consistency verification protocol ensures annotation quality. 
+
+affective reasoning. In this section, we first outline the theoretical foundation grounding our construction philosophy. We then detail our construction pipeline, quality assurance protocols, and dataset statistics. 
+
+3.1 Theoretical Foundation: Affective Events Theory 
+
+Our dataset construction is grounded in the Affective Events Theory (AET) pro-posed by Weiss and Cropanzano [40]. AET posits that human emotions are not static states, but rather dynamic reactions triggered by consecutive, precipitat-ing events—such as sudden visual stimuli or narrative twists. Furthermore, these affective reactions are dynamic and cumulative, meaning current emotions are influenced by the history of preceding events. Based on this theory, we construct our dataset by segmenting videos based on semantic and visual event boundaries rather than arbitrary time intervals. This ensures that each segment represents a coherent stimulus unit that triggers a specific affective reaction , providing a solid psychological basis for dynamic reasoning. 
+
+3.2 Data Acquisition and Preprocessing 
+
+We source our raw videos from the Video Cognitive Empathy (VCE) dataset [29], which provides a rich taxonomy of 27 fine-grained emotion categories suitable for capturing nuanced viewer reactions. 6 Z. Zhang et al. 
+
+Duration Filtering. We discard videos shorter than 1 second, as they lack sufficient temporal context to exhibit dynamic emotional changes. 
+
+Static Frame Removal. We compute the perceptual hash and optical flow between frames. Videos exhibiting static imagery, such as slideshows or single images, are removed as they do not possess the temporal motion cues essential for analyzing event-driven emotional shifts. 
+
+3.3 Construction Pipeline 
+
+Our construction pipeline, as illustrated in Figure 2, transforms raw videos into temporally grounded, causal affective reasoning chains through a multi-stage process. 
+
+Stage 1: Event-Aligned Affective Segmentation. To implement the AET-driven segmentation, we employ a coarse-to-fine strategy combining semantic understanding with visual boundary detection. First, we prompt Gemini-2.5-Pro [11] to propose high-level semantic event boundaries, dividing the video according to narrative shifts or affective turning points. Since LLM-predicted timestamps often suffer from drift, we utilize PySceneDetect [8] to detect precise hard cuts and fade transitions. We apply boundary snapping: semantic bound-aries within a 0.5 s window of a detected visual cut are shifted to the corre-sponding cut frame. Finally, for segments that do not align with hard cuts, we employ InternVL3.5 [38] to verify segment integrity, recursively re-segmenting or merging those that fail to represent a complete event. 
+
+Stage 2: Incremental Differential Captioning. Conventional video caption-ing often yields redundant information when applied to streaming segments. Let 
+
+Si denote the i-th segment in a video, and let Di denote its visual description. For the first segment, D0 is set to an empty context. We introduce an Incremen-tal Differential Captioning strategy in which Qwen3-VL [4] is conditioned on the visual tokens of Si and the preceding description Di−1. The model is explicitly instructed to focus on the changes in visual content, actions, and atmosphere. To ensure visual faithfulness, we use Grounding DINO [26] as a visual ground-ing filter to verify whether salient entities mentioned in each description can be grounded in the associated video frames. 
+
+Stage 3: Stream-of-Affect Reasoning Generation. This stage generates the core reasoning chain linking stimuli to emotions. We adopt a “Bottom-up” reasoning logic: Visual Evidence → Contextual Appraisal → Emotion Trigger .Let Ei denote the viewer-centric emotion label associated with segment Si. For the first segment, E0 is set to an empty context. We construct a structured prompt containing the historical context {Si−1, D i−1, E i−1}, the current stimu-lus {Si, D i}, and the Top-3 candidate emotions drawn from VCE, and provide it to Qwen3-VL. The model generates four candidate emotion –reason pairs. Following AET principles, if the predicted emotion for segment Si is identical to that of Si−1, we merge the two segments into a coherent emotional phase and regenerate the rationale to reflect the sustained affective state. Dynamic Affective Reasoning 7
+
+3.4 Quality Assurance: Dual-Consistency Verification 
+
+To ensure the quality of our model-generated data, we implement a Dual-Consistency Verification Protocol. We employ InternVL3.5 and Qwen3-omni [42] as two in-dependent MLLM judges. Instead of binary scoring, the generated emotion and 
+
+reason pairs are evaluated across five distinct dimensions: 1. Visual Grounding. This metric verifies whether the visual cues cited in the reasoning, such as specific objects or actions, are physically present in the corresponding video frames. 2. Causal Logic. This dimension assesses whether the described event provides a sufficient and logical premise to trigger the predicted emotion. 3. Viewer Centricity. This criterion ensures the reasoning focuses on the viewer’s affective reaction rather than merely describing the character’s facial expressions or internal state. 4. Temporal Consistency. This metric checks if the reasoning coheres with the historical context of previous segments, which ensures a continuous nar-rative flow. 5. Answer Consistency. This verifies whether the final emotion label logically follows from the arguments presented in the reasoning text. The committee assigns a comprehensive score based on these dimensions. Low-scoring samples are not simply discarded; they are fed back into the gen-eration pipeline with specific feedback for rewriting. Only samples that pass a strict quality threshold after verification are included in the final dataset. 
+
+3.5 Dataset Statistics 
+
+We provide a comprehensive statistical analysis of DAR to highlight its scale, diversity, and complexity. The dataset contains 15,087 videos and 36,908 affective segments, with 13,646 videos in the training set and 1,441 videos in the test set. 
+
+Temporal Granularity and Dynamics. Unlike previous datasets that treat videos as static, DAR emphasizes fine-grained temporal dynamics. As shown in Figure 3(a), the average video duration is 14.3s, while the average segment duration is 5.8s, indicating that a typical video contains multiple distinct emo-tional phases. This is further corroborated by Figure 3(b), which illustrates the relationship between video length and segment count, reinforcing the idea that emotions can evolve quickly within brief video durations. Furthermore, the emo-tion transition matrix in Figure 3(c) reveals structured and non-random affect dynamics, with the most prominent transition being Craving → Satisfaction 
+
+(0.47) and another frequent shift from Anxiety → Fear (0.30), indicating that our annotations capture coherent, event-driven emotional progressions rather than arbitrary fluctuations. 
+
+Emotion Distribution. Figure 3(d) presents the distribution of the 27 emotion categories. While the distribution follows a natural long-tail pattern typically observed in real-world data, the top-17 emotions account for approximately 80% 8 Z. Zhang et al. Duration (seconds)     
+
+> Frequency
+> Mean segment
+> duration = 5.8 s
+> Mean video
+> duration = 14.3 s
+
+(a) Frequency   
+
+> Segment Count
+> 1 segment
+> 2 segments
+> 3 segments
+> 4 segments
+> >4 segments
+> Video Duration (seconds)
+
+(b) Craving →Satisfaction 
+
+> Anxiety →Fear
+
+(c) Number of Segments  
+
+> Cumulative percentage of segments
+
+(d) Frequency   
+
+> Reason Length
+> Mean length = 118.8 words
+
+(e)  (f ) 
+
+Fig. 3: Statistical Analysis of the DAR Dataset. (a) Video and segment duration distributions. (b) Segment counts by video duration. (c) Emotion transition matrix. (d) Distribution of 27 emotion categories. (e) Reasoning-text lengths. (f) High-frequency words in reasoning annotations. 
+
+of the occurrences. This indicates a balanced emotional coverage within the dataset, where emotions such as Amusement, Interest, and Surprise dominate, while complex emotions like Admiration and Aesthetic Appreciation are well-represented. This demonstrates that our dataset not only captures basic Ekman emotions but also includes more nuanced emotional and cognitive appraisals. 
+
+Reasoning Complexity. The average reasoning text length, as shown in Fig-ure 3(e), is 118.8 words, which is significantly longer than standard video cap-tions. This suggests that our annotations provide rich contextual information rather than merely summarizing the content. The word cloud in Figure 3(f) shows the high-frequency affect-related terms in the reasoning annotations after filtering generic nouns and connective words. The remaining terms cover emotion words, appraisal-related expressions, and visual descriptors. Dynamic Affective Reasoning 9
+
+4 Methodology 
+
+To address the challenges of dynamic affective reasoning—specifically, the need for precise temporal localization, accurate emotion classification, and grounded causal reasoning—we propose DAR-R1. Our framework adapts an MLLM to this task via a two-stage training paradigm: cold-start supervised fine-tuning (SFT) for structural adaptation and reinforcement learning (RL) for reasoning refinement. 
+
+4.1 Cold Start Training 
+
+The primary objective of this stage is to adapt the generalist MLLM to the complex output schema required for dynamic reasoning and to initialize a policy prior for the subsequent RL stage. Given visual inputs V and task instructions Itask , the model is trained to gen-erate the ground-truth target sequence Sgt = ( S∗ 
+
+> 1
+
+, . . . , S ∗ 
+
+> N
+
+), where each segment 
+
+S∗ 
+
+> i
+
+= ( t∗
+
+> i, start
+
+, t ∗
+
+> i, end
+
+, e ∗ 
+
+> i
+
+, r ∗ 
+
+> i
+
+) comprises the start and end timestamps, emotion label, and causal rationale. We optimize the parameters θ by minimizing the standard negative log-likelihood over the ground-truth tokens. 
+
+4.2 Reinforcement Learning via GRPO 
+
+While SFT ensures format compliance, it often struggles to capture precise event boundaries or generate deeply grounded reasoning. To this end, we employ Group Relative Policy Optimization [14] (GRPO). Unlike Proximal Policy Optimiza-tion [34] (PPO) which requires a separate critic model, GRPO estimates the baseline from a group of outputs generated by the current policy itself, reducing computational overhead. For each input query q, we sample a group of G outputs 
+
+{oi}Gi=1 from the behavior policy πθold . The objective function aims to maximize the advantage of high-reward outputs while constraining the policy shift via KL divergence: 
+
+JGRPO (θ) = Eq∼D , {oi}Gi=1 ∼πθold (·| q)
+
+"
+
+1
+
+G
+
+> G
+
+X
+
+> i=1
+
+Gi(θ)
+
+#
+
+, (1) 
+
+Gi(θ) = 1
+
+|oi|
+
+> |oi|
+
+X
+
+> t=1
+
+min 
+
+
+
+ρi,t (θ) ˆAi, clip( ρi,t (θ), 1 − ϵ, 1 + ϵ) ˆAi
+
+
+
+− β DKL (πθ ∥ πref ) ,
+
+(2) 
+
+ρi,t (θ) = πθ (oi,t | q, o i,<t )
+
+πθold (oi,t | q, o i,<t ) , ˆAi = Ri − mean (Rgroup )
+
+std (Rgroup ) . (3) We design a multi-dimensional reward function to guide the model across structure, localization, accuracy, and reasoning. 10 Z. Zhang et al. 
+
+Structural Constraints Reward ( Rstruct ). This component ensures the out-put adheres to the strict JSON schema, maintains temporal validity, and prevents runaway generation. It aggregates three sub-rewards: format compliance ( rf mt ), minimum segment duration ( rdur ), and total length penalty ( rlen ). Let o denote the generated output text, and Spred = ( ˆS1, . . . , ˆSN ) be the set of parsed seg-ments, where each segment ˆSi contains a start time ˆti, start and end time ˆti, end .The structural reward is defined as: 
+
+Rstruct = λ1 · I(o ∈ J ) + λ2 · Y
+
+> ˆSi∈S pred
+
+I(ˆ ti, end − ˆti, start ≥ τmin ) + λ3 · ψlen (|o|), (4) where I(·) is the indicator function, and J represents the set of valid JSON strings that conform to the required schema (e.g., valid keys, continuous times-tamps). We set λ1 = 0 .5, λ2 = 0 .2, and λ3 = 0 .3. The second term penalizes unrealistically short segments ( τmin = 0 .4s) to avoid fragmentation. The third term ψlen (|o|) applies a soft penalty on the total token count |o| to discourage excessively long or runaway generations, defined as ψlen (n) = exp( − max(0 , n −
+
+Lsof t )/τ len ) if n < L hard , and 0 otherwise. We use Lsof t = 1200 , Lhard = 2400 ,and τlen = 400 .
+
+Segment Count Reward ( Rcount ). To prevent over-segmentation or under-segmentation, we encourage the model to generate a number of segments con-sistent with the ground truth. Let Npred = |S pred | and Ngt = |S gt |, respectively. The reward is modeled as an exponential decay function based on the count difference: 
+
+Rcount = exp 
+
+
+
+− |Npred − Ngt |
+
+τcnt 
+
+
+
+, (5) where τcnt = 1 .5 controls the sensitivity of the penalty. This formulation provides a dense reward signal, incentivizing predictions that closely approximate the ground-truth event density. 
+
+Temporal Segmentation Reward ( Rseg ). To improve boundary precision, we employ an Intersection over Union (IoU) matching mechanism combined with a boundary distance decay. For each predicted segment ˆSi ∈ S pred , we identify the best-matching ground-truth segment S∗ 
+
+> i
+
+∈ S gt that maximizes the temporal IoU. The segment-level reward is then computed as: 
+
+rseg ( ˆSi) = α · IoU ( ˆSi, S ∗ 
+
+> i
+
+) + (1 − α) · exp − |ˆti, start − t∗
+
+> i, start
+
+| + |ˆti, end − t∗
+
+> i, end
+
+|
+
+τtemp 
+
+!
+
+.
+
+(6) The final Rseg is the average of rseg over all predicted segments. The first term incentivizes overlap, while the second term, governed by the boundary decay temperature τtemp = 0 .5, encourages the start and end timestamps to snap precisely to visual event boundaries. We use α = 0 .5 to balance temporal overlap and boundary-distance accuracy. 
+
+Emotion Accuracy Reward ( Remo ). This reward evaluates the correctness of the predicted emotion labels. We align predicted segments to ground truth based on maximum temporal overlap. Let ˆei and e∗ 
+
+> i
+
+be the emotion labels for the Dynamic Affective Reasoning 11 
+
+matched segments ˆSi and S∗ 
+
+> i
+
+. The reward is binary, conditioned on both label matching and sufficient temporal overlap: 
+
+Remo = 1
+
+Npred 
+
+X
+
+> ˆSi∈S pred
+
+I(ˆ ei = e∗ 
+
+> i
+
+) · I(IoU ( ˆSi, S ∗ 
+
+> i
+
+) > 0.5) . (7) This ensures that the model is rewarded only when it correctly identifies the emotion for the correct temporal event. 
+
+Reasoning Quality Reward ( Rreason ). To ensure the generated rationale ri is informative and non-repetitive, we define Rreason based on length and uniqueness constraints. Let W (ri) be the word count of the reasoning text for segment Si. We define an exponential length score ϕ(l) = exp( −| l − μlen |/σ len ). The uniqueness is measured using the Jaccard similarity between adjacent reasoning texts ri and 
+
+ri−1. The reward is computed as: 
+
+Rreason = 1
+
+Npred Npred 
+
+X
+
+> i=1
+
+ϕ(W (ˆ ri)) · (1 − I(Jaccard (ˆ ri, ˆri−1) > τ dup )) , (8) where μlen = 120 encourages detailed explanations, σlen = 40 controls the length-score decay, and τdup = 0 .75 serves as a threshold to penalize repetitive hallucination loops across consecutive segments. The total reward Rtotal is a weighted sum of five components: 
+
+Rtotal = w1Rstruct + w2Rcount + w3Rseg + w4Remo + w5Rreason , (9) where wk represents the weight for each reward component. 
+
+5 Experiments 
+
+In this section, we validate the effectiveness of our proposed DAR-R1 frame-work on the DAR dataset. We first describe the experimental setup, including implementation details and evaluation metrics. We then present a comprehen-sive comparison against state-of-the-art Multimodal Large Language Models. Finally, we conduct ablation studies to analyze the impact of our two-stage training paradigm and provide a qualitative analysis. 
+
+5.1 Experimental Setup Implementation Details. We utilize Qwen2.5-VL-3B as our backbone model, keeping the vision encoder frozen while fine-tuning the LLM and aligner through-out both stages. We adopt a two-phase training scheme on 4 ×H100 GPUs: in the cold-start stage, we run supervised fine-tuning for 0.5 epochs using AdamW with a learning rate of 1 × 10 −5; in the reinforcement learning stage, we perform GRPO training for 1 epoch with a learning rate of 2 × 10 −6. The overall reward is a weighted sum of structural constraints, segment count reward, temporal 12 Z. Zhang et al. 
+
+segmentation, emotion accuracy, and reasoning quality with weights 0.10, 0.25, 0.25, 0.25, and 0.15, respectively. 
+
+Emotion Taxonomy. To capture fine-grained viewer reactions, our dataset utilizes the VCE taxonomy consisting of 27 emotion categories, including Ad-miration, Amusement, Anger, Anxiety, Awe, Boredom, Calmness, Confusion, Craving, Disgust, Empathic Pain, Entrancement, Excitement, Fear, Horror, In-terest, Joy, Nostalgia, Relief, Romance, Sadness, Satisfaction, Sexual Desire, Surprise, Awkwardness, Adoration, Aesthetic Appreciation .
+
+Evaluation Metrics. Evaluating dynamic affective reasoning requires assessing both temporal localization and semantic correctness. We adopt a holistic suite of metrics: 
+
+– Segment Count Accuracy: We evaluate whether the number of predicted segments correctly reflects the emotional transitions in the video. This metric ensures that the predicted number of emotional shifts aligns with the ground truth, addressing the accuracy of emotional boundary detection. 
+
+– Segmentation Accuracy: We calculate the Mean Temporal Intersection over Union (mIoU) between the predicted segments and ground-truth seg-ments to evaluate temporal localization accuracy. 
+
+– Emotion Accuracy: A prediction is considered correct only if the predicted emotion category matches the ground truth and the segment has a temporal IoU ≥ 0.5 with the corresponding ground truth segment. 
+
+– Reasoning Quality: To evaluate rationale quality, we employ GPT-4o [18] as a judge. The judge rates each generated rationale on a 0–5 scale, focusing on visual grounding, causal logic, viewer centricity, temporal consistency, and answer consistency. 
+
+5.2 Main Results 
+
+Table 2 compares our models with representative state-of-the-art MLLMs on the DAR test set. The results highlight both the difficulty of Dynamic Affective Reasoning and the effectiveness of our two-stage training paradigm. 
+
+Limitations of Existing Models. Existing models struggle significantly with this benchmark, reflecting the combined challenges of strict temporal localization and causally grounded, viewer-centric explanation. Emotion-focused MLLMs like Videmo and AffectGPT perform poorly due to their static training paradigms, lacking the granularity for temporal localization. Large-scale generalist models such as Qwen3-VL-8B demonstrate stronger inherent capabilities but still fall short in temporal precision and reasoning coherence without domain-specific adaptation. Incorporating the DAR dataset via cold-start training yields a substantial performance improvement. Compared to the base model Qwen-2.5-VL-3B, DAR-SFT achieves gains across all evaluation metrics, with particularly large gains in segment-count accuracy and emotion accuracy by 12.3% and 10.8%, respec-tively. This confirms that our dataset effectively bridges the gap between general multimodal understanding and dynamic affective alignment. Building upon this, Dynamic Affective Reasoning 13 
+
+Table 2: Quantitative Comparison on the DAR Test Set. We compare our method with leading proprietary and open-source MLLMs. SC-Acc (%) denotes seg-ment count accuracy, mIoU (%) denotes temporal segmentation overlap, Emo-Acc (%) denotes emotion prediction accuracy, and GPT-Score (0–5) denotes reasoning qual-ity, as evaluated by GPT across five dimensions: visual grounding (VG), causal logic (CL), viewer centricity (VC), temporal consistency (TC), and answer consistency (AC), along with the average score (Avg). “DAR-SFT” is after SFT and “DAR-R1” is the final model. Best results are in bold .                                                                                                                                       
+
+> Models SC-Acc mIoU Emo-Acc GPT-Score VG CL VC TC AC Avg
+> Emotion Focused Multimodal Large Language Models Videmo [52] 7.9 9.2 4.3 0.7 0.6 0.5 0.4 0.3 0.5 EmotionLlama [10] 21.3 10.8 2.1 1.0 0.9 0.8 0.7 0.6 0.8 AffectGPT [23] 24.3 11.9 5.8 1.0 1.4 1.3 0.7 1.1 1.1 General Multimodal Large Language Models Video-ChatGPT [28] 18.4 20.9 6.4 2.4 1.2 0.8 1.6 1.3 1.5 PandaGPT [36] 21.3 32.7 7.1 1.9 2.4 1.2 2.2 1.5 1.8 Video-LLaVA [25] 14.6 32.6 7.0 2.1 1.9 1.0 1.8 1.7 1.7 InternVL-3.5-2B [38] 21.2 33.6 8.2 1.8 2.0 2.3 2.1 1.0 1.8 InternVL-3.5-8B [38] 26.0 39.2 11.5 2.2 2.5 2.5 2.3 1.6 2.2 Qwen2.5-VL-3B [5] 25.4 41.7 15.0 2.4 2.3 2.2 2.5 2.0 2.3 Qwen2.5-VL-7B [5] 31.9 45.2 14.9 2.8 2.7 2.6 2.6 2.4 2.6 Qwen3-VL-4B [4] 29.2 48.2 17.9 2.8 2.9 2.6 2.8 2.4 2.7 Qwen3-VL-8B [4] 26.2 43.1 17.0 2.6 3.0 2.4 2.6 2.2 2.6
+> DAR-SFT 37.7 47.6 25.8 3.1 3.0 2.9 2.8 3.0 3.0
+> DAR-R1 41.5 52.3 28.6 3.1 3.8 3.2 3.2 3.1 3.3
+
+the RL stage drives further gains. DAR-R1 consistently outperforms DAR-SFT 
+
+across all metrics, achieving 52.3% mIoU and a causal-logic score of 3.8, and establishes a new state of the art on our benchmark. This trajectory indicates that while SFT establishes structural compliance, the specific reward modeling in RL is crucial for refining boundary precision and enforcing logical consistency in affective reasoning. 
+
+Table 3: Human Evaluation of Reasoning Quality. Average expert ratings across the five predefined dimensions. 
+
+Models VG CL VC TC AC Avg 
+
+AffectGPT 0.6 1.8 0.2 0.1 1.0 0.7 Qwen2.5-VL-3B 2.5 2.3 2.5 2.4 2.8 2.5 Qwen3-VL-4B 3.1 3.5 2.7 2.8 3.0 3.0 DAR-SFT 3.4 3.5 4.0 3.1 3.8 3.6 DAR-R1 4.2 4.5 4.2 3.8 4.4 4.2 Human Evaluation. To com-plement automatic metrics and validate alignment with hu-man perception, we recruited five experts to evaluate 100 randomly sampled videos. As summarized in Table 3, ex-isting emotion-focused models like AffectGPT struggle with the multi-task complexity. Gen-eralist MLLMs exhibit better foundational reasoning but lack domain specificity. In contrast, 14 Z. Zhang et al. Task : You are analyzing a video to understand the viewer's emotional journey.  1. Segment the video into emotion phases based on when the 
+
+viewer's dominant emotion  changes . 2. Predict the viewer's emotion for each segment . 3. Reason why the viewer feels that emotion .
+
+{candidate_emotions }{Sample _format }
+
+Emotion -Llama: 
+
+[{0.0s -10.0 s,  Happy , the viewer is happy because they are  walking on a path  in the woods, surrounded by nature, and enjoying the peaceful 
+
+atmosphere.}, 
+
+{10.0s -20.0 s,  Sad , the viewer is sad because they are  walking alone  and feeling lonely.}, 
+
+{20.0 s-30.0 s,  Fear , the viewer is fearful because they are walking through a  dark forest  with no clear path ahead.}] 
+
+Qwen 2.5 -VL -3B: 
+
+[{0.0s -2.2s,  Excitement , The person is seen jumping off a log into a river, indicating a sense of thrill and excitement.}, 
+
+{2.2s -4.2s,  Relief , The person is seen lying on the ground after jumping, suggesting a sense of  relief  after the jump.}, 
+
+{4.2s -8.2s,  Aesthetic Appreciation , The lush green  forest  and the muddy  river  create a visually pleasing and serene environment, evoking 
+
+a sense of appreciation for nature.}] 
+
+DAR -R1: 
+
+[{0.0s -1.5 s,  Interest , The  viewer feels interest because the scene is rich with visual detail and potential narrative intrigue: the dense, 
+
+overgrown forest creates a sense of mystery and hidden adventure, while the person’s presence on the tree branch adds a human  element 
+
+that invi tes curiosity about their purpose or destination. The natural, overcast lighting and the lush greenery, combined with the sli ghtly 
+
+blurred background, draw the eye to the foreground, heightening focus on the person and the tree, which feels like a moment o f quiet tension 
+
+or anticipation.}, 
+
+{1.5s -2.5 s,  Surprise , The viewer feels surprise because the previously still, mysterious scene is suddenly disrupted by someone grabbing a 
+
+rope and  swinging down from the tree branch . The visual shift from a calm, focused composition to a dynamic, uncontrolled arc —especially 
+
+the person’s body sweeping through the air —creates a jarring contrast that feels unexpected and almost violent. This transition from interest 
+
+to surprise is trigg ered by the abrupt change in action: the person’s sudden, unscripted swing  breaks the quiet tension of the forest, replacing 
+
+curiosity with a visceral reaction to the unexpected event.}, 
+
+{2.5s -8.2s,  Empathic Pain , The viewer feels Empathic Pain because the sudden, violent impact of the jump is now followed by a clear, 
+
+unambiguous physical consequence: the person lands on the ground with a visible, forceful impact that causes them to fall bac kward, their 
+
+body conto rting in pain. The visual cues —falling forward, arms flailing, and a visible, uncontrolled fall —evoke a visceral sense of physical 
+
+distress, making the viewer instinctively feel the person’s discomfort. This emotional shift from Su rprise to Empathic Pain is triggered by 
+
+the transition from a sudden, unexplained jump to a visible, painful consequence —the person’s body language and the immediate aftermath 
+
+of the impact create a direct, relatable sense of suffering, which the viewer ca n’t help but feel.}] 
+
+0.0 s 1.2s  2.4s  3.6s  4.8s  6.0 s 7.2s  8.2s 
+
+Fig. 4: Qualitative Comparison on DAR. We visualize the temporal alignment, predicted emotion labels, and reasoning text. Green highlights indicate correct rea-soning, while red indicates hallucinations or errors. DAR-R1 demonstrates superior grounding capabilities compared to baselines. 
+
+our proposed methods demonstrate superior performance. The high scores in Causal Logic and Viewer Centricity particularly verify that our RL paradigm effectively aligns the model with the nuanced, viewer-centric logic required for high-quality affective reasoning. Importantly, we observe strong agreement be-tween GPT-based judging and expert preferences, suggesting that our automatic GPT evaluation provides a reliable proxy for human assessment on this bench-mark. 
+
+5.3 Qualitative Analysis 
+
+To provide concrete insights into the capabilities of DAR-R1 , we present a qual-itative comparison in Figure 4. As shown in Figure 4, emotion-focused MLLM fails on this benchmark. It often produces temporally invalid outputs (e.g., times-tamps exceeding the video duration) and relies on generic, template-like ratio-nales that ignore salient high-arousal events. This behavior suggests that static or coarse-grained supervision is insufficient for temporally grounded affective Dynamic Affective Reasoning 15 
+
+reasoning in videos. The generalist model, Qwen2.5-VL-3B, correctly perceives the “jumping” action but fails in affective alignment. It misinterprets the crash scene—where the man hits the mud—as “Relief” or “Aesthetic Appreciation” of the lush forest. It focuses on the background scenery rather than the salient event (the accident) that drives the viewer’s emotion. In contrast, our DAR-R1 model demonstrates precise temporal grounding and causal logic. It successfully identifies the narrative turning point. It segments the initial buildup as “Inter-est” and “Surprise”, and crucially, it aligns the onset of “Empathic Pain” (2.5s) with the moment the swing loses control. Unlike Qwen2.5-VL, DAR-R1 explic-itly captures the visual evidence of distress, referencing specific physical cues as highlighted in green. This causal link between the visual impact and the viewer’s visceral reaction confirms that our RL training effectively aligns the model with fine-grained human emotional dynamics. 
+
+6 Conclusion 
+
+In this paper, we presented a comprehensive framework for transitioning Video Emotion Analysis from static classification to Dynamic Affective Reasoning. Grounded in Affective Events Theory, we introduced DAR, the first large-scale dataset featuring event-aligned segmentation and causal reasoning chains. To benchmark this task, we proposed DAR-R1, a novel training pipeline that lever-ages Reinforcement Learning to align MLLMs with fine-grained emotional dy-namics. Extensive experiments demonstrate that our method establishes a new state-of-the-art, significantly outperforming existing models in temporal local-ization, emotion recognition, and reasoning quality. We hope this work serves as a foundation for advancing affective computing by enabling models to pre-dict when emotions shift, what they are, and why they arise from temporally grounded evidence. 
+
+Acknowledgements 
+
+This work was supported by the National Science and Technology Major Project (Grant No. 2025ZD0215301), the National Natural Science Foundation of China (Grant Nos. 62402471, U22A2094, and U25A20530), the Yangtze River Delta Science and Technology Innovation Community Joint Research (Basic Research) Project (Grant No. 2025CSJZN01600), the New Generation Artificial Intelli-gence National Science and Technology Major Project (Grant No. 2025ZD0123100), and the Key Science and Technology Project of Anhui Province (Grant No. 202523j08050001). This research was also supported by the advanced computing resources provided by the Supercomputing Center of the University of Science and Technology of China. 16 Z. Zhang et al. 
+
+References 
+
+1. Achiam, J., Adler, S., Agarwal, S., Ahmad, L., Akkaya, I., Aleman, F.L., Almeida, D., Altenschmidt, J., Altman, S., Anadkat, S., et al.: Gpt-4 technical report. arXiv preprint arXiv:2303.08774 (2023) 2. Achlioptas, P., Ovsjanikov, M., Guibas, L.J., Tulyakov, S.: Affection: Learning affective explanations for real-world visual data. In: CVPR. pp. 6641–6651 (2023) 3. Achlioptas, P., Ovsjanikov, M., Haydarov, K., Elhoseiny, M., Guibas, L.J.: Artemis: Affective language for visual art. In: CVPR. pp. 11569–11579 (2021) 4. Bai, S., Cai, Y., Chen, R., Chen, K., Chen, X., Cheng, Z., Deng, L., Ding, W., Gao, C., Ge, C., et al.: Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 (2025) 5. Bai, S., Chen, K., Liu, X., Wang, J., Ge, W., Song, S., Dang, K., Wang, P., Wang, S., Tang, J., et al.: Qwen2.5-vl technical report. arXiv preprint arXiv:2502.13923 (2025) 6. Barros, P., Churamani, N., Lakomkin, E., Siqueira, H., Sutherland, A., Wermter, S.: The omg-emotion behavior dataset. arXiv preprint arXiv:1803.05434 (2018) 7. Cao, H., Cooper, D.G., Keutmann, M.K., Gur, R.C., Nenkova, A., Verma, R.: Crema-d: Crowd-sourced emotional multimodal actors dataset. IEEE transactions on affective computing 5(4), 377–390 (2014) 8. Castellano, B.: PySceneDetect: Video scene cut and transition detection. https: //github.com/Breakthrough/PySceneDetect (2025) 9. Chen, Z., Wu, J., Wang, W., Su, W., Chen, G., Xing, S., Zhong, M., Zhang, Q., Zhu, X., Lu, L., et al.: Internvl: Scaling up vision foundation models and aligning for generic visual-linguistic tasks. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 24185–24198 (2024) 10. Cheng, Z., Cheng, Z.Q., He, J.Y., Wang, K., Lin, Y., Lian, Z., Peng, X., Haupt-mann, A.: Emotion-llama: Multimodal emotion recognition and reasoning with in-struction tuning. Advances in Neural Information Processing Systems 37 , 110805– 110853 (2024) 11. Comanici, G., Bieber, E., Schaekermann, M., Pasupat, I., Sachdeva, N., Dhillon, I., Blistein, M., Ram, O., Zhang, D., Rosen, E., et al.: Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 (2025) 12. Ekman, P.: An argument for basic emotions. Cognition & emotion 6(3-4), 169–200 (1992) 13. Filippini, C., Perpetuini, D., Cardone, D., Chiarelli, A.M., Merla, A.: Thermal infrared imaging-based affective computing and its application to facilitate human robot interaction: A review. Applied Sciences 10 (8), 2924 (2020) 14. Guo, D., Yang, D., Zhang, H., Song, J., Wang, P., Zhu, Q., Xu, R., Zhang, R., Ma, S., Bi, X., et al.: Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 (2025) 15. Guo, Y., Siddiqui, F., Zhao, Y., Chellappa, R., Lo, S.Y.: Stimuvar: Spatiotemporal stimuli-aware video affective reasoning with multimodal large language models. International Journal of Computer Vision 133 (9), 6456–6472 (2025) 16. Han, Z., Zhu, B., Xu, Y., Song, P., Yang, X.: Benchmarking and bridging emo-tion conflicts for multimodal emotion reasoning. In: Proceedings of the 33rd ACM International Conference on Multimedia. pp. 5528–5537 (2025) 17. Hu, J., Shi, H., Dai, C., Li, Z., Song, P., Wang, M.: Beyond emotion recognition: A multi-turn multimodal emotion understanding and reasoning benchmark. In: Dynamic Affective Reasoning 17 Proceedings of the 33rd ACM International Conference on Multimedia. pp. 5814– 5823 (2025) 18. Hurst, A., Lerer, A., Goucher, A.P., Perelman, A., Ramesh, A., Clark, A., Os-trow, A., Welihinda, A., Hayes, A., Radford, A., et al.: Gpt-4o system card. arXiv preprint arXiv:2410.21276 (2024) 19. Jiang, X., Zong, Y., Zheng, W., Tang, C., Xia, W., Lu, C., Liu, J.: Dfew: A large-scale database for recognizing dynamic facial expressions in the wild. In: Pro-ceedings of the 28th ACM international conference on multimedia. pp. 2881–2889 (2020) 20. Kollias, D., Zafeiriou, S.: Aff-wild2: Extending the aff-wild database for affect recog-nition. arXiv preprint arXiv:1811.07770 (2018) 21. Kossaifi, J., Tzimiropoulos, G., Todorovic, S., Pantic, M.: Afew-va database for valence and arousal estimation in-the-wild. Image and Vision Computing 65 , 23– 36 (2017) 22. Kossaifi, J., Walecki, R., Panagakis, Y., Shen, J., Schmitt, M., Ringeval, F., Han, J., Pandit, V., Toisoul, A., Schuller, B., et al.: Sewa db: A rich database for audio-visual emotion and sentiment research in the wild. IEEE transactions on pattern analysis and machine intelligence 43 (3), 1022–1040 (2019) 23. Lian, Z., Chen, H., Chen, L., Sun, H., Sun, L., Ren, Y., Cheng, Z., Liu, B., Liu, R., Peng, X., et al.: Affectgpt: A new dataset, model, and benchmark for emotion understanding with multimodal large language models. International Conference on Machine Learning (2025) 24. Lian, Z., Sun, H., Sun, L., Chen, K., Xu, M., Wang, K., Xu, K., He, Y., Li, Y., Zhao, J., et al.: Mer 2023: Multi-label learning, modality robustness, and semi-supervised learning. In: Proceedings of the 31st ACM International Conference on Multimedia. pp. 9610–9614 (2023) 25. Lin, B., Ye, Y., Zhu, B., Cui, J., Ning, M., Jin, P., Yuan, L.: Video-llava: Learning united visual representation by alignment before projection. In: Proceedings of the 2024 conference on empirical methods in natural language processing. pp. 5971– 5984 (2024) 26. Liu, S., Zeng, Z., Ren, T., Li, F., Zhang, H., Yang, J., Jiang, Q., Li, C., Yang, J., Su, H., et al.: Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In: European conference on computer vision. pp. 38–55. Springer (2024) 27. Liu, S., Zheng, C., Demasi, O., Sabour, S., Li, Y., Yu, Z., Jiang, Y., Huang, M.: Towards emotional support dialog systems. In: Proceedings of the 59th annual meeting of the association for computational linguistics and the 11th international joint conference on natural language processing (volume 1: Long papers). pp. 3469– 3483 (2021) 28. Maaz, M., Rasheed, H., Khan, S., Khan, F.: Video-chatgpt: Towards detailed video understanding via large vision and language models. In: Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers). pp. 12585–12602 (2024) 29. Mazeika, M., Tang, E., Zou, A., Basart, S., Chan, J.S., Song, D., Forsyth, D., Stein-hardt, J., Hendrycks, D.: How would the viewer feel? estimating wellbeing from video scenarios. Advances in Neural Information Processing Systems 35 , 18571– 18585 (2022) 30. Mohamed, Y., Khan, F.F., Haydarov, K., Elhoseiny, M.: It is okay to not be okay: Overcoming emotional bias in affective image captioning by contrastive data col-lection. In: CVPR. pp. 21231–21240 (2022) 18 Z. Zhang et al. 31. Pantic, M., Sebe, N., Cohn, J.F., Huang, T.: Affective multimodal human-computer interaction. In: Proceedings of the 13th annual ACM international conference on Multimedia. pp. 669–676 (2005) 32. Poria, S., Hazarika, D., Majumder, N., Naik, G., Cambria, E., Mihalcea, R.: Meld: A multimodal multi-party dataset for emotion recognition in conversations. In: Proceedings of the 57th Conference of the Association for Computational Linguis-tics. pp. 527–536 (2019) 33. Ringeval, F., Sonderegger, A., Sauer, J., Lalanne, D.: Introducing the recola multi-modal corpus of remote collaborative and affective interactions. In: 2013 10th IEEE international conference and workshops on automatic face and gesture recognition (FG). pp. 1–8. IEEE (2013) 34. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O.: Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 (2017) 35. Song, P., Guo, D., Yang, X., Tang, S., Wang, M.: Emotional video captioning with vision-based emotion interpretation network. IEEE Transactions on Image Processing 33 , 1122–1135 (2024) 36. Su, Y., Lan, T., Li, H., Xu, J., Wang, Y., Cai, D.: Pandagpt: One model to instruction-follow them all. In: Proceedings of the 1st Workshop on Taming Large Language Models: Controllability in the era of Interactive Assistants! pp. 11–23 (2023) 37. Wang, S., Yuan, F., Wang, K., Yang, X., Zhang, X., Wang, M.: Dual-state per-sonalized knowledge tracing with emotional incorporation. IEEE Transactions on Knowledge and Data Engineering (2025) 38. Wang, W., Gao, Z., Gu, L., Pu, H., Cui, L., Wei, X., Liu, Z., Jing, L., Ye, S., Shao, J., et al.: Internvl3. 5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. arXiv preprint arXiv:2508.18265 (2025) 39. Wang, Y., Sun, Y., Huang, Y., Liu, Z., Gao, S., Zhang, W., Ge, W., Zhang, W.: Ferv39k: A large-scale multi-scene dataset for facial expression recognition in videos. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 20922–20931 (2022) 40. Weiss, H.M., Cropanzano, R.: Affective events theory. Research in organizational behavior 18 (1), 1–74 (1996) 41. Xie, H., Peng, C.J., Tseng, Y.W., Chen, H.J., Hsu, C.F., Shuai, H.H., Cheng, W.H.: Emovit: Revolutionizing emotion insights with visual instruction tuning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 26596–26605 (2024) 42. Xu, J., Guo, Z., Hu, H., Chu, Y., Wang, X., He, J., Wang, Y., Shi, X., He, T., Zhu, X., et al.: Qwen3-omni technical report. arXiv preprint arXiv:2509.17765 (2025) 43. Xu, Y., Hu, J., Zhao, Z., Duan, Z., Sun, X., Yang, X.: Multiagentesc: A llm-based multi-agent collaboration framework for emotional support conversation. In: Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing. pp. 4665–4681 (2025) 44. Xu, Y., Zhao, Z., Sun, X., Yang, X.: Prompt learning with multiperspective cues for emotional support conversation systems. IEEE Transactions on Computational Social Systems (2025) 45. Yadegaridehkordi, E., Noor, N.F.B.M., Ayub, M.N.B., Affal, H.B., Hussin, N.B.: Affective computing in education: A systematic review and future research. Com-puters & education 142 , 103649 (2019) 46. Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Gao, C., Huang, C., Lv, C., et al.: Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025) Dynamic Affective Reasoning 19 47. Yang, X., Pan, H., Wang, X., Cao, Y., Li, J., Wang, M.: Fine: Fine-grained neuron-level model editing for reliable and safe llms. IEEE Transactions on Pattern Anal-ysis and Machine Intelligence (2026) 48. Yannakakis, G.N.: Enhancing health care via affective computing (2018) 49. Ye, C., Chen, W., Song, P., Liu, X., Zhang, L., Mao, Z.: Multi-round mutual emotion-cause pair extraction for emotion-attributed video captioning. In: Pro-ceedings of the 33rd ACM International Conference on Multimedia. pp. 3320–3329 (2025) 50. Zadeh, A., Chan, M., Liang, P.P., Tong, E., Morency, L.P.: Social-iq: A ques-tion answering benchmark for artificial social intelligence. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 8807– 8817 (2019) 51. Zhang, F., Cheng, Z., Deng, C., Li, H., Lian, Z., Chen, Q., Liu, H., Wang, W., Zhang, Y.F., Zhang, R., et al.: Mme-emotion: A holistic evaluation benchmark for emotional intelligence in multimodal large language models. International Confer-ence on Learning Representations (2025) 52. Zhang, Z., Wang, W., Zhu, Y., Qin, W., Wan, P., Zhang, D., Yang, J.: Videmo: Affective-tree reasoning for emotion-centric video foundation models. Advances in Neural Information Processing Systems (2025) 53. Zhang, Z., Yang, J.: Temporal sentiment localization: Listen and look in untrimmed videos. In: ACM MM (2022) 54. Zhang, Z., Song, P., Hu, J., Chen, W., Ni, L., Yang, X.: Stimuli-aware emotion adaptor for enhancing llm in affective explanation captioning. In: ICASSP 2026-2026 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP). pp. 10662–10666. IEEE (2026) 20 Z. Zhang et al. 
+
+A Additional Related Work 
+
+A.1 Dynamic Emotion Understanding 
+
+Dynamic emotion understanding treats affect as a time-evolving process rather than a static clip-level label. Early datasets such as Aff-Wild2 [20] and AFEW-VA [21] enabled dense temporal affect estimation by providing frame-level valence– arousal annotations. Subsequent works extended continuous affect tracking to multimodal interaction scenarios [22, 33] or emphasized gradual emotional tran-sitions across utterances [6]. More recently, TSL-300 [53] shifted the focus toward temporal sentiment localization in untrimmed videos. However, these datasets primarily support continuous affect regression, gradual transition modeling, or coarse sentiment localization. They do not jointly model fine-grained emotion categories, event-aligned emotional shifts, and their underlying causal mecha-nisms. In contrast, DAR requires models to identify when fine-grained emotions shift, what emotional states occur, and why visual stimuli trigger these transi-tions. 
+
+B Data Reliability and Human Validation        
+
+> Table 4: Human validation statistics on DAR annotations. Error Type Error Rate Boundary error >0.5s 2.4% Emotion-label disagreement 3.1% Visual-grounding error 2.2% Non-viewer-centric rationale 1.3%
+
+Beyond the three-stage verification in the annotation pipeline, DAR annota-tions are further validated by three experts on the full test split and a random subset of training samples. The validation covers boundary accuracy, emotion-label consistency, visual grounding, and viewer-centric rationales. The validation statistics are summarized in Table 4. 
+
+C Visual Diversity Analysis 
+
+We conduct a post-hoc visual-diversity analysis based on the segment-level de-scriptions Dt in DAR. The genre distribution is diverse: 27.2% Nature/Wildlife, 20.5% Animals, 12.2% Comedy, 8.9% Urban Life, 8.0% Horror, 7.3% Food/Cooking, 7.2% Sports, 6.9% Performance, and 1.8% Others. The scene distribution is also balanced, with 52.0% outdoor scenes and 48.0% indoor scenes. These results indicate that DAR covers rich visual scenarios and diverse scene contexts. Dynamic Affective Reasoning 21 
+
+D Dataset Split 
+
+To preserve the distribution of dynamic affective patterns, the split is stratified by dominant emotion, number of segments, video duration, and coarse visual genre/scene type. This results in 13,646 training videos and 1,441 test videos. Hyperparameters and model selection are tuned only on a held-out subset of the training split, while the test split is used exclusively for final evaluation. 
+
+E Additional Fine-Tuned Emotion-Focused Baselines 
+
+Table 5: Fine-tuned emotion-focused baselines on DAR. Model SC-Acc mIoU Emo-Acc ROUGE-L SBERT Videmo-FT 10.3 22.1 5.0 14.7 50.2 EmotionLlama-FT 31.4 42.9 5.4 17.5 54.6 AffectGPT-FT 36.2 46.5 6.6 20.2 56.3 StimuVAR-FT 13.5 16.3 10.2 23.9 61.1 DAR-SFT 37.7 47.6 25.8 24.1 77.0 
+
+DAR-R1 41.5 52.3 28.6 24.8 78.6 
+
+To address the concern that existing emotion-focused MLLMs are not origi-nally designed for DAR, we additionally fine-tune four emotion-focused MLLMs on DAR. As shown in Table 5, DAR-R1 still outperforms these stronger base-lines. 
+
+F Out-of-Domain Evaluation 
+
+Table 6: OOD temporal localization results (%) on TSL. Model mAP@0.1 mAP@0.15 mAP@0.2 mAP@0.25 mAP@0.3 Videmo [52] 4.1 2.7 1.7 1.2 1.0 EmotionLlama [10] 4.8 3.0 1.9 1.3 1.1 AffectGPT [23] 7.9 6.1 4.8 3.9 3.1 StimuVAR [15] 2.7 1.5 0.6 0.3 0.3      
+
+> DAR-R1 13.2 11.4 9.4 7.5 6.7
+
+We further conduct an out-of-domain evaluation on TSL [53], following the temporal localization protocol. As shown in Table 6, DAR-R1 remains consis-tently stronger than emotion-focused baselines, indicating that the proposed dy-22 Z. Zhang et al. 
+
+namic formulation and reward-guided training generalize beyond the in-domain DAR split. 
+
+G Reward Ablation Studies 
+
+Table 7: Ablation study of task rewards on DAR. Variant SC-Acc mIoU Emo-Acc ROUGE-L SBERT w/o Rcount 38.3 49.7 26.5 24.2 77.4 w/o Rseg 39.4 48.0 27.0 24.5 77.7 w/o Remo 40.0 51.0 24.2 24.6 78.2 
+
+DAR-R1 41.5 52.3 28.6 24.8 78.6 
+
+Table 7 reports ablation studies on the main task rewards. Removing each reward leads to a performance decline in its corresponding dimension, confirm-ing the necessity of the reward design. We keep Rstruct and Rreason as stability rewards for GRPO training: Rstruct enforces valid JSON, monotonic timestamps, and non-fragmented segments, while Rreason controls rationale length and repe-tition. Without Rreason , the model tends to generate excessively long rationales that exceed the token budget and destabilize GRPO training. 
+
+H Qualitative Inference Examples of DAR-R1 [{" start_time ": 0.0, "end_time ": 3.5, "emotion" : "Romance", "reason" : "The viewer feels 
+
+romance because the black -and -white color palette evokes a timeless, classic, and 
+
+emotionally charged atmosphere, often associated with love stories . The intimate close -up 
+
+composition, with the man and woman gazing into each other’s eyes, creates a sense of 
+
+connection and tenderness, while the soft, diffused lighting enhances the emotional depth .
+
+The text overlays —“Tere Bin,” “Nahi Lagda ,” “Dil Mera” —are poetic phrases that directly 
+
+reference love and longing, reinforcing the romantic narrative . Together, these visual and 
+
+textual elements trigger a deep, nostalgic sense of romantic longing in the viewer ."}, 
+
+{" start_time ": 3.5, "end_time ": 10 .2, "emotion" : "Sadness", "reason" : "The viewer feels 
+
+sadness because the visual narrative abruptly shifts from intimate connection to isolation 
+
+and physical vulnerability : the man is now lying motionless on the wet pavement, his body 
+
+language still and lifeless, while the woman is no longer present, leaving him alone in a
+
+desolate, rain -drenched environment . The black -and -white color palette, once evoking romance, 
+
+now amplifies the somber mood, and the static, unchanging camera emphasizes his helplessness 
+
+and emotional weight . The transition from romance to sadness is triggered by the sudden 
+
+absence of the woman and the man’s physical collapse, which shatters the earlier emotional 
+
+intimacy and replaces it with a poignant, solitary aftermath . The text overlays —“Dolna ,” 
+
+“Nahi Lagda ,” “Mena” —further deepen the sorrow, now serving as a melancholic commentary on 
+
+unfulfilled love and loss ."}] 
+
+Fig. 5: Qualitative inference example of DAR-R1. 
+
+We provide a qualitative inference example of DAR-R1 in Fig. 5. Dynamic Affective Reasoning 23 
+
+I LLM-as-a-Judge Prompt 
+
+We evaluate the quality of the predicted emotion and reason pairs using an LLM-as-a-judge protocol. For each predicted segment, the judge receives the video, the target temporal interval, the task question, and the model prediction in JSON format. 
+
+LLM-as-a-judge prompt. We use the following prompt template: 
+
+You are an expert evaluator for viewer-centric dynamic affective reasoning in videos. You will be given: 1. A silent video. 2. A target temporal segment: [START_TIME, END_TIME]. 3. A question: "What emotion would a viewer feel in this segment, and why?" 4. A model prediction containing: predicted emotion and reason. Important: - The emotion refers to the VIEWER’s induced emotion, not the emotion expressed by people in the video. - The reason should be grounded in visible evidence. - The answer should focus on the target temporal segment. - If the segment is not the first segment, consider whether the predicted emotion and reason are temporally consistent with the preceding emotional context. Target segment: [START_TIME, END_TIME] Model prediction: Emotion: [PREDICTED_EMOTION] Reason: [PREDICTED_REASON] Evaluate the predicted emotion--reason pair from 0 to 5. Score 5: The answer is fully correct and well grounded. Score 4: The answer is Mostly correct and largely grounded. Score 3: The answer is partially correct. Score 2: The answer has limited correctness. Score 1: The answer is mostly incorrect. Score 0: The answer is invalid or irrelevant. Evaluate the answer along the following dimensions: - visual_grounding: Is the reason supported by visible content in the segment? - causal_logic: Does the reason explain why the visual event induces the viewer emotion? - viewer_centricity: Does it describe the viewer’s feeling rather than the character’s emotion? - temporal_consistency: Is the reason grounded in the specified time interval, consistent with the emotional transition, and coherent with the preceding segment context when applicable? - answer_consistency: Are the emotion label and reason mutually consistent? Output only a valid JSON object in the following format: { "score": <integer from 0 to 5>, 24 Z. Zhang et al. 
+
+"visual_grounding": <integer from 0 to 5>, "causal_logic": <integer from 0 to 5>, "viewer_centricity": <integer from 0 to 5>, "temporal_consistency": <integer from 0 to 5>, "answer_consistency": <integer from 0 to 5>, "brief_comment": "<one-sentence explanation>"} 
+
+J Examples of DAR Data Construction 
+
+We provide an example of the DAR construction process in Fig. 6. Dynamic Affective Reasoning 25 [{ Start _time : 0.0, End _time : 4.6, Emotion : Horror , Description : The video is shot from a first -
+
+person perspective, likely from a helmet -mounted camera on a motorcycle . The view shows the 
+
+motorcycle's black handlebars and dashboard, including a circular speedometer and other gauges, in 
+
+the lower portion of the frame . The scene unfolds on a city street with multiple lanes, marked with 
+
+white crosswalk lines and road markings . On the left, there is a sidewalk lined with trees, a red 
+
+and white advertisement kiosk, and a pedestrian in a blue shirt walking away from the camera . A
+
+black pickup truck is visible ahead, driving away from the camera . As the motorcycle proceeds, it 
+
+turns slightly right, navigating a curve in the road . The environment includes modern buildings, 
+
+parked cars, and traffic signals . A maroon sedan is seen making a left turn across the motorcycle’s 
+
+path, stopping abruptly in the middle of the intersection . The motorcycle continues forward, closing 
+
+the distance rapidly, with the maroon car now directly in its path, creating a sense of imminent 
+
+collision . The lighting is overcast, casting a muted, gray tone over the urban setting . The 
+
+composition emphasizes the forward motion of the motorcycle and the sudden obstruction posed by the 
+
+stopped car . Reason : The viewer feels horror because the first -person perspective from the 
+
+motorcycle creates an immediate, visceral sense of being in the moment, with no time to react . The 
+
+maroon sedan suddenly stops in the middle of the intersection, directly in the motorcycle’s path, 
+
+and the camera’s forward motion continues unrelentingly, heightening the feeling of inevitability .
+
+The overcast, gray lighting and the urban environment’s cold, mechanical feel amplify the sense of 
+
+danger, while the static, unblinking view of the car’s rear end —now a looming obstacle —evokes a
+
+terrifying helplessness, as if the viewer is trapped in a collision they cannot avoid .}, 
+
+{Start _time : 4.6, End _time : 10 .6, Emotion : Empathic Pain , Description : The scene transitions from 
+
+forward motion on the motorcycle to a sudden, violent impact . The camera perspective shifts abruptly 
+
+from a forward -facing view of the road to a chaotic, disoriented angle as the motorcycle collides 
+
+with the maroon sedan . The rider is thrown forward, and the camera captures a close -up of the car’s 
+
+windshield, reflecting the rider’s helmet and gloved hand gripping the glass . The view then tilts 
+
+downward, revealing the motorcycle lying on its side in the intersection, with visible damage to the 
+
+front wheel and fairing . The rider’s hand remains on the windshield, indicating they are pressed 
+
+against the car’s surface . The environment changes from a dynamic street scene to a static, post -
+
+crash view, with the wrecked motorcycle and scattered debris now prominent in the foreground . The 
+
+lighting remains overcast, but the focus shifts from motion to stillness, emphasizing the aftermath 
+
+of the collision . Reason : The viewer shifts from Horror to Empathic Pain because the abrupt 
+
+collision violently transforms the viewer’s perspective from an impending doom into a visceral, 
+
+embodied experience of trauma . The chaotic camera tilt, the rider’s gloved hand gripping the car’s 
+
+windshield, and the distorted reflection of the helmet convey a raw, physical struggle —making the 
+
+viewer feel the impact through the rider’s body . The downward tilt revealing the wrecked motorcycle 
+
+and scattered debris anchors the emotion in tangible damage and vulnerability, shifting focus from 
+
+external danger to internal suffering . This transition is triggered by the sudden collapse of motion 
+
+into stillness, replacing the helpless anticipation of Segment 1 with the immediate, intimate 
+
+aftermath of injury and loss of control .}, 
+
+{Start _time : 10 .6, End _time : 14 .9, Emotion : Surprise , Description : The camera perspective shifts 
+
+from a close -up of the rider's hand pressed against the car's windshield to a wider, overhead view 
+
+as the rider delivers a forceful punch, causing the windshield to shatter dramatically with a
+
+spiderweb of cracks radiating outward . The rider's gloved hand is visible making contact with the 
+
+glass, and the impact is emphasized by the sudden fragmentation of the windshield . Next, the camera 
+
+angle adjusts to show the rider standing on the hood of the maroon sedan, their body positioned 
+
+above the damaged vehicle, with the motorcycle lying on its side nearby . The environment remains the 
+
+same urban intersection, but the focus transitions from the immediate aftermath of the crash to the 
+
+rider's aggressive retaliation . The lighting remains overcast, but the visual impact of the 
+
+shattered glass and the rider's elevated stance on the car's hood introduces a new dynamic of 
+
+confrontation and intensity . The camera movement is more stable now, capturing the full scene of the 
+
+damaged motorcycle, the broken windshield, and the rider's dominant position on the car . Reason : The 
+
+viewer feels surprise in this segment because the scene abruptly shifts from the raw, vulnerable 
+
+aftermath of the crash to a sudden, violent act of retaliation —the rider punching the car’s 
+
+windshield, shattering it in a dramatic spiderweb of cracks . This action is unexpected and jarring, 
+
+especially after the previous segment’s focus on physical helplessness and damage, making the viewer 
+
+recoil in shock at the sudden escalation . The transition from Empathic Pain to Surprise is triggered 
+
+by the change in the rider’s behavior : from being a victim pressed against the car, the rider 
+
+becomes an active aggressor, standing on the hood and physically attacking the vehicle . This shift 
+
+in agency and the visual spectacle of the shattered glass transform the emotional tone from passive 
+
+suffering to stunned disbelief at the intensity and unpredictability of the rider’s response .}] 
+
+Fig. 6: Example of the DAR data construction process.

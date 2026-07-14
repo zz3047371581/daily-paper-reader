@@ -1,0 +1,732 @@
+Title: CHARM: Charge Calibration and Acoustic Rescue for LLM-based Multimodal Sarcasm Detection
+
+URL Source: https://arxiv.org/pdf/2607.11102v1
+
+Published Time: Tue, 14 Jul 2026 02:49:48 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# CHARM: Charge Calibration and Acoustic Rescue for LLM-based Multimodal Sarcasm Detection 
+
+Qiyang Sun Student Member, IEEE , Yi Chang*, Yupei Li, Xi Shao Member, IEEE , Zixing Zhang* Senior Member, IEEE , and Bj¨ orn W. Schuller Fellow, IEEE 
+
+Abstract —Sarcasm detection, the identification of discrepancies between literal and intended meaning, is a fundamental task in affective computing. However, zero-shot instruction-tuned Large Language Models (LLMs) systematically over-predict the positive (sarcastic) class across the entire capability spectrum, while the prosodic cues humans rely on remain underexploited and transfer unevenly across languages. We introduce CHARM (Charge Calibration and Acoustic Rescue for Multimodal Sar-casm Detection), a training-free framework that couples two modules. Bidirectional Charge Calibration (BiCAL) steers the LLM toward opposing sarcastic and literal verdicts along a sym-metric axis of charged prompts; the induced directional biases cancel by construction, and a simple aggregation recovers an unbiased pragmatic signal. Acoustic Late-Fusion Rescue (ALFR) then fuses the calibrated votes with prosodic descriptors and LLM-generated auditory-perception probes through a shallow classifier, actively down-weighting saturated text votes in favour of acoustic evidence. Without fine-tuning any backbone, BiCAL attains the highest reported zero-shot text-only Macro-F1 of 0.787 on MUStARD, while ALFR lifts weak backbones by up to +0.382 Macro-F1 on CMMA. A Stouffer meta-analysis confirms statistical significance on MUStARD and CMMA ( Z = 13 .89 
+
+and Z = 34 .64 , respectively; p < 10 −43 ). Our analysis further uncovers a cross-cultural prosodic decoupling: low-level acoustics fail to transfer across languages, whereas high-level perceptual abstractions remain robust. Together, these components yield an explainable, cross-lingual multimodal detector. 
+
+Index Terms —Multimodal Sarcasm Detection, Large Language Models (LLMs), Zero-Shot Learning, Charge Calibration, Acous-tic Late Fusion, Cross-Cultural Analysis, Prosodic Decoupling, Explainability 
+
+I. I NTRODUCTION 
+
+# HUMANS recognise sarcasm almost instantly from a dry tone or a knowing pause. However, contemporary instruction-tuned Large Language Models (LLMs) systemati-cally err in the opposite direction. Sarcasm detection involves 
+
+Qiyang Sun, Yi Chang, and Yupei Li are with GLAM – the Group on Language, Audio, & Music, Imperial College London, UK. e-mail: q.sun23@imperial.ac.uk; yichang312@gmail.com; yupei.li22@imperial.ac.uk Xi Shao is with the College of Telecommunications and Information Engineering, Nanjing University of Posts and Telecommunications, China, e-mail: shaoxi@njupt.edu.cn Zixing Zhang is with the College of Computer Science and Electronic En-gineering, Hunan University, China; Zixing Zhang is also with the Shenzhen Research Institute, Hunan University, China. e-mail: zixingzhang@hnu.edu.cn Bj¨ orn W. Schuller is with GLAM – the Group on Language, Audio, & Music, Imperial College London, UK; CHI – Chair of Health Informatics, TUM University Hospital, Germany; relAI – the Konrad Zuse School of Excellence in Reliable AI, Germany; MDSI – Munich Data Science Institute, Germany; and MCML – Munich Center for Machine Learning, Germany. e-mail: bjoern.schuller@imperial.ac.uk Corresponding author: Yi Chang, Zixing Zhang Manuscript received April 19, 2021; revised August 16, 2021. 
+
+identifying the deliberate mismatch between the literal and intended meaning of a speaker [1]. This operation serves as a cornerstone task within affective computing. This field aims to enable machines to perceive, understand, interpret, and express human emotions [2], [3]. Unlike standard sentiment analysis [4] or emotion recognition [5], sarcastic utterances rarely carry explicit sentiment cues; instead, they hinge on im-plicit lexical and prosodic nuances. Consequently, automated systems must jointly analyse lexical content, dialogue context, and prosody to infer intent [6]. Whereas humans process these multimodal signals effortlessly, automated systems still struggle to interpret them reliably [7], opening a costly perfor-mance gap. Accurate sarcasm detection nonetheless remains crucial for conversational AI, intelligent customer service, and social-media analysis [8], where misinterpreting sarcasm yields inappropriate responses that erode both operational effectiveness and user trust. Recently, large language models (LLMs) have become increasingly prominent in affective computing, and various efforts leverage their emergent reasoning capabilities for sub-jective pragmatic tasks [9], [10]. When executing such tasks, however, instruction-tuned LLMs exhibit a pronounced syco-phancy bias [11]: reinforcement learning from human feed-back (RLHF) routinely rewards alignment with explicit user presuppositions rather than objective neutrality [12]. A presup-position is the stance implicitly encoded in the framing of a query; merely asking “Is the speaker being sarcastic?” already foregrounds sarcasm as a live possibility, and a sycophantic model treats this framing as a direct cue to affirm rather than evaluating the input as a neutral proposition to adjudicate. The key observation is that this bias is directional : if it behaves like a signed “charge” that pushes the verdict toward one pole, then symmetrically applying opposing positive and negative prompt charges should let the biases cancel and expose the underlying signal – the intuition we later formalise as charge calibration. This directional skew emerges clearly within recent bench-marks. Extant studies systematically test off-the-shelf models on sarcasm detection [8], [13]. These evaluations demonstrate that LLMs remain highly sensitive to the precise prompting formulation [13]. Few-shot exemplars provide only moderate performance gains. Furthermore, this strategy heavily pe-nalises computational efficiency by exponentially increasing inference latency [8]. Heavier prompt engineering remedies encompass both few-shot exemplars and elaborate chain-of-thought scaffolds. Although these extensive interventions re-duce prompt sensitivity, they fail to eliminate it entirely [13]. Parallel multimodal frameworks add visual instructions and arXiv:2607.11102v1 [cs.SD] 13 Jul 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+dense-retrieval networks [14], yet concentrate almost exclu-sively on textual or visual modalities. Consequently, the acous-tic and prosodic cues of spoken sarcasm remain comparatively underexplored. The problem sharpens under strict zero-shot constraints, where external retrieved exemplars are unavail-able: zero-shot LLM classifiers are already prone to systematic label bias [15], and here alignment-induced answer biases [12] drive severe positive-class over-prediction across backbones. Complex reasoning prompts do not uniformly mitigate this issue but instead introduce directional biases of their own [16], and neither generic CoT prompting [13] nor structured step-by-step variants [17] robustly eliminate the residual skew. Zero-shot text-only performance thus remains bottlenecked by systematic prompt skew, motivating a method that targets the underlying bias directly instead of constructing ever-larger prompts. The integration of the acoustic modality represents a natural remediation for textual bias. However, this multimodal expan-sion introduces a secondary, orthogonal gap. Large Audio-Language Models (LALMs) offer a viable path for affective computing [18] and perform well on standard speech emotion recognition [19], but their training distributions lean heav-ily on literal semantic alignment such as automatic speech recognition [20], leaving fine-grained pragmatic anomalies like sarcasm underexplored within these foundation models. Native end-to-end Omni models attempt to unify speech and text processing [21] yet suffer a severe text-dominance bias in their deep layers [22]: under holistic querying, the textual stream overrides the acoustic evidence, and the black-box layers fail to decouple the conflicting intents carried by text and prosody [23]. Such end-to-end fusion therefore ignores fine-grained raw acoustic cues during binary inference [24] and renders the decision an opaque, unexplainable black box [25], [26]. This acoustic blindness is orthogonal to the prompt-induced bias above, since averaging symmetric prompts cannot recover a signal the model never attended to. Although fine-tuning presents an alternative, it remains impractical in this context for three reasons. First, annotated audio-text sarcasm data are scarce and heavily class-imbalanced; thus, adapting billion-parameter architectures risks overfitting. Second, the strongest commercial LLMs are restricted behind inference APIs and cannot be fine-tuned. Finally, models optimised for one language’s sarcastic markers transfer poorly across cul-tures. These constraints call for a structural remedy that keeps the foundation models frozen. It elicits prosodic evidence explicitly and reliably, rather than trusting a single end-to-end verdict. To address these two bottlenecks, we introduce a uni-fied framework, Charge Calibration and Acoustic Rescue for Multimodal Sarcasm Detection ( CHARM ), that decouples pragmatic reasoning into two independent yet complementary components. The first is Bidirectional Charge Calibration (BiCAL ), which targets the over-positivity bias at the purely textual level. Rather than relying on a single prompt, BiCAL deploys symmetric prompt variants along the charge axis intro-duced above, so the native alignment bias cancels during zero-shot inference; an ensemble voting scheme then aggregates these configurations into a stable text-based prediction. The second component is the Acoustic Late-Fusion Res-cue ( ALFR ) model, which re-targets the multimodal Omni architecture toward its inherent processing strengths. ALFR employs one Omni LLM to extract four multi-class paralin-guistic probes and openSMILE [27] to extract fine-grained raw physical acoustic features; a lightweight classification head then integrates these signals with the calibrated text predictions from BiCAL. This late-fusion routing affords high feature-level explainability and rescues weaker language models from single-class text-based collapse. We evaluate the framework extensively on the English MUStARD [28] and Chinese CMMA [29] datasets. The main contributions of this work are summarised as follows:  
+
+> •
+
+Bidirectional Charge Calibration (BiCAL): A zero-shot text-only calibration method that neutralises RLHF-induced positivity bias through symmetric prompt-charge ensembling. BiCAL yields a consistent Macro-F1 lift across all seven LLM backbones on both MUStARD and CMMA benchmarks, delivering Stouffer significance scores of Z = 5 .85 and Z = 19 .29 , respectively. It attains the highest reported zero-shot, text-only Macro-F1 of 0.787 on MUStARD with DeepSeek-V4-Pro, out-performing prior training-free prompting methods, and establishes the first zero-shot LLM benchmark on the CMMA corpus.  
+
+> •
+
+Acoustic Late-Fusion Rescue (ALFR): A lightly super-vised multimodal extension that fuses BiCAL votes, low-level openSMILE prosodic statistics, and frozen audio-language-model perception probes through a shallow classifier head. ALFR delivers up to +0 .382 absolute Macro-F1 rescue on the weakest CMMA backbone, with across-backbone Stouffer meta-analyses of Z = 13 .89 on MUStARD and 34 .64 on CMMA ( p < 10 −43 ).  
+
+> •
+
+Cross-cultural Prosodic Decoupling: We quantify, for the first time on these benchmarks, a 3.3× collapse of low-level prosodic effect sizes between English MUS-tARD and Chinese CMMA. Conversely, high-level per-ception probes strengthen cross-culturally. This perfor-mance pattern is consistent with prior cross-linguistic acoustic studies of sarcastic speech. II. R ELATED WORK 
+
+A. LLMs in Sarcasm Detection 
+
+LLMs demonstrate strong reasoning capabilities, and their application to sarcasm detection has become an active research area. In the text modality, Zhang et al. [13] propose the SarcasmBench benchmark, systematically evaluating various LLMs on pure text sarcasm understanding and highlighting their limitations of current models in complex pragmatic reasoning. In the multimodal domain, Li et al. [30] utilise LLMs to assist the annotation of speech sarcasm data and construct a large-scale multimodal dataset, PodSarc. Mai et al. [8] apply prompt engineering with varying numbers of few-shot examples to probe Llama 3 on textual sarcasm detection, finding that additional exemplars yield only moderate accu-racy gains while non-linearly escalating inference latency and JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+penalising computational efficiency. Tang et al. [14] employ visual instructions and demonstration-retrieval augmentation to recast multimodal sarcasm detection as an end-to-end gen-erative task. Furthermore, they adopt parameter-efficient fine-tuning such as Low-Rank Adaptation (LoRA) to train LLMs directly on visual-text sarcasm data. Despite these advances, two limitations persist. First, few-shot prompting only partially alleviates pragmatic-reasoning bottlenecks: it requires numerous contextual exemplars, caus-ing the input token length to grow linearly and the self-attention complexity to increase quadratically, and it depends on high-quality external annotations. Crucially, it fails to resolve the inherent sycophancy bias of LLMs under zero-shot settings, where uncalibrated alignment triggers systematic positive-class over-prediction. Second, existing multimodal frameworks rely on parameter-efficient fine-tuning such as LoRA for modal alignment, which incurs substantial training time and data costs and is inapplicable to closed-source frontier models served behind inference APIs. The literature therefore lacks a lightweight, plug-and-play architecture that keeps the foundation backbones entirely frozen. 
+
+B. LALMs and Acoustic Integration 
+
+Recent affective computing research actively extends speech processing through LALMs [18]. Frameworks such as Qwen-Audio align continuous audio waveforms with textual tokens. This structural alignment establishes a general semantic un-derstanding capability. Consequently, these architectures de-liver highly competitive results on standard speech emotion recognition. Contemporary speech LLMs, however, tend to prioritise semantic content and overlook the paralinguistic cues that carry affect, yielding shallow emotional interpretations in complex interactions [31]. In parallel, historical literature shows that low-level physical acoustic descriptors remain foundational indicators of emotion [6]; recent studies therefore feed these vocal nuances directly into the prompt, which markedly strengthens LLM-based emotion recognition [32]. Despite this progress, LALM research on joint audio-text sarcasm detection remains scarce. Most multimodal baselines target general sentiment categorisation and fail to capture the implicit pragmatic mismatch that defines sarcasm [6]. End-to-end audio models also face distinctive challenges on complex dialogues: Banerjee et al. [33], for instance, eval-uate frontier generative architectures on multi-party interac-tions and observe severe hallucinations during conversational tracking. Because these models entangle cross-modal fusion within deeply coupled hidden layers, their monolithic black-box design obscures the individual contributions of the text stream and the speech channel. The systematic exploitation of acoustic descriptors thus remains underexplored in the LLM era, particularly the deployment of prosody as an explicit, separable signal for sarcasm detection. III. M ETHODOLOGY 
+
+The CHARM framework is built on two functionally or-thogonal modules that share neither parameters nor a fused multimodal representation space (cf. Figure 1). The B ICAL module operates strictly within the textual domain, neutralising the directional verdict bias of a frozen LLM through a sym-metric ensemble of charge-typed prompts. The ALFR module is invoked only when textual evidence saturates. This late-fusion layer fuses the resulting calibrated vote with a compact acoustic feature vector through a shallow per-LLM classifier. 
+
+A. Problem Formulation 
+
+We formalise sarcasm detection as a binary classification problem. Let U denote the space of textual utterances. Let 
+
+C = Uk represent the space of length-bounded dialogue contexts. Let A denote the space of speech-audio waveforms. A multimodal sample is defined as a tuple 
+
+x = ( u, c, a ) ∈ X = U × C × (A ∪ { ∅}), (1) where the audio component a may be absent in text-only settings. This configuration is denoted by the null symbol 
+
+∅. The target y ∈ Y = {0, 1} represents the ground-truth pragmatic label. A value of y = 1 indicates a sarcastic instance. The objective is to construct a decision function that predicts y from x.
+
+B. Framework Overview 
+
+The CHARM framework consists of two complementary modules. These components share neither parameters nor a fused representation space (cf. Figure 1). The system operates in one of two modes depending on the available modality profile: 
+
+fθ (x) = 
+
+(
+
+⊮ v > 7  Stage 1 (BiCAL, text-only) 
+
+M xjoint 
+
+ Stage 2 (BiCAL + ALFR, multimodal). (2) In Stage 1, the text-only BiCAL module (§III-C) maps the linguistic input to a calibrated vote count. This operation yields 
+
+v ∈ { 0, . . . , 15 }. The framework thresholds this value directly to generate a prediction. In Stage 2, the ALFR module (§III-D) assembles a 27-dimensional heterogeneous feature vector xjoint . The pipeline routes this vector through a shallow classifier M. All foun-dation backbones, prosody extractors, and perceptual probes remain frozen throughout execution. Only the classifier layer 
+
+M consumes task labels. This process occurs exclusively through cross-validation folds. Consequently, CHARM oper-ates as a zero-shot end-to-end system in Stage 1 and a lightly supervised framework in Stage 2. This design positions the method cleanly between purely zero-shot prompting and fully fine-tuned systems. 
+
+C. Bidirectional Charge Calibration (BiCAL) 
+
+We introduce Bidirectional Charge Calibration (BiCAL) to neutralise prompt-induced behavioural skews by mapping textual inputs to a calibrated discrete voting profile, without resorting to sequential reasoning chains. Let C denote a set of five textual charge templates that balance stance-forcing instructions across symmetric pragmatic poles; Figure 2 gives their exact typographic layout and lexical boundaries. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4Input
+
+Text
+
+> utterance
+> context
+
+Audio                                
+
+> waveform
+> ModeA:textonlyBiCAL
+> vote-levelconfidence
+> BiCALchargeaxis
+> 5symmetricprompttemplates
+> FrozenLLMReasoning
+> 15 votes
+> (one per charge × seed)
+> stochasticdecoding(T=0.5)
+> Voteaggregation
+> Symmetricbiascancellation
+> Sum15cell-votes→score0–15
+> ModeB:MultimodalALFR
+> Low-levelphysicalprosody
+> Speaker-normalised openSMILE features
+> High-levelcognitiveprobes
+> Omnimulti-classperceptionprobes
+
+Joint feature vector                              
+
+> Explainable27Drepresentation
+> 1Dtextvote6D prosody 20Dprobes
+> ALFRfusionhead
+> Lightweightclassifier
+> Multimodaloutput
+> Lightsupervisedprediction
+> +2
+> +1
+> 0
+> −1
+> −2
+> F0meanF0varLoudness
+> SpectralfluxHNRTempo
+> P1Intensity(4)
+> P2Vocalstyle(8)
+> P3Tone–textmatch(3)
+> P4Expressiveness(5)
+> Text-only output
+> Zero-shot prediction
+
+Fig. 1. Architecture of the CHARM framework. Mode A (text-only B ICAL): Five symmetric charge templates span from −2 to +2 . These configurations elicit binary sarcasm judgements from a frozen LLM via stochastic decoding ( T =0 .5). Aggregating predictions across three random seeds yields fifteen cell-level votes. This symmetric layout cancels prior-induced token bias. The pipeline outputs a calibrated pragmatic confidence score within [0 , 15] . Mode B (acoustic late-fusion rescue, ALFR): The framework concatenates the calibrated text vote with multimodal acoustic descriptors. The combined input incorporates six low-level openSMILE z-features and twenty high-level Omni perception probes to construct 27 total dimensions. An optimal shallow classifier head resolves the cross-lingual acoustic gap. This integration operates cleanly without parametric weight updates or back-propagation into either foundation backbone. 
+
+Mathematical Rationale of Bias Cancellation: We provide a theoretical justification for this layout. Let L(u, c, p ) denote the latent predictive log odds emitted by the backbone under a template p ∈ P for a text tuple. We formalise this conditional log odds function as 
+
+L(u, c, p ) = ln P (ˆ y = 1 | u, c, p )1 − P (ˆ y = 1 | u, c, p ) . (3) Due to human preference alignment constraints, the predictive distribution suffers from directional bias. We decompose this latent log odds function into two main components 
+
+L(u, c, p ) = f (u, c ) + δ(p), (4) and the variable f (u, c ) represents the unbiased pragmatic target signal. The variable δ(p) represents the additive prompt specific bias. Positive charge templates generate an upward inflation where δ(p+) > 0. Negative charge templates impose a downward compression where δ(p−) < 0.Our framework maps these continuous variables to discrete binary outputs via a monotonic logistic mapping followed by hard thresholding. Since the logistic sigmoid is strictly mono-tonic and centrosymmetric around the origin, our symmetric prompt layout enforces a zero-sum equilibrium over the bias space X
+
+> p∈C
+
+δ(p) = 0 . (5) Because the bias perturbations are distributed symmetrically around the true signal, the downstream majority voting pro-tocol acts as a non-parametric median estimator. This aggre-gation cancels out the opposing directional skews in the final probability domain. This mathematical structure isolates the unbiased target representation without requiring direct logit access during decoding. 
+
+Nested Voting Framework and Decision Paths: Let S
+
+represent a set of three independent random seeds, so that the ensemble spans fifteen template–seed configuration pairs. For each pair of template i and seed j, the language model generates three response samples under stochastic decod-ing, implementing a localised self-consistency protocol. Let 
+
+oi,j,k ∈ { 0, 1} denote the parsed binary output of the k-th response sample. We resolve the local consolidated vote ϕi,j 
+
+through majority thresholding 
+
+ϕi,j = ⊮
+
+" 3X
+
+> k=1
+
+oi,j,k ≥ 2
+
+#
+
+. (6) The binary parameter ϕi,j represents the stable vote for the configuration. We compute the final aggregated text voting profile v via double summation 
+
+v =
+
+> |C|
+
+X
+
+> i=1
+> |S|
+
+X
+
+> j=1
+
+ϕi,j ∈ { 0, 1, . . . , 15 }. (7) This voting profile characterises the overarching discrete prag-matic confidence. The framework applies the Stage 1 decision rule of Eq. 2 when acoustic streams are absent. The nested majority voting protocol effectively smooths local token sensitivity. This non-sequential aggregation strategy avoids heavy analytical scaf-folds. It counteracts the systematic positivity bias documented in prior LLM-based sarcasm evaluations. 
+
+D. Acoustic Late-Fusion Rescue (ALFR) 
+
+We introduce the Acoustic Late-Fusion Rescue module to recover classification performance when text alone saturates. Operating outside the black-box language network bound-ary, the architecture decouples textual voting properties from JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+## Bidirectional Charge Prompting Continuum (BiCAL)      
+
+> +2 +1 0−1−2
+> prompt sarcasm suppress sarcasm
+
+Common User Message Wrapper (shared across all five variants) 
+
+The user message is composed by concatenating, in order:   
+
+> Context:
+> {preceding_utterance_1 }{preceding_utterance_2 }
+> ...
+> {speaker }says: ‘‘ {utterance }’’
+> User Tail (variant-specific, see below)
+
+[expert_role] Positive Charge: +2 
+
+System: You are an expert in identifying sarcasm in spoken dialogue. Reply with a single word. 
+
+User Tail: Is {speaker } being sarcastic? Answer Yes or No. 
+
+[attentive] Positive Charge: +1 
+
+System: You answer questions about short dialogue snippets. Reply with a single word. 
+
+User Tail: Look carefully for sarcasm. Is {speaker } being sarcastic? Answer Yes or No. 
+
+[zero] Neutral Baseline Charge: 0
+
+System: You answer questions about short dialogue snippets. Reply with a single word. 
+
+User Tail: Is {speaker } being sarcastic? Answer Yes or No. 
+
+[skeptic_mild] Negative Charge: −1
+
+System: You answer questions about short dialogue snippets. Reply with a single word. 
+
+User Tail: Read the line carefully before assuming sarcasm. Is {speaker } being sarcastic? Answer Yes or No. 
+
+[skeptic_strong] Negative Charge: −2
+
+System: You answer questions about short dialogue snippets. Most everyday utterances are literal, not sarcastic. Reply with a single word. 
+
+User Tail: Most utterances are literal. Is {speaker } being sarcastic? Answer Yes or No.            
+
+> Fig. 2. The Symmetrical Bidirectional Charge Prompting Continuum within the BiCAL Module. A shared common user message wrapper feeds all five variants; only the System message and User Tail vary along the symmetric charge axis, from strongly prompting sarcasm ( +2 ) to strongly suppressing it ( −2). Colour encodes charge polarity (warm =positive, cool =negative). Dynamic input slots are shown in a typewriter typeface.
+
+structural acoustic observations, which avoids the cross-modal single-class collapses that characterise conventional fusion. The module applies a downstream fusion pattern over an asynchronous feature space. 
+
+Multi-Modal Heterogeneous Feature Representation Space: 
+
+The ALFR module constructs a unified heterogeneous feature space that aggregates the linguistic calibration vote alongside raw prosody, spanning twenty-seven multimodal dimensions in total. The first dimension encapsulates the discrete linguistic confidence metrics from Section III-C. Let v ∈ { 0, 1, . . . , 15 }
+
+represent the scalar text voting profile. The subsequent six dimensions encompass low-level physi-cal acoustic functionals from openSMILE. Let a ∈ R6 denote the raw acoustic vector. These elements represent mean pitch, pitch variation, loudness, spectral flux, harmonic clarity, and tempo. To eliminate speaker variance without utilising labels, we implement a cascading baseline pool. Let s denote the unique speaker identity. Let d represent the specific dialogue context string. We determine the operative reference pool using a hierarchical validation cascade 
+
+Ω = 
+
+
+
+ΩL1 (s, d ) if |ΩL1 (s, d )| ≥ nmin ,
+
+ΩL2 (s) else if |ΩL2 (s)| ≥ nmin ,
+
+ΩL3 otherwise ,
+
+(8) where ΩL1 restricts the context to the same speaker within the dialogue. The secondary pool ΩL2 evaluates cross-dialogue samples for the identical speaker. The final fallback pool JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6
+
+ΩL3 represents the universal baseline. The threshold parameter 
+
+nmin equals two for the MUStARD corpus. This threshold parameter equals five for the CMMA corpus to counteract smaller per-dialogue speaker pools. We compute the nor-malised rolling acoustic vector z ∈ R6 feature-wise 
+
+zm = am − μm
+
+ Ω \ { a}
+
+σm
+
+ Ω \ { a} + ϵ , (9) where μm and σm denote pool mean and standard deviation. The subtraction of the singleton set enforces strict causal fairness during extraction. The scaling parameter ϵ = 10 −8
+
+prevents mathematical division errors. To prevent divergent scores when the within-pool standard deviation approaches zero, all computed metrics are clipped to the strict interval of [−5, +5] .The final twenty dimensions incorporate categorical acoustic perceptions from multi-class omni probes. Rather than forcing binary verdicts which trigger collapses, we leverage fine-grained multi-class profiling. This strategic constraint routes the audio stream into robust multi-class perception tasks. We formalise the precise implementation layout, system directives, and verbatim runtime templates in Figure 3. Let P1 track voice intensity across four discrete options. Let P2 track vocal style across eight discrete choices. Let P3
+
+evaluate tone matching across three choices. Let P4 monitor expressiveness across five numerical ratings. Let o ∈ { 0, 1}20 
+
+denote the concatenated dense binary vector. We map each indicator through a standalone one-hot encoding (denoted as 
+
+oh ) function 
+
+o = oh (P1)T , oh (P2)T , oh (P3)T , oh (P4)T T . (10) 
+
+Feature Assembly and Classification Routing: We construct the final joint vector by concatenating these heterogeneous input matrices. Let xjoint ∈ R27 denote the integrated feature instance 
+
+xjoint =
+
+
+
+vz
+
+o
+
+ . (11) This concatenation preserves the interpretability of each indi-vidual channel while jointly exposing linguistic and acoustic cues to the classifier. The combined multimodal vector feeds a parameterised shallow meta-learner that optimises the secondary classifi-cation boundary. Let M represent the generalised function mapping this vector to the label space 
+
+ˆy(2) = M xjoint 
+
+ ∈ { 0, 1}. (12) Implemented as either a linearly regularised model or a non-linear boosting ensemble, M accommodates varying target priors across language environments and adaptively re-weights features. This flexibility lets the framework rescue over-firing backbones by downweighting saturated language-model votes in favour of the orthogonal acoustic features. IV. E XPERIMENTAL SETUP 
+
+A. Datasets and Evaluation Profile 
+
+We evaluate our framework on two multimodal sarcasm benchmarks across different linguistic environments. The eval-uation utilises the English MUStARD [28] corpus alongside the Chinese CMMA [29] dataset. We formalise the statistical profiles of these evaluation corpora in Table I.             
+
+> TABLE I STATISTICAL PROFILES OF THE EVALUATION DATASETS
+> Dataset Sample Size Sarcasm Ratio Language
+> MUStARD 690 50.0% English CMMA 3961 11.4% Chinese
+
+MUStARD comprises 690 conversational video clips drawn from popular English-language sitcoms. These series include 
+
+Friends , The Big Bang Theory , The Golden Girls , and Sarcas-maholics Anonymous . Owing to the limited size of MUStARD, the literature lacks a single standardised train–test partition [28], [34], [35]. Since our text-only calibration stage is entirely training-free, we evaluate this phase on the full set of 690 clips. In contrast, the lightly-supervised ALFR stage is assessed via stratified 5-fold cross-validation. CMMA is a large-scale Chinese multi-party conversational benchmark. This corpus aggregates dialogues from popular domestic series such as iPartment , Three Kingdoms , and 
+
+Cooking Class Story . The dataset is severely class-imbalanced, with sarcastic utterances comprising only 11.4% of the cases. We adopt the official test split of CMMA, comprising 3,961 utterances, rather than the substantially larger full corpus. This choice keeps our results directly comparable with the standard evaluation protocol of the benchmark. We enforce a unified partitioning protocol across experi-ments. The standalone text calibration phase processes the full un-split dataset and consumes no downstream task labels. Con-versely, the late-fusion phase runs a stratified cross-validation scheme. The acoustic extractors and multi-class perceptual probes operate strictly within these designated evaluation subsets. 
+
+B. Models and Framework Components 
+
+The experimental framework aggregates foundational lan-guage networks, acoustic functional extractors, and down-stream regularised routing heads. This modular setup evaluates performance across varying parameter scales and architecture designs. 
+
+Linguistic Foundation Backbones: We employ seven LLM backbones to validate text-based performance, which comprise Qwen2.5-32B-Instruct [36], Qwen2.5-7B-Instruct [36], Llama-3.1-8B-Instruct [37], Gemma-2-27B-it [38], Mistral-Small-Instruct-2409 [39], DeepSeek-V4-Pro [40], and GPT-5.4 [41]. All linguistic backbones process input prompts under identical prompting configurations to maintain evaluation parity. 
+
+Acoustic Modality Components: The acoustic processing stream decouples speech signals into complementary physical and perceptual feature spaces. Low-level physical prosody functionals are captured through the openSMILE toolkit [27], JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+## Multi-Class Acoustic Perception Probing Framework 
+
+Omni Probes – Runtime Configuration 
+
+P1 : 4-way P2 : 8-way P3 : 3-way P4 : 5-pt scale 
+
+P1 Emotional Intensity Profile P1 intensity single word, 4-way       
+
+> Runtime Prompt Template:
+> “Listen to this clip. How emotionally intense is the speaker’s voice? Choose ONE: monotone, mild, moderate, strong. Reply with one word.”
+> Options: monotone mild moderate strong
+
+P2 Vocal Style Profiling P2 style single word, 8-way          
+
+> Runtime Prompt Template:
+> “Listen to this clip. Choose the ONE word that best describes the speaker’s vocal style : flat, animated, dramatic, sincere, bored, excited, hostile, friendly. Reply with just that one word.”
+> Options: flat animated dramatic sincere bored excited hostile friendly
+
+P3 Tone–Text Transcript Alignment P3 alignment dynamic, 3-way       
+
+> Dynamic Runtime Function (p3_prompt(utterance) ):
+> “Listen to this clip. The transcript of what is said is: “ {utterance }”. How well does the speaker’s vocal tone match the literal meaning of those words? Choose ONE: matches, mismatched, unclear. Reply with one word.”
+> Options: matches mismatched unclear
+
+P4 Speaker Expressiveness Index P4 expressiveness numeric, 5-pt scale              
+
+> Runtime Prompt Template:
+> “Listen to this clip. Rate the speaker’s vocal expressiveness on a scale of 1 to 5 (1 = very monotone, 5 = highly expressive). Reply with one number.”
+> Options: 12345
+> Fig. 3. Verbatim runtime templates for the four Multi-Class Omni Perception Probes. Each probe isolates the exact prompt template executed in the production script; the title badge reports its output space (number of categorical options or scale points), and admissible answers are listed as chips. Probe P3is a dynamic
+> directive that splices the character-bounded transcript string {utterance }into the listening prompt for cross-modal verification. Key perceptual targets are highlighted in bold ; dynamic input slots are set in a typewriter typeface.
+
+which executes the standardised eGeMAPSv02 configuration pool. High-level categorical acoustic perceptions are extracted using the Qwen2.5-Omni-7B [21] multimodal architecture acting as zero-shot omni probes. The framework isolates these frozen feature extractors to prevent foundational parameter updates during downstream evaluation. 
+
+Lightweight Decision Classifiers: The parameterised deci-sion routing block outside the foundational network bound-ary aggregates a candidate pool of ten classic classification models. This evaluation pool is partitioned into eight indi-vidual estimators and two meta-ensemble architectures. The individual estimators encompass Logistic Regression (LR) [42], Random Forests (RF) [43], Gradient Boosting (GB) [44], and AdaBoost [45]. This group also includes Support Vector Machines (SVM) [46], Multi-Layer Perceptrons (MLP) [47], XGBoost [48], and LightGBM [49]. The meta-ensemble configurations incorporate Stacking protocols (Stacking) [50] and Heterogeneous Soft Voting [51]. The parameter structures of all ten estimators remain fixed to standardised library con-figurations to prevent over-parameterised fitting leakage, and the meta-learners resolve decision boundaries solely within the cross-validation training partitions. We relegate the precise parameter specifications of all ten candidate classifiers to Appendix A. 
+
+C. Implementation Details 
+
+This section formalises the precise operational parameters across our execution pipeline. We consolidate the parameter layout to ensure experimental transparency and full repro-ducibility. 
+
+1) Large Language Model Inference Configuration: The experimental framework establishes a unified sampling profile across all evaluated language networks. We adopt Direct Zero-Shot Prompting (DZS) [52] as the standard reference configuration. This protocol matches the baseline architecture used in recent LLM-based sarcasm evaluation [8]. All subse-quent BiCAL and ALFR improvements are reported directly against this reference. DZS employs a single prompt template executed via greedy decoding by setting do sample to false, JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8
+
+allocating one sample per utterance. All stochastic generation, by contrast, follows a standardised sampling layout: tempera-ture 0.5, top-p 0.95, three response samples per prompt-seed combination, and three replication seeds (42, 43, 44), with final predictions resolved by majority voting. Generation is capped at twelve tokens, and a deterministic parser extracts the binary classification indicator. 
+
+2) Acoustic Feature Extraction Pipelines: The acoustic processing stream executes the dual extraction channels for-malised in Section 3. For the physical channel, the openSMILE software engine extracts the 6-dimensional eGeMAPSv02 baseline functional vector. The hierarchical cascade pool Ω
+
+applies the dataset-specific threshold parameter nmin to cal-culate un-biased z-scores. For the perceptual channel, the frozen Qwen2.5-Omni-7B multimodal network acts as zero-shot probes. The omni engine executes strict greedy decoding to generate one single deterministic response per diagnostic query. Standalone one-hot encoding mapping tables transform these categorical outputs into a 20-dimensional perception vector. 
+
+3) Classifier Optimisation and Layered Supervision: The framework operates under a strictly layered supervision profile to separate representations from routing. The linguistic cali-bration blocks and acoustic extraction modules remain entirely zero-shot. The post-network late fusion layer consumes down-stream task labels exclusively. This regularised learning layer maps the 27-dimensional concatenated multimodal feature vector to the target label space. We configure a standard AdaBoost classifier for the symmetric English MUStARD dataset and deploy a Heterogeneous Soft Voting ensemble for the Chinese CMMA benchmark. The downstream training pipeline runs a five-fold stratified cross-validation sequence tracking five independent random seeds from 42 to 46. All candidate classifiers maintain fixed standard factory parameter settings to avoid optimisation bias. 
+
+4) Statistical Testing Framework: We employ a paired bootstrap resampling protocol to evaluate performance vari-ations reliably. The statistical engine executes 10,000 boot-strap replication cycles, resampling unique sample identifiers instead of cross-validation folds. The evaluation computes the Stouffer Z meta-analysis metric [53] across the seven LLM backbones, with the Bonferroni correction [54] applied to handle family-wise error rates. All implementation components are fully documented to support reproducibility. The random seeds, foundational model identifiers, and dataset partitions are public. The complete pro-duction source code repository is hosted online 1. We compile comprehensive model cards in Appendix E. V. M AIN RESULTS AND PERFORMANCE ANALYSIS 
+
+This section evaluates CHARM across diverse linguistic environments. We first assess the standalone performance of the linguistic BiCAL layer under zero-shot textual constraints, followed by a systematic evaluation of the ALFR module against direct zero-shot baselines. Table II reports the con-solidated results across two datasets. 
+
+> 1https://github.com/glam-imperial/charm
+
+A. Stage 1 Evaluation: Standalone Linguistic Calibration Per-formance 
+
+The first stage assesses the standalone bidirectional charge-calibration layer under zero-shot textual constraints. Table II shows a uniform positive progression: BiCAL produces pos-itive Macro-F1 increments for all seven backbones on both datasets, consistently across structurally distinct model fami-lies and parameter scales. Consistent with a calibration mecha-nism, the size of each gain tracks the backbone’s intrinsic over-prediction. The heavily over-firing GPT-5.4 backbone, which exhibits a positive class prediction rate of 76.7%, benefits most. Its Macro-F1 score improves by an absolute margin of 0.076 on MUStARD ( 0.654 → 0.730 ). Conversely, better-aligned architectures improve more modestly. The Macro-F1 score of Gemma-2-27B-it increases by 0.023 ( 0.447 → 0.470 ), while DeepSeek-V4-Pro yields a Macro-F1 gain of 0.045 (0.742 → 0.787 ). In absolute terms, the calibrated DeepSeek-V4-Pro sets the overall zero-shot text-only peak at a Macro-F1 score of 0.787, followed by Mistral-Small-Instruct-2409 at 0.736. This calibration trend generalises across highly divergent linguistic environments. Applying the English templates ver-batim to the CMMA keeps the Macro-F1 gains consistently positive across all seven backbones, ranging from +0 .010 
+
+for Qwen2.5-7B ( 0.269 → 0.279 ) to +0 .059 for GPT-5.4 (0.545 → 0.604 ). This stable cross-lingual transferability validates the bidirectional formulation, demonstrating that the charge structure neutralises the instruction-following bias regardless of the underlying tokenisation language. We verify these gains with a paired bootstrap resampling protocol of 10,000 cycles, deriving per-backbone z-scores (observed delta over standard error) across all seven back-bones. A cumulative Stouffer meta-analysis of these z-scores proves highly significant. The analysis yields Z = 5 .85 with 
+
+p = 2 .4 × 10 −9 on MUStARD, which rises to Z = 19 .29 with 
+
+p < 10 −50 on CMMA. The more than threefold larger Z on CMMA reflects the substantially wider calibration headroom available under extreme positive-class imbalance. The joint behaviour of Macro-F1 and Accuracy is also informative. On the balanced MUStARD, the two metrics stay tightly coupled within a 0.005 interval for every model family, indicating that the lift reflects genuine probability calibration rather than an exploitation of distributional skew. On the highly imbalanced CMMA benchmark, the larger gap between Macro-F1 and Accuracy is a natural consequence of the 11.4% sparse positive prior and does not compromise the validity of the calibrated Macro-F1 progression. The text-only calibration gain is structurally bounded be-tween +0 .010 and +0 .076 Macro-F1 across all backbones, with the largest lift accruing to the most heavily over-predicting model and the smallest to the already-calibrated ones. This bounded, over-prediction-tracking lift matches our design intent, confirming that BiCAL acts purely as a statisti-cal calibration layer that removes RLHF sycophancy, without adding external features or altering the frozen model’s reason-ing capacity. The capability gap between strong and weak text models therefore persists in Stage 1. On CMMA, the Macro-JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9                 
+
+> TABLE II STAGE -WISE PERFORMANCE PROGRESSION OF CHARM ON MUS TARD AND CMMA BENCHMARKS REPORTED USING MACRO -F1 AND ACC .METRICS ALONGSIDE THE OPTIMAL LATE -FUSION ROUTING HEAD . DZS DENOTES DIRECT ZERO -SHOT PROMPTING WITH GREEDY DECODING . T HIS CONFIGURATION SERVES AS THE REFERENCE BASELINE FROM PRIOR LLM-BASED SARCASM EVALUATIONS [8], [13]. B ICAL APPLIES BIDIRECTIONAL LINGUISTIC CALIBRATION . ALFR DENOTES THE PROPOSED ACOUSTIC LATE -FUSION RESCUE MODULE . B EST PERFORMANCE WITHIN EACH BACKBONE FAMILY IS HIGHLIGHTED IN BOLD . S TOUFFER ZSTATISTIC AGGREGATES PER -MODEL PAIRED -BOOTSTRAP Z -SCORES ACROSS ALL SEVEN BACKBONES .
+
+DZS +BiCAL +ALFR LLM Backbone Family Macro-F1 Acc. Macro-F1 Acc. Macro-F1 Acc. Best CLF 
+
+MUStARD 
+
+Mistral-Small-Instruct-2409 0.718 0.723 0.736 0.736 0.729 0.730 LR Qwen2.5-32B-Instruct 0.699 0.700 0.713 0.713 0.729 0.730 LR Gemma-2-27B-it 0.447 0.549 0.470 0.562 0.721 0.725 AdaBoost Qwen2.5-7B 0.409 0.519 0.420 0.523 0.635 0.636 RF Llama-3.1-8B-Instruct 0.401 0.529 0.411 0.533 0.635 0.641 LGBM DeepSeek-V4-Pro 0.742 0.743 0.787 0.787 0.784 0.785 Soft Voting GPT-5.4 0.654 0.678 0.730 0.736 0.787 0.787 Stacking Stouffer Z (DZS → +BiCAL) Z = 5 .85 , p = 2 .4 × 10 −9
+
+Stouffer Z (+BiCAL → +ALFR) Z = 13 .89 , p < 10 −43 
+
+CMMA 
+
+Mistral-Small-Instruct-2409 0.527 0.637 0.572 0.723 0.591 0.823 Soft Voting Qwen2.5-32B-Instruct 0.577 0.740 0.599 0.796 0.594 0.824 Soft Voting Gemma-2-27B-it 0.273 0.275 0.286 0.290 0.607 0.840 Soft Voting Qwen2.5-7B 0.269 0.271 0.279 0.282 0.586 0.836 Soft Voting Llama-3.1-8B-Instruct 0.144 0.149 0.193 0.194 0.575 0.831 Soft Voting DeepSeek-V4-Pro 0.542 0.664 0.592 0.758 0.619 0.829 Soft Voting GPT-5.4 0.545 0.647 0.604 0.768 0.627 0.819 Soft Voting Stouffer Z (DZS → +BiCAL) Z = 19 .29 , p < 10 −50 
+
+Stouffer Z (+BiCAL → +ALFR) Z = 34 .64 , p < 10 −50 
+
+F1 gap between Llama-3.1-8B-Instruct at 0.193 and GPT-5.4 at 0.604 remains a wide 0.411. This closely mirrors the 0.401 gap the two models exhibit in the uncalibrated DZS phase, where they score 0.144 and 0.545, respectively. Bidirectional calibration is thus necessary but insufficient for text-dominated classifiers. Small models lack the zero-shot reasoning capacity to resolve implicit cross-cultural irony from text alone, and this textual ceiling motivates the Stage 2 acoustic late-fusion rescue. 
+
+B. Stage 2 Evaluation: Multi-Modal Late-Fusion Rescue 
+
+Integrating acoustic features produces a pronounced di-chotomy across backbones, proving that the late-fusion module acts as a rescue mechanism rather than a generic retrofit. On MUStARD, Gemma-2-27B-it achieves an absolute Macro-F1 improvement of 0.251 to reach 0.721. Meanwhile, Llama-3.1-8B-Instruct and Qwen2.5-7B exhibit Macro-F1 increases of 0.224 and 0.215 relative to their respective Stage 1 scores. The effect intensifies on the imbalanced CMMA benchmark. Here, Llama-3.1-8B-Instruct records a peak single-model absolute Macro-F1 increase of 0.382 to reach a score of 0.575, with Gemma-2-27B-it and Qwen2.5-7B following with gains of 0.321 and 0.307, respectively. Mistral-Small-Instruct-2409 and Qwen2.5-32B-Instruct are already saturated, varying by under 0.020 in Macro-F1 score across either environment. DeepSeek-V4-Pro is likewise sat-urated on MUStARD and remains essentially unchanged. Conversely, the mildly over-predicting GPT-5.4 still retains acoustic headroom and is rescued by an absolute Macro-F1 increment of 0.057 to reach a score of 0.787 on MUStARD. On the imbalanced CMMA benchmark, both GPT-5.4 and DeepSeek-V4-Pro achieve a modest absolute increase of 0.023 in Macro-F1 score. A cumulative Stouffer meta-analysis across all seven backbones confirms the significance of this rescue phase. The analysis yields Z = 13 .89 with p < 10 −43 on MUStARD, scaling to Z = 34 .64 with p < 10 −50 on CMMA. The larger Chinese dataset reflects the expanded rescue space available for heavily collapsed baselines. This multimodal progression also reveals a convergence effect across model families. Computing the Pearson correla-tion between the zero-shot text baseline and the total Macro-F1 increment delivered by the full pipeline across all seven backbones uncovers a strong linear inversion: r = −0.946 
+
+on MUStARD and r = −0.996 on CMMA. Backbones with the weakest text baselines receive the largest acoustic rescue, while already-strong backbones move little; GPT-5.4 retains a positive increment owing to its residual over-prediction, whereas the saturated DeepSeek-V4-Pro sits near the zero-increment end of the line. The optimal fusion routing head is data-driven and varies with the dataset’s class distribution. On the MUStARD dataset, JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+the choice is heterogeneous and selected per backbone: Mistral-Small-Instruct-2409 and Qwen2.5-32B-Instruct peak with standard Logistic Regression, whereas the remaining five backbones favour non-linear ensemble heads, such as AdaBoost, Random Forests, and LightGBM for Gemma-2-27B-it, Qwen2.5-7B, and Llama-3.1-8B, and Stacking and soft voting for GPT-5.4 and DeepSeek-V4-Pro, respectively. The diversity of optimal heads underscores that the routing is learnt rather than fixed. On the imbalanced CMMA corpus, the fusion layer con-verges onto a homogeneous profile. The heterogeneous soft voting ensemble dominates across all text networks, outper-forming the second-best standalone Random Forest by a con-sistent margin of 0.017 to 0.045 in Macro-F1 score. Standard boosting architectures collapse into the majority negative class under severe sparsity; the standalone AdaBoost model, for instance, matches the dummy baseline exactly. It scores a high Accuracy of 0.886 with a degraded Macro-F1 of 0.470. Soft voting overcomes this by integrating three distinct inductive biases together with balanced class penalisation. We compile the complete optimisation sweeps for all ten candidate fusion classifiers across backbones in Appendix B. We note the contrasting trajectories of Accuracy and Macro-F1 on the imbalanced Chinese benchmark. The framework’s Accuracy across the seven backbones stays between 0.819 and 0.840, slightly below the always-negative majority baseline of 0.886. This is a deliberate trade-off rather than a regression, as the balanced class weighting penalises majority-class errors to maximise minority sarcastic recall. A naive majority-class baseline reaches an Accuracy score of 0.886 but a stag-nant Macro-F1 score of only 0.470. The late-fusion rescue breaks this passive saturation, delivering absolute Macro-F1 elevations of 0.105 to 0.157 over that baseline across all seven backbones. Trading marginal majority-class accuracy for robust sensitivity to rare sarcastic instances aligns with established practice for skewed distributions, where Macro-F1 is the primary efficacy metric. 
+
+C. Comparison with Prior Work 
+
+Table III situates CHARM among prior sarcasm detection methods. This comparison is necessarily heterogeneous, since the listed systems differ in supervision regime, modality, and evaluation protocol; the table therefore offers broader context rather than a like-for-like leaderboard, and we evaluate CHARM primarily against methods that share its validation setting. On MUStARD, CHARM-BiCAL attains the highest Macro-F1 score of 0.787 among training-free approaches. This performance surpasses the metacognitive prompting of Lee et al. [58], which yields a Macro-F1 score of 0.777, as well as the step-by-step reasoning of Yao et al. [17], which achieves a Macro-F1 score of 0.699. It achieves this through a lightweight bidirectional calibration rather than an elaborate multi-step reasoning scaffold and without any fine-tuning. The resulting score is competitive even with fully supervised multimodal systems that additionally exploit the visual stream [55], [56], despite relying on text alone.                                                                                        
+
+> TABLE III COMPARISON WITH PRIOR SARCASM -DETECTION METHODS ON
+> MUS TARD AND CMMA. M ODALITY : T( EXT ), A( UDIO ), V( IDEO ). TRAINING :Sup. (SUPERVISED ON THE BENCHMARK ), SFT (LLM SUPERVISED FINE -TUNING ), Train-free (ZERO -SHOT PROMPTING ),
+> Light-sup. (FROZEN BACKBONES WITH A SHALLOW TRAINED HEAD ). “–”
+> DENOTES A METRIC NOT REPORTED BY THE SOURCE . O UR CMMA
+> SCORES USE THE ENGLISH -PROMPT SETTING ON THE AUDIO -AVAILABLE SUBSET ; MUS TARD FOLLOWS THE ORIGINAL SPLIT . T HE BEST RESULT AMONG TRAINING -FREE METHODS IS IN BOLD .
+> Method Modality Training Macro-F1 Acc F1
+> MUStARD
+> Sukhavasi et al. [55] T, A, V Sup. ––0.730 Xue et al. [56] T, A, V Sup. –0.769 0.761 Buaroiu et al. [57] TSFT ––0.770 Yao et al. [17] TTrain-free 0.699 0.707 –Lee et al. [58] TTrain-free 0.777 0.794 –Zheng et al. [59] TTrain-free 0.762 0.762 –Xiong et al. [60] TTrain-free ––0.366
+> CHARM-BiCAL (Ours) TTrain-free 0.787 0.787 –
+> CHARM-ALFR (Ours) T, A Light-sup. 0.784 0.785 –
+> CMMA
+> Zhang et al. [29] TSup. 0.541 ––Zhang et al. [29] T, A Sup. 0.532 ––Zhang et al. [29] T, A, V Sup. 0.752 ––
+> CHARM-BiCAL (Ours) TTrain-free 0.604 0.768 –
+> CHARM-ALFR (Ours) T, A Light-sup. 0.627 0.819 –
+
+On CMMA, no prior work evaluates zero-shot LLMs, so we compare against the supervised baselines of the original benchmark [29], which require task-specific training. In this scenario, CHARM-BiCAL achieves a Macro-F1 score of 0.604, which already exceeds the supervised text-only baseline score of 0.541 and the supervised audio-text baseline score of 0.532. Furthermore, CHARM+ALFR widens this margin to reach a peak Macro-F1 score of 0.627. Tellingly, the fully supervised baseline derives no benefit from acoustics. Its audio-text score of 0.532 falls below its text-only performance score of 0.541. In contrast, ALFR secures a consistent gain from 0.604 to 0.627, directly cor-roborating our late-fusion design. Only the fully supervised tri-modal configuration of Zhang et al. [29] remains ahead, achieving a superior Macro-F1 score of 0.752 by exploiting visual cues. Visual streams introduce rich pragmatic features, such as facial micro-expressions and body postures, which heavily facilitate supervised intent recognition. However, pro-cessing full-scale video tracking significantly escalates compu-tational complexity and parametric overhead. We intentionally exclude the visual modality to focus exclusively on resolv-ing the linguistic-prosodic interface within frozen foundation models, allowing CHARM to maintain a streamlined and lightweight architecture while bypassing the spatial noise inherent to video tracking pipelines. These outcomes require two distinct caveats. Our CMMA evaluation uses the audio-available subset under the English-prompt setting. Additionally, MUStARD scores reported across prior literature vary based on the specific data split and corpus variant. 
+
+D. Ablation Studies 
+
+Three targeted ablation experiments substantiate the core structural choices of CHARM. We first demonstrate that the JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 
+
+performance gain of BiCAL stems from charge polarity rather than from prompt diversity. The evaluation then confirms that the three distinct feature blocks of ALFR are individually insufficient yet jointly necessary. Finally, we characterise the cost-accuracy frontier of the charge ensemble to identify two valid operating points that balance inference overhead against stochastic variance protection. 
+
+1) Random Paraphrase Control: We isolate whether the zero-shot textual lift of BiCAL over the direct baseline derives from charge polarity or from generic prompt and sampling diversity. Under a fixed sampling profile matching our frame-work parameters, we replace the five charged templates with five neutral paraphrases compiled in Appendix C. This control baseline replicates the fifteen validation votes using three random seeds on the Qwen2.5-32B-Instruct backbone. 
+
+TABLE IV LINGUISTIC CONFIGURATION ABLATION ON THE MUS TARD  
+
+> BENCHMARK USING
+
+QWEN 2.5-32B-I NSTRUCT .
+
+Linguistic Configuration Profile Vote Count Macro-F1 DZS Baseline 1 0.699 E maj15-RandPara Control 15 0.692 E maj15-BiCAL Framework 15 0.713 
+
+As documented in Table IV, the neutral paraphrase control yields a Macro-F1 score of 0.692. This performance remains statistically indistinguishable from the single-prompt baseline score of 0.699. The random paraphrase control falls 0.021 below the BiCAL framework score of 0.713. Paired bootstrap resampling confirms this performance deficit is statistically significant at p < 0.05 . The observed zero-shot textual lift is therefore directly attributable to the systematic polarity of our charge configuration rather than generic prompt variety or sampling smoothing. 
+
+2) ALFR Feature Component Ablation: We evaluate the separate contributions of the three multimodal feature blocks within the ALFR routing layer. The evaluation isolates perfor-mance across seven additive feature subsets using the optimal downstream classifier heads evaluated across five validation seeds. 
+
+TABLE V ABLATION OF THE TWENTY -SEVEN MULTIMODAL FEATURE COMPONENTS ACROSS BENCHMARKS USING QWEN 2.5-32B-I NSTRUCT . E ACH SUBSET IS EVALUATED THROUGH THE OPTIMAL LATE -FUSION HEAD . F OR CMMA,  
+
+> THIS ABLATION USES THE
+
+CHINESE -PROMPT CONDITION , UNDER WHICH THE ZERO -SHOT BASELINE IS MORE SEVERELY MISCALIBRATED , LEAVING MORE HEADROOM TO PROBE THE CALIBRATION EFFECT .                          
+
+> Configuration Subset MUStARD Macro-F1 CMMA Macro-F1 Text (Vote) 0.713 0.606 Acoustic 0.598 0.472 Perceptual 0.569 0.542 Text +Acoustic 0.722 0.615 Text +Perceptual 0.718 0.618 Acoustic +Perceptual 0.619 0.547 Text +Acoustic +Perceptual (ALFR) 0.729 0.622
+
+The empirical patterns recorded in Table V demonstrate that each feature block is individually insufficient yet highly addi-tive when combined. Every standalone acoustic or perceptual block remains bounded below a strict Macro-F1 ceiling of 0.610 across both benchmarks. Conversely, the full integration vector achieves peak Macro-F1 scores of 0.729 on MUStARD and 0.622 on CMMA, exceeding any pairwise subset variant. The performance asymmetry between linguistic environments is informative. On the MUStARD corpus, the combination of text and low-level prosody edges out the perception-probe subset by an absolute margin of 0.004 in Macro-F1 score, suggesting high diagnostic value for raw acoustics in English sitcom speech. On the CMMA, this ordering reverses, as the perception-probe combination outperforms the prosody variant by an absolute margin of 0.003 in Macro-F1 score, highlighting a cross-cultural decoupling effect. 
+
+3) Charge Ensemble Size and Cost Analysis: We charac-terise the cost-accuracy frontier of the bidirectional charge en-semble on the Qwen2.5-32B-Instruct architecture. The ensem-ble voter cap N is systematically varied across odd integers from 1 to 15 to prevent voting deadlocks. 
+
+TABLE VI COST AND ACCURACY FRONTIER SWEEPS ACROSS DIFFERENT CHARGE ENSEMBLE SCALES USING QWEN 2.5-32B-I NSTRUCT . B EST RESULT PER BENCHMARK IN BOLD . † DENOTES A CONFIGURATION STATISTICALLY INDISTINGUISHABLE FROM THE E MAJ 15 REFERENCE ON both  
+
+> BENCHMARKS
+
+(TWO -SIDED PAIRED BOOTSTRAP , p = 0 .26 ON MUS TARD  
+
+> AND
+
+p = 0 .74 ON CMMA); THE NARROWER THREE -CHARGE E MAJ 9 
+
+> SUBSET FALLS SIGNIFICANTLY BELOW
+
+E MAJ 15 ( p = 0 .002 AND 
+
+p < 0.001 ). F OR CMMA, THIS ABLATION AGAIN USES THE 
+
+CHINESE -PROMPT CONDITION (CF . T ABLE V).                 
+
+> Config Operational Setup Profile MUStARD Macro-F1 CMMA Macro-F1 Baseline DZS 1 Charge with Greedy Decoding 0.699 0.497 E maj3 1 Charge tracked across 3 Seeds 0.701 0.499 E maj5 5 Charges tracked across 1 Seed 0.709 †0.598 †
+> E maj9 3 Charges tracked across 3 Seeds 0.699 0.527 E maj15 5 Charges tracked across 3 Seeds 0.713 0.598
+
+The empirical sweeps in Table VI reveal three key in-sights. First, restricting the ensemble to a narrower three-charge subset (E maj9) significantly underperforms the full-axis E maj15 reference on both benchmarks. On MUStARD, the Macro-F1 score drops from 0.713 to 0.699, yielding a two-sided paired bootstrap significance level of p = 0 .002 . On CMMA, the Macro-F1 score decreases from 0.598 to 0.527 at p < 0.001 . This trend demonstrates that charge breadth covering the full symmetric axis drives the calibration gain rather than mere seed-level sample replication. Second, the compact E maj5 variant tracks five charges across a single seed. This configuration is statistically indistin-guishable from E maj15 regarding accuracy. The performance difference is minimal on MUStARD at an absolute Macro-F1 discrepancy of -0.004 with p = 0 .260 . The variation is entirely negligible on CMMA with p = 0 .740 . Crucially, the E maj5 setup requires only one-third of the baseline inference budget. Third, these two equivalent-accuracy operating points serve distinct deployment purposes. We retain E maj15 as the standard reference configuration throughout this paper. Its three-seed averaging minimises single-run stochastic variance. This variance reduction serves as a prerequisite for the seed-level bootstrap and Stouffer meta-analyses underpinning our significance claims. Conversely, E maj5 is the recommended JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 
+
+configuration for cost-bound deployments where formal sta-tistical inference is not required. 
+
+E. Cross-cultural Analysis 
+
+This section evaluates the cross-cultural generalisability of CHARM beyond English language environments through acoustic feature decoupling and prompt-language transferabil-ity tests. 
+
+1) Acoustic Feature Decoupling: We evaluate the cross-cultural transferability of the acoustic features by computing the effect sizes via Cohen d metrics and percentage point changes across the MUStARD and CMMA environments. This analysis contrasts low-level prosodic functionals against high-level auditory language model perception probes. 
+
+TABLE VII CROSS -CULTURAL EFFECT SIZES OF LOW -LEVEL OPEN SMILE PROSODIC FEATURES .                              
+
+> Prosodic Feature F0 MUStARD Cohen dCMMA Cohen dCross-cultural Shift f0 mean -0.180 -0.030 6×Attenuation f0 var +0.130 +0.040 3×Attenuation loudness +0.340 -0.090 Direction Inversion spectralFlux +0.260 -0.100 Direction Inversion tempo -0.150 +0.020 Vector Decay HNR 0.000 +0.040 Statistically Flat Average absolute |d|0.177 0.053 3.3 ×Magnitude Drop
+
+TABLE VIII CROSS -CULTURAL VARIATION OF HIGH -LEVEL OMNI PERCEPTION PROBE OUTPUTS .                 
+
+> Omni Perception Probe Head MUStARD ∆pp CMMA ∆pp Cross-cultural Fate P3 Tone-text Mismatch +8.100 +22.300 2.75 ×Amplification P2 Hostile Style Probe +6.200 +18.300 2.95 ×Amplification P2 Sincere Style Probe -12.200 -12.300 Cross-lingual Parity P1 Intensity Strong Probe -3.900 +3.800 Inverted Informative
+
+The data in Tables VII and VIII reveal a clear architectural decoupling. Low-level physical prosody collapses sharply in the transition from English to Chinese speech. The average ab-solute effect size drops by 3.3×, and loudness and spectral flux even invert direction. High-level cognitive features captured by the auditory probes, by contrast, remain robust and undergo substantial cross-cultural amplification. In particular, the tone-text mismatch probe P3 shifts from 8.1 to 22.3 percentage points. These patterns converge with established findings in psy-cholinguistics. Cheang and Pell [61] demonstrate that English sarcasm utilises a lowered mean F0 with restricted variability and elevated spectral noise. Conversely, Cantonese sarcasm displays an elevated mean F0 within a narrow range. They fur-ther report that reliable cross-language sarcasm identification depends on native experience. Li et al. [62] characterise Man-darin sarcasm as voice-quality-driven and marked primarily by creakier phonation, a profile that contrasts with the spectrally noisy English case. Prosodic statistics fitted on English speech therefore cannot transfer cleanly to Mandarin corpora. The cross-cultural amplification of probe P3 aligns with Echoic Mention Theory [63], under which irony marks a cognitive contrast between an echoed expectation and the actual utterance. In tonal languages, lexical tones occupy the 
+
+F0 channel for semantic identity, which restricts the bandwidth available for affective prosodic exaggeration. We hypothesise that the pragmatic contrast then projects preferentially onto the lexical-prosodic interface, rather than relying on pitch contour alone. This specific interface matches the precise signal targeted by the high-level probe P3. The dual-stream integration of ALFR successfully captures this language-invariant cognitive anchor. 
+
+2) Prompt-Language Transferability: We evaluate the cross-lingual robustness of our zero-shot prompt design by testing English calibration templates verbatim on the Chinese CMMA corpus against localised translations. 
+
+TABLE IX PROMPT -LANGUAGE TRANSFERABILITY EVALUATIONS ON THE CMMA  
+
+> CORPUS REPORTING
+
+MACRO -F1. B EST PERFORMANCE WITHIN EACH BACKBONE FAMILY ACROSS ALL PROMPT SETTINGS IS HIGHLIGHTED IN BOLD .                                                 
+
+> English Prompt Templates Chinese Prompt Templates LLM Backbone Family DZS +BiCAL +ALFR DZS +BiCAL +ALFR Mistral-Small-Instruct-2409 0.527 0.572 0.591 0.468 0.508 0.606
+> Qwen2.5-32B-Instruct 0.577 0.599 0.594 0.497 0.598 0.622
+> Gemma-2-27B-it 0.273 0.286 0.607 0.140 0.187 0.601 Qwen2.5-7B 0.269 0.279 0.586 0.280 0.298 0.560 Llama-3.1-8B-Instruct 0.144 0.193 0.575 0.115 0.138 0.541 DeepSeek-V4-Pro 0.542 0.592 0.619 0.477 0.551 0.603 GPT-5.4 0.545 0.604 0.627 0.362 0.504 0.621
+
+We examine whether the BiCAL templates require ex-plicit translation on the Chinese CMMA corpus. Holding the execution methodology fixed, replacing the five English templates with Chinese counterparts produces near-identical Stage 1 results on some backbones. For instance, Qwen2.5-32B-Instruct shifts by a marginal 0.001 in Macro-F1 score. Conversely, this modification triggers a sharp collapse on other architectures, where the performance drop tracks the Chinese-language alignment of the model rather than its raw parameter capacity. Under Chinese prompting, the Macro-F1 score of Gemma-2-27B-it declines by an absolute margin of 0.099 ( 0.286 → 0.187 ). The same degradation appears even at the frontier. The Macro-F1 score of GPT-5.4 falls by 0.100 (0.604 → 0.504 ), whereas the Chinese-developed DeepSeek-V4-Pro is markedly more robust, experiencing an absolute decrease of only 0.041 ( 0.592 → 0.551 ). Native Chinese sarcasm queries thus trigger a more severe positivity bias on backbones weakly aligned to Chinese, irrespective of scale. The Stage 2 ALFR rescue narrows this prompt-language gap substantially across all seven backbones. The Macro-F1 score of Gemma-2-27B-it converges to within 0.006 between the two prompt conditions, while Llama-3.1-8B-Instruct converges to within 0.034 in Macro-F1 score. The two API backbones exhibit a similar convergence pattern. The initial 0.100 col-lapse of GPT-5.4 shrinks to a residual gap of 0.006 in Macro-F1 score ( 0.627 → 0.621 ), while the cross-prompt gap for DeepSeek-V4-Pro is restricted to 0.016 ( 0.619 → 0.603 ). ALFR consistently reduces prompt-language sensitivity but does not fully eliminate it, leaving a small residual gap of JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 0.0     
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Feature-block importance
+> 0.16
+> 0.63
+> 0.21
+> 0.12
+> 0.64
+> 0.23
+> 0.29
+> 0.54
+> 0.17
+> 0.35
+> 0.48
+> 0.17
+> 0.40
+> 0.46
+> 0.15
+> 0.46
+> 0.41
+> 0.13
+> 0.46
+> 0.40
+> 0.14
+> (a) MUStARD
+> Llama-3.1-8B
+> Qwen2.5-7B
+> Gemma-2-27B
+> Qwen2.5-32B
+> Mistral-Small-22B
+> DeepSeek-V4-Pro
+> GPT-5-4
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Feature-block importance
+> 0.20
+> 0.45
+> 0.35
+> 0.23
+> 0.43
+> 0.34
+> 0.30
+> 0.39
+> 0.31
+> 0.30
+> 0.39
+> 0.31
+> 0.28
+> 0.40
+> 0.32
+> 0.37
+> 0.34
+> 0.29
+> 0.41
+> 0.34
+> 0.25
+> (b) CMMA
+> BiCAL vote (1 dim) openSMILE z(6 dims) Omni probes (20 dims)
+
+Fig. 4. Random Forest impurity-based feature importance [43] allocated to the three ALFR feature blocks (BiCAL vote, openSMILE prosodic z, Omni perception probes) per LLM backbone, on (a) MUStARD and (b) CMMA. Importances are summed within each block and normalised to one per LLM. Random Forest is used for cross-backbone consistency only. 
+
+roughly 0.006 to 0.020 in Macro-F1 score. We adopt English templates uniformly in our main evaluations to maintain cross-cultural transferability. The Chinese prompt template for CMMA is available in Appendix D. 
+
+F. Explainability Analysis 
+
+We conduct a post-hoc explainability analysis of the inter-nal routing dynamics of ALFR. Figure 4 presents impurity-based feature importance allocations across LLM backbones, computed with Random Forest [43] for cross-backbone con-sistency. On the English MUStARD dataset, where the horizontal axis orders backbones by baseline textual strength, the BiCAL vote importance rises steadily as the text backbone strengthens, from 0.160 on Llama-3.1-8B-Instruct to 0.400 on Mistral-Small-Instruct-2409, while the low-level openSMILE z im-portance contracts from 0.630 to 0.460. As stronger language models produce more reliable calibration signals, the late-fusion classifier shifts weight onto this calibrated text channel and away from raw prosody functionals. A different allocation profile emerges on the Chinese CMMA benchmark, where the vote importance stays between 0.200 and 0.300 across all architectures while the high-level Omni perception probe block rises sharply, reaching a mean importance of 0.326 on CMMA. This level scales significantly above the 0.186 mean observed on MUStARD. This routing transition represents a 1.75 × amplification. Sec-tion V-E1 quantifies this cross-cultural audio signal asymmetry at the feature level, and the present analysis tracks the same phenomenon at the routing level. Both converge on one mechanism: low-level physical prosody fails to transfer cross-culturally. The late-fusion head compensates by re-weighting toward high-level perceptual probes. This routing behaviour provides the language-invariant cognitive anchor that sustains cross-lingual classification stability. VI. C ONCLUSION 
+
+This paper presented CHARM, a two-stage framework for multimodal sarcasm detection that decouples pragmatic processing into a textual bidirectional calibration layer and an acoustically grounded late-fusion rescue module. Across seven LLM backbones, the calibration layer consistently miti-gated systemic positive-class over-prediction, achieving highly significant Stouffer meta-analysis scores of Z = 5.85 on MUStARD and Z = 19 .29 on CMMA. The acoustic late-fusion module then delivered substantial gains for pragmat-ically compromised small networks, compressing the inter-model performance gap by 2.5× on MUStARD and 7.9× on CMMA across all seven backbones, with cumulative signif-icance of Z = 13 .89 and Z = 34 .64 . Finally, feature-block decompositions exposed a cross-cultural prosodic decoupling phenomenon. Low-level physical prosody collapsed across language environments, whereas high-level audio-language perception probes amplified on Chinese data. This robust perceptual channel provided the language-invariant cognitive anchor needed to sustain stable cross-lingual classification. Several limitations bound the scope of this study. The framework relies on shallow classifier routing heads optimised on validation splits rather than a fully zero-shot pipeline, and its high-level features depend on a single audio foundation model without testing alternative architecture families. Addi-tionally, our late-fusion layer relies on feature concatenation, which may fail to capture complex non-linear interactions across different sarcasm subtypes, such as semantic-prosodic incongruity or purely acoustic stylistic modulations. The cross-cultural validation covers only one English and one Chinese benchmark, omitting other tonal-language families, and the diagnostics operate purely at the behavioural output level without white-box probing of internal hidden states. Finally, although we contextualise CHARM against supervised mul-timodal systems, these comparisons remain indicative rather than strictly head-to-head, since the methods differ in train-ing regime, modality, and evaluation protocol. Future work will integrate the late-fusion features into a unified auxiliary supervised fine-tuning loop, explore advanced cross-modal attention or tensor fusion mechanisms to dynamically model distinct sarcasm sub-phenomena, and transfer the calibra-tion mechanism to adjacent pragmatic tasks. Furthermore, we intend to align these machine-derived attributions with native cross-cultural human annotations to build more granular explainability frameworks. APPENDIX ALATE -F USION CLASSIFIER HYPERPARAMETERS 
+
+Table A.1 lists the configuration of the ten candidates evaluated by the late-fusion sweep. On the imbalanced CMMA benchmark, class re-weighting is applied as documented in the rightmost column, whereas on MUStARD that column remains inactive. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 14 
+
+TABLE A.1 LATE -FUSION CLASSIFIER HYPERPARAMETERS . “S CALED ” INDICATES THE ESTIMATOR IS WRAPPED IN A PIPELINE WITH A PRECEDING 
+
+STANDARD SCALER . η DENOTES LEARNING RATE , AND nEST DENOTES THE NUMBER OF BASE ESTIMATORS . U NSPECIFIED PARAMETERS RETAIN LIBRARY DEFAULTS UNDER SCIKIT -LEARN 1.6.1, XGBOOST 3.2.0, AND LIGHTGBM 4.6.0.                                   
+
+> Classifier Hyperparameters CMMA Re-weighting Pool LR C=1 .0,max_iter =2000 , scaled class_weight=‘balanced’
+> RF nest =200 ,max_depth =6 class_weight=‘balanced’
+> GB nest =200 ,max_depth =3 ,η=0 .05 —AdaBoost nest =200 ,η=0 .5—SVM (RBF) C=1 .0,γ=scale , scaled class_weight=‘balanced’
+> MLP layers =(64 ,32) ,max_iter =500 , early stopping, scaled — XGBoost nest =200 ,max_depth =3 ,η=0 .05 scale_pos_weight =7 .8
+> LightGBM nest =200 ,max_depth =3 ,η=0 .05 class_weight=‘balanced’
+> Stacking base ={LR, RF, GB }, meta =LR Inherited Soft Voting estimators ={LR, RF, GB },voting=‘soft’ Inherited
+
+APPENDIX BFULL 7-LLM × 10-C LASSIFIER SWEEP MATRIX 
+
+Tables B.1 and B.2 report the full late-fusion sweep un-derlying the Best CLF column of Table II. Each cell reports Macro-F1 and Accuracy averaged over 5-fold, 5-seed cross-validation; the optimal classifier per language backbone family is highlighted in boldface. APPENDIX CRANDOM PARAPHRASE CONTROL TEMPLATES 
+
+Random Paraphrase Control 
+
+5 neutral variants, all at zero charge 
+
+Shared System Prompt = BiCAL zero-charge 
+
+“You answer questions about short dialogue snippets. Reply with a single word.” 
+
+Variant-Specific User Tails differing wording in bold 
+
+[paraphrase_1] Is {speaker } being sarcastic ? Answer Yes or No. 
+
+[paraphrase_2] Does {speaker } use sarcasm ? An-swer Yes or No. 
+
+[paraphrase_3] Is {speaker }’s remark sarcastic ? An-swer Yes or No. 
+
+[paraphrase_4] Is {speaker } expressing sarcasm ?Answer Yes or No. 
+
+[paraphrase_5] Would you classify {speaker }’s state-ment as sarcastic ? Answer Yes or No. Fig. C.1. The five neutral-paraphrase templates used by the Random Para-phrase Control of Sec. V-D1. All variants share the exact system prompt of BiCAL’s zero-charge variant (shown once at the top); only the user-tail phrasing varies, with the differing wording highlighted in bold . Dynamic input slots are set in a typewriter typeface. 
+
+Figure C.1 reports the five neutral paraphrase templates used by the Random Paraphrase Control framework. All five share an identical system prompt matching the neutral configuration of BiCAL and differ only in the surface phrasing of the user query. None contains stance-forcing language or explicit expert or skeptic role specifications; consequently, each configuration occupies a stable position near the zero-charge centre of the bias axis. The sampling profile under which these control templates are executed is identical to the main BiCAL module. The generation temperature is locked at 0.5 and the top-p threshold at 0.95, across three random seeds (42, 43, and 44). We collect three samples per seed-template combination, accu-mulating fifteen evaluation votes per instance, and the final consensus prediction follows the same majority-rule equation 
+
+ˆy = ⊮[v > 7] deployed in the standard BiCAL calibration runs. APPENDIX DCHINESE PROMPT TEMPLATES ON CMMA Figure D.1 presents the native Chinese prompt templates evaluated on the CMMA corpus. The five prompt configura-tions mirror the symmetric structure of the English BiCAL templates, operating along the same [−2, +2] charge axis. All sampling parameters are identical to the core evaluation profile: a temperature of 0.5 and a top-p threshold of 0.95 across three random seeds. APPENDIX EMODEL CARD 
+
+Table E.1 lists the foundation models invoked by the CHARM framework, documenting their HuggingFace iden-tifiers, parameter scales, licences, and operational roles. All models are evaluated as-is, without parameter updates. No fine-tuning or adapter adjustments are applied to any underly-ing backbone. 
+
+Hardware and inference configuration.: We load open-source backbones in their native bfloat16 precision on a single NVIDIA A100 80GB GPU. DeepSeek-V4-Pro and GPT-5.4 are instead queried through their respective infer-ence APIs and incur no local GPU cost. Inference follows the decoding specifications documented in our experimental setup. The direct zero-shot baseline uses greedy decoding with 
+
+do sample set to false, whereas the BiCAL and random-paraphrase variants deploy stochastic sampling profiles in-stead. This configuration sets the temperature T to 0.5, the top-p threshold to 0.95, and the sample allocation N to 3 per template-seed combination. The audio probing pipeline maintains greedy decoding on Qwen2.5-Omni-7B. No model parameter undergoes fine-tuning at any framework stage. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 15 
+
+TABLE B.1 FULL 7-LLM × 10-CLASSIFIER SWEEP ON THE MUS TARD BENCHMARK WITH SAMPLE COUNT EQUAL TO 690. E ACH CELL REPORTS THE MACRO -F1  
+
+> AND
+
+ACCURACY VALUES . T HE OPTIMAL CLASSIFIER PER ARCHITECTURE IS HIGHLIGHTED IN BOLDFACE .
+
+Classifier Mistral-Small-Instruct-2409 Qwen2.5-32B-Instruct Gemma-2-27B-it Qwen2.5-7B Llama-3.1-8B-Instruct DeepSeek-V4-Pro GPT-5.4 LR 0.729/0.730 0.729/0.730 0.705/0.705 0.619/0.620 0.627/0.629 0.780/0.780 0.782/0.782 RF 0.727/0.728 0.718/0.719 0.718/0.718 0.635/0.636 0.622/0.624 0.783/0.783 0.783/0.783 GB 0.719/0.720 0.698/0.699 0.707/0.708 0.616/0.617 0.637/0.638 0.767/0.768 0.761/0.761 AdaBoost 0.723/0.724 0.728/0.729 0.721/0.725 0.610/0.612 0.620/0.622 0.784/0.785 0.772/0.772 SVM (RBF) 0.714/0.715 0.709/0.709 0.696/0.696 0.616/0.618 0.622/0.624 0.769/0.769 0.754/0.754 MLP 0.704/0.705 0.701/0.701 0.665/0.666 0.598/0.600 0.612/0.614 0.748/0.749 0.747/0.747 XGBoost 0.715/0.715 0.702/0.702 0.707/0.708 0.609/0.610 0.632/0.633 0.766/0.767 0.755/0.756 LightGBM 0.715/0.715 0.710/0.711 0.701/0.702 0.620/0.622 0.635/0.641 0.758/0.759 0.752/0.752 Stacking 0.726/0.726 0.728/0.728 0.721/0.722 0.628/0.629 0.635/0.635 0.783/0.783 0.787/0.787 
+
+Soft Voting 0.725/0.726 0.723/0.723 0.722/0.723 0.632/0.634 0.630/0.632 0.784/0.785 0.784/0.784 
+
+TABLE B.2 FULL 7-LLM × 10-CLASSIFIER SWEEP ON THE CMMA BENCHMARK UNDER ENGLISH PROMPT CONDITIONS . E ACH CELL REPORTS THE MACRO -F1  
+
+> AND
+
+ACCURACY VALUES . T HE OPTIMAL CLASSIFIER PER ARCHITECTURE IS HIGHLIGHTED IN BOLDFACE WITH BALANCED CLASS RE -WEIGHTING CONSTRAINTS APPLIED .
+
+Classifier Mistral-Small-Instruct-2409 Qwen2.5-32B-Instruct Gemma-2-27B-it Qwen2.5-7B Llama-3.1-8B-Instruct DeepSeek-V4-Pro GPT-5.4 LR 0.535/0.652 0.569/0.703 0.540/0.660 0.524/0.637 0.515/0.620 0.585/0.714 0.594/0.723 RF 0.557/0.714 0.577/0.741 0.562/0.725 0.559/0.720 0.544/0.710 0.586/0.741 0.600/0.750 GB 0.494/0.885 0.493/0.883 0.486/0.882 0.485/0.884 0.475/0.884 0.504/0.882 0.505/0.882 AdaBoost 0.470/0.886 0.470/0.886 0.470/0.886 0.470/0.886 0.470/0.886 0.472/0.887 0.471/0.887 SVM (RBF) 0.525/0.642 0.557/0.687 0.533/0.657 0.525/0.646 0.519/0.639 0.566/0.690 0.591/0.727 MLP 0.471/0.886 0.472/0.886 0.470/0.886 0.471/0.886 0.468/0.886 0.471/0.886 0.480/0.886 XGBoost 0.551/0.690 0.563/0.713 0.554/0.698 0.550/0.693 0.538/0.678 0.577/0.718 0.590/0.727 LightGBM 0.552/0.693 0.566/0.717 0.555/0.700 0.550/0.695 0.539/0.690 0.579/0.721 0.588/0.728 Stacking 0.532/0.644 0.559/0.687 0.535/0.650 0.518/0.625 0.509/0.610 0.578/0.701 0.588/0.713 Soft Voting 0.591/0.823 0.594/0.824 0.607/0.840 0.586/0.836 0.575/0.831 0.619/0.829 0.627/0.819 
+
+TABLE E.1 MODEL CARD FOR ALL FOUNDATION MODELS INVOKED BY CHARM. O PEN -WEIGHT PARAMETER COUNTS FOLLOW THE TOTALS REPORTED IN OFFICIAL RELEASE NOTES AND ARE LOADED IN NATIVE B F L O A T 16 ; COMMERCIAL OR FRONTIER API S LIST PARAMETER COUNTS BASED ON OFFICIAL TECHNICAL BRIEFS WHERE AVAILABLE . T HE AUDIO LANGUAGE MODEL EXECUTES VIA ITS NATIVE MULTIMODAL INTERFACE FOLLOWING THE OFFICIAL TECHNICAL REPORT RECIPES .
+
+Model Name HuggingFace Identifier / API Param. License Role in CHARM Qwen2.5-32B-Instruct Qwen/Qwen2.5-32B-Instruct 32.5B Apache 2.0 Text backbone (BiCAL) Mistral-Small-Instruct-2409 mistralai/Mistral-Small-Instruct-2409 22.0B Mistral Research License Text backbone (BiCAL) Gemma-2-27B-it google/Gemma-2-27B-it 27.2B Gemma Terms of Use Text backbone (BiCAL) Qwen2.5-7B-Instruct Qwen/Qwen2.5-7B-Instruct 7.6B Apache 2.0 Text backbone (BiCAL) Llama-3.1-8B-Instruct meta-llama/Llama-3.1-8B-Instruct 8.0B Llama-3 Community License Text backbone (BiCAL) Qwen2.5-Omni-7B Qwen/Qwen2.5-Omni-7B 7.0B Apache 2.0 Audio probe extractor (ALFR Ψ)DeepSeek-V4-Pro deepseek-v4-pro (API) 1.6T MIT Text backbone (BiCAL) GPT-5.4 gpt-5.4 (API) Undisclosed Proprietary API Text backbone (BiCAL) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 16 
+
+Bidirectional Charge Prompting Continuum 
+
+CMMA Chinese variants 
+
++2 +1 0 −1 −2
+
+prompt sarcasm ←− Charge Axis −→ suppress sarcasm 
+
+[expert_role] Positive Charge: +2 
+
+System: 你是反讽识 别专家，擅长判断对话中是否存在反
+
+讽。只用一个 词回答。
+
+User Tail: {speaker }是在反讽吗？回答是或否。
+
+[attentive] Positive Charge: +1 
+
+System: 你回答关于对话片段的问题。只用一个 词回答。
+
+User Tail: 仔细留意反讽线索。{speaker }是在反讽吗？
+
+回答是或否。
+
+[zero] Neutral Baseline Charge: 0
+
+System: 你回答关于对话片段的问题。只用一个 词回答。
+
+User Tail: {speaker }是在反讽吗？回答是或否。
+
+[skeptic_mild] Negative Charge: −1
+
+System: 你回答关于对话片段的问题。只用一个 词回答。
+
+User Tail: 请仔细读这句话再判断，不要轻易认为是反
+
+讽。{speaker }是在反讽吗？回答是或否。
+
+[skeptic_strong] Negative Charge: −2
+
+System: 你回答关于对话片段的问题。大多 数日 常表达是
+
+字面表达，而不是反讽。只用一个 词回答。
+
+User Tail: 大多 数对话是字面意思。{speaker }是在反讽
+
+吗？回答是或否。
+
+Fig. D.1. The Chinese symmetrical bidirectional charge prompting continuum within the BiCAL module on CMMA. Variants are colour-coded along the symmetric charge axis, from strongly prompting sarcasm ( +2 ) to strongly suppressing it ( −2); colour encodes charge polarity (warm = positive, cool 
+
+= negative), and the charge-bearing wording is highlighted in bold . Dynamic slots are set in a typewriter typeface. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 17 
+
+REFERENCES [1] F. Santosa, E. Utami, K. Kusrini, and F. W. Wibowo, “Sarcasm de-tection in the era of ai: A systematic review of techniques, datasets, performance, and future outlook,” in 2025 International Conference on Computer, Control, Informatics and its Applications (IC3INA) . IEEE, 2025, pp. 19–24. [2] R. W. Picard, Affective Computing . Cambridge, MA: MIT Press, 1997. [3] Q. Sun, Y. Li, E. Alturki, S. M. K. Murthy, and B. W. Schuller, “Towards friendly ai: A comprehensive review and new perspectives on human-ai alignment,” AI and Ethics , vol. 6, no. 2, p. 193, 2026. [4] S. Amiriparian, L. Christ, A. Kathan, M. Gerczuk, N. M¨ uller, S. Klug, L. Stappen, A. K¨ onig, E. Cambria, B. W. Schuller et al. , “The muse 2024 multimodal sentiment analysis challenge: Social perception and humor recognition,” in Proceedings of the 5th on Multimodal Sentiment Analysis Challenge and Workshop: Social Perception and Humor , 2024, pp. 1–9. [5] Y. Li, Q. Sun, S. M. K. Murthy, E. Alturki, and B. W. Schuller, “Gatedxlstm: a multimodal affective computing approach for emotion recognition in conversations,” arXiv preprint arXiv:2503.20919 , 2025. [6] X. Gao, S. Nayak, and M. Coler, “Spoken in jest, detected in earnest: A systematic review of sarcasm recognition-multimodal fusion, challenges, and future prospects,” IEEE Transactions on Affective Computing , 2025. [7] R. Dhumpati, A. Sasi, S. J. Basha, S. Vadhri, P. Saroja, S. Alluri, and R. Vatambeti, “Enhancing sarcasm detection in sentiment analysis for cyberspace safety using advanced deep learning techniques,” Scientific Reports , vol. 15, no. 1, p. 22681, 2025. [8] Z. Mai, J. Zhang, Z. Xu, and Z. Xiao, “Is llama 3 good at sarcasm detection? a comprehensive study,” in Proceedings of the 2024 7th In-ternational Conference on Machine Learning and Machine Intelligence (MLMI) , 2024, pp. 141–145. [9] Z. Zhang, L. Peng, T. Pang, J. Han, H. Zhao, and B. W. Schuller, “Refashioning emotion recognition modeling: the advent of generalized large models,” IEEE Transactions on Computational Social Systems ,vol. 11, no. 5, pp. 6690–6704, 2024. [10] Y. Zhang, X. Yang, X. Xu, Z. Gao, Y. Huang, S. Mu, S. Feng, D. Wang, Y. Zhang, K. Song et al. , “Affective computing in the era of large language models: A survey from the nlp perspective,” Knowledge-Based Systems , p. 115411, 2026. [11] E. Perez, S. Ringer, K. Lukosiute, K. Nguyen, E. Chen, S. Heiner, C. Pettit, C. Olsson, S. Kundu, S. Kadavath et al. , “Discovering language model behaviors with model-written evaluations,” in Findings of the association for computational linguistics: ACL 2023 , 2023, pp. 13 387– 13 434. [12] M. Sharma, M. Tong, T. Korbak, D. Duvenaud, A. Askell, S. Bowman, E. Durmus, Z. Hatfield-Dodds, S. Johnston, S. Kravec et al. , “Towards understanding sycophancy in language models,” in International Con-ference on Learning Representations , vol. 2024, 2024, pp. 110–144. [13] Y. Zhang, C. Zou, Z. Lian, P. Tiwari, and J. Qin, “Sarcasmbench: Towards evaluating large language models on sarcasm understanding,” 
+
+IEEE Transactions on Affective Computing , vol. 16, no. 4, pp. 2560– 2578, 2025. [14] B. Tang, B. Lin, H. Yan, and S. Li, “Leveraging generative large language models with visual instruction and demonstration retrieval for multimodal sarcasm detection,” in Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) ,2024, pp. 1732–1742. [15] Z. Zhao, E. Wallace, S. Feng, D. Klein, and S. Singh, “Calibrate before use: Improving few-shot performance of language models,” in 
+
+International conference on machine learning . Pmlr, 2021, pp. 12 697– 12 706. [16] M. Turpin, J. Michael, E. Perez, and S. Bowman, “Language models don’t always say what they think: Unfaithful explanations in chain-of-thought prompting,” Advances in Neural Information Processing Systems , vol. 36, pp. 74 952–74 965, 2023. [17] B. Yao, Y. Zhang, Q. Li, and J. Qin, “Is sarcasm detection a step-by-step reasoning process in large language models?” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 24, 2025, pp. 25 651–25 659. [18] Y. Chu, J. Xu, X. Zhou, Q. Yang, S. Zhang, Z. Yan, C. Zhou, and J. Zhou, “Qwen-audio: Advancing universal audio understanding via unified large-scale audio-language models,” arXiv preprint arXiv:2311.07919 ,2023. [19] C.-K. Yang, N. S. Ho, and H.-y. Lee, “Towards holistic evaluation of large audio-language models: A comprehensive survey,” in Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , 2025, pp. 10 155–10 181. [20] A. Radford, J. W. Kim, T. Xu, G. Brockman, C. McLeavey, and I. Sutskever, “Robust speech recognition via large-scale weak supervi-sion,” in International conference on machine learning . PMLR, 2023, pp. 28 492–28 518. [21] J. Xu, Z. Guo, J. He, H. Hu, T. He, S. Bai, K. Chen, J. Wang, Y. Fan, K. Dang et al. , “Qwen2. 5-omni technical report, 2025,” URL https://arxiv. org/abs/2503.20215 , 2025. [22] H. Wu, M. Tang, X. Zheng, and H. Jiang, “When language overrules: Revealing text dominance in multimodal large language models,” arXiv preprint arXiv:2508.10552 , 2025. [23] C. Agarwal, “Rethinking explainability in the era of multimodal ai,” 
+
+arXiv preprint arXiv:2506.13060 , 2025. [24] J. Chen, Z. Guo, J. Chun, P. Wang, A. Perrault, and M. Elsner, “Do audio llms really listen, or just transcribe? measuring lexical vs. acoustic emotion cues reliance,” in Proceedings of the 19th Conference of the European Chapter of the Association for Computational Linguistics (Volume 1: Long Papers) , 2026, pp. 5848–5877. [25] Q. Sun, A. Akman, and B. W. Schuller, “Explainable artificial in-telligence for medical applications: A review,” ACM Transactions on Computing for Healthcare , vol. 6, no. 2, pp. 1–31, 2025. [26] A. Akman, Q. Sun, and B. W. Schuller, “Improving audio explanations using audio language models,” IEEE Signal Processing Letters , vol. 32, pp. 741–745, 2025. [27] F. Eyben, M. W¨ ollmer, and B. Schuller, “Opensmile: the munich versatile and fast open-source audio feature extractor,” in Proceedings of the 18th ACM international conference on Multimedia , 2010, pp. 1459–1462. [28] S. Castro, D. Hazarika, V. P´ erez-Rosas, R. Zimmermann, R. Mihalcea, and S. Poria, “Towards multimodal sarcasm detection (an obviously perfect paper),” in Proceedings of the 57th annual meeting of the association for computational linguistics , 2019, pp. 4619–4629. [29] Y. Zhang, Y. Yu, Q. Guo, B. Wang, D. Zhao, S. Uprety, D. Song, Q. Li, and J. Qin, “Cmma: benchmarking multi-affection detection in chinese multi-modal conversations,” Advances in Neural Information Processing Systems , vol. 36, pp. 18 794–18 805, 2023. [30] Z. Li, Y. Zhang, X. Gao, S. Nayak, and M. Coler, “Leveraging large language models for sarcastic speech annotation in sarcasm detection,” 
+
+arXiv preprint arXiv:2506.00955 , 2025. [31] H. Wang, G. Zhang, J. Chen, J. Li, Y. Wang, and Y. Guo, “Empathy omni: Enabling empathetic speech response generation through large language models,” arXiv preprint arXiv:2508.18655 , 2025. [32] Z. Wu, Z. Gong, L. Ai, P. Shi, K. Donbekci, and J. Hirschberg, “Be-yond silent letters: Amplifying llms in emotion recognition with vocal nuances,” in Findings of the Association for Computational Linguistics: NAACL 2025 , 2025, pp. 2202–2218. [33] S. Banerjee, A. Agarwal, and S. Singla, “Llms will always hallucinate, and we need to live with this,” in Intelligent Systems Conference .Springer, 2025, pp. 624–648. [34] X. Gao, S. Bansal, K. Gowda, Z. Li, S. Nayak, N. Kumar, and M. Coler, “Amused: An attentive deep neural network for multimodal sarcasm detection incorporating bi-modal data augmentation,” arXiv preprint arXiv:2412.10103 , 2024. [35] J. R. Saini, S. Vaidya, I. Dhulekar, and K. Pal, “Grainy-xai: A domain-wise granular analysis of sarcastic text using explainable-ai techniques.” 
+
+International Journal of Intelligent Engineering & Systems , vol. 17, no. 4, 2024. [36] Qwen, :, A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Li, D. Liu, F. Huang, H. Wei, H. Lin, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Lin, K. Dang, K. Lu, K. Bao, K. Yang, L. Yu, M. Li, M. Xue, P. Zhang, Q. Zhu, R. Men, R. Lin, T. Li, T. Tang, T. Xia, X. Ren, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Wan, Y. Liu, Z. Cui, Z. Zhang, and Z. Qiu, “Qwen2.5 technical report,” 2025. [Online]. Available: https://arxiv.org/abs/2412.15115 [37] A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan et al. , “The llama 3 herd of models,” arXiv preprint arXiv:2407.21783 , 2024. [38] G. Team, M. Riviere, S. Pathak, P. G. Sessa, C. Hardin, S. Bhupatiraju, L. Hussenot, T. Mesnard, B. Shahriari, A. Ram´ e et al. , “Gemma 2: Improving open language models at a practical size,” arXiv preprint arXiv:2408.00118 , 2024. [39] A. Q. Jiang, A. Sablayrolles, A. Roux, A. Mensch, B. Savary, C. Bam-ford, D. S. Chaplot, D. d. l. Casas, E. B. Hanna, F. Bressand et al. ,“Mixtral of experts,” arXiv preprint arXiv:2401.04088 , 2024. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 18 
+
+[40] A. Liu, B. Feng, B. Xue, B. Wang, B. Wu, C. Lu, C. Zhao, C. Deng, C. Zhang, C. Ruan et al. , “Deepseek-v3 technical report,” arXiv preprint arXiv:2412.19437 , 2024. [41] A. Singh, A. Fry, A. Perelman, A. Tart, A. Ganesh, A. El-Kishky, A. McLaughlin, A. Low, A. Ostrow, A. Ananthram et al. , “Openai gpt-5 system card,” arXiv preprint arXiv:2601.03267 , 2025. [42] D. W. Hosmer Jr, S. Lemeshow, and R. X. Sturdivant, Applied logistic regression . John Wiley & Sons, 2013. [43] L. Breiman, “Random forests,” Machine learning , vol. 45, no. 1, pp. 5–32, 2001. [44] J. H. Friedman, “Greedy function approximation: a gradient boosting machine,” Annals of statistics , pp. 1189–1232, 2001. [45] Y. Freund and R. E. Schapire, “A decision-theoretic generalization of on-line learning and an application to boosting,” Journal of computer and system sciences , vol. 55, no. 1, pp. 119–139, 1997. [46] H. Drucker, C. J. Burges, L. Kaufman, A. Smola, and V. Vapnik, “Support vector regression machines,” Advances in neural information processing systems , vol. 9, 1996. [47] M.-C. Popescu, V. E. Balas, L. Perescu-Popescu, and N. Mastorakis, “Multilayer perceptron and neural networks,” WSEAS transactions on circuits and systems , vol. 8, no. 7, pp. 579–588, 2009. [48] T. Chen and C. Guestrin, “Xgboost: A scalable tree boosting system,” in Proceedings of the 22nd acm sigkdd international conference on knowledge discovery and data mining , 2016, pp. 785–794. [49] G. Ke, Q. Meng, T. Finley, T. Wang, W. Chen, W. Ma, Q. Ye, and T.-Y. Liu, “Lightgbm: A highly efficient gradient boosting decision tree,” 
+
+Advances in neural information processing systems , vol. 30, 2017. [50] D. H. Wolpert, “Stacked generalization,” Neural networks , vol. 5, no. 2, pp. 241–259, 1992. [51] J. Kittler, M. Hatef, R. P. Duin, and J. Matas, “On combining classifiers,” 
+
+IEEE transactions on pattern analysis and machine intelligence , vol. 20, no. 3, pp. 226–239, 1998. [52] T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al. , “Language mod-els are few-shot learners,” Advances in neural information processing systems , vol. 33, pp. 1877–1901, 2020. [53] M. C. Whitlock, “Combining probability from independent tests: the weighted z-method is superior to fisher’s approach,” Journal of evolu-tionary biology , vol. 18, no. 5, pp. 1368–1373, 2005. [54] R. A. Armstrong, “When to use the b onferroni correction,” Ophthalmic and physiological optics , vol. 34, no. 5, pp. 502–508, 2014. [55] V. Sukhavasi and V. Dondeti, “A deep learning based contrastive atten-tion model for multi-modal sarcasm detection,” in 2025 International Conference on Computing Technologies (ICOCT) . IEEE, 2025, pp. 1–6. [56] H. Xue, L. Xu, Y. Tong, R. Li, J. Lin, and D. Jiang, “Breakthrough from nuance and inconsistency: Enhancing multimodal sarcasm detection with context-aware self-attention fusion and word weight calculation.” in 
+
+Proceedings of the 2024 Joint International Conference on Computa-tional Linguistics, Language Resources and Evaluation (LREC-COLING 2024) , 2024, pp. 2493–2503. [57] A.-C. B˘ aroiu and S ¸ . Tr˘ aus ¸an-Matu, “How capable are state-of-the-art language models to cope with sarcasm?” in 2023 24th International Conference on Control Systems and Computer Science (CSCS) . IEEE, 2023, pp. 399–402. [58] J. Lee, W. Fong, A. Le, S. Shah, K. Han, and K. Zhu, “Pragmatic metacognitive prompting improves llm performance on sarcasm detec-tion,” in Proceedings of the 1st Workshop on Computational Humor (CHum) , 2025, pp. 63–70. [59] Y. Zheng and L. Ma, “Masd: A multi-agent sarcasm detection framework with chain-of-thought,” in 2025 IEEE International Conference on Systems, Man, and Cybernetics (SMC) . IEEE, 2025, pp. 1087–1092. [60] L. Xiong, R. Gao, and A. Jeong, “Sarc7: Evaluating sarcasm detection and generation with seven types and emotion-informed techniques,” in 
+
+Proceedings of the 9th Widening NLP Workshop , 2025, pp. 157–166. [61] H. S. Cheang and M. D. Pell, “Acoustic markers of sarcasm in cantonese and english,” The Journal of the Acoustical Society of America , vol. 126, no. 3, pp. 1394–1405, 2009. [62] S. Li, W. Gu, L. Liu, and P. Tang, “The role of voice quality in mandarin sarcastic speech: An acoustic and electroglottographic study,” Journal of Speech, Language, and Hearing Research , vol. 63, no. 8, pp. 2578– 2588, 2020. [63] D. Wilson, “The pragmatics of verbal irony: Echo or pretence?” Lingua ,vol. 116, no. 10, pp. 1722–1743, 2006.

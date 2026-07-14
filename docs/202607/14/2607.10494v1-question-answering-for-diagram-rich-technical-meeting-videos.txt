@@ -1,0 +1,392 @@
+Title: Question Answering for Diagram-Rich Technical Meeting Videos
+
+URL Source: https://arxiv.org/pdf/2607.10494v1
+
+Published Time: Tue, 14 Jul 2026 01:23:54 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Question Answering for Diagram-Rich Technical Meeting Videos 
+
+Zhuoran Xu ∗† , Jia Li ∗ †, Dayuan Tan †, Mark Cole †, Ish Ashraf †, Sandeep Puri †,Mehrdad Sabetzadeh ∗ , Shiva Nejati ∗∗University of Ottawa, Ottawa, ON, Canada 
+
+> †
+
+Ciena Corp, Ottawa, ON, Canada 
+
+{zxu045, jli714, m.sabetzadeh, snejati }@uottawa.ca 
+
+{datan, mcole, iashraf, spuri }@ciena.com 
+
+Abstract —Software engineering increasingly relies on asyn-chronous communication artifacts, including recorded meetings where stakeholders discuss concerns, rationale, and decisions. These meetings often include diagram-based representations of requirements, system behavior, component interactions, and trace dependencies. Accessing knowledge from these meetings is challenging because recordings are long and relevant evidence is distributed across speech, slides, and technical diagrams. This paper reports our industrial experience developing and evalu-ating LMVQA, an LLM-based multimodal question-answering system for technical meeting videos. Developed in collaboration with engineers at Ciena, LMVQA supports the understanding of requirements and design intent by grounding answers in audio and visual evidence, with explicit handling of diagram-rich content such as requirements and UML diagrams. It processes each video once to build a reusable time-stamped evidence corpus for grounded question answering. Across a Ciena dataset and a public dataset, we show that LMVQA significantly improves answer accuracy compared to a state-of-the-art baseline, from 31% to 94% on the Ciena dataset and from 21% to 88% on the public dataset, with larger gains on diagram-rich videos. We further show that, after one-time indexing, LMVQA reduces average response time from 81.3s to 3.3s on Ciena and from 98.4s to 9.2s on the public dataset, while lowering average token-based LLM API cost by about 75%. Finally, our interviews with three domain experts show that engineers particularly value LMVQA for locating software-engineering-relevant information, revisiting rationale, and tracing answers to specific video segments. 
+
+Index Terms —Multimodal Question Answering, Large Lan-guage Models, Software Requirements and Design Diagrams 
+
+I. I NTRODUCTION 
+
+A shared understanding of system goals, assumptions, con-straints, design decisions, and rationale is essential to suc-cessful software projects [1]. Misalignment among stakehold-ers can create conflicting interpretations of requirements and design decisions, reducing efficiency and increasing project risk [2]. This challenge is amplified in industrial settings, where distributed stakeholders cannot always participate in synchronous discussions. As a result, asynchronous com-munication has become increasingly important in software engineering [3]. Recorded technical meetings are one such medium [4]. They often capture requirements- and design-relevant infor-mation, including stakeholder concerns, rationale, decisions, dependencies, and visual explanations of system behavior, architecture, workflows, and design alternatives. Engineers revisit these videos to clarify requirements, recover decision rationale, and understand component dependencies. These activities are central to software maintenance and evolution, where engineers must frequently retrieve historical context, rationale, and architectural knowledge from prior technical discussions. Prior work shows that recorded video supports knowledge transfer when synchronous participation is not possible [5], [6]. However, these recordings are difficult to use efficiently because they are long, users often have specific questions, and relevant evidence is distributed across speech, slides, and technical diagrams. This challenge is especially important for software-intensive systems because technical meeting videos are highly multi-modal. They combine spoken explanations with slides, source code, and structured diagrams such as domain, goal, UML, data-flow, and process models [7]. These diagrams capture entities, relationships, hierarchies, interactions, and dependen-cies central to requirements understanding and design intent. Although prior work supports video search through text-based tagging [8], [9] and code extraction from screencasts [10]– [13], precise question answering over long technical meeting videos remains difficult when evidence is diagrammatic and dispersed across modalities [14]. Large Language Models (LLMs) are increasingly used to build question-answering systems for software engineering tasks [15]–[18]. Multimodal LLMs further make it possible to process image and audio content in addition to text. However, existing video question-answering approaches are not well suited to software engineering questions over long technical recordings. Many are designed for short videos and do not scale well to hours-long content [19]–[22]. Some process visual information only coarsely [23], [24], making them less effective for diagram-intensive material, while others do not fully integrate the audio and visual evidence available in videos [19], [21]–[23], [25]. These limitations matter in fields like software engineering, where users often need grounded answers that connect spoken discussion with diagrammatic evidence. To the best of our knowledge, there is no prior work on handling open-ended question answering over long technical meeting videos where answers require combining spoken discussions with software diagrams. arXiv:2607.10494v1 [cs.SE] 11 Jul 2026 To address this challenge, we propose LMVQA , an LLM-based Multimodal system for technical Videos Question-
+
+Answering. LMVQA processes each video once to build a reusable, time-stamped evidence corpus from both visual and audio streams. On the visual side, it samples representa-tive frames, detects diagram-containing frames, and applies diagram-type-aware extraction for common software engineer-ing diagrams, including domain models and UML diagrams. On the audio side, it transcribes speech into time-stamped segments. These multimodal evidence units are then embedded and stored in a vector database for retrieval. Provided with a question, LMVQA retrieves the most relevant evidence units and uses them as the context for answer generation. This design supports long videos by processing them into reusable indexed chunks and explicitly targets the diagram-centric nature of technical meeting content. We evaluate LMVQA on two technical meeting video question-answering datasets: an industrial dataset from Ciena and a public dataset derived from undergraduate software engineering lectures [26]. Compared with a state-of-the-art baseline, DrVideo [23], LMVQA improves average accuracy from 31% to 94% on the Ciena dataset and from 21% to 88% on the public dataset, with especially strong gains on diagram-based questions. LMVQA also improves efficiency: after one-time video indexing, it reduces average per-question latency from 81.3s to 3.3s on Ciena and from 98.4s to 9.2s on the public dataset, while lowering average LLM API cost by approximately 75%. Interviews with three Ciena engineers further indicate that LMVQA helps users identify relevant video segments, quickly find specific information without rewatching the entire recording, verify answers using time-stamped evidence, and interpret diagram-related content in technical videos. 
+
+Contributions. This paper makes the following contributions: 
+
+- We present a software-engineering-aware multimodal question-answering approach for long technical meeting videos. Our approach combines time-stamped evidence construction with diagram-type-aware extraction, enabling grounded answers to questions about diagram-rich technical discussions. 
+
+- We implement our approach in LMVQA, a two-stage multimodal system that constructs a reusable evidence corpus and answers queries via retrieval, with explicit support for diagram detection and diagram-type-aware extraction. 
+
+- We evaluate LMVQA on an industrial dataset from Ciena and a public course dataset related to software engineering, showing substantial accuracy improvements over a state-of-the-art baseline, DrVideo [23], while lowering overall cost through corpus reuse. We further conduct qualitative inter-views with three Ciena engineers, who reported that LMVQA helps users efficiently locate, verify, and interpret information in long technical meeting videos. II. I NDUSTRY CONTEXT 
+
+Large technology companies such as Ciena are exploring AI solutions, including chatbots, to automate routine work and improve information retrieval across their complex techni-cal content portfolios [15]–[17]. One particularly challenging content type is archived technical meeting videos, which are recorded for software engineering purposes. For example, these recordings may include stakeholder interview and de-sign meetings for requirements elicitation and design explo-ration, capturing user needs, design alternatives, priorities, constraints, and rationale. They also help preserve knowledge when experienced engineers leave or transition roles, allowing recorded explanations to serve as institutional memory. In practice, these recordings often become part of the long-term institutional memory needed to support onboarding, system evolution, and maintenance activities across teams. In addition, they enable cross-team communication by helping distributed teams stay aligned with evolving requirements, designs, con-straints, and technical decisions. However, retrieving knowledge from these video archives is challenging. Ciena’s technical meetings typically span 45–90 minutes and combine spoken discussion with slides, demos, and technical diagrams (e.g., UML, domain models, and data flows). Engineers often need answers to very specific questions, such as “What decision was made regarding the user authentication requirement discussed in last week’s meet-ing?” or “What design constraints were identified for the XYZ component during our design brainstorming meeting?” Finding such specific information can be slow and frustrating: it typically requires watching large portions of a long recording or relying on coarse, timestamp-based navigation that is often too imprecise to pinpoint the exact moment where the relevant detail was discussed or shown. Another key challenge is that much of the critical information is visual. In our analysis, 24% of the video frames from Ciena’s technical meetings include diagrams whose semantics cannot be recovered from speech-to-text alone. Existing video search tools rely largely on metadata and transcripts, so they fail when relevant details appear in slides or diagrams. As Ciena produces hundreds of hours of recordings each year, scalable retrieval requires automated methods that jointly index and query both audio and visual content [13], [14]. Our goal in this paper is to develop an LLM-based question-answering system for technical meeting videos containing rich diagrammatic content. In particular, our question-answering system aims to address the following needs, identified through our discussions with Ciena’s engineering teams: (1) Diagram understanding: The question-answering system must accu-rately interpret and answer questions about technical dia-grams, including their entities, relationships, and hierarchical structures. (2) Multimodal fusion: Answers should inte-grate information from both visual content (slides, diagrams, demonstrations) and audio content (spoken explanations, dis-cussions). (3) Factual grounding: Generated answers must be grounded in the video content, with the ability to trace answers back to specific segments when needed. This helps reduce hallucination risks and ensures that stakeholders can verify the information. (4) Cost efficiency: Given the volume of videos to be processed, the system must be cost-effective for video 
+
+> archive
+> add video
+
+…
+
+> User selected
+> video
+> frames
+> audio
+> textual chunks
+
+…
+
+> vector
+> database
+> question
+> LLM
+> diagram related
+> frames
+> answer
+> Non-diagram
+> related frames
+> Light-Weight LLM
+> Frontier LLM
+> LLM
+> LLM
+> Video Processing and Corpus Creation
+> Question and Answering
+> Visual Descriptions Extraction
+> Audio
+> Description
+> Extraction
+> Extract
+> Frames
+> Extract
+> Audios
+> Is This Frame
+> Diagram-
+> Related?
+> Extract
+> Diagram
+> Semantics
+> Generate
+> Visual
+> Descriptions
+> Generate
+> Audio
+> Descriptions
+> Embed
+> Chunks
+> Extract Top-K
+> Chunks
+> Generate
+> Answer
+> Top-k chunks
+
+…
+
+> Detect
+> Diagram
+> Category
+> Light-Weight LLM
+> frames with
+> category
+
+Fig. 1. Overview of our LLM-based multimodal approach for technical video question answering (LMVQA) 
+
+enterprise deployment. Commercial LLMs with token-based API pricing can become expensive when processing long-form content. (5) Reasonable response time: Users expect interactive response times, particularly for frequently queried videos. A system that requires hours to process a video before it can be queried would not meet usability expectations. III. O UR APPROACH (LMVQA) Figure 1 shows an overview of LMVQA which consists of two stages: (1) video processing and corpus creation, and (2) question answering. In the first stage, LMVQA converts each input video into a collection of time-stamped textual chunks derived from both the visual and audio streams, and stores their embeddings in a vector database for retrieval. In the second stage, given a user query, LMVQA retrieves the most relevant chunks and uses them as evidence to generate an answer. Section III-A explains how LMVQA constructs a time-stamped chunk corpus from the visual and audio streams and stores it in a vector database. Section III-B then describes retrieval and answer generation. 
+
+A. Video Processing and Corpus Creation 
+
+For each input video, LMVQA processes the visual and audio streams separately and converts them into time-stamped chunks through the following two steps: 
+
+(1) Visual description extraction. Technical meeting videos often contain many identical or near-identical consecutive frames. For instance, presentation slides can remain unchanged frame1 
+
+> [0s-1s)
+> frame3
+> [2s-3s)
+> frame4
+> [3s-4s)
+> keyframe1
+> [0s-3s)
+> keyframe2
+> [3s-5s)
+> chunk1
+> 5s video
+> keyframe1
+> [0s-3s)
+> Non-diagram related
+> keyframe2
+> [3s-5s)
+> Diagram related
+> audio1
+> [0s-2s)
+> audio2
+> [2s-5s)
+> { "id": "a2”… }
+> { "id": "a1”… }
+> { "id": “v2”, "timestamp": “3s-5s",
+> "text": “This video…
+> "Entities": …
+> "Relationships": …
+> "Hierarchy”… }
+> { "id": “v1”, "timestamp": “0s-3s",
+> "text": “This video… }
+> Audio description extraction
+> Visual descriptions extraction
+> chunk2
+> chunk3
+> chunk4
+> …
+> …
+> keyframe2
+> [3s-5s)
+> Diagram related
+> Class Diagram
+
+Fig. 2. Excerpt of an example showing how visual and audio content from a 5-second video is segmented into chunks. 
+
+for several minutes and meeting discussions frequently show fixed participant windows with minimal variation. As a result, a high proportion of frames of technical meeting videos are duplicate. For example, an online video recorded at the standard frame rate of 30 FPS [27] generates approximately 
+
+162 ,000 frames in a 90-minute session, most of which contain little additional semantic information. To reduce redundancy, LMVQA samples technical meeting videos at a low rate (e.g., 1 FPS) and selects a subset of the sampled frames using the Structural Similarity Index (SSIM) [28]. Specifically, a sampled frame is retained as a 
+
+keyframe if its SSIM score with respect to the most recently re-tained keyframe falls below a predefined threshold, indicating a meaningful visual change. Each keyframe is then assigned a time interval corresponding to the segment of the video for which it is visually representative. Figure 2 illustrates the keyframe extraction process. From a 5-second video, we sample one frame per second, yielding five frames. Using SSIM, each new frame is compared with the last retained keyframe and kept only if it exhibits a significant visual difference. In this example, two keyframes are retained, denoted as keyframe1 and keyframe2 in the figure. The interval assigned to keyframe1 is [0s , 3s) , while the interval assigned to keyframe2 is [3s , 5s) . Together, these two frames serve as the visual representation of the 5-second video. Once keyframes are selected, LMVQA identifies whether each frame contains a diagram. Since diagram-related frames encode richer semantics than non-diagram frames, LMVQA first uses a lightweight LLM to classify each keyframe as diagram-related or non-diagram, where diagram-related means the frame contains at least one diagram. This classification follows the diagram-detection prompt in Appendix VIII-A, Listing a. LMVQA then uses a lightweight LLM to generate concise visual descriptions for non-diagram frames, following the non-diagram captioning prompt in Listing b. To handle diagrams with different syntax and semantics, LMVQA uses the same lightweight LLM to classify each diagram-related keyframe into one of the following categories: four UML types (class, sequence, state/activity, and use-case), network/topology diagrams, architecture/workflow diagrams, and an “other” category. This classification follows the di-agram classification prompt in Appendix VIII-A, Listing c. The diagram categories and their category-specific extraction fields are summarized in Listing d. LMVQA then processes each diagram-related frame with a frontier LLM using the diagram frame extraction prompt in Listing e, together with the corresponding category-specific extraction fields. The prompts in Listings a to d in the appendix use Chain-of-Thought prompting [29] and few-shot In-Context Learning [30] to better capture relationships among diagram elements through example diagram frames paired with detailed semantic descrip-tions. The actual prompts are available online [26]. The descriptions of the keyframes, whether or not they contain diagrams, obtained by LLMs form a set of chunks. Each chunk corresponding to a keyframe is encoded in JSON format and includes a unique chunk ID, a textual description of the keyframe, the keyframe’s time interval, and the term “visual”, indicating that the chunk captures the content of a visual keyframe. For example, as illustrated in Figure 2, two textual chunks, denoted as chunk1 and chunk2, are generated for the two keyframes, keyframe1 and keyframe2. 
+
+(2) Audio description extraction. In parallel with visual processing, LMVQA transcribes the input video’s audio track using an automatic speech recognition (ASR) system with voice activity detection enabled (e.g., Whisper [31]). The resulting transcript is segmented into sentence-level units. To reduce noise while preserving meaning, we restore punctuation and remove common filler words, such as “um”, “uh” and “you know”. LMVQA then converts the audio track into chunks, with each chunk corresponding to one sentence. Each audio chunk is assigned the time interval of its corresponding sentence and is encoded in JSON format with a unique chunk ID, the sentence text, its time interval, and the label “audio” to indicate that it originates from the audio track. The audio track in Figure 2 contains two sentences, and two chunks, chunk3 and chunk4, are derived from it. All chunks generated from a single video, whether derived from visual keyframes or audio sentences, are aggregated and serialized into a corpus. The corpus is then embedded in a high-dimensional vector space using a pretrained embedding model, and the resulting embeddings are stored in a vector database for efficient retrieval. 
+
+B. Question Answering 
+
+Given a user query, LMVQA first encodes it into the same vector space as the corpus. It then retrieves the top-k
+
+most relevant chunks from the vector database using cosine similarity [32]. The choice of k involves a trade-off: a large 
+
+k increases computational cost, while a small k may exclude relevant information. In our setting, retrieving the top-k chunks provides a practical balance between answer quality and effi-ciency by supplying the LLM with sufficient evidence while keeping the prompt size manageable. LMVQA converts the encoded query and retrieved chunks into a structured prompt for answer generation, following the RAG-based video question-answering prompt in Ap-pendix VIII-A, Listing f. This prompt enforces two key instructions: (i) the LLM must rely exclusively on the retrieved chunks, and (ii) the LLM must explicitly abstain from spec-ulation when sufficient evidence is absent. To construct the prompt, we place the user query first, append the retrieved top-ranked chunks as supporting evidence, and then add explicit instructions that reduce hallucinations by requiring the LLM to avoid answers unsupported by the retrieved evidence. When the retrieved evidence includes diagram-related frames, the prompt further incorporates chain-of-thought reasoning and few-shot examples to enhance the completeness and accuracy of diagram-based answers. In addition to generating an answer, LMVQA returns the top-k most relevant chunks together with their corresponding time intervals and content summaries, enabling users to trace the answer back to its original locations in the video for traceability and verification. IV. E MPIRICAL EVALUATION 
+
+In this section, we evaluate LMVQA based on the following research questions (RQs): 
+
+RQ1 (Accuracy). Can LMVQA accurately answer ques-tions based on technical meeting videos? To address RQ1, we compare the accuracy of LMVQA with that of a state-of-the-art video processing method, DrVideo [23], across two video datasets: One based on technical meeting recordings at Ciena, and the other derived from lectures of two undergraduate software engineering courses at the University of Ottawa. 
+
+RQ2 (Efficiency). How efficiently can LMVQA answer questions based on technical meeting videos? We evaluate LMVQA’s response time and cost, and compare its perfor-mance with the baseline (DrVideo) on both datasets. 
+
+RQ3 (Practitioner Feedback). How do engineers perceive LMVQA? To answer RQ3, we invite three practicing engineers from Ciena, who are not co-authors of this paper, to use LMVQA, and collect their feedback on the perceived useful-ness, accuracy, and evidence-tracing support of LMVQA. 
+
+A. Dataset 
+
+We evaluate LMVQA on two datasets. The first, provided by Ciena, consists of meeting recordings and project introductions (hereafter referred to as the “Ciena” dataset). The second, which we constructed, comprises lecture recordings from two undergraduate software engineering courses (hereafter referred to as the “Course” dataset). The Course dataset is publicly available online [26]. Table I summarizes the main character-istics of the two datasets, including the number of videos, their average durations and sizes, the average number of chunks per video, and the total number of questions. The following paragraphs describe the datasets in more detail. 
+
+Ciena dataset. This dataset contains five videos contributed by four different internal groups at Ciena. The videos include work-progress presentations that summarize project context, stakeholder requirements, design choices, and operational TABLE I SUMMARY STATISTICS FOR OUR TWO DATASETS : C IENA AND COURSE .                                    
+
+> Ciena Course
+> # of videos 55Average video duration 55.07min 72.60min Average video size 271.2MB 97.72MB Average # of chunks per video 679.8 1003.8 Average # of diagram-related keyframes per video 14.8 70.4 Average # of non-diagram related keyframes per video 48 72.2 Average # of diagram-related questions per video 4.2 28.2 Average # of visual-content-related questions per video 5.8 15.4 Average # of audio-related questions per video 37.2 15.4 Total # of questions 236 295 TABLE II MAIN PARAMETERS AND LLM MODELS OF LMVQA.
+> Parameter/Model Value
+> Sampling rate 1 FPS SSIM threshold 0.92 Top candidate chunks K200 Keyframe Classifier GPT-4o-mini Description Extractor (non-diagram-related frames) GPT-4o Description Extractor (diagram-related frames) GPT-5 Diagram Category Detection GPT-4o-mini QA model GPT-4o Temperature 0
+> Note: The LLM roles specified in Fig. 1 correspond to the following actual LLMs: lightweight LLM = GPT-4o-mini, LLM = GPT-4o, and frontier LLM = GPT-5.
+
+workflows. In total, the dataset includes 236 questions ( 47 .2
+
+questions per video). The questions were provided by Ciena and were derived from two sources: (a) audience questions asked during the presentations (capturing clarifications and “why/how” reasoning), and (b) knowledge-check questions about the key concepts employees were expected to learn from the recordings. Ciena engineers developed the ground-truth answers to the questions. 
+
+Course dataset. This dataset is made up of five lecture record-ings from two undergraduate software engineering courses, totaling 488 .6 MB and 363 .02 minutes, with an average dura-tion of 72 .6 minutes per video. One course focuses on general software engineering concepts (e.g., requirements and domain analysis, architectural and design modeling), and the other focuses on Java programming (e.g., object-oriented design and implementation). Both courses make extensive use of UML. The questions and ground-truth answers were created by two university students, neither of whom is a co-author of this paper. The questions were formulated based on the recordings to ensure coverage of both verbal explanations and visually grounded information. The questions span (a) concep-tual understanding of software engineering topics introduced by the lecturer, (b) code- and API-level reasoning in Java (e.g., inheritance, class responsibilities, and method behavior), and (c) diagram-centric interpretation of UML elements (e.g., identifying diagram components, relationships, and the impli-cations of design choices). In total, this dataset contains 295 
+
+questions, averaging 59 questions per video. 
+
+B. Experiment Setting 
+
+Table II shows the configuration parameters used for LMVQA in our experiments. Based on preliminary exper-iments, we set the sampling rate to 1 FPS, so that only one frame per second is retained, which substantially reduces computational cost while preserving sufficient temporal res-olution for reasoning. We set the SSIM threshold to 0.92 
+
+for keyframe selection, following the SSIM-based redundancy filtering described in Section III-A. With this threshold, we discard only frames that are nearly identical while retaining those with even subtle differences. This is important for technical meeting videos, where small visual updates, such as new text, arrows, or diagram elements appearing on a slide, introduce important information that should be preserved as distinct frames. For answer generation, we start by keeping the top 200 most relevant chunks, chosen to balance evidence coverage and prompt size. If the retrieved context exceeds GPT-4o’s context-length limit, we retain only the highest-ranked chunks that fit within the model’s context window and omit the remaining lower-ranked chunks, thereby minimizing information loss. In the visual description extraction, we use GPT-4o-mini to classify keyframes and detect diagram categories, GPT-4o to extract descriptions from non-diagram related frames, and GPT-5 to generate descriptions for diagram-related frames. We also use GPT-4o for answer generation. All OpenAI models used in our experiments, including GPT-5, were accessed through Ciena-approved OpenAI API subscriptions at the time of the study. For all LLM queries, we set the temperature to zero to ensure that the outputs are as deterministic and reproducible as possible. To our knowledge, no prior work has addressed open-ended question answering over technical videos. For comparison with existing methods, we use DrVideo [23] as the closest and most recent approach to our work. DrVideo is a state-of-the-art retrieval-based method for long-video question answering. However, it is designed for multiple-choice questions, whereas all questions in our datasets are open-ended. We therefore adapt DrVideo by extending its prompts and post-processing pipeline to generate open-ended responses in a compact JSON format with final_answer and rationale ; our adapted DrVideo baseline is released as part of our replication pack-age [26]. We use GPT-4o as the underlying LLM for DrVideo, consistent with the LLM used for LMVQA. We used the same experimental setup for both LMVQA and DrVideo. For both methods, all local preprocessing, retrieval, and logging steps were executed on a machine equipped with an Intel(R) Core(TM) Ultra 7 165U CPU and 
+
+16 GB of memory. Audio transcription was performed locally using Whisper [31]. All LLM calls for both LMVQA and DrVideo, including calls to GPT-4o-mini, GPT-4o, and GPT-5, were made through Ciena-approved OpenAI API subscriptions rather than locally deployed models. This setup ensured that LMVQA and DrVideo were evaluated under the same exe-cution environment and API access conditions. All code and experimental results are available online [26]. 
+
+C. Metrics 
+
+To answer RQ1, we evaluate the accuracy of answers generated by LMVQA and the baseline by comparing them against the ground-truth answers. The evaluation was con-TABLE III EXAMPLES OF QUESTIONS , GENERATED ANSWERS , CORRESPONDING GROUND -TRUTH ANSWERS , AND CORRECTNESS OF THE GENERATED ANSWERS . R EDACTED TEXT APPEARS IN SQUARE BRACKETS ([]) AND IS HIGHLIGHTED IN RED .                 
+
+> Item Content Example 1 Correct according to the criteria in Table IV
+> Question Who are the main vertically integrated vendors in the coherent plug market? Generated Answer [Vendor1], [Vendor2], [Vendor3], and [Vendor4]. Ground truth [Vendor1], [Vendor2], [Vendor3], and [Vendor4] are the main vertically integrated vendors producing plugs and having both DSP and electro-optics capabilities.
+> Example 2 Correct according to the criteria in Table IV
+> Question How much total spectrum is required to transport 2 Terabits (2T) of data using [Internal Transponder A] versus [Internal Transponder B], as shown in the table and diagrams? Generated Answer [Internal Transponder A]: 625 GHz; [Internal Transponder B]: 400 GHz. Ground truth To transport 2T of data, [Internal Transponder A] requires 625 GHz of spectrum, whereas [Internal Transponder B] requires only 400 GHz of spectrum.
+> Example 3 Incorrect as it violates the criteria ii and iii in Table IV
+> Question On the “STATES” slide fragment, which example state is shown receiving two incoming “buttonOrObstacle” arrows? Generated Answer Opening Ground truth HalfOpen
+
+TABLE IV CORRECTNESS CRITERIA FOR GENERATED ANSWERS . 
+
+> Criterion Description i. Exact numeric agreement (when applicable)
+> For questions requiring quantitative answers, the response must exactly match the numeric values and units in the ground truth, or present an equivalent representation that unambiguously conveys the same quantity. Differences in formatting are allowed, but any discrepancy in values, units, or referenced entities renders the answer incorrect.
+> ii. Complete coverage of question-required content
+> For questions with ground-truth answers that list multiple entities or facts (e.g., vendors or required conditions), the generated answer must contain all listed items. Missing any item is considered incorrect.
+> iii. Core-answer equivalence under extended ground truth
+> If the ground-truth answer includes extra explanatory details, the generated answer is still correct as long as it conveys the essential facts or claims that directly answer the question and does not contradict the ground truth.
+
+ducted by two labelers who were not authors of this study and were not involved in constructing the datasets. Both labelers received detailed annotation guidelines and assessed each generated answer against its corresponding ground truth. Table III presents representative examples of questions, gener-ated answers, ground-truth answers, and assigned labels, while Table IV defines the criteria for judging semantic equivalence. For each pair of generated and ground-truth answers, the labelers assigned a binary label: correct or incorrect . An answer was labeled incorrect if it contradicted the ground truth, failed to answer the question, omitted required information, or contained incorrect numerical values, units, or entities. As shown in Table III, the first two generated answers were labeled correct because they satisfy the criteria in Table IV; the third is incorrect because it violates criteria (ii) and (iii). Interrater agreement among the two labelers was measured using Cohen’s kappa ( κ). As shown in Table V, agreement between the two labelers is consistently high. For DrVideo, we obtain κ = 0 .750 on the Ciena dataset and 0.929 on the Course dataset, corresponding to substantial and almost perfect agreement respectively. For LMVQA, κ = 0.621 on the 
+
+TABLE V INTER -RATER AGREEMENT (C OHEN ’S κ) PER SPLIT AND POOLED .                 
+
+> Split Cohen’s κInterpretation dataset
+> DrVideo 0.750 Substantial Ciena 0.929 Almost perfect Course LMVQA 0.621 Substantial Ciena 0.967 Almost perfect Course
+> Pooled (all) 0.908 Almost perfect —
+
+Ciena dataset (substantial agreement) and 0.967 on the Course dataset (almost perfect agreement). The pooled agreement across all items is κ = 0 .908 , indicating near-perfect reliability of the binary judgments [33]. A disagreement was counted whenever the two labelers assigned different labels to the same answer. All disagreements were subsequently resolved in a consensus meeting, during which the labelers discussed each disputed case and jointly agreed on the final label. Accuracy was then calculated as the proportion of questions labeled as correct out of the total number of questions. For RQ2, we evaluate efficiency using three metrics: offline video-indexing time , interactive answering time per question ,and LLM API cost . We distinguish offline and interactive time to avoid conflating one-time preprocessing with the latency experienced by users during question answering. LMVQA has a two-stage design: it first processes each video once to construct a reusable, time-stamped multimodal evidence corpus, and then uses this corpus to answer user questions through retrieval and generation. We define the three metrics measuring efficiency as follows: (1) Offline video-indexing time measures the wall-clock time needed to process a video before it becomes queryable, including audio and visual ex-traction, description generation, chunking, embedding, and vector-database storage. This metric captures the one-time preprocessing cost that LMVQA shifts offline and reuses across questions. (2) Interactive answering time per question measures the user-facing latency from question submission to answer generation after indexing, including query embed-ding, retrieval, prompt construction, and answer generation. (3) LLM API cost measures the token-based cost of commer-cial LLM calls. We report the average cost per video, including indexing and answer generation for all questions associated with that video. For RQ3, we collected qualitative feedback from three Ciena engineers through hands-on use of LMVQA followed by semi-structured interviews. At the start of each session, we demonstrated LMVQA using a randomly selected internal Ciena technical meeting video and briefly explained the topic and scope of the assigned video to provide participants with sufficient context for formulating relevant questions. Partic-ipants then completed approximately ten minutes of guided practice to become familiar with the interface and the question-answering workflow. After this guided practice, participants were given access to the interactive interface of LMVQA and were free to explore the assigned video in a hands-on manner by watching or skimming relevant segments, navigating to timestamps, and asking natural-language questions about both its spoken and visual content. Participants continued using TABLE VI ACCURACY COMPARISON BETWEEN LMVQA ( DENOTED BY L) AND         
+
+> DRVIDEO (DENOTED BY D).
+> # of correct answers(L-D) # of incorrect answers(L-D) Accuracy (L-D) Ciena 222-74 14-162 0.94-0.31
+> Course 261-63 34-232 0.88-0.21
+
+LMVQA until they felt they had sufficiently explored its capabilities, after which they completed the questionnaire described below. The questionnaire consisted of five parts. The first part cap-tured participants’ experience with company technical meeting videos, including their viewing duration and frequency. The second part examined their purposes for watching technical meeting videos and the challenges they encounter when con-suming them. The third part asked about any alternative tools they had previously used for similar tasks. The fourth part elicited their views on the usefulness, accuracy, and effective-ness of LMVQA. Finally, the fifth part invited participants to suggest future improvements. The completed questionnaires for all three participants are available online [26]. 
+
+D. Results 
+
+RQ1: Accuracy. To answer RQ1, we assess the accuracy of both LMVQA and the baseline, DrVideo, using the accuracy metric described in Section IV-C. Table VI summarizes the accuracy results achieved by LMVQA and DrVideo on our two datasets. Specifically, for the Ciena dataset, the accuracy (i.e., the rate of correct answers) improves from 31% (DrVideo) to 94% (LMVQA), representing an absolute gain of 63% and a relative improvement of 203% . For the Course dataset, the accuracy increases from 21% to 88% , corresponding to an absolute gain of 67% and a relative improvement of 319% .As shown in Table I, the Course dataset contains more diagram-related content than the Ciena dataset. On average, each Course video contains 70 .4 diagram-related keyframes, compared with 14 .8 in the Ciena dataset. The Course dataset also contains more diagram-related questions per video ( 28 .2
+
+vs. 4.2). The improvement achieved by LMVQA is more pronounced for the Course dataset than for the Ciena dataset (319% vs. 203% in accuracy). While other factors may contribute to this gap, these results suggest that LMVQA may be particularly useful for diagram-rich technical videos. The answer to RQ1 is that LMVQA achieves substantially higher accuracy than a state-of-the-art approach, DrVideo, improving accuracy from 31% to 94% on the Ciena dataset and from 21% to 88% on the Course dataset. 
+
+RQ2: Efficiency. We evaluate efficiency using the three metrics defined in Section IV-C: offline video-indexing time ,
+
+interactive answering time per question , and LLM API cost .We report the cost per video, including both the one-time indexing cost and the answer-generation cost for all questions associated with that video. Recall that offline video-indexing time measures the one-time preprocessing cost required for                                 
+
+> TABLE VII EFFICIENCY COMPARISON BETWEEN LMVQA AND DRVIDEO ON THE
+> CIENA AND COURSE DATASETS . R ESULTS SHOW MEAN (STD .) OFFLINE INDEXING TIME ,PER -QUESTION LATENCY ,AND LLM API COST .
+> offline video-indexing time avg (std) interactive answering time per question avg (std) LLM API cost per video avg (std) dataset DrVideo N/A 81 .3s ( 24 .8s) 149 USD ( 29 .3USD) Ciena N/A 98 .4s ( 25 .0s) 156 USD ( 59 .1USD) Course
+> LMVQA 1.47 h ( 0.31 h) 3.3s ( 1.2s) 36 USD ( 3.5USD) Ciena
+> 2.71 h ( 1.18 h) 9.2s ( 7.0s) 38 USD ( 12 .7USD) Course
+
+LMVQA to construct a reusable multimodal evidence cor-pus for each video, including audio transcription, visual de-scription extraction, chunk generation, embedding, and vector database construction. In contrast, interactive answering time per question measures the latency experienced by users during question answering once indexing has been completed. Table VII reports the average values and standard deviations for all three metrics across both datasets. Since DrVideo does not construct a reusable offline index and instead repeatedly processes raw video content during question answering, the offline video-indexing metric is not applicable to the baseline and is therefore marked as N/A. For LMVQA, the average offline video-indexing time is 
+
+1.47 hours per video on the Ciena dataset and 2.71 hours per video on the Course dataset. Although this preprocessing step incurs an upfront cost, it is performed only once per video, can be executed offline (e.g., overnight), and enables efficient reuse across subsequent queries. The benefits of this design are reflected in the interactive answering latency. On the Ciena dataset, DrVideo requires an average of 81 .3 seconds per question, whereas LMVQA answers questions in only 3.3 seconds after indexing, yielding approximately a 24 .6 times speedup. Similarly, on the Course dataset, DrVideo requires 98 .4 seconds per question, while LMVQA reduces this latency to 9.2 seconds, corresponding to an approximate 10 .7 times improvement. These results indicate that shifting computation to an offline indexing stage substantially improves responsiveness during user interaction. LMVQA also achieves substantially lower LLM API costs than DrVideo. On the Ciena dataset, LMVQA incurs an average cost of 36 USD per video, compared with 149 USD for DrVideo. On the Course dataset, LMVQA costs 38 USD per video, whereas DrVideo costs 156 USD. Overall, this corresponds to cost reductions of approximately 76% and 75% 
+
+on the Ciena and Course datasets, respectively. Since most of LMVQA’s cost is incurred during one-time offline indexing, the marginal LLM API cost of each subsequent query is low, making the approach practical when videos are queried multiple times. The answer to RQ2 is that LMVQA improves interactive efficiency by shifting expensive video processing to a one-time offline indexing stage. After indexing, LMVQA an-swers questions substantially faster than DrVideo, reducing average per-question latency from 81 .3s to 3.3s on Ciena and from 98 .4s to 9.2s on Course. It also lowers LLM API cost by approximately 75% across both datasets. 
+
+RQ3: Practitioner Feedback. To address RQ3, we col-lected qualitative feedback from three Ciena engineers through hands-on use of LMVQA followed by semi-structured inter-views, as described in Section IV-C. The completed question-naires from all three participants are available online [26]. Here, we outline the main findings. All participants had at least three years of experience at Ciena. They regularly use technical meeting recordings to synchronize with ongoing projects, learn about new technolo-gies and system introductions, understand the rationale behind technical decisions, and identify stakeholder requirements and constraints. None of the participants is a co-author of this paper. The interviews highlighted some recurring challenges associated with reviewing long technical meeting videos. Par-ticipants noted that the length of the recordings makes them time-consuming to revisit and makes it difficult to remember specific details afterward. In practice, engineers often revisit recordings with focused information needs, such as clarifying a design decision or locating a particular requirement, and therefore prefer not to watch the entire video again to find relevant information. In addition, participants discussed the tools they currently use to support video review. One participant reported using Zoom’s meeting assistant, while another relied on several general-purpose generative AI tools, including GPT, Claude, and YouTube’s AI-assisted video features. However, partic-ipants emphasized several limitations of these tools when applied to long technical meeting videos. First, directly up-loading long videos to general-purpose LLM systems often leads to unpredictable processing times and, in some cases, unusable or incomplete answers. Second, these systems are not specifically designed for software-engineering artifacts commonly found in technical meetings, such as UML dia-grams, architecture diagrams, workflow diagrams, and other structured engineering visualizations. As a result, they may fail to correctly interpret diagram semantics or connect visual evidence with spoken explanations. Finally, participants noted that these tools typically do not provide explicit time-stamped multimodal evidence tracing, making it difficult to verify answers or navigate back to the relevant video segments. Two participants reported that the answers generated by LMVQA during the evaluation sessions were accurate and easy to understand. The third participant asked three questions and indicated that LMVQA answered two correctly, while one answer was only partially accurate because it required identi-fying a very small component within a diagram. Despite this limitation, all participants stated that LMVQA successfully traced answers back to the relevant portions of the video. Even in the partially correct case, the participant considered the identified video segment helpful because it substantially narrowed the search space for manual verification. Overall, two participants rated LMVQA as accurate or very accurate. More importantly, all three participants em-phasized that the ability to locate and trace relevant evidence within long technical meeting recordings was one of the most valuable aspects of the system. These results suggest that, beyond answer generation alone, LMVQA provides practical value through grounded multimodal retrieval and time-stamped source tracing for diagram-rich technical meeting videos. The answer to RQ3 is that, based on practitioner feedback from three Ciena engineers, LMVQA was perceived as useful for locating, verifying, and interpreting information in long technical meeting videos. Two participants rated LMVQA as accurate or very accurate, and all three found its time-stamped source tracing helpful for verifying an-swers and locating relevant video segments. 
+
+E. Validity Considerations and Limitations 
+
+Internal Validity. A potential threat to internal validity arises from the inherent randomness of LLMs. Due to the high execution time, we were unable to run LMVQA or the baseline multiple times to account for randomness. To mitigate this threat, we set the LLM temperature parameter to zero to improve determinism in the generated outputs. In addition, the substantial number of questions in our datasets – averaging 
+
+47 .2 questions per video for the Ciena dataset and 59 questions per video for the Course dataset – helps compensate for the lack of repeated runs. 
+
+External Validity. Although our evaluation uses two datasets spanning both an industrial setting (Ciena) and a public course setting, the total number of videos remains limited to ten videos, which makes the study appropriate as an initial assessment rather than a definitive demonstration of generaliz-ability. The videos cover different presentation styles, question types, and varying amounts of diagram-centric content, but differences in domains and meeting practices may still affect how well the results transfer to other real-world contexts. Fur-thermore, LMVQA relies on OpenAI LLMs – GPT-4o-mini for keyframe classification and diagram category detection, GPT-4o for non-diagram description extraction and answer generation, and GPT-5 for diagram-related frame processing – so the reported outcomes may vary with other LLMs due to differences in their capabilities and behavior. V. R ELATED WORK 
+
+Table VIII positions LMVQA within the literature by com-paring it to relevant approaches across three capabilities central to technical meeting question answering (QA): (i) long-video support , i.e., the ability to process hour-scale videos; (ii) au-dio coverage , i.e., whether spoken content is used as evidence; and (iii) diagram grounding , i.e., whether the method explic-itly supports understanding and reasoning over diagrams. A first line of work in software-engineering video analysis focuses on retrieval, navigation, and code extraction rather TABLE VIII RELATED WORK ORGANIZED BY THREE CAPABILITIES CENTRAL TO VIDEO QUESTION -ANSWERING : LONG -VIDEO SUPPORT , AUDIO COVERAGE , AND DIAGRAM GROUNDING . I N THIS TABLE , ✓ INDICATES FULL SUPPORT , ×                      
+
+> INDICATES NO SUPPORT ,AND ▷INDICATES PARTIAL SUPPORT .
+> Approach(es) Long-video Audio Diagram
+> CodeTube [7], Escobar-Avila et al. [8], VT-Revolution [11], psc2code [10], PSFinder [13], LongVLM [25], Video-LLaVA [21]
+> ✓××
+> Flamingo [19], Video-ChatGPT [22] ×××
+> Video-LLaMA [20] ×✓×
+> PlotQA [34], ChartQA [35], ChartVQA [36], AI2D [37], DocVQA [38]
+> ××✓
+> DrVideo [23] ✓▷▷
+> LMVQA ✓✓✓
+
+than question answering. CodeTube [7] and the approach of Escobar-Avila et al. [8] identify relevant segments in software tutorial videos using tag-based retrieval. VT-Revolution [11] and psc2code [10] extend this direction by supporting in-teractive navigation and code extraction from programming videos. PSFinder [13] similarly enables efficient search over live-coding screencasts. These methods are relevant because they operate over long videos in software-related settings; however, they are not designed for grounded, open-ended question answering, do not integrate audio evidence, and do not explicitly reason over diagrams in slides or screen shares. A second line of work studies general-purpose multi-modal video-language models. Flamingo [19] and Video-ChatGPT [22] extend image-language modeling to video through sparse frame sampling and prompt-based genera-tion. These models are effective for clip-level captioning and question answering, but they are not intended for hours-long videos and rely primarily on visual input. Video-LLaVA [21] moves further toward video understanding by aligning frame sequences with instruction tuning, and LongVLM [25] in-troduces memory- and retrieval-based mechanisms for long-video processing. While these approaches improve temporal coverage, they still do not explicitly incorporate audio as a first-class source of evidence and do not provide dedicated sup-port for diagram reasoning. Video-LLaMA [20] addresses part of this limitation by incorporating audio into an instruction-tuned audio-visual LLM. However, it still focuses on short- to medium-length videos rather than hour-long technical record-ings with diagram-heavy content. A third, complementary line of work comes from di-agram and document question answering. PlotQA [34], ChartQA [35], and ChartVQA [36] study reasoning over charts and plots, including reading labels, inferring values, and per-forming logical or arithmetic operations. AI2D [37] expands the scope to general diagram understanding by modeling diagram elements and their relations, while DocVQA [38] focuses on question answering over document images. These studies are highly relevant to our setting because they highlight the importance of structured visual reasoning. However, they are fundamentally image-centric: they do not handle long temporal context, do not integrate spoken explanations, and therefore do not directly address technical meeting videos where answers often depend on combining diagram content with narration over time. The closest prior work to ours is DrVideo [23], which we use as our baseline. DrVideo is a retrieval-based framework for long-video understanding that retrieves question-conditioned evidence and iteratively refines it into a document for answer-ing, making it more suitable for hour-scale videos than clip-oriented video QA systems. However, DrVideo only partially addresses technical meeting QA. It lacks explicit mechanisms for detecting diagram-relevant segments, categorizing diagram types, or adapting answer generation to diagram structure. As a result, it can answer diagram-related questions only when the retrieved textual evidence captures the necessary visual semantics. Moreover, DrVideo is designed for multiple-choice QA, so applying it to open-ended questions requires additional prompting and post-processing. Overall, no prior approach is tailored to technical meeting video QA, which requires long-video processing, audio-visual evidence integration, and grounding in structured artifacts such as software diagrams. Existing methods address these needs only partially. LMVQA fills this gap by constructing a reusable audio-visual evidence corpus, explicitly detecting and categorizing diagrams, and using diagram-aware prompting for structured visual evidence. VI. L ESSONS LEARNED 
+
+Lesson 1: Customization for software-engineering dia-gram semantics is important for diagram-rich technical videos. Technical engineering meetings often convey essential information through diagrams that capture structure, depen-dencies, relationships, and design intent. Our results suggest that treating these diagrams as generic visual content can limit answer accuracy. LMVQA is customized for software-engineering artifacts by detecting diagram-rich frames, classi-fying diagram types, and extracting diagram-specific semantics before generating answers from visual and audio evidence. To evaluate the importance of this capability, we compared LMVQA against DrVideo [23], a recent state-of-the-art long-video question-answering approach from the literature, which we adapted to support open-ended questions but which does not explicitly support software-engineering diagram semantics. Our RQ1 results provide evidence for the value of this customization. LMVQA improves accuracy from 31% to 94% on the Ciena dataset and from 21% to 88% on the Course dataset. While other factors may contribute to these gains, the results suggest that semantic-level understanding of software-engineering diagrams is important for effective question an-swering over diagram-rich technical meeting videos. 
+
+Lesson 2: Brute-force frame analysis is costly and unnec-essary. RQ2 shows that LMVQA is substantially more efficient and less costly than DrVideo, a state-of-the-art baseline. A key reason is that LMVQA samples frames at fixed intervals (1 FPS in our implementation), removes visually redundant sampled frames using SSIM, and applies LLM-based visual description extraction only to the retained keyframes. This reduces repeated analysis of visually similar frames while preserving the key visual evidence needed for question an-swering. As shown in our evaluation, this selective frame analysis reduces unnecessary LLM calls without sacrificing answer quality. As a result, LMVQA lowers per-question latency from 81.3s to 3.3s on Ciena and from 98.4s to 9.2s on Course, while reducing LLM API cost by approximately 75%. These results show that vision-based similarity metrics [39] can effectively identify the focused visual evidence needed for technical video question answering, rather than processing all frames exhaustively. 
+
+Lesson 3: Grounded evidence matters as much as answer generation. A third lesson is that LMVQA’s value lies not only in answering questions, but also in helping users navigate long technical videos through grounded multimodal evidence. Participants noted that such videos are long, easy to forget, and hard to search afterward. In this setting, LMVQA’s ability to connect answers to relevant video segments was a key differentiating factor: all three participants rated its source tracing as helpful. One participant noted that LMVQA helped them “jump to the sections I need”, while others emphasized that it enabled them to quickly find specific information without rewatching the entire video. Participants also valued its diagram-related support, with two rating diagram-related answers as accurate or very accurate and one reporting that it made diagram understanding very easy. Overall, these comments suggest that LMVQA’s distinctive strength is the combination of diagram analysis, question answering, and traceable evidence, rather than answer generation alone. At the same time, the feedback shows that fine-grained diagram understanding and the user experience of interacting with long videos remain important directions for future research. 
+
+Deployment at Ciena. LMVQA was developed in col-laboration with Ciena over seven months and deployed as part of Ciena’s AI-based solutions. It uses Milvus [40] as a Ciena-hosted vector database for reusable offline indexing. For each archived meeting video, LMVQA extracts audio and visual evidence, builds time-stamped multimodal chunks, embeds them, and stores them in Milvus for efficient retrieval. Engineers can then query the pre-indexed archive without reprocessing videos for each question. VII. C ONCLUSION 
+
+In this paper, we presented LMVQA, an LLM-based multi-modal question-answering system for diagram-rich technical meeting videos. Across an industrial dataset and a public-domain dataset, LMVQA improves average accuracy over a state-of-the-art baseline, DrVideo, from 31% to 94% and from 
+
+21% to 88% , respectively, while reducing average LLM API cost by about 75% . These results show that diagram-aware processing, reusable video indexing, and evidence-grounded answer generation are key to practical QA over long technical recordings. More broadly, LMVQA can help engineers recover rationale, revisit historical decisions, and understand archi-tecture and requirements discussions. Feedback from Ciena engineers suggests that future work should further improve video navigation, answer verification, and user interaction. VIII. A PPENDIX 
+
+A. Prompt Outlines 
+
+(Listing a) Prompt Outline for Diagram-Like Frame Detection (I) Role: a fast triage classifier. 
+
+(II) Input: a single video frame image. 
+
+(III) Task: decide whether the frame is diagram-like. Diagram-like visuals include diagrams, flowcharts, schematics, architecture diagrams, charts, tables, UI wireframes, whiteboards with boxes or arrows, and equations. 
+
+(IV) Output: LABEL: <DIAGRAM|NOT_DIAGRAM> ; TYPES: <types> ; CONF: <0.00-1.00> .
+
+(Listing b) Prompt Outline for Non-Diagram Frame Captioning (I) Role: an assistant analyzing a video frame from an educational lecture or tutorial. 
+
+(II) Frame metadata: {timestamp }.
+
+(III) Input: a sampled video frame image. 
+
+(IV) Task: describe visible slide, screen, chart, or non-diagram content; extract and summarize visible text when useful. 
+
+(V) Grounding rules: ignore irrelevant UI elements, avoid redundancy, and describe only visible content. 
+
+(VI) Output: a fluent structured English frame description. 
+
+(Listing c) Prompt Outline for Diagram Classification (I) Role: a fast diagram-type classifier. 
+
+(II) Input condition: the image is already known to be diagram-like. 
+
+(III) Categories: UML_CLASS , UML_SEQUENCE ,
+
+UML_STATE_ACTIVITY , UML_USE_CASE , NETWORK_TOPOLOGY ,
+
+ARCH_WORKFLOW , or OTHER .
+
+(IV) Output: CATEGORY: <category> ; CONF: <0.00-1.00> .
+
+(Listing d) Definitions for diagram categories used in prompt outline in listing c. 
+
+UML_CLASS : diagram title; scope or packages; classes and interfaces; relationships; key takeaways. 
+
+UML_SEQUENCE : diagram title; participants or lifelines; temporally ordered messages; activations; combined fragments; key scenario summary. 
+
+UML_STATE_ACTIVITY : diagram title; subtype; nodes; transitions or flows; composite states, swimlanes, forks, joins, and behavior summary. 
+
+UML_USE_CASE : diagram title; system boundary; actors; use cases; associations; include, extend, and generalization relationships. 
+
+NETWORK_TOPOLOGY : title or legend; nodes and endpoints; links; traffic or flows; key topology takeaway. 
+
+ARCH_WORKFLOW : title; components or modules; interfaces or artifacts; connections or flows; workflow steps. 
+
+OTHER : title; diagram type guess; main elements; relationships or structure; key takeaway. 
+
+(Listing e) Prompt Outline for Diagram Frame Extraction (I) Role: a diagram-frame describer specialized according to the selected diagram category. 
+
+(II) Frame metadata: {timestamp }.
+
+(III) Input: the diagram-like video frame image. 
+
+(IV) Generic schema: title, purpose, global layout, nodes, edges, flow sequence, text and labels, data or variables, context anchors, and key takeaway. 
+
+(V) Category-specific schema: refined according to the diagram classifier output. 
+
+(VI) Grounding rules: describe only visible content, quote labels when possible, mark unclear text as [illegible] , and do not invent facts. 
+
+(VII) Output: exhaustive structured plain English text, not JSON. 
+
+(Listing f) Prompt Outline for RAG-Based Video Question Answering (I) Role: an assistant answering questions about technical videos using time-stamped multimodal information. 
+
+(II) Video metadata: {video_duration }.
+
+(III) Retrieved context: {retrieved_context }, formatted as 
+
+[source] <timestamp>: <text> .
+
+(IV) User question: {user_question }.
+
+(V) Grounding rules: answer only from retrieved segments; do not introduce unsupported information; use the insufficient-information answer when needed. 
+
+(VI) Output: Answer: plus final answer, and Used_context: with 1–10 relevant time-stamped segments. ACKNOWLEDGEMENTS 
+
+We gratefully acknowledge financial support from Mitacs, Ciena, and NSERC of Canada through the Discovery Program. REFERENCES [1] A. van Lamsweerde, “Requirements engineering in the year 00: A re-search perspective,” in Proceedings of the 22nd International Conference on Software Engineering (ICSE) , 2000, pp. 5–19. [2] W. J. Lloyd, M. B. Rosson, and J. D. Arthur, “Effectiveness of elicitation techniques in distributed requirements engineering,” in 10th Anniversary IEEE Joint International Conference on Requirements Engineering (RE 2002) , 2002, pp. 311–318. [3] A. Girgensohn, J. Marlow, F. M. Shipman, and L. Wilcox, “Hy-perMeeting: Supporting asynchronous meetings with hypervideo,” in 
+
+Proceedings of the 23rd Annual ACM Conference on Multimedia , 2015, pp. 611–620. [4] L. Nagel, O. Karras, S. M. Amiri, and K. Schneider, “Turning asyn-chronicity into an opportunity: asynchronous communication for shared understanding with vision videos,” Requirements Engineering , vol. 29, pp. 49–71, 2024. [5] A. Skylar, “A comparison of asynchronous online text-based lectures and synchronous interactive web conferencing lectures,” Issues in Teacher Education , vol. 18, no. 2, 2009. [6] S. Palsole and C. Awalt, “Team-based learning in asynchronous online settings,” New Directions for Teaching and Learning , vol. 2008, no. 116, pp. 87–95, 2008. [7] L. Ponzanelli, G. Bavota, A. Mocci, M. Di Penta, R. Oliveto, B. Russo, S. Haiduc, and M. Lanza, “CodeTube: Extracting relevant fragments from software development video tutorials,” in Proceedings of the 38th International Conference on Software Engineering Companion , 2016, pp. 645–648. [8] J. Escobar-Avila, E. Parra, and S. Haiduc, “Text retrieval-based tagging of software engineering video tutorials,” in 2017 IEEE/ACM 39th International Conference on Software Engineering Companion (ICSE-C) , 2017. [9] E. Parra, J. Escobar-Avila, and S. Haiduc, “Automatic tag recommen-dation for software development video tutorials,” in Proceedings of the 26th IEEE/ACM International Conference on Program Comprehension (ICPC) , 2018. [10] L. Bao, Z. Xing, X. Xia, D. Lo, M. Wu, and X. Yang, “psc2code: Denois-ing code extraction from programming screencasts,” ACM Transactions on Software Engineering and Methodology , 2020. [11] L. Bao, Z. Xing, X. Xia, and D. Lo, “VT-Revolution: Interactive programming video tutorial authoring and watching system,” IEEE Transactions on Software Engineering , 2019. [12] A. Malkadi, A. Tayeb, and S. Haiduc, “Improving code extraction from coding screencasts using a code-aware encoder-decoder model,” in Proceedings of the 38th IEEE/ACM International Conference on Automated Software Engineering (ASE) , 2023. [13] C. Yang, F. Thung, and D. Lo, “Efficient search of live-coding screen-casts from online videos,” in IEEE International Conference on Software Analysis, Evolution and Reengineering (SANER) , 2022, pp. 73–77. [14] Y. Yan, N. Cooper, O. Chaparro, K. Moran, and D. Poshyvanyk, “Semantic GUI scene learning and video alignment for detecting du-plicate video-based bug reports,” in Proceedings of the IEEE/ACM 46th International Conference on Software Engineering (ICSE) , 2024, pp. 2868–2880. [15] P. Khamsepour, M. Cole, I. Ashraf, S. Puri, M. Sabetzadeh, and S. Nejati, “Question answering for multi-release systems: A case study at ciena,” in 33rd IEEE International Conference on Software Analysis, Evolution and Reengineering (SANER) , 2026. [16] D. Chaudhary, S. L. Vadlamani, D. Thomas, S. Nejati, and M. Sabet-zadeh, “Developing a llama-based chatbot for CI/CD question answer-ing: A case study at ericsson,” in IEEE International Conference on Software Maintenance and Evolution (ICSME) , 2024, pp. 707–718. [17] S. Abedu, A. Yuen, A. Abdellatif, S. Owolabi, M. S. Ruiz Rodriguez, C. Lim Ah Tock, A. Zaraket, E. Shihab, and N. Nasseri, “Experiences developing an AI chatbot in the pharmaceutical industry,” in 7th Interna-tional Workshop on Bots and Agents in Software Engineering (BoatSE) ,2026. [18] L. Yang, Y. Luo, H. Gao, Y. Fan, J. Zhang, X. Li, X. Dong, B. Gu, Z. Jin, and M. Yang, “Evaluating large language models for requirements question answering in industrial aerospace software,” in Proceedings of the 33rd ACM International Conference on the Foundations of Software Engineering Companion (FSE Companion) , 2025, pp. 366–377. [19] J.-B. Alayrac, J. Donahue, P. Luc, A. Miech, I. Barr, Y. Hasson, K. Lenc, A. Mensch, K. Millican, M. Reynolds, R. Ring, E. Rutherford, S. Cabi, T. Han, Z. Hao, M. M. Botvinick, O. Vinyals, A. Zisserman, and K. Simonyan, “Flamingo: a visual language model for few-shot learning,” arXiv preprint arXiv:2204.14198 , 2022. [Online]. Available: https://arxiv.org/abs/2204.14198 [20] H. Zhang, X. Li, and L. Bing, “Video-LLaMA: An instruction-tuned audio-visual language model for video understanding,” arXiv preprint arXiv:2306.02858 , 2023. [Online]. Available: https://arxiv.org/abs/2306. 02858 [21] B. Lin, B. Zhu, Y. Ye, M. Ning, P. Jin, and L. Yuan, “Video-LLaVA: Learning united visual representation by alignment before projection,” arXiv preprint arXiv:2311.10122 , 2023. [Online]. Available: https://arxiv.org/abs/2311.10122 [22] M. Maaz, H. Rasheed, S. Khan, and F. S. Khan, “Video-ChatGPT: Towards detailed video understanding via large vision and language models,” arXiv preprint arXiv:2306.05424 , 2023. [Online]. Available: https://arxiv.org/abs/2306.05424 [23] Z. Ma, C. Gou, H. Shi, B. Sun, S. Li, H. Rezatofighi, and J. Cai, “DrVideo: Document retrieval based long video understanding,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , Jun. 2025, pp. 18 936–18 946. [24] C. Zhang, T. Lu, M. M. Islam, Z. Wang, S. Yu, M. Bansal, and G. Bertasius, “A simple LLM framework for long-range video question-answering,” in Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing (EMNLP) . Miami, Florida, USA: Association for Computational Linguistics, Nov. 2024, pp. 21 715– 21 737. [25] Y. Weng, M. Han, H. He, X. Chang, and B. Zhuang, “LongVLM: Efficient long video understanding via large language models,” 
+
+arXiv preprint arXiv:2404.03384 , 2024. [Online]. Available: https: //arxiv.org/abs/2404.03384 [26] Z. Xu, “LMVQA: Prompts, resources, codes, and interviews for the LMVQA system,” https://github.com/ZhuoRanRan/LMVQA, 2026, [On-line]. [27] Medialooks, “Frame rates explained: Why FPS matters in broadcasting,” 2025. [Online]. Available: https://medialooks.com/ articles/frame-rates-explained-why-fps-matters-in-broadcasting [28] Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, “Image quality assessment: From error visibility to structural similarity,” IEEE Transactions on Image Processing , vol. 13, no. 4, pp. 600–612, 2004. [29] J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. H. Chi, Q. V. Le, and D. Zhou, “Chain-of-thought prompting elicits reasoning in large language models,” in Proceedings of the 36th International Conference on Neural Information Processing Systems , ser. NeurIPS ’22. Red Hook, NY, USA: Curran Associates, Inc., 2022. [30] T. B. Brown, B. Mann, N. Ryder, M. Subbiah, J. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell, S. Agarwal, A. Herbert-Voss, G. Krueger, T. Henighan, R. Child, A. Ramesh, D. M. Ziegler, J. Wu, C. Winter, C. Hesse, M. Chen, E. Sigler, M. Litwin, S. Gray, B. Chess, J. Clark, C. Berner, S. McCandlish, A. Radford, I. Sutskever, and D. Amodei, “Language models are few-shot learners,” in Pro-ceedings of the 34th International Conference on Neural Information Processing Systems , ser. NeurIPS ’20. Red Hook, NY, USA: Curran Associates, Inc., 2020. [31] A. Radford, J. W. Kim, T. Xu, G. Brockman, C. McLeavey, and I. Sutskever, “Robust speech recognition via large-scale weak supervi-sion,” in Proceedings of the 40th International Conference on Machine Learning (ICML) , ser. Proceedings of Machine Learning Research, vol. 202, 2023, pp. 28 492–28 518. [32] G. Salton, A. Wong, and C. S. Yang, “A vector space model for automatic indexing,” Communications of the ACM , vol. 18, no. 11, pp. 613–620, 1975. [33] J. R. Landis and G. G. Koch, “The measurement of observer agreement for categorical data,” Biometrics , vol. 33, no. 1, pp. 159–174, 1977. [34] N. Methani, P. Ganguly, M. M. Khapra, and P. Kumar, “PlotQA: Reasoning over scientific plots,” in Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , 2020, pp. 1520–1529. [35] A. Masry, D. X. Long, J. Q. Tan, S. Joty, and E. Hoque, “ChartQA: A benchmark for question answering about charts with visual and logical reasoning,” in Findings of the Association for Computational Linguistics: ACL 2022 , 2022, pp. 2263–2279. [Online]. Available: https://aclanthology.org/2022.findings-acl.177/ [36] Z. Yang et al. , “ChartVQA: A benchmark for question answering on charts using visual reasoning,” arXiv preprint arXiv:2203.10244 , 2022. [Online]. Available: https://arxiv.org/abs/2203.10244 [37] A. Kembhavi, M. Salvato, E. Kolve, M. J. Seo, H. Hajishirzi, and A. Farhadi, “A diagram is worth a dozen images,” in Computer Vision – ECCV 2016 , ser. Lecture Notes in Computer Science, vol. 9908. Springer, 2016, pp. 235–251. [Online]. Available: https://doi.org/10.1007/978-3-319-46493-0 15 [38] M. Mathew, D. Karatzas, and C. V. Jawahar, “DocVQA: A dataset for VQA on document images,” in Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , 2021, pp. 2200–2209. [39] D. Ghobari, M. H. Amini, D. Q. Tran, S. Park, S. Nejati, and M. Sabetzadeh, “Test input validation for vision-based dl systems: An active learning approach,” in IEEE/ACM 47th International Con-ference on Software Engineering: Software Engineering in Practice (ICSE 2025) . IEEE, 2025, pp. 630–640, https://doi.org/10.1109/ICSE-SEIP66354.2025.00061. [40] J. Wang, X. Yi, R. Guo, H. Jin, P. Xu, S. Li, X. Wang, X. Guo, C. Li, X. Xu, K. Yu, Y. Yuan, Y. Zou, J. Long, Y. Cai, Z. Li, Z. Zhang, Y. Mo, J. Gu, R. Jiang, Y. Wei, and C. Xie, “Milvus: A purpose-built vector data management system,” in Proceedings of the 2021 International Conference on Management of Data , 2021, pp. 2614–2627.
