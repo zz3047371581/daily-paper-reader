@@ -1,0 +1,599 @@
+Title: Should Missing Modalities Always Be Necessary to Repair for Multi-modal Sentiment Analysis?
+
+URL Source: https://arxiv.org/pdf/2607.17262v1
+
+Published Time: Tue, 21 Jul 2026 01:08:58 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Should Missing Modalities Always Be Necessary to Repair for Multi-modal Sentiment Analysis? 
+
+Yubo Gao 1,2 *, Haotian Wu 3*, Xiaoyu Xu 5*, Yibo Yan 1,2 ,Hong Chen 1,2 , Ruoshui Peng 1,2 , Fei Pan 5, Puay Siew Tan 4,
+
+Zhuoran Gao 1,2 , Yonghua Hei 1,2 , Jie Zhang 3, Xuming Hu 1,2 †1The Hong Kong University of Science and Technology (Guangzhou), 
+
+> 2
+
+The Hong Kong University of Science and Technology, 
+
+> 3
+
+Nanyang Technological University, 
+
+> 4
+
+Singapore Institute of Manufacturing Technology, A*STAR, 
+
+> 5
+
+Lingnan University  
+
+> Emails: ygao704@connect.hkust-gz.edu.cn, xuminghu@hkust-gz.edu.cn
+
+Abstract 
+
+Existing methods for multimodal sentiment analysis (MSA) under missing modalities usu-ally follow a repair-first paradigm. We revisit this assumption and ask: should every miss-ing modality be repaired? A per-sample oracle analysis shows the answer is not always: full-modality input is optimal for only a small frac-tion of samples, and every modality subset is preferred by some samples. These results sug-gest that adding or repairing modalities may not always improve prediction, and that the utility of each modality is sample-dependent. Build-ing on this finding, we propose Sufficiency-
+
+Informed Evidential Val vE (SIEVE ) that turns “whether to repair” into an explicit, learnable decision at the sample level. SIEVE compares a direct prediction branch with a repair branch, derives an empirical sufficiency signal from their per-sample loss gap, and routes each in-put through an evidential gate that jointly mod-els sufficiency and its epistemic uncertainty. SIEVE is repair-agnostic: it operates as a plug-and-play decision on top of any explicit or im-plicit repair module, without modifying its in-ternal design. Experiments on CMU-MOSI and IEMOCAP show that SIEVE consistently im-proves representative repair backbones across evaluated missing rates, and approaches the per-sample dual-branch achievable optimum. 
+
+1 Introduction 
+
+Multimodal sentiment analysis (MSA) aims to in-fer human affect by integrating language, acoustic, and visual signals (Zadeh et al., 2016, 2018). Prior work has developed diverse fusion and represen-tation learning strategies to leverage the comple-mentarity of these cues (Zadeh et al., 2017; Tsai 
+
+> *These authors contributed equally to this work.
+> †Corresponding author.
+
+et al., 2019; Hazarika et al., 2020; Yu et al., 2021). However, most canonical methods rest on a full-modality assumption that is fragile in real-world deployments: acoustic signals may be corrupted by noise, visual cues may be occluded or with-held for privacy, and transcripts may be degraded by recognition errors or access restrictions (Zhao et al., 2021a; Lian et al., 2023). These incomplete observations have motivated a growing body of work on robust MSA under missing modalities. 0 20 40 60 80 100                   
+
+> GCNet
+> MISA
+> 4.4 5.2 15.7 4.5 22.2 14.7 33.2
+> 11.2 9.2 21.3 5.8 22.4 14.6 15.5
+> VATA+V T+V T+A T+A+V
+
+Figure 1: Best-performing modality combination per sample on CMU-MOSI (%). 
+
+Existing robust MSA approaches largely adopt a repair-oriented view of missing modalities, ei-ther through explicit repair that reconstructs absent modalities from the observed ones (Pham et al., 2019; Zhao et al., 2021a; Lian et al., 2023; Guo et al., 2024; Wang et al., 2023b,a), or through im-plicit repair that compensates for the resulting se-mantic deficiency at the representation or decision level (Wei et al., 2023; Li et al., 2024a,b,c; Zhuang et al., 2025b; Zhang et al., 2024; Zhuang et al., 2025a; Xu et al., 2024b; Zhuang et al., 2026). De-spite their different mechanisms, these methods share a repair-first tendency: whenever a modality is absent, they intervene before prediction, without examining whether such repair is necessary for the current sample. In this paper, we revisit this as-sumption and ask: Should every missing modality be repaired? A diagnostic oracle analysis on CMU-MOSI (Figure 1) suggests otherwise. We evaluate two representative MSA models, MISA and GC-1arXiv:2607.17262v1 [cs.CL] 19 Jul 2026 Net, under each of the seven possible modality combinations on every test sample, and identify the combination that yields the lowest prediction error. The result is striking: full-modality input is the best choice for only 15.5% of samples un-der MISA and 33.2% under GCNet, while every one of the seven subsets is preferred for some sam-ples. This pattern holds across both models and reveals a more fundamental principle: the utility of a modality is sample-dependent. For some samples, an additional modality introduces redundancy or noise instead of complementary evidence, leaving the model better off without it. Thus, reconstruct-ing or compensating for every missing modality may be unnecessary, and in some cases may even hurt prediction. This reshapes the central question of missing-modality MSA. Instead of asking only 
+
+how to repair a missing modality , a model should first decide whether repair is needed for the cur-rent sample . When the observed modalities already carry enough evidence, direct prediction may be preferable; when they do not, repair remains bene-ficial. Yet existing methods invoke repair whenever any modality is absent, leaving this sample-level decision unaddressed. To this end, we propose Sufficiency-Informed 
+
+Evidential Valv E (SIEVE ) for selective modal-ity repair. SIEVE turns “whether to repair” into an explicit, learnable decision at the sample level. For each input, SIEVE compares two prediction pathways: a direct branch that predicts from the observed modalities, and a repair branch that first invokes a repair module and then predicts. An ev-idential sufficiency valve then routes the sample between the two pathways. SIEVE is a plug-and-play, repair-agnostic framework compatible with both explicit and implicit repair methods. The cen-tral challenge is that no external ground-truth signal exists for whether a sample’s observed modalities are sufficient. SIEVE addresses this by deriving an empirical sufficiency signal directly from the per-sample loss gap between the two branches, which reveals whether direct prediction is at least as ac-curate as repaired prediction. To make routing reliable under noisy signals, SIEVE further mod-els sufficiency as an evidential distribution, jointly capturing the sufficiency estimate and its epistemic uncertainty to enable uncertainty-aware routing. Our contributions are threefold: • We challenge the repair-first assumption: a per-sample oracle analysis shows that forcing repair on every incomplete input may not be helpful for a substantial fraction of samples. • We propose SIEVE , a selective repair framework that learns a per-sample decision of whether to repair from the dual-branch loss gap, without external sufficiency labels. • As a plug-and-play decision framework, SIEVE consistently improves diverse repair backbones across benchmarks and missing rates. 
+
+2 Related Work 
+
+MSA with Missing Modalities. Multimodal senti-ment analysis (MSA) integrates language, acoustic, and visual signals to infer human affect. Since real-world inputs are often incomplete, recent studies have explored robust MSA under missing modali-ties, which can be broadly grouped into explicit and implicit modality repair (see Appendix B for a detailed review). Explicit modality repair 
+
+reconstructs, imagines, or approximates absent modalities from the observed ones before predic-tion (Pham et al., 2019; Zhao et al., 2021a; Lian et al., 2023; Guo et al., 2024; Wang et al., 2023a,b). 
+
+Implicit modality repair compensates for the re-sulting semantic deficiency at the representation or decision level, either by distilling full-modality knowledge into incomplete-modality models (Wei et al., 2023; Li et al., 2024a,b,c; Zhuang et al., 2025b), or by intrinsic evidence compensation with-out a full-modality teacher (Zhang et al., 2024; Zhuang et al., 2025a; Xu et al., 2024b; Zhuang et al., 2026). Overall, existing methods study how 
+
+to repair missing modalities. In contrast, SIEVE asks whether repair is needed for each sample, en-abling selective repair when the observed modali-ties are insufficient and direct prediction when they already suffice. 
+
+Subjective Logic and Evidential Deep Learning 
+
+Subjective Logic (Jøsang, 2001, 2016) represents uncertainty through subjective opinions. For a bi-nary proposition, an opinion consists of belief b,disbelief d, uncertainty u, and a base rate a, where 
+
+b + d + u = 1 ; the base rate specifies how the un-committed uncertainty mass is projected to a prob-ability. Under the conjugate Beta view, the parame-ters α and β encode evidence for the two outcomes, and a smaller total concentration α+β corresponds to higher epistemic uncertainty. Evidential deep learning (Xu et al., 2024a; Zhuang et al., 2025a) brings this principle into neural networks by di-rectly predicting the parameters of an appropriate 2evidence distribution, such as Dirichlet distribu-tions (and their binary special case, Beta) (Han et al., 2021, 2022) for classification (Sensoy et al., 2018) and Normal-Inverse-Gamma distributions for regression (Amini et al., 2020). 
+
+3 Method 
+
+3.1 Overview and Problem Setup 
+
+Many existing missing-modality MSA methods fol-low a repair-first assumption: whenever a modality is unavailable, the model should reconstruct, distill, or otherwise compensate for it before prediction. As our pilot study in Section 1 shows, however, the utility of a modality is sample-dependent, and forcing repair on every incomplete sample may be harmful. This shifts the central question from how to repair missing modalities to whether repair is needed for the current sample .
+
+Framework overview. SIEVE operationalizes selective modality repair through a sample-adaptive sufficiency assessment framework (Fig-ure 2). For each incomplete input, SIEVE con-structs two comparable prediction pathways. The first is a direct branch , which predicts from the observed modalities only. The second is a repair branch , which first applies a repair module Rω
+
+and then performs prediction. The repair module is used as an interchangeable component, so Rω
+
+can be instantiated by either explicit or implicit modality methods. In this way, SIEVE does not replace existing repair models, but adds a decision module that determines whether their intervention is needed for the current input. The central difficulty is that sufficiency is not directly annotated and cannot be inferred from the missing pattern alone. Two samples with the same missing modalities may require differ-ent treatments, because the observed modalities may already contain enough task-relevant evidence for one sample but remain inadequate for another. SIEVE therefore defines sufficiency operationally within the dual-branch system: the observed modal-ities are treated as empirically sufficient when di-rect prediction is no worse than repair-based pre-diction. This yields an empirical sufficiency sig-nal from the per-sample loss gap between the two branches, which provides supervision for an evi-dential sufficiency valve . The valve formulates suf-ficiency as a binary Subjective Logic proposition, namely whether the observed modalities provide enough evidence to skip repair, and predicts a Beta distribution over this proposition. Evidence for sufficiency favors the direct branch, evidence for insufficiency favors the repair branch, and high un-certainty defers to the missing-pattern prior, falling back to whichever pathway is more likely to suc-ceed under the current missing pattern. 
+
+Problem setup. Let M = {l, a, v } denote the language, acoustic, and visual modalities. For the 
+
+i-th sample, modality availability is encoded by a binary mask mi ∈ { 0, 1}|M| , where mki = 1 
+
+if modality k is observed and 0 otherwise. We write Oi = {k ∈ M : mki = 1 } for the observed modality set and assume |O i| ≥ 1. Each instance is ({xki }k∈O i , mi, y i), with xki the input feature of modality k and yi the sentiment label. The goal is to predict yi from the observed modalities while jointly deciding, on a per-sample basis, whether to activate the repair module. 
+
+3.2 Dual-Branch Prediction 
+
+This module builds the two prediction pathways used by SIEVE. The direct branch predicts from the observed modalities alone, while the repair branch first applies the repair module and then predicts. Their per-sample loss gap will later supervise the sufficiency valve (Section 3.3). 
+
+Observed representation. We first encode the observed modalities into a single feature vector 
+
+zoi that both branches share. For each modality, SIEVE uses its encoder if the modality is observed, and a learnable placeholder otherwise: 
+
+¯hki =
+
+(
+
+Ek(xki ), mki = 1 ,
+
+pk, mki = 0 , k ∈ M , (1) where Ek(·) is the modality-specific encoder, 
+
+pk ∈ Rd is a learnable placeholder, and ¯hki ∈ Rd
+
+is the resulting modality representation. The place-holder only signals absence; it does not synthesize content. We also embed the binary mask into a continuous vector: 
+
+ei = Wmmi + bm, (2) with trainable parameters Wm ∈ Rd×|M| and 
+
+bm ∈ Rd. Stacking the modality representations into a sequence Hi = [ ¯hli; ¯hai ; ¯hvi ] and using ei
+
+as the query, we aggregate them via multi-head attention: 
+
+zoi = Pooling(MHA( ei, Hi, Hi)) , (3) where MHA( ·, ·, ·) denotes multi-head attention with query Q, key K, and value V . The output 
+
+zoi ∈ Rd therefore summarizes the evidence cur-rently available. 3Vision    
+
+> Audio
+> Text
+> 011
+> Mask
+> MHA
+> eDirect Branch Repair Branch
+> Modality Repair
+> Concate Empirical Sufficiency Signal Evidential Parameterization Mean Sufficiency Uncertainty Dynamic Threshold Pattern Base Rate
+> Supervised Uncertainty-aware Routing
+> Yes No Final Prediction
+
+Figure 2: Overview of SIEVE. Direct and repair branch yield two predictions, whose per-sample loss gap supervises parameterization of the evidential valve. The valve routes each sample through an uncertainty-aware threshold. 
+
+Direct and repair branches. The direct branch predicts from zoi alone: 
+
+ˆydi = Fd(zoi ), (4) where Fd(·) is the direct-branch predictor. The repair branch first applies the repair module 
+
+Rω to obtain a repaired representation: 
+
+˜zi = Rω(Hi, mi), (5) where Rω can be any explicit or implicit modality repair method. For methods without an explicit repaired modality, we use their compensated rep-resentation as ˜zi. The repair branch then concate-nates the observed and repaired representations and feeds them to the repair-branch predictor: 
+
+ˆyri = Fr([ zoi ; ˜ zi]) , (6) where [·; ·] denotes concatenation and Fr(·) is the repair-branch predictor. 
+
+3.3 Evidential Sufficiency Valve 
+
+The valve decides, for each sample, whether the observed modalities are sufficient for direct pre-diction. Since no ground-truth label exists for this decision, we define sufficiency operationally with respect to the dual-branch system: the observed modalities are empirically sufficient if direct pre-diction is no worse than repair-based prediction. This turns sufficiency into an observable quantity: comparable per-sample losses of the two branches, and removes the need for any external supervision. 
+
+Empirical sufficiency signal. We compute the per-sample task losses of the two branches, 
+
+Ld,i = ℓ(ˆ ydi , y i), L r,i = ℓ(ˆ yri , y i), (7) where ℓ(·, ·) is the task loss. The empirical advan-tage of direct prediction is the loss gap 
+
+Ai = sg( Lr,i − Ld,i ), (8) where sg( ·) is stop-gradient: Ai > 0 means the direct branch is better, and Ai < 0 means repair is helpful. We convert this gap into a soft sufficiency target via a temperature-scaled sigmoid: 
+
+s⋆i = σ(Ai/η ) , (9) with η > 0. Thus s⋆i approaches 1 when direct prediction wins and 0 when repair wins. Here, s⋆i
+
+serves as a soft internal supervised anchor (empiri-cal sufficiency targets) for training the valve. It is used to fit the predicted sufficiency estimate ¯si.
+
+Evidential parameterization. The empirical suf-ficiency target s⋆i is inherently noisy, since it is de-rived from the per-sample losses of two branches that co-evolve during training. The valve should therefore predict not only a sufficiency score, but also its uncertainty. To this end, we parameterize a Beta distribution over the sufficiency probability of sample i, with its parameters predicted from the ob-served evidence. The valve first maps the observed representation zoi and the mask embedding ei to a hidden state, and then predicts the Beta parameters 
+
+vi = ReLU( W1[zoi ; ei] + b1) ,αi = Softplus( w⊤ 
+
+> α
+
+vi + cα) + 1 ,βi = Softplus( w⊤ 
+
+> β
+
+vi + cβ ) + 1 ,
+
+(10) where the +1 shift ensures αi, β i > 1 and stabi-lizes training. Intuitively, αi accumulates evidence for sufficiency, and βi accumulates evidence for insufficiency. This induces the Beta posterior: 
+
+p(qi | zoi , ei) = Beta( qi; αi, β i), (11) where qi ∈ [0 , 1] denotes the latent sufficiency probability. We use the posterior mean as the pre-dicted sufficiency score: 
+
+¯si = αi
+
+αi + βi
+
+. (12) Following Subjective Logic (Jøsang, 2016; Han 4et al., 2021), the same Beta distribution decom-poses into belief ( bi), disbelief( di), and uncertainty (ui) masses,                  
+
+> bi=αi−1
+> αi+βi
+> , d i=βi−1
+> αi+βi
+> , u i=2
+> αi+βi
+> ,(13)
+
+satisfying bi +di +ui = 1 . A smaller total evidence 
+
+αi + βi yields larger ui, so ui measures the valve’s epistemic uncertainty. 
+
+Uncertainty-aware routing. A reliable valve must adapt its routing threshold to both the per-sample uncertainty and the prior repair necessity of each missing pattern. To this end, we design a dynamic threshold that combines an evidential un-certainty term with a missing-pattern-conditioned base rate ( πmi ∈ [0 , 1] ): 
+
+θ(ui) = 1 + (1 − 2πmi ) ui
+
+2 , (14) where πmi ∈ [0 , 1] estimates the empirical proba-bility of direct-branch sufficiency under the missing pattern mi. We maintain πm online as an exponen-tial moving average over the empirical sufficiency targets within each missing pattern: 
+
+πm ← (1 − κ) πm + κ · 1
+
+|B m|
+
+X
+
+> i∈B m
+
+s⋆i , (15) where Bm collects the samples in the current batch with missing pattern m, and κ ∈ (0 , 1] is the update rate. Intuitively, when a missing pattern frequently yields sufficient direct prediction, πm grows and the threshold drops, allowing the valve to more readily skip repair. When repair is typically needed, 
+
+πm shrinks and the threshold rises, biasing routing toward repair. The dynamic threshold thus cali-brates itself to the empirical repair necessity of each missing pattern, all without supervision (Ap-pendix A). At inference, the routing decision is hard (without Gumbel noise): 
+
+ghard  
+
+> i
+
+= I[¯ si > θ (ui)] , (16) with ghard  
+
+> i
+
+= 1 routing to the direct branch and 
+
+ghard  
+
+> i
+
+= 0 to the repair branch. At training, hard routing blocks gradients. We therefore use a Gumbel-Sigmoid relaxation (Jang et al., 2016) around the same decision boundary. Define the routing margin: 
+
+ri = logit(¯ si) − logit( θ(ui)) , (17) with logit( x) = log x 
+
+> 1−x
+
+, so that ri > 0 is equiva-lent to ¯si > θ (ui). The differentiable soft routing weight is             
+
+> gi=σ
+> ri+ log ρi−log(1 −ρi)
+> τ
+> 
+> , ρ i∼Uniform(0 ,1) ,
+> (18)
+
+where τ > 0 is the relaxation temperature. During training gi ∈ (0 , 1) softly mixes the two branches, and as τ decreases gi approaches a near-binary stochastic routing variable. 
+
+3.4 Optimization and Inference 
+
+Training has two goals: stable prediction branches and a reliable sufficiency valve. Because the em-pirical sufficiency target s⋆i depends on the current accuracy of both branches, optimizing the valve too early uses unreliable supervision. We therefore adopt a two-stage protocol. 
+
+Stage 1: Warmup. We train the two branches with equal weights, keeping the valve frozen:         
+
+> Lwarm =1
+> N
+> NX
+> i=1
+> 12
+> h
+> ℓ(ˆ ydi, y i) + ℓ(ˆ yri, y i)
+> i
+> +λRLR,(19)
+
+where N is the number of training samples, LR
+
+is the optional internal loss of the repair module, and λR is its weight. This stage stabilizes both branches so that the loss gap Ai becomes a mean-ingful supervision signal for the valve. 
+
+Stage 2: Joint training. We then jointly optimize the branches and the valve with three complemen-tary losses. The routed prediction loss weights the two branches by the soft routing weight gi from Eq. (18):          
+
+> Lpred =1
+> N
+> NX
+> i=1
+> h
+> giℓ(ˆ ydi, y i) + (1 −gi)ℓ(ˆ yri, y i)
+> i
+> .(20)
+
+The valve calibration loss aligns the predicted sufficiency distribution with the empirical suffi-ciency target s⋆i . Specifically, the valve predicts a Beta distribution parameterized by (αi, β i), and we maximize the density assigned to the s⋆i :             
+
+> Lvalve =−1
+> N
+> NX
+> i=1
+> h
+> (αi−1) log ˜ s⋆i+ ( βi−1) log(1 −˜s⋆i)
+> −log B(αi, β i)
+> i
+> ,
+> (21)
+
+where B(αi, β i) is the Beta function. We use 
+
+˜s⋆i = clip( s⋆i , ϵ, 1 − ϵ) to keep the s⋆i away from the boundary values 0 and 1, where the Beta log-density contains unstable logarithmic terms. The evidence regularizer penalizes evidence that contradicts the empirical target. Inspired by 5the soft-label adaptation of evidential deep learn-ing (Sensoy et al., 2018; Han et al., 2021), we form adjusted Beta parameters that mask out the target-aligned evidence and retain only the wrong-direction component: 
+
+˜αi = s⋆i + (1 − s⋆i )αi, ˜βi = (1 − s⋆i ) + s⋆i βi. (22) When s⋆i → 1 (direct branch better), ˜αi → 1
+
+while ˜βi retains βi; the converse holds when 
+
+s⋆i → 0. Pulling the adjusted Beta toward the non-informative prior therefore penalizes only evidence assigned in the wrong direction:        
+
+> Lev =1
+> N
+> NX
+> i=1
+> DKL
+> h
+> Beta(˜ αi,˜βi)∥Beta(1 ,1)
+> i
+> .(23)
+
+The overall objective is              
+
+> L=Lpred +λvLvalve +λeq(t)Lev +λRLR,(24)
+
+where λv, λ e, λ R are balancing coefficients and 
+
+q(t) = min( t/T e, 1) ramps up the evidence reg-ularizer over the first Te epochs ( t denotes the cur-rent epoch). We also anneal the Gumbel-Sigmoid temperature from τ0 to τmin during this stage. 
+
+Inference. At test time, SIEVE computes ¯si and 
+
+ui from the observed modalities and the mask, and applies the hard valve:              
+
+> ˆyi=
+> (Fd(zoi),¯si> θ (ui),Fr([ zoi;Rω(Hi,mi)]) ,¯si≤θ(ui).(25)
+
+Repair is invoked when the valve estimates the observed modalities to be insufficient under the uncertainty- and pattern-adjusted threshold. This selective mechanism retains the benefit of repair when needed, while avoiding unnecessary interven-tion when the observed modalities suffice. 
+
+4 Experiments 
+
+4.1 Experimental Setup Datasets. We conduct experiments on two stan-dard MSA benchmarks. CMU-MOSI (Zadeh et al., 2016) provides 2,199 opinion video clips labeled with continuous sentiment intensities in [−3, +3] ,split into 1,284 / 229 / 686 utterances for training, validation, and testing. IEMOCAP (Busso et al., 2008) comprises 5,531 dyadic conversational utter-ances; following Lian et al. (2023), we focus on the four-class subset ( happy , sad , angry , neutral ) and adopt leave-one-session-out 5-fold cross-validation protocol (Lian et al., 2026). 
+
+Implementation Details. Following prior work (Lian et al., 2023; Xu et al., 2024b; Zhuang et al., 2026), we extract utterance-level features as follows: wav2vec-large (Schneider et al., 2019) for audio, DeBERTa-large (He et al., 2020) for text, and MTCNN followed by MA-Net (Zhao et al., 2021b) for vision (Zhang et al., 2016). We fol-low the random missing protocol of GCNet (Lian et al., 2023) so that no complete-modality super-vision leaks into training. The missing rate is 
+
+M R = 1 −  
+
+> P
+> ici
+> 3L
+
+, where mi ∈ { 1, 2, 3} denotes the count of observed modalities for the i-th sample and L is the dataset size. For every sample, each modality is independently dropped with probability 
+
+M R , subject to ci ≥ 1 (hence M R ≤ 2/3 ≈ 0.67 ;
+
+M R = 0 .7 approximates this limit (Lian et al., 2023)). Identical missing patterns are sampled across training, validation, and testing, and the dropped features remain inaccessible throughout. Detailed hyperparameter settings are provided in Appendix C. All results are averaged over five ran-dom seeds on a single NVIDIA A100-PCIE-40GB. 
+
+Baselines and Evaluation Metrics. We compare SIEVE with two groups of baselines. The first group consists of general MSA methods originally designed for the full-modality setting, including MISA (Hazarika et al., 2020) and Self-MM (Yu et al., 2021). The second group consists of missing-modality MSA methods. Explicit modality repair 
+
+baselines include MMIN (Zhao et al., 2021a), GC-Net (Lian et al., 2023), DiCMoR (Wang et al., 2023a), and IMDer (Wang et al., 2023b). Implicit modality repair baselines fall into two sub-families. The distillation-based methods include CorrKD (Li et al., 2024c) and CMAD (Zhuang et al., 2025b); the intrinsic evidence compensation methods in-clude LNLN (Zhang et al., 2024), MoMKE (Xu et al., 2024b), and TMDC (Zhuang et al., 2026). For evaluation, we adopt dataset-appropriate metrics consistent with prior work (Lian et al., 2023). On CMU-MOSI, where labels are con-tinuous, we report binary accuracy ( Acc-2 ) and 
+
+Weighted F1 computed over the positive/negative polarity. On IEMOCAP, we report four-class accu-racy ( Acc-4 ) and Weighted F1 .
+
+4.2 Experimental Results and Analysis Comparison with Baselines. Table 1 compares SIEVE with representative general and robust MSA methods under the extreme missing setting ( M R =0.7). To verify that selective repair is a general principle rather than a method-specific trick, we 6Table 1: Performance comparison under extreme miss-ing modality ( M R = 0 .7). Best results in bold , second-best underlined. “F1” denotes Weighted F1.                                                              
+
+> CMU-MOSI IEMOCAP Method Acc-2 ( ↑)F1 ( ↑)Acc-4 ( ↑)F1 ( ↑)MISA 0.6128 0.5942 0.5138 0.5073 Self-MM 0.5701 0.5433 0.5446 0.5443 MMIN 0.5655 0.5248 0.5531 0.5538 IMDer 0.5741 0.5487 0.5893 0.5891 DiCMoR 0.5915 0.5769 0.5572 0.5579 CMAD 0.6250 0.6184 0.6026 0.6017 TMDC 0.7043 0.6891 0.6326 0.6298 LNLN 0.6220 0.6242 0.5282 0.5192 GCNet 0.7027 0.6998 0.6816 0.6840 + SIEVE 0.7165 0.7100 0.6942 0.6968
+> CorrKD 0.5854 0.5642 0.5575 0.5570 + SIEVE 0.6174 0.5993 0.5756 0.5759 MoMKE 0.6705 0.6718 0.6437 0.6405 + SIEVE 0.6982 0.6999 0.6555 0.6545
+
+integrate SIEVE into three representative repair paradigms: GCNet (explicit graph-based recon-struction), CorrKD (distillation-based implicit re-pair), and MoMKE (intrinsic evidence compensa-tion with modality experts). On both CMU-MOSI and IEMOCAP, SIEVE consistently improves all three backbones, and GCNet+SIEVE further at-tains the best overall performance among all com-pared methods. The improvements span all three repair paradigms, confirming that SIEVE comple-ments existing repair models without altering their internal design: when the observed modalities are sufficient, SIEVE allows direct prediction; other-wise, it preserves the contribution of the underlying repair module. 
+
+The Results under Different Missing Rates. Ta-ble 2 reports dataset-specific accuracy across miss-ing rates M R ∈ { 0.0, 0.1, . . . , 0.7}, using Acc-2 for CMU-MOSI and Acc-4 for IEMOCAP. Adding SIEVE consistently improves all three repair back-bones at every missing rate on both datasets. Two patterns emerge from these results. First, the improvements are not confined to incomplete in-puts: SIEVE also helps in the full-modality setting (M R = 0 .0). This indicates that selective routing is beneficial even when all modalities are observed, since the direct branch can avoid the noise intro-duced by an unnecessary repair step. Second, the relative gains tend to grow with M R , and the effect is more pronounced for weaker backbones. This suggests that SIEVE provides larger benefits when repair signals become less reliable, where deciding 
+
+whether to repair matters more than how to repair. 
+
+Ablation Study. We conduct ablations on CMU-MOSI with GCNet as the repair backbone, and report Acc-2 under three representative missing rates in Table 3. Removing the valve calibration loss Lvalve degrades performance at all missing rates, confirming that the Beta likelihood over s⋆i
+
+is essential for learning a useful valve. Remov-ing the evidence regularizer Lev causes the largest drop, indicating that penalizing wrong-direction evidence stabilizes uncertainty estimation. Remov-ing the repair-module loss LR also hurts perfor-mance, showing that selective routing still relies on a well-trained repair branch. On the routing side, replacing θ(ui) with a fixed threshold θ = 0 .5 re-moves uncertainty adaptivity and consistently low-ers accuracy, while fixing πm = 0 (which reduces Eq. (14) to θ(ui) = (1 + ui)/2 and imposes a uni-formly conservative prior across missing patterns) also degrades performance. Together, these results validate the three pillars of SIEVE: empirical suffi-ciency supervision, evidential regularization, and pattern-aware uncertainty-adaptive routing. 
+
+Table 3: Ablation study under different missing rates on the CMU-MOSI dataset in terms of Acc-2.                                
+
+> Variant M R = 0 .3M R = 0 .5M R = 0 .7
+> Full 0.8201 0.7744 0.7165
+> w/o Lvalve 0.7530 0.6707 0.6204 w/o Lev 0.7378 0.6128 0.6250 w/o LR0.7302 0.6723 0.6174 fixed θ= 0 .50.7409 0.6738 0.6128 fixed πm= 0 0.7500 0.6357 0.6189
+
+Anatomy of SIEVE’s Routing Behavior. We in-vestigate two questions: (i) does the evidential valve learn a meaningful sufficiency signal, and (ii) how much of the achievable accuracy does it recover? We study both on CMU-MOSI under missing rates M R ∈ { 0.3, 0.5, 0.7}. For each test utterance, we record its missing pattern mi and pre-dicted sufficiency ¯si = αi/(αi + βi). As an upper reference, we compute the Achievable Optimum ,which selects, for each sample, the branch with the smaller per-sample loss; this denotes the highest accuracy reachable by any binary router restricted to the two branches. Figure 3 reveals three findings. First, ¯si is consis-tently higher for patterns containing the language modality, reflecting the text-dominant nature of sen-timent evidence on CMU-MOSI and matching the oracle distribution in Figure 1. Second, this rank-7Table 2: Accuracy under different missing rates on CMU-MOSI and IEMOCAP. 
+
+Dataset Method 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 Avg. CMU-MOSI GCNet 0.8445 0.8262 0.8034 0.8171 0.7546 0.7530 0.7119 0.7027 0.7767 + SIEVE 0.8567 0.8430 0.8186 0.8201 0.7683 0.7744 0.7393 0.7165 0.7921 MoMKE 0.8708 0.8490 0.8340 0.7935 0.7642 0.7410 0.7202 0.6705 0.7804 + SIEVE 0.8872 0.8643 0.8460 0.8140 0.7774 0.7713 0.7317 0.6982 0.7988 
+
+CorrKD 0.8491 0.7973 0.7546 0.7134 0.6723 0.6250 0.6052 0.5854 0.7003 + SIEVE 0.8567 0.8018 0.7500 0.7226 0.7043 0.6799 0.6372 0.6174 0.7212 IEMOCAP GCNet 0.7618 0.7524 0.7426 0.7319 0.7198 0.7076 0.6928 0.6816 0.7238 + SIEVE 0.7737 0.7651 0.7540 0.7452 0.7310 0.7204 0.7031 0.6942 0.7358 
+
+MoMKE 0.7760 0.7512 0.7362 0.7147 0.6954 0.6840 0.6651 0.6437 0.7083 + SIEVE 0.7925 0.7682 0.7478 0.7252 0.7108 0.6914 0.6805 0.6555 0.7215 CorrKD 0.7075 0.6778 0.6566 0.6278 0.6120 0.5894 0.5742 0.5575 0.6254 + SIEVE 0.7270 0.6990 0.6808 0.6576 0.6318 0.6131 0.5890 0.5756 0.6467 A T V A+T A+V T+V 
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7 ̄
+> si
+
+(a) ¯si at M R = 0 .3A T V A+T A+V T+V  
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7 ̄
+> si
+
+(b) ¯si at M R = 0 .5A T V 
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7 ̄
+> si
+
+(c) ¯si at M R = 0 .7Repair SIEVE 
+
+> 0.80
+> 0.81
+> 0.82
+> 0.83
+> 0.84
+> 0.85
+> 0.86
+> Acc-2
+> 4.17%
+> 3.87%
+
+(d) Gap to optimum at M R = 0 .3Repair SIEVE 
+
+> 0.75
+> 0.76
+> 0.77
+> 0.78
+> 0.79
+> 0.80
+> Acc-2
+> 4.27%
+> 2.13%
+
+(e) Gap to optimum at M R = 0 .5Repair SIEVE 
+
+> 0.70
+> 0.71
+> 0.72
+> 0.73
+> 0.74
+> 0.75
+> 0.76
+> Acc-2
+> 5.12%
+> 3.74%
+
+(f) Gap to optimum at M R = 0 .7
+
+Figure 3: Routing analysis on CMU-MOSI under three missing rates. Top row : mean per-pattern sufficiency ¯si
+
+produced by SIEVE. Bottom row : Acc-2 of Repair-only and SIEVE; the red dashed line marks the per-sample Achievable Optimum. 
+
+ing remains stable across missing rates, suggesting that the valve learns a transferable notion of suf-ficiency; meanwhile, the sufficiency of language-free patterns rises with M R , showing that the valve adaptively raises its tolerance for direct prediction when repair becomes less reliable. Third, SIEVE consistently outperforms the Repair-only baseline and approaches the Achievable Optimum across all three regimes, closing most of the gap to the per-sample upper bound. 
+
+Branch Representations Analysis. A natural con-cern is whether the direct and repair branches col-lapse into redundant representations, in which case per-sample routing would degenerate into a learned ensemble weight. We therefore ask: do the two branches occupy distinct regions of the represen-tation space, and does this separation persist as missingness intensifies? For each test utterance on CMU-MOSI, we extract the penultimate-layer Routed to Direct Routed to Repair 
+
+(a) M R = 0 .3Routed to Direct Routed to Repair (b) M R = 0 .5Routed to Direct Routed to Repair (c) M R = 0 .7
+
+Figure 4: t-SNE projection of per-sample routed-branch representations on CMU-MOSI under three missing rates, colored by routing decision. 
+
+feature of the routed branch and project it into two dimensions via t-SNE, coloring each point by its hard routing decision ghard 
+
+i . The analysis is re-peated at M R ∈ { 0.3, 0.5, 0.7}.Figure 4 shows a clear separation across all three regimes: Direct-routed and Repair-routed samples occupy disjoint regions of the embedding space, in-dicating that the two pathways encode structurally complementary information rather than duplicat-ing each other. Notably, the Repair-routed cluster shrinks in relative size as M R grows—an initially counterintuitive trend that aligns with our earlier observation: when repair becomes less reliable un-der heavy missingness, the valve adaptively favors the direct pathway. Together, these results show that SIEVE operates over representationally dis-tinct branches rather than selecting between near-duplicate predictors. 
+
+5 Conclusion 
+
+We challenged the repair-first assumption that un-derlies most missing-modality MSA research, and showed through a per-sample oracle analysis that the utility of a modality is sample-dependent: re-pair is not universally beneficial, and is unnecessary for a substantial fraction of samples. Motivated by 8this observation, we proposed SIEVE, a plug-and-play framework that learns, for each input, whether the observed modalities are already sufficient or whether repair should be invoked. SIEVE turns sufficiency into an internal-supervised quantity through a dual-branch loss gap and routes samples through an evidential gate that jointly accounts for sufficiency and its uncertainty. Across two bench-marks, diverse repair backbones, and a wide range of missing rates, SIEVE consistently improves the underlying repair models and approaches the per-sample achievable optimum, without complete-modality supervision. More broadly, our results establish whether to repair as a first-class question alongside how to repair , and suggest that selective intervention is a useful design principle for robust multimodal systems beyond sentiment analysis. 
+
+6 Limitations 
+
+Our empirical study is restricted to multimodal sen-timent analysis on CMU-MOSI and IEMOCAP. Ex-tending SIEVE to broader incomplete-modality set-tings, including visual question answering, multi-modal action recognition, and medical multimodal diagnosis, is a promising direction for future work. In addition, SIEVE evaluates both branches dur-ing training to compute the per-sample loss gap. The overhead is modest in practice, since the direct branch is lightweight relative to the repair module, but it is nonzero. Future work will explore amor-tized training schemes and inference-time branch pruning to further reduce this cost. 
+
+References 
+
+Alexander Amini, Wilko Schwarting, Ava Soleimany, and Daniela Rus. 2020. Deep evidential regression. 
+
+Advances in neural information processing systems ,33:14927–14937. Lanxin Bi, Yunqi Zhang, Luyi Wang, Yake Niu, and Hui Zhao. 2025. Two challenges, one solution: Ro-bust multimodal learning through dynamic modality recognition and enhancement. In EMNLP 2025-2025 Conference on Empirical Methods in Natural Lan-guage Processing, Findings of EMNLP 2025 , pages 12855–12867. Association for Computational Lin-guistics (ACL). Carlos Busso, Murtaza Bulut, Chi-Chun Lee, Abe Kazemzadeh, Emily Mower, Samuel Kim, Jean-nette N Chang, Sungbok Lee, and Shrikanth S Narayanan. 2008. Iemocap: Interactive emotional dyadic motion capture database. Language resources and evaluation , 42(4):335–359. Rongfei Chen, Tingting Zhang, Xiaoyu Shen, and Wei Zhang. 2026. Evaluation before generation: A paradigm for robust multimodal sentiment anal-ysis with missing modalities. arXiv preprint arXiv:2604.05558 .Zirun Guo, Tao Jin, and Zhou Zhao. 2024. Multimodal prompt learning with missing modalities for senti-ment analysis and emotion recognition. In Proceed-ings of the 62nd annual meeting of the association for computational linguistics (volume 1: Long papers) ,pages 1726–1736. Zongbo Han, Changqing Zhang, Huazhu Fu, and Joey Tianyi Zhou. 2021. Trusted multi-view classifi-cation. In 9th International Conference on Learning Representations, ICLR 2021 .Zongbo Han, Changqing Zhang, Huazhu Fu, and Joey Tianyi Zhou. 2022. Trusted multi-view classifi-cation with dynamic evidential fusion. IEEE trans-actions on pattern analysis and machine intelligence ,45(2):2551–2566. Devamanyu Hazarika, Roger Zimmermann, and Sou-janya Poria. 2020. Misa: Modality-invariant and-specific representations for multimodal sentiment analysis. In Proceedings of the 28th ACM interna-tional conference on multimedia , pages 1122–1131. Pengcheng He, Xiaodong Liu, Jianfeng Gao, and Weizhu Chen. 2020. Deberta: Decoding-enhanced bert with disentangled attention. arXiv preprint arXiv:2006.03654 .Eric Jang, Shixiang Gu, and Ben Poole. 2016. Categori-cal reparameterization with gumbel-softmax. arXiv preprint arXiv:1611.01144 .Audun Jøsang. 2001. A logic for uncertain probabilities. 
+
+International Journal of Uncertainty, Fuzziness and Knowledge-Based Systems , 9(03):279–311. Audun Jøsang. 2016. Subjective logic , volume 3. Springer. Mingcheng Li, Dingkang Yang, Yuxuan Lei, Shunli Wang, Shuaibing Wang, Liuzhen Su, Kun Yang, Yuzheng Wang, Mingyang Sun, and Lihua Zhang. 2024a. A unified self-distillation framework for mul-timodal sentiment analysis with uncertain missing modalities. In Proceedings of the AAAI conference on artificial intelligence , volume 38, pages 10074– 10082. Mingcheng Li, Dingkang Yang, Yang Liu, Shunli Wang, Jiawei Chen, Shuaibing Wang, Jinjie Wei, Yue Jiang, Qingyao Xu, Xiaolu Hou, Mingyang Sun, Ziyun Qian, Dongliang Kou, and Lihua Zhang. 2024b. To-ward robust incomplete multimodal sentiment anal-ysis via hierarchical representation learning. In Ad-vances in Neural Information Processing Systems ,volume 37, pages 28515–28536. 
+
+9Mingcheng Li, Dingkang Yang, Xiao Zhao, Shuaib-ing Wang, Yan Wang, Kun Yang, Mingyang Sun, Dongliang Kou, Ziyun Qian, and Lihua Zhang. 2024c. Correlation-decoupled knowledge distillation for multimodal sentiment analysis with incomplete modalities. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition ,pages 12458–12468. Zheng Lian, Lan Chen, Licai Sun, Bin Liu, and Jian-hua Tao. 2023. Gcnet: Graph completion network for incomplete multimodal learning in conversation. 
+
+IEEE Transactions on pattern analysis and machine intelligence , 45(7):8419–8432. Zheng Lian, Licai Sun, Yong Ren, Hao Gu, Haiyang Sun, Lan Chen, Bin Liu, and Jianhua Tao. 2026. Mer-bench: A unified evaluation benchmark for multi-modal emotion recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence .Hai Pham, Paul Pu Liang, Thomas Manzini, Louis-Philippe Morency, and Barnabás Póczos. 2019. Found in translation: Learning robust joint repre-sentations by cyclic translations between modalities. In Proceedings of the AAAI conference on artificial intelligence , volume 33, pages 6892–6899. Steffen Schneider, Alexei Baevski, Ronan Collobert, and Michael Auli. 2019. wav2vec: Unsupervised pre-training for speech recognition. arXiv preprint arXiv:1904.05862 .Murat Sensoy, Lance Kaplan, and Melih Kandemir. 2018. Evidential deep learning to quantify classi-fication uncertainty. Advances in neural information processing systems , 31. Yao-Hung Hubert Tsai, Shaojie Bai, Paul Pu Liang, J Zico Kolter, Louis-Philippe Morency, and Ruslan Salakhutdinov. 2019. Multimodal transformer for un-aligned multimodal language sequences. In Proceed-ings of the 57th annual meeting of the association for computational linguistics , pages 6558–6569. Yuanzhi Wang, Zhen Cui, and Yong Li. 2023a. Distribution-consistent modal recovering for incom-plete multimodal learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 22025–22034. Yuanzhi Wang, Yong Li, and Zhen Cui. 2023b. In-complete multimodality-diffused emotion recogni-tion. Advances in Neural Information Processing Systems , 36:17117–17128. Shicai Wei, Chunbo Luo, and Yang Luo. 2023. Mmanet: Margin-aware distillation and modality-aware regu-larization for incomplete multimodal learning. In 
+
+Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition , pages 20039– 20049. Cai Xu, Jiajun Si, Ziyu Guan, Wei Zhao, Yue Wu, and Xiyue Gao. 2024a. Reliable conflictive multi-view learning. In Proceedings of the AAAI conference on artificial intelligence , volume 38, pages 16129– 16137. Wenxin Xu, Hexin Jiang, and Xuefeng Liang. 2024b. Leveraging knowledge of modality experts for in-complete multimodal learning. In Proceedings of the 32nd ACM International Conference on Multimedia ,pages 438–446. Wenmeng Yu, Hua Xu, Ziqi Yuan, and Jiele Wu. 2021. Learning modality-specific representations with self-supervised multi-task learning for multimodal sen-timent analysis. In Proceedings of the AAAI con-ference on artificial intelligence , volume 35, pages 10790–10797. Amir Zadeh, Minghai Chen, Soujanya Poria, Erik Cam-bria, and Louis-Philippe Morency. 2017. Tensor fu-sion network for multimodal sentiment analysis. In 
+
+Proceedings of the 2017 conference on empirical methods in natural language processing , pages 1103– 1114. Amir Zadeh, Rowan Zellers, Eli Pincus, and Louis-Philippe Morency. 2016. Mosi: multimodal cor-pus of sentiment intensity and subjectivity anal-ysis in online opinion videos. arXiv preprint arXiv:1606.06259 .AmirAli Bagher Zadeh, Paul Pu Liang, Soujanya Poria, Erik Cambria, and Louis-Philippe Morency. 2018. Multimodal language analysis in the wild: Cmu-mosei dataset and interpretable dynamic fusion graph. In Proceedings of the 56th Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers) , pages 2236–2246. Haoyu Zhang, Wenbin Wang, and Tianshu Yu. 2024. Towards robust multimodal sentiment analysis with incomplete data. Advances in Neural Information Processing Systems , 37:55943–55974. Kaipeng Zhang, Zhanpeng Zhang, Zhifeng Li, and Yu Qiao. 2016. Joint face detection and alignment using multitask cascaded convolutional networks. 
+
+IEEE signal processing letters , 23(10):1499–1503. Jinming Zhao, Ruichen Li, and Qin Jin. 2021a. Missing modality imagination network for emotion recogni-tion with uncertain missing modalities. In Proceed-ings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers) , pages 2608–2618. Zengqun Zhao, Qingshan Liu, and Shanmin Wang. 2021b. Learning deep global multi-scale and local attention features for facial expression recognition in the wild. IEEE Transactions on Image Processing ,30:6544–6556. Yan Zhuang, Minhao Liu, Wei Bai, Yanru Zhang, Wei Li, Jiawen Deng, and Fuji Ren. 2025a. Hyper-modality enhancement for multimodal sentiment analysis with missing modalities. Advances in Neural Information Processing Systems , 38:142100– 142129. 
+
+10 Yan Zhuang, Minhao Liu, Wei Bai, Yanru Zhang, Xi-aoyue Zhang, Jiawen Deng, and Fuji Ren. 2025b. Cmad: Correlation-aware and modalities-aware dis-tillation for multimodal sentiment analysis with miss-ing modalities. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 4626–4636. Yan Zhuang, Minhao Liu, Yanru Zhang, Jiawen Deng, and Fuji Ren. 2026. Tmdc: A two-stage modality denoising and complementation framework for mul-timodal sentiment analysis with missing and noisy modalities. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pages 2281– 2289. 
+
+A Derivation of the Adaptive Threshold 
+
+This appendix shows that the dynamic threshold 
+
+θ(u) = (1 + (1 − 2πm)u)/2 in Eq. (14) arises as the exact decision boundary induced by Sub-jective Logic projection under a missing-pattern-conditioned base rate. We drop the sample index i
+
+throughout. 
+
+Beta-opinion correspondence. The Beta param-eters α, β > 1 map to a Subjective Logic opinion 
+
+(b, d, u ) with b + d + u = 1 (Jøsang, 2016): 
+
+b = α − 1
+
+S , d = β − 1
+
+S , u = 2
+
+S , S = α + β. 
+
+(26) Using the Beta mean ¯s = α/S , this rewrites as 
+
+b = ¯ s − u 
+
+> 2
+
+, d = (1 − ¯s) − u 
+
+> 2
+
+. (27) 
+
+Missing-pattern-conditioned projection. ASubjective Logic opinion is projected to a decision probability via a base rate π ∈ [0 , 1] :
+
+Ps = b + π u, P ¬s = d + (1 − π) u. (28) A fixed base rate treats every missing pattern iden-tically, which is overly pessimistic for patterns where the observed modalities are usually suffi-cient, and overly conservative for patterns where they are rarely sufficient. We therefore condition the base rate on the missing pattern m, defining 
+
+πm as the empirical probability that direct predic-tion is at least as accurate as repair under pattern 
+
+m. Operationally, πm is estimated online from the empirical sufficiency target s⋆ defined in Eq.(9) via an exponential moving average (Eq.(15)), requiring no additional external supervision. The projection becomes 
+
+Ps = b + πm u, P ¬s = d + (1 − πm) u. (29) 
+
+Threshold. Routing to the direct branch requires 
+
+Ps > P ¬s. Substituting Eq. (27) and Eq. (29), 
+
+¯s − u 
+
+> 2
+
++ πm u > (1 − ¯s) − u 
+
+> 2
+
++ (1 − πm) u
+
+⇐⇒ ¯s > 1 + (1 − 2πm) u
+
+2 ,
+
+(30) which is exactly ¯s > θ (u). The threshold decom-poses as θ(u) = 12 +( 12 −πm) u, where the constant  
+
+> 12
+
+is the decision boundary under full confidence (u → 0) and ( 12 − πm) u is an uncertainty-scaled correction whose direction is set by the missing-pattern base rate. When πm > 12 , the correction is negative and the threshold drops below 12 , al-lowing the valve to more readily skip repair on patterns that are usually sufficient; when πm < 12 ,the threshold rises above 12 , demanding stronger sufficiency evidence before skipping repair. The magnitude of this shift scales with u: under low uncertainty, the threshold stays close to 12 , while under high uncertainty it approaches 1 − πm, de-ferring the routing decision to the missing-pattern prior rather than to a fixed default. 
+
+B Extended Related Work: MSA with Missing Modalities 
+
+Multimodal sentiment analysis (MSA) integrates language, acoustic, and visual signals to infer hu-man affect. Since real-world inputs are often in-complete, recent studies have explored robust MSA under missing modalities. From a repair perspec-tive, these methods can be broadly grouped into explicit and implicit modality repair. 
+
+Explicit modality repair. These methods recon-struct, imagine, or approximate absent modali-ties or their latent representations from the ob-served ones before prediction. Early studies learn cross-modal translation or imagination mecha-nisms (Pham et al., 2019; Zhao et al., 2021a), while later work performs graph-based completion for conversational data (Lian et al., 2023). Recent methods further improve recovery with more ex-pressive generators, including prompt-based gener-ation (Guo et al., 2024), class-specific normalizing flows (Wang et al., 2023a), and conditional diffu-sion (Wang et al., 2023b). 
+
+Implicit modality repair. Rather than directly filling the missing slots, these methods compen-sate for the resulting semantic deficiency at the representation or decision level. One line of work 11 transfers full-modality knowledge to incomplete-modality models via distillation, including margin-aware decision distillation (Wei et al., 2023), self-distillation across heterogeneous missing cases (Li et al., 2024a), hierarchical representation align-ment (Li et al., 2024b), multi-level correlation dis-tillation (Li et al., 2024c), and modality-aware fea-ture distillation (Zhuang et al., 2025b). The other line performs intrinsic evidence compensation with-out a full-modality teacher, by refining a language-dominant signal (Zhang et al., 2024), retrieving cross-sample cues (Zhuang et al., 2025a), combin-ing modality-expert knowledge (Xu et al., 2024b), or denoising modality-specific and shared represen-tations (Zhuang et al., 2026). 
+
+Position of SIEVE. Overall, existing methods focus on how to repair missing modalities, apply-ing their compensation mechanism uniformly to every incomplete sample. In contrast, SIEVE asks 
+
+whether repair is needed for each sample, and se-lectively activates the underlying repair module only when the observed modalities are insufficient. A concurrent line of work (Chen et al., 2026; Bi et al., 2025) begins to question the universality of repair, but differs from SIEVE in two essential as-pects. First, their sufficiency signal depends on external supervision: ProMMA (Chen et al., 2026) derives pseudo-labels from a complete-modality teacher and a hand-tuned similarity threshold, while DREAM (Bi et al., 2025) relies on ground-truth labels and requires enumerating all 2|M| 
+
+modality subsets to compute its Shapley-based con-tribution score. SIEVE instead grounds sufficiency in the dual-branch loss gap, which is fully self-contained and requires only a single forward pass per branch. Second, their selection mechanism is tightly entangled with a specific repair design: ProMMA’s evaluator operates on its own prompt-based generator and cannot be transplanted without rebuilding the prompt modules, while DREAM’s PSS-driven enhancement and soft-masking fusion are co-designed and inseparable from its cross-modal attention backbone. SIEVE imposes no constraint on Rω and acts as a unified decision layer that wraps any repair module as a black box, which we validate by attaching the same SIEVE design to three repair paradigms spanning explicit reconstruction (GCNet), distillation-based compen-sation (CorrKD), and intrinsic evidence compensa-tion (MoMKE). 
+
+C Hyperparameter Settings 
+
+For all backbone models, we follow the experi-mental settings described in Section 4.1. The fea-ture extractors, missing-modality protocol, dataset splits, and evaluation metrics are kept identical between each backbone and its SIEVE-enhanced counterpart. We do not modify the internal re-pair architecture of the backbone models when adding SIEVE. Instead, SIEVE only introduces a lightweight evidential valve on top of the existing prediction pipeline, together with the valve-related losses described in the method section. Table 4 reports the SIEVE-specific hyperparam-eters used in the main incomplete-modality set-ting ( M R = 0 .7). Here, each method denotes the corresponding repair backbone equipped with SIEVE, while the original backbone hyperparame-ters are kept the same as in the main experiments. The reported hyperparameters include the valve calibration weight λv, the evidence regularization weight λe, the soft sufficiency-label temperature 
+
+κ, the final Gumbel-Sigmoid temperature τmin ,and the hidden dimension of the valve MLP. The Gumbel-Sigmoid temperature is linearly annealed from τ0 = 1 .0 to τmin during training. The values are chosen from a compact and shared range across datasets and backbones. In particular, λv controls how strongly the empirical direct–repair loss gap supervises the valve; λe con-trols the strength of evidential regularization; κ
+
+determines how sharply the loss gap is converted into the soft sufficiency target; and τmin controls the degree to which the learned routing approaches a near-binary decision late in training. We keep the gate hidden dimension small relative to the back-bone encoders, so the additional parameter cost of SIEVE remains negligible. 
+
+D Full Results under Different Missing Rates 
+
+To complement the accuracy-only comparison in Table 2, we report the full evaluation results under all missing rates in this appendix. For CMU-MOSI, we include Acc-2, weighted F1, MAE, and Pear-son correlation. For IEMOCAP, which is evalu-ated as a four-class classification task, we report Acc-4 and weighted F1. These results provide a more complete view of how SIEVE affects both classification-oriented and regression-oriented eval-uation criteria. 12 Table 4: SIEVE-specific hyperparameters used under 
+
+M R = 0 .7.
+
+Data Method λv λe κ τmin Valve Dimension 
+
+MOSI GCNet 0.05 0.10 0.50 0.10 128 MOSI MoMKE 0.30 0.01 0.30 0.10 128 MOSI CorrKD 0.30 0.01 0.30 0.10 128 IEMO GCNet 0.10 0.05 0.30 0.20 128 IEMO MoMKE 0.15 0.06 0.12 0.30 96 IEMO CorrKD 0.12 0.12 0.08 0.45 96 
+
+13 Table 5: Full results under different missing rates. 
+
+(a) CMU-MOSI results. Each cell reports Acc-2/F1. Method 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 Avg. 
+
+GCNet 0.8445/0.8442 0.8262/0.8244 0.8034/0.8033 0.8171/0.8164 0.7546/0.7560 0.7530/0.7532 0.7119/0.7127 0.7027/0.6998 0.7767/0.7762 + SIEVE 0.8567/0.8569 0.8430/0.8425 0.8186/0.8188 0.8201/0.8164 0.7683/0.7684 0.7744/0.7758 0.7393/0.7396 0.7165/0.7100 0.7921/0.7911 CorrKD 0.8491/0.8491 0.7973/0.7982 0.7546/0.7551 0.7134/0.7133 0.6723/0.6689 0.6250/0.6121 0.6052/0.5904 0.5854/0.5642 0.7003/0.6939 + SIEVE 0.8567/0.8568 0.8018/0.8030 0.7500/0.7515 0.7226/0.7218 0.7043/0.7015 0.6799/0.6736 0.6372/0.6238 0.6174/0.5993 0.7212/0.7164 MoMKE 0.8708/0.8705 0.8490/0.8492 0.8340/0.8346 0.7935/0.7942 0.7642/0.7653 0.7410/0.7424 0.7202/0.7218 0.6705/0.6718 0.7804/0.7812 + SIEVE 0.8872/0.8872 0.8643/0.8647 0.8460/0.8460 0.8140/0.8146 0.7774/0.7788 0.7713/0.7727 0.7317/0.7333 0.6982/0.6999 0.7988/0.7996 
+
+(b) CMU-MOSI results. Each cell reports MAE/Corr. Lower MAE is better, while higher Corr is better. Method 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 Avg. 
+
+GCNet 0.8356/0.7698 0.8515/0.7341 0.9041/0.7185 0.9323/0.6960 1.0533/0.6094 1.0174/0.6364 1.1300/0.5644 1.2312/0.4910 0.9944/0.6524 + SIEVE 0.7852/0.7833 0.8085/0.7699 0.9199/0.7037 0.8996/0.7093 1.0072/0.6278 1.0553/0.6447 1.0800/0.5827 1.1734/0.4832 0.9661/0.6631 CorrKD 0.7547/0.7985 0.8442/0.7422 0.9082/0.7193 0.9583/0.6778 1.0318/0.6213 1.1417/0.5631 1.1552/0.5323 1.2047/0.4819 0.9998/0.6421 + SIEVE 0.7439/0.8105 0.7750/0.8047 0.9045/0.7090 1.0000/0.6436 1.0389/0.6150 1.0879/0.5819 1.1393/0.5414 1.1594/0.5321 0.9811/0.6548 MoMKE 0.7828/0.7980 0.8372/0.7640 0.8905/0.7255 0.9750/0.6768 1.0398/0.6275 1.1020/0.5742 1.1480/0.5458 1.2235/0.4660 0.9998/0.6472 + SIEVE 0.7573/0.8125 0.8306/0.7672 0.8575/0.7413 0.9332/0.6952 1.0194/0.6272 1.0767/0.5916 1.1222/0.5563 1.1836/0.4821 0.9726/0.6592 
+
+(c) IEMOCAP results. Each cell reports Acc-4/F1. Method 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 Avg. 
+
+GCNet 0.7618/0.7642 0.7524/0.7549 0.7426/0.7453 0.7319/0.7341 0.7198/0.7224 0.7076/0.7101 0.6928/0.6955 0.6816/0.6840 0.7238/0.7263 + SIEVE 0.7737/0.7759 0.7651/0.7674 0.7540/0.7562 0.7452/0.7475 0.7310/0.7338 0.7204/0.7227 0.7031/0.7056 0.6942/0.6968 0.7358/0.7382 CorrKD 0.7075/0.7070 0.6778/0.6772 0.6566/0.6560 0.6278/0.6284 0.6120/0.6116 0.5894/0.5900 0.5742/0.5748 0.5575/0.5570 0.6254/0.6253 + SIEVE 0.7270/0.7273 0.6990/0.6987 0.6808/0.6800 0.6576/0.6591 0.6318/0.6333 0.6131/0.6149 0.5890/0.5891 0.5756/0.5759 0.6467/0.6473 MoMKE 0.7760/0.7742 0.7512/0.7488 0.7362/0.7344 0.7147/0.7114 0.6954/0.6918 0.6840/0.6826 0.6651/0.6619 0.6437/0.6405 0.7083/0.7057 + SIEVE 0.7925/0.7908 0.7682/0.7659 0.7478/0.7442 0.7252/0.7220 0.7108/0.7087 0.6914/0.6885 0.6805/0.6773 0.6555/0.6545 0.7215/0.7190 
+
+14

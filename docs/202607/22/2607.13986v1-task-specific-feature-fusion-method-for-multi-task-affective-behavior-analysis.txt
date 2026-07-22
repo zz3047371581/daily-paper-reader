@@ -1,0 +1,334 @@
+Title: Task-Specific Feature Fusion Method for Multi-Task Affective Behavior Analysis
+
+URL Source: https://arxiv.org/pdf/2607.13986v1
+
+Published Time: Thu, 16 Jul 2026 01:30:03 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Task-Specific Feature Fusion Method for Multi-Task Affective Behavior Analysis 
+
+Jiajun Sun and Zhe Gao †
+
+Shanghai Normal University, Shanghai, China 
+
+{ora942878@gmail.com, zgao0911@shnu.edu.cn} 
+
+Abstract. The 11th Affective Behavior Analysis in-the-wild (ABAW11) Multi-Task Learning Challenge requires a unified system to predict valence-arousal, categorical expressions, and facial action units from the official s-Aff-Wild2 images. Although these tasks are naturally related through facial behavior, our validation experiments show that they benefit from different visual features, temporal processing strategies, fusion mecha-nisms, and calibration procedures. In this paper, we study task-adaptive feature fusion for ABAW11 multi-task affective behavior analysis. We first adapt two pretrained visual backbones, DINOv2 ViT-L and DI-NOv3 ConvNeXt-base, on an external expression-oriented facial image set, and then freeze them to extract complementary frame-level features from the official ABAW11 data. On top of these frozen features, we systematically compare frame-level prediction heads, temporal convolu-tional heads, post-hoc temporal smoothing, LightGBM models, feature concatenation, gated fusion, residual fusion, late logit fusion, threshold calibration, and shared MTL structures. The final system selects task-specific fusion and prediction strategies rather than forcing all tasks to share a single architecture. On the ABAW11 validation set, the se-lected system achieves 0.4222 EXPR macro-F1, 0.5402 AU macro-F1, and 0.6717 VA mean CCC, resulting in an overall validation score of 1.6341. The results suggest that task-adaptive fusion of frozen visual features is a simple and effective strategy for ABAW-style multi-task affective behavior analysis. 
+
+Keywords: ABAW11th · Affective behavior analysis · Multi-task learn-ing · Task-adaptive feature fusion 
+
+# 1 Introduction 
+
+Affective behavior analysis in the wild is important for human–computer in-teraction, intelligent education, mental health assessment, and social robotics. However, reliable facial affect recognition in unconstrained settings remains chal-lenging because real-world images exhibit substantial variations in identity, pose, illumination, occlusion, and motion blur, together with annotation ambiguity. The Affective Behavior Analysis in-the-Wild (ABAW) competitions, built on the Aff-Wild and Aff-Wild2 datasets [1, 9, 10], provide large-scale benchmarks arXiv:2607.13986v1 [cs.CV] 15 Jul 2026 2 J. Sun and Z. Gao 
+
+for evaluating affect recognition under such conditions. The ABAW11 Multi-Task Learning (MTL) Challenge [1] considers three tasks on the official s-Aff-Wild2 images: valence–arousal estimation (VA), categorical expression recogni-tion (EXPR), and facial action unit detection (AU). Although these tasks share the same visual input, they involve different la-bel structures and prediction objectives. VA is a continuous regression problem, EXPR is a single-label classification problem, and AU detection is a multi-label classification problem. Our validation experiments further show that the three tasks favor different feature representations, temporal strategies, fusion mecha-nisms, and calibration procedures. This motivates us to investigate task-adaptive feature fusion instead of imposing a single downstream architecture on all tasks. We first fine-tune a DINOv2 ViT-L backbone [6,16] and a DINOv3 ConvNeXt-base backbone [13, 19] on an external expression-oriented facial image set. The adapted backbones are then frozen and used to extract complementary frame-level features from the official ABAW11 images. On top of these features, we compare neural and LightGBM [8] prediction heads, learned and post-hoc tem-poral processing, feature- and logit-level fusion, threshold calibration, and shared MTL structures. The final system selects the highest-scoring validation configu-ration separately for each task. Our contributions are threefold. First, we present a task-adaptive fusion framework that allows VA, EXPR, and AU to use different feature sources, temporal strategies, fusion mechanisms, and calibration procedures. Second, we conduct a systematic comparison of neural and tree-based prediction heads, tem-poral processing methods, feature- and prediction-level fusion strategies, and shared MTL structures under a common validation protocol. Finally, the result-ing task-adaptive configuration achieves an overall score of 1.6341 on the official ABAW11 validation set, outperforming the shared MTL baselines evaluated un-der the same protocol. 
+
+# 2 Related Work 
+
+2.1 Affective Behavior Analysis in the Wild 
+
+Aff-Wild [9] and Aff-Wild2 [10] are large-scale in-the-wild datasets for facial affect analysis. They cover tasks such as valence–arousal estimation, expression recognition, and action unit detection, and have served as the basis of the ABAW benchmark series. The 7th ABAW Competition introduced an MTL challenge that jointly considered VA, EXPR, and AU on s-Aff-Wild2 [11]. ABAW11 con-tinues this multi-task setting under the official s-Aff-Wild2 protocol [1]. Un-like single-task systems, ABAW MTL must accommodate continuous regression, single-label classification, and multi-label classification over the same visual in-put. 
+
+2.2 External Data and Visual Representations 
+
+External facial affect datasets are widely used to improve the transfer per-formance of affect recognition models. AffectNet [15] provides expression and Task-Specific Feature Fusion 3
+
+valence–arousal annotations, while RAF-DB [12] contains real-world facial im-ages with expression labels. FER2013 [7], FER+ [4], and CK+ [14] are also commonly used for facial expression recognition. In this work, an image set constructed primarily from AffectNet and RAF-DB is used only for backbone adaptation, while all downstream models are trained and evaluated using the official ABAW11 annotations. Recent self-supervised models provide transferable visual representations. DI-NOv2 [16] and DINOv3 [19] learn general-purpose features from large-scale im-age collections. Vision Transformers capture interactions among image tokens [6], whereas ConvNeXt retains convolutional inductive biases such as locality [13]. We adapt one backbone from each family to obtain complementary frozen fea-tures for the ABAW11 tasks. 
+
+2.3 Fusion, Temporal Modeling, and Multi-Task Learning 
+
+Affective behavior recognition systems commonly combine visual feature extrac-tion, temporal modeling, feature fusion, and task-specific prediction [17]. Ex-isting ABAW methods have used strong visual encoders, temporal processing, prediction smoothing, and task-specific heads [18, 22]. Temporal convolutional networks [3] and inference-time smoothing can incorporate short-term context or stabilize frame-level predictions. When multiple feature streams are available, gated fusion [2], tensor fu-sion [21], and transformer-based fusion [20] can model interactions among het-erogeneous representations. Classical multi-task learning instead shares repre-sentations across related tasks while retaining task-specific output heads [5]. Rather than assuming that one shared structure is optimal for all outputs, we compare task-adaptive fusion, temporal processing, calibration, and shared MTL baselines within a common frozen-feature framework. 
+
+# 3 Method 
+
+3.1 Overview 
+
+Given a cropped-aligned facial frame xt, ABAW11 requires a valence–arousal vector yva  
+
+> t
+
+∈ [−1, 1] 2, an expression label yexpr  
+
+> t
+
+∈ { 1, . . . , 8}, and an action-unit vector yau  
+
+> t
+
+∈ { 0, 1}12 . Since the annotations contain task-specific missing labels, a sample is included in training and evaluation for a task only when it is marked as valid for that task. Our system reuses two frozen expression-adapted representations and selects the downstream expert separately for each task. For every frame, we extract 
+
+zvit  
+
+> t
+
+= fvit (xt), zcnn  
+
+> t
+
+= fcnn (xt), (1) where both features are 1024-dimensional. The expert pool contains frame-level neural heads, temporal models, LightGBM predictors, feature- and prediction-level fusion modules, and shared MTL baselines. 4 J. Sun and Z. Gao 
+
+3.2 Frozen Visual Representations 
+
+Before ABAW11 training, we adapt a DINOv2 ViT-L/14 [6, 16] and a DINOv3 ConvNeXt-base [13, 19] on an external eight-class expression set constructed from AffectNet [15] and RAF-DB [12]. The adaptation data contain no Aff-Wild2 images. We then discard the expression classifiers, freeze both backbones, and store their frame features offline. This makes all downstream comparisons use identical visual inputs while avoiding repeated backbone evaluation. The adaptation and extraction settings are provided in Appendix A.2. 
+
+3.3 Task-Specific and Temporal Experts 
+
+For each feature stream, we compare linear and multi-layer frame heads with task-dependent output layers. VA uses a tanh -bounded regressor optimized by MSE and CCC loss; EXPR uses class-weighted cross-entropy with label smooth-ing; and AU uses weighted binary cross-entropy followed by per-AU threshold calibration. As a non-neural baseline, we train LightGBM [8] predictors on the frozen ViT-L features. We also provide each frame with the mean feature of its local temporal neighborhood and its deviation from this mean, allowing the frame-wise model to capture simple contextual changes. Temporal neural experts project the frozen features to a shared hidden di-mension and apply residual temporal convolutional blocks [3] over overlapping within-video windows. As a parameter-free alternative, mean or median smooth-ing is applied to frame predictions without crossing video boundaries. AU logits are smoothed before sigmoid activation, whereas VA predictions are smoothed directly. Exact head structures, losses, sequence settings, smoothing windows, and LightGBM parameters are listed in Appendices A.3 and A.4. 
+
+3.4 Task-Adaptive Feature Fusion 
+
+We compare three feature-level combinations of the ViT-L and ConvNeXt rep-resentations. Direct concatenation uses zcat  
+
+> t
+
+= [ zvit  
+
+> t
+
+; zcnn  
+
+> t
+
+]. Gated fusion learns sample-dependent weights after independently normalizing and projecting the two features, while residual fusion treats the ViT-L representation as the main branch and introduces the ConvNeXt feature through a learned gate. Each fused representation can be followed by either a frame-level or temporal head. We also consider late fusion between independently trained experts: 
+
+ˆpt = (1 − α)ˆ pvit  
+
+> t
+
++ αˆpcnn  
+
+> t
+
+, (2) where α is selected on the validation set. Fusion operates on logits for EXPR and AU and on continuous predictions for VA; smoothing and AU threshold calibration are applied afterwards when used. The complete gated and residual formulations are deferred to Appendix A.5. Task-Specific Feature Fusion 5
+
+3.5 Shared Multi-Task Baselines 
+
+For comparison with task-adaptive selection, we jointly train shared MTL mod-els [5] using the same frozen feature families and validity masks. The evaluated variants comprise a shared MLP with task-specific heads, a task-token model that exchanges information through a lightweight Transformer, and residual task-relation modules with learned gates. All models optimize the sum of the VA, EXPR, and AU objectives. Their architectural details are given in Ap-pendix A.6. 
+
+# 4 Experiments and Results 
+
+4.1 Experimental Setting 
+
+We evaluate our method on the official ABAW11 validation set. All models are trained on the official training annotations and evaluated on the official valida-tion annotations. For each task, samples with missing labels are ignored during training and evaluation. EXPR is evaluated by macro-F1 over eight expression classes, AU is evaluated by macro-F1 over 12 action units, and VA is evaluated by the mean CCC of valence and arousal. The official ABAW11 MTL validation score is computed as: 
+
+S = CCC valence + CCC arousal 
+
+2 + F 1EXPR 
+
+8 + F 1AU 
+
+12 . (3) Here, F 1EXPR denotes the sum of the F1 scores over the eight expression classes, so F 1EXPR /8 is equivalent to EXPR macro-F1. Similarly, F 1AU denotes the sum of the F1 scores over the 12 action units, and F 1AU /12 is equivalent to AU macro-F1. Therefore, all tables in this paper report EXPR macro-F1, AU macro-F1, and mean VA CCC. For VA estimation, CCC is computed as: 
+
+CCC( x, y ) = 2ρσ xσy
+
+σ2 
+
+> x
+
++ σ2 
+
+> y
+
++ ( μx − μy )2 , (4) where x and y denote the prediction and ground truth, ρ is their Pearson corre-lation coefficient, μx and μy are their means, and σ2 
+
+> x
+
+and σ2 
+
+> y
+
+are their variances.                                                               
+
+> Table 1: Frame-level head ablation. EXPR/AU/VA are evaluated by macro-F1, tuned macro-F1, and mean CCC. Feature Task Linear MLP BigMLP ViT-L EXPR 0.3534 0.3332 0.3651
+> ViT-L AU 0.5072 0.5200 0.5252
+> ViT-L VA 0.4317 0.4375 0.4437
+> ConvNeXt EXPR 0.3051 0.3065 0.3144
+> ConvNeXt AU 0.4988 0.5057 0.5053 ConvNeXt VA 0.4366 0.4603 0.4598 6J. Sun and Z. Gao
+> Table 2: Single-feature ablation. EXPR/AU/VA are evaluated by macro-F1, tuned macro-F1, and mean CCC. Task Feature / Model Frame Smooth Temporal EXPR ViT-L 0.3651 0.3961 0.4211
+> ConvNeXt-base 0.3144 0.3217 0.3670 LightGBM (ViT-L feat.) 0.3275 0.3677 0.3055 AU ViT-L 0.5252 0.5314 0.5330
+> ConvNeXt-base 0.5057 0.5132 0.5170 LightGBM (ViT-L feat.) 0.5162 0.5249 0.5249 VA ViT-L 0.4437 0.4781 0.6367
+> ConvNeXt-base 0.4603 0.5222 0.6236 LightGBM (ViT-L feat.) 0.3673 0.3868 0.4682
+
+4.2 Frame-level Head Analysis 
+
+We first compare three frame-level heads: Linear, MLP, and BigMLP. As shown in Table 1, the preferred head varies across feature sources and tasks. BigMLP performs best for all ViT-L tasks, while ConvNeXt-base favors BigMLP for EXPR and MLP for AU and VA. 
+
+4.3 Single-feature Expert Analysis 
+
+We then compare single-feature experts using ViT-L features, ConvNeXt-base features, and LightGBM models trained on ViT-L features. Table 2 reports frame-level prediction, post-hoc smoothing, and temporal modeling. For neu-ral frame-level results, we use the best head from Table 1. ViT-L is stronger for EXPR and AU, while VA benefits clearly from temporal modeling on both deep feature streams. LightGBM is competitive for AU, indicating that tree-based models can still exploit frozen facial representations. 
+
+4.4 Dual-feature Fusion Analysis 
+
+We further combine ViT-L and ConvNeXt-base features using concatenation, gated fusion, residual fusion, and late logit fusion. As shown in Table 3, the best fusion strategy differs across tasks: EXPR prefers concatenation with smoothing, AU obtains the best result from late logit fusion, and VA benefits most from residual fusion with smoothing. 
+
+4.5 Shared MTL Structure Analysis 
+
+We compare several shared MTL structures using the same frozen feature rep-resentations. Among these baselines, the task-token model achieves the highest overall score of 1.3598. However, the results suggest that a single shared predic-tion structure cannot fully accommodate the heterogeneous requirements of VA, EXPR, and AU. Task-Specific Feature Fusion 7
+
+Table 3: Dual-feature fusion ablation. EXPR/AU/VA are evaluated by macro-F1, tuned macro-F1, and mean CCC. Method EXPR AU VA Best ViT-L single expert 0.4211 0.5330 0.6367 Best ConvNeXt-base single expert 0.3670 0.5170 0.6236 Concatenation, frame-level 0.3513 0.5275 0.4630 Concatenation, smoothed 0.4222 0.5356 0.6574 Concatenation, temporal 0.3837 0.5344 0.5081 Gated fusion, frame-level 0.3086 0.5134 0.4351 Gated fusion, smoothed 0.4213 0.5361 0.6574 Gated fusion, temporal 0.3437 0.5202 0.4848 Residual fusion, frame-level 0.3091 0.5138 0.4427 Residual fusion, smoothed 0.3989 0.5386 0.6717 
+
+Residual fusion, temporal 0.3334 0.5225 0.4902 Late logit fusion, smoothed 0.4086 0.5402 0.6588 
+
+Table 4: Comparison of shared MTL baselines and the validation-selected task-adaptive system. Overall is the sum of EXPR macro-F1, AU tuned macro-F1, and mean VA CCC. Bold values indicate the best result within each category. Method EXPR AU VA Overall ViT-L MTL 0.3345 0.5171 0.4787 1.3303 ConvNeXt MTL 0.2822 0.4997 0.4918 1.2737 Concat MTL 0.3429 0.5165 0.4918 1.3512 Gated MTL 0.3448 0.5146 0.4881 1.3475 Residual MTL 0.3114 0.5112 0.4389 1.2616 Task-token MTL (best shared) 0.3460 0.5176 0.4962 1.3598 
+
+Task-token + dropout 0.3111 0.5165 0.4501 1.2777 Task-token + residual 0.2916 0.5140 0.4165 1.2221 Task-token + gated 0.3113 0.5154 0.4525 1.2792 
+
+Task-adaptive fusion 0.4222 0.5402 0.6717 1.6341 
+
+4.6 Validation-Selected Task-Adaptive System 
+
+Based on the official validation experiments, we construct a validation-selected system using the best-performing configuration for each task. Specifically, EXPR uses concatenated ViT-L and ConvNeXt-base features with smoothing, AU uses late logit fusion with threshold calibration, and VA uses residual feature fu-sion with smoothing. As shown in Table 4, these configurations achieve 0.4222, 0.5402, and 0.6717 for EXPR, AU, and VA, respectively, yielding an overall validation score of 1.6341. This result represents the best configuration on the official validation split, while the stability of the selected experts under different video partitions is examined in Section 4.7. 8 J. Sun and Z. Gao                                          
+
+> Table 5: Video-level five-fold results. VA-Res. denotes residual fusion with smoothing. Overall is computed using VA-TCN. Fold EXPR AU VA-Res. VA-TCN Overall 10.5149 0.5648 0.5360 0.6066 1.6863 20.4189 0.5639 0.5086 0.6260 1.6089 30.3613 0.5661 0.5584 0.6982 1.6256 40.4070 0.5197 0.5135 0.6432 1.5699 50.4109 0.5502 0.4456 0.6312 1.5924 Mean 0.4226 0.5530 0.5124 0.6411 1.6166 SD 0.0503 0.0176 0.0378 0.0309 0.0394
+
+4.7 Cross-Fold Expert Stability 
+
+We further conduct video-level five-fold cross-validation, ensuring that frames from the same video never appear in both the training and validation subsets. During this more detailed evaluation, we find that the ViT-L temporal convolu-tional expert performs consistently well for VA and outperforms residual fusion in every fold. As shown in Table 5, the temporal expert achieves 0.6411 ± 0.0309 ,compared with 0.5124 ± 0.0378 for residual fusion. Although residual fusion ob-tains a higher score on the official validation split, the five-fold results indicate that explicit temporal modeling is more stable across different video partitions. Based on this observation, our final system retains concatenated features for EXPR and late fusion for AU, while replacing the residual VA expert with the ViT-L temporal convolutional expert. The resulting task-adaptive configuration achieves an overall five-fold score of 1.6166 ± 0.0394 .
+
+# 5 Discussion and Conclusion 
+
+Our results show that ABAW11 tasks favor different downstream configurations. EXPR benefits from concatenated ViT-L and ConvNeXt-base features, while AU favors late fusion and threshold calibration. For VA, residual fusion achieves the highest score on the official validation split, whereas the temporal convolutional expert is more stable across video-level folds. The resulting cross-validated con-figuration obtains 1.6166 ± 0.0394 and remains stronger than the shared MTL baselines, supporting task-specific expert selection. Although the three tasks operate on the same facial frames, their labels de-pend on different information. VA is closely related to temporal affective evolu-tion, EXPR emphasizes holistic categorical patterns, and AU focuses on localized facial activations. These differences may explain their preferences for different representations, temporal strategies, and calibration procedures. The current system relies on frozen backbones and validation-based expert selection. Future work could investigate these task-specific preferences and de-velop automatic expert weighting or joint backbone adaptation. Since the official competition results are not yet available, all conclusions are based on validation experiments. Task-Specific Feature Fusion 9
+
+# References 
+
+1. 11th workshop and competition on affective and behavior analysis in-the-wild. https://affective-behavior-analysis-in-the-wild.github.io/11th/ 
+
+(2026), accessed: 2026-07-14 2. Arevalo, J., Solorio, T., Montes-y Gómez, M., González, F.A.: Gated multimodal units for information fusion. arXiv preprint arXiv:1702.01992 (2017) 3. Bai, S., Kolter, J.Z., Koltun, V.: An empirical evaluation of generic convolutional and recurrent networks for sequence modeling. arXiv preprint arXiv:1803.01271 (2018) 4. Barsoum, E., Zhang, C., Ferrer, C.C., Zhang, Z.: Training deep networks for facial expression recognition with crowd-sourced label distribution. In: Proceedings of the ACM International Conference on Multimodal Interaction (2016) 5. Caruana, R.: Multitask learning. Machine Learning 28 , 41–75 (1997) 6. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., Houlsby, N.: An image is worth 16x16 words: Transformers for image recognition at scale. In: International Conference on Learning Representations (2021) 7. Goodfellow, I.J., Erhan, D., Carrier, P.L., Courville, A., Mirza, M., Hamner, B., Cukierski, W., Tang, Y., Thaler, D., Lee, D.H., et al.: Challenges in representation learning: A report on three machine learning contests. In: International Conference on Neural Information Processing (2013) 8. Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., Liu, T.Y.: Light-GBM: A highly efficient gradient boosting decision tree. In: Advances in Neural Information Processing Systems. vol. 30 (2017) 9. Kollias, D., Tzirakis, P., Nicolaou, M.A., Papaioannou, A., Zhao, G., Schuller, B., Kotsia, I., Zafeiriou, S.: Deep affect prediction in-the-wild: Aff-wild database and challenge, deep architectures, and beyond. International Journal of Computer Vision (2019) 10. Kollias, D., Zafeiriou, S.: Aff-wild2: Extending the aff-wild database for affect recog-nition. arXiv preprint arXiv:1811.07770 (2018) 11. Kollias, D., Zafeiriou, S., Kotsia, I., Dhall, A., Ghosh, S., Shao, C., Hu, G.: 7th abaw competition: Multi-task learning and compound expression recognition. arXiv preprint arXiv:2407.03835 (2024) 12. Li, S., Deng, W., Du, J.: Reliable crowdsourcing and deep locality-preserving learn-ing for expression recognition in the wild. In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (2017) 13. Liu, Z., Mao, H., Wu, C.Y., Feichtenhofer, C., Darrell, T., Xie, S.: A convnet for the 2020s. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (2022) 14. Lucey, P., Cohn, J.F., Kanade, T., Saragih, J., Ambadar, Z., Matthews, I.: The ex-tended cohn-kanade dataset (ck+): A complete dataset for action unit and emotion-specified expression. In: IEEE Computer Society Conference on Computer Vision and Pattern Recognition Workshops (2010) 15. Mollahosseini, A., Hasani, B., Mahoor, M.H.: Affectnet: A database for facial ex-pression, valence, and arousal computing in the wild. In: IEEE Transactions on Affective Computing (2017) 16. Oquab, M., Darcet, T., Moutakanni, T., Vo, H.V., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust visual features without supervision. Transactions on Machine Learning Research (2024) 10 J. Sun and Z. Gao 17. Poria, S., Cambria, E., Bajpai, R., Hussain, A.: A review of affective comput-ing: From unimodal analysis to multimodal fusion. Information Fusion 37 , 98–125 (2017) 18. Savchenko, A.V.: Emotieffnet facial features in uni-task emotion recognition in video at abaw-5 competition. arXiv preprint arXiv:2303.09162 (2023) 19. Siméoni, O., Vo, H.V., Seitzer, M., Baldassarre, F., Oquab, M., Jose, C., Khali-dov, V., Szafraniec, M., Yi, S., Ramamonjisoa, M., et al.: Dinov3. arXiv preprint arXiv:2508.10104 (2025) 20. Tsai, Y.H.H., Bai, S., Liang, P.P., Kolter, J.Z., Morency, L.P., Salakhutdinov, R.: Multimodal transformer for unaligned multimodal language sequences. arXiv preprint arXiv:1906.00295 (2019) 21. Zadeh, A., Chen, M., Poria, S., Cambria, E., Morency, L.P.: Tensor fusion network for multimodal sentiment analysis. arXiv preprint arXiv:1707.07250 (2017) 22. Zhang, Z., An, L., Cui, Z., Xu, A., Dong, T., Jiang, Y., Shi, J., Liu, X., Sun, X., Wang, M.: Facial affect recognition based on transformer encoder and audiovisual fusion for the abaw5 challenge. arXiv preprint arXiv:2303.09158 (2023) Task-Specific Feature Fusion 11 
+
+# A Implementation Details 
+
+A.1 Overall Pipeline and Feature Extraction 
+
+Figure 1 presents the overall workflow of our system. The pipeline consists of three main stages: external-data backbone adaptation, frozen feature extraction on s-Aff-Wild2, and task-specific expert construction. Instead of training a sin-gle end-to-end architecture for all three ABAW11 tasks, we first establish two complementary visual representations and then construct separate downstream configurations for VA, EXPR, and AU. 
+
+Backbone adaptation. We use a DINOv2 ViT-L and a ConvNeXt-base as the two visual backbones. Before processing s-Aff-Wild2, both models are adapted using external facial-expression frames. For ViT-L, the patch embedding and the first eight Transformer blocks are kept fixed during adaptation. The remaining rep-resentation is optimized with a four-expert mixture-of-experts head, where each expert contains three residual MLP blocks. The mixture-of-experts prediction head is used only during external-data adaptation and is discarded afterward. The normalized 1024-dimensional class-token representation is retained as the ViT-L feature. ConvNeXt-base is adapted separately using a conventional expression-classification objective. After adaptation, its classification head is also removed, and the 1024-dimensional globally pooled representation is retained. The two adaptation pro-cedures are independent; no ABAW11 validation or test annotations are used at this stage. This produces two visual encoders with different inductive biases: ViT-L provides a global attention-based representation, whereas ConvNeXt-base provides a convolutional representation with stronger spatial locality.   
+
+> Fig. 1: Overview of the proposed task-specific expert framework. The two visual back-bones are first adapted using external expression frames and are subsequently frozen for feature extraction on s-Aff-Wild2. The extracted representations are supplied to a pool of candidate feature sources, fusion strategies, temporal strategies, and predic-tion experts. The components inside the expert pool represent alternative task-specific choices rather than a single sequential architecture. 12 J. Sun and Z. Gao
+
+A.2 Backbone Adaptation and Feature Extraction 
+
+The external expression set used for backbone adaptation is constructed from AffectNet [15] and RAF-DB [12] and reorganized into neutral, anger, disgust, fear, happiness, sadness, surprise, and other. This stage contains no Aff-Wild2 images. For the transformer branch, we initialize DINOv2 ViT-L/14 [6, 16] from pre-trained weights. The patch embedding layer and first eight transformer blocks are frozen, while the remaining layers are adapted through expression classification. A four-expert gated mixture-of-experts classifier is attached during adaptation; each expert contains three residual MLP blocks, and a learned router produces sample-dependent softmax weights. Training uses class-balanced cross-entropy, label smoothing, MixUp, layer-wise learning-rate decay, and facial-image aug-mentation. After adaptation, the classifier is discarded and the normalized class token is retained as a 1024-dimensional representation. For the convolutional branch, we initialize DINOv3 ConvNeXt-base [13, 19] and fine-tune the backbone together with a linear expression classifier. It uses the same eight classes, class-balanced supervision, label smoothing, MixUp, and image augmentation, with a separately configured optimization schedule. The classifier is then removed and the 1024-dimensional global representation is re-tained. For ABAW11 extraction, the cleaned cropped-aligned frames are resized to 
+
+256 × 256 , center-cropped to 224 × 224 , and normalized with ImageNet statis-tics. Both backbones are evaluated without gradient updates, and the resulting features are stored offline and matched to annotations by relative frame path. 
+
+A.3 Prediction Heads, Objectives, and LightGBM 
+
+The linear head consists of layer normalization, dropout, and a single output projection. The MLP head uses one or two GELU-activated hidden layers de-pending on the task, while BigMLP uses two wider hidden layers with stronger input and hidden dropout. The output dimensions are two, eight, and twelve for VA, EXPR, and AU, respectively. VA predictions are bounded by tanh , whereas EXPR and AU heads output logits. The VA objective combines mean squared error and concordance correlation coefficient loss: 
+
+Lva = λmse MSE (ˆ yva , yva ) + λccc 
+
+2
+
+X
+
+> d∈{ v,a }
+
+(1 − CCC d) , (5) where λmse = 0 .5 and λccc = 1 . For EXPR, the base class weight is N/ (8 Nc),where Nc is the number of samples in class c. Its square root is normalized by the mean class weight and used in cross-entropy with label smoothing. For AU 
+
+j, the positive weight is the square root of its negative-to-positive sample ratio and is used in binary cross-entropy with logits. As a non-neural baseline, we also train LightGBM [8] predictors on the frozen ViT-L features. We use two regressors for valence and arousal, one multiclass Task-Specific Feature Fusion 13 
+
+classifier for EXPR, and twelve binary classifiers for AU. Each model uses 300 estimators, a learning rate of 0.03, at most 31 leaves, a subsampling ratio of 0.9, a feature-sampling ratio of 0.8, and a random seed of 42. To provide the frame-wise LightGBM models with simple temporal context, we additionally compute the local mean feature and the deviation of the current frame from this mean: 
+
+μt = 1
+
+|N t|
+
+X
+
+> i∈N t
+
+zi, δt = zt − μt, (6) where Nt contains frames from the same video within a radius of 12. The tem-porally augmented input is then 
+
+˜zt = [ zt; μt; δt]. (7) 
+
+A.4 Temporal Modeling and Post-processing 
+
+Task-valid frames are ordered within each video and divided into overlapping sequences. EXPR and AU use sequences of 256 frames with a stride of 128, while VA uses sequences of 512 frames with a stride of 256. Short sequences are zero-padded, and padded positions are excluded from both prediction and loss computation. Each input feature is first normalized and projected to a 256-dimensional hidden representation. The resulting sequence is processed by residual temporal convolutional blocks: 
+
+H(l+1) = H(l) + Fl
+
+
+
+H(l)
+
+, (8) where Fl contains two one-dimensional convolutions with kernel size five, group normalization, GELU activation, and dropout. The dilation factor increases ex-ponentially across blocks as 1, 2, 4, . . . . We use four blocks for EXPR and AU and six blocks for VA. No Transformer layer is used in the final VA temporal expert. Predictions of frames appearing in multiple overlapping sequences are averaged. As a parameter-free temporal alternative, we apply mean or median smooth-ing independently within each video. For a smoothing window of size w, the prediction at frame t is computed from the neighboring predictions: 
+
+˜pt = Aggregate ( pt−r , . . . , pt+r ) , r = w − 12 , (9) where Aggregate denotes the mean or median operator. Boundary predictions are replicated, and smoothing never crosses video boundaries. We evaluate window sizes of 3, 5, 7, 9, 13 , 17 , and 25 ; the standard EXPR configuration uses median smoothing with a window size of 25. AU logits are smoothed before sigmoid activation, whereas VA predictions are smoothed directly. For AU threshold calibration, the decision threshold of each AU is selected independently by maximizing its validation F1 score. Thresholds are searched from 0.01 to 0.99 with a step size of 0.01. 14 J. Sun and Z. Gao 
+
+A.5 Trainable Fusion Architectures 
+
+For trainable feature fusion, the frozen ViT-L and ConvNeXt-base features are independently normalized and projected to the same dimensional space: 
+
+at = Wvit LN  zvit 
+
+> t
+
+ , bt = Wcnn LN ( zcnn  
+
+> t
+
+) . (10) For gated fusion, a two-dimensional softmax gate first estimates the relative contribution of the two feature streams: 
+
+ωt = softmax ( Gmix ([ at; bt])) , (11) 
+
+mt = ωvit  
+
+> t
+
+at + ωcnn  
+
+> t
+
+bt. (12) A scalar residual gate then controls how strongly the mixed representation mod-ifies the ViT-L branch: 
+
+gt = σ (Gres ([ at; bt])) , (13) 
+
+zgate  
+
+> t
+
+= LN ( at + gt (mt − at)) . (14) Residual fusion directly adds the projected ConvNeXt-base representation to the ViT-L branch: 
+
+zres  
+
+> t
+
+= LN ( at + gtbt) . (15) The residual-gate bias is initialized to −4, causing the model to begin train-ing close to the ViT-L representation and gradually incorporate complementary ConvNeXt-base information. Fusion is performed independently at each frame, after which the fused representation is passed to either a frame-level prediction head or a temporal convolutional head. 
+
+A.6 Shared Multi-Task Baselines 
+
+The shared MTL models use ViT-L, ConvNeXt-base, or concatenated features. For each feature source, the input is standardized using the mean and standard deviation computed from the training set. The shared-MLP baseline projects each frame feature to a 512-dimensional common representation. Three task-specific MLP heads then predict VA, EXPR, and AU from the same shared representation. The task-token model first projects the frame feature to a 512-dimensional representation. Three task-specific adapters transform this representation, and a learned task embedding is added to each adapted feature. The resulting VA, EXPR, and AU tokens are processed jointly by a one-layer Transformer encoder with four attention heads: 
+
+[˜hva  
+
+> t
+
+; ˜hexpr  
+
+> t
+
+; ˜hau  
+
+> t
+
+] = Transformer ([ hva  
+
+> t
+
+; hexpr  
+
+> t
+
+; hau  
+
+> t
+
+]) . (16) Separate prediction heads decode the three updated task representations. The residual-relation model converts each frame feature into 64 latent tokens of dimension 64. These are feature-space tokens rather than consecutive video Task-Specific Feature Fusion 15 
+
+frames. A lightweight depthwise convolutional token mixer produces a shared update, which is added to the original input through task-specific sigmoid gates and learned residual scales: 
+
+hkt = xt + tanh( αk)gkt ⊙ ∆xt, k ∈ { va , expr , au }. (17) Each task representation is finally passed to its corresponding output head. All shared MTL baselines operate independently at the frame level and do not in-troduce explicit temporal modeling. Since not every frame provides valid annotations for all three tasks, each task loss is computed only over its valid samples. The joint objective is 
+
+LMTL = λva Lva + λexpr Lexpr + λau Lau , (18) where all task weights are set to one.

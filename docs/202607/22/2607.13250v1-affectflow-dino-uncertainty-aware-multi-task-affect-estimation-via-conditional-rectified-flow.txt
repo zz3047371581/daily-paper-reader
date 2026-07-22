@@ -1,0 +1,627 @@
+Title: AffectFlow-DINO: Uncertainty-Aware Multi-Task Affect Estimation via Conditional Rectified Flow
+
+URL Source: https://arxiv.org/pdf/2607.13250v1
+
+Published Time: Thu, 16 Jul 2026 00:20:47 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# AffectFlow-DINO: Uncertainty-Aware Multi-Task Affect Estimation via Conditional Rectified Flow 
+
+Salah Eddine Bekhouche 1, Abdellah Zakaria Sellam 2, Fadi Dornaika 1, and Abdenour Hadid 3 
+
+> 1
+
+University of the Basque Country (UPV/EHU), Spain  
+
+> 2
+
+Department of Innovation Engineering, University of Salento & Institute of Applied Sciences and Intelligent Systems (CNR), Italy  
+
+> 3
+
+Faculty of Data Science and Computing, Universiti Malaysia Kelantan, Malaysia 
+
+Abstract. We present AffectFlow-DINO , a multi-task learning sys-tem for the 11th ABAW challenge that extends a standard deterministic architecture with a conditional rectified-flow head to model the inherent ambiguity of in-the-wild facial behavior. Instead of predicting a single af-fect estimate, the model learns a conditional generative distribution, en-abling uncertainty-aware one-to-many predictions through Monte Carlo sampling. The system jointly estimates continuous valence-arousal, clas-sifies eight facial expressions, and detects twelve Action Units from static face images. Built on a frozen DINOv3 ViT-S/16 backbone, extensive ab-lation studies show that rectified-flow decoding consistently improves de-terministic prediction, particularly for valence-arousal estimation (CCC-V +0 .058 ). We further show that post-hoc threshold calibration effec-tively recovers performance on severely imbalanced rare classes (e.g., Fear: 3.8% → 33 .1% ) without retraining. Combined with backbone fine-tuning and flow retuning, the final model achieves PMTL = 1.177 , sub-stantially outperforming the official challenge baseline of PM T L = 0 .45 .
+
+Keywords: Affective behavior analysis · ABAW · Multi-task learning ·
+
+Rectified flow · Valence-arousal · Facial expression recognition · Action unit detection 
+
+## 1 Introduction 
+
+The 11th Affective Behavior Analysis in-the-wild (ABAW) competition includes a Multi-Task Learning (MTL) challenge in which each facial frame is associated with three complementary affect representations: continuous valence-arousal (VA) values, an eight-way expression label, and twelve binary Action Unit (AU) la-bels. This setting is challenging because the three targets differ in output type and supervision density, and because s-Aff-Wild2 exhibits severe class imbalance (an 8 × expression imbalance and a 29 × AU imbalance) while joint three-task annotation covers only 37% of training frames. We present AffectFlow-DINO , a frame-level MTL system that augments a DINOv3 ViT-S/16 backbone with a conditional rectified-flow head [32] to model arXiv:2607.13250v1 [cs.CV] 14 Jul 2026 2 S.E. Bekhouche et al. 
+
+the full joint affect distribution p(y | x). The core motivation is the inherent per-ceptual ambiguity of in-the-wild facial behavior: a subtle smile, partial occlusion, or low-intensity expression may correspond to several plausible configurations in the joint VA, expression, and AU space, yet deterministic point estimates collapse this ambiguity into a single vector and discard the uncertainty. The rectified-flow head learns instead a generative transport map from noise to p(y | x), producing a family of plausible affect vectors per image whose mean improves over the point estimate and whose spread characterizes prediction uncertainty. Our main contributions are: 
+
+– A masked rectified-flow MTL objective that jointly optimizes deterministic task heads and a generative conditional distribution over the 22-dimensional affect vector. 
+
+– A systematic ablation study spanning 26 design choices on s-Aff-Wild2, cov-ering flow loss weight, inference efficiency, imbalance remedies, backbone fine-tuning, and post-hoc calibration strategies. 
+
+– Post-hoc per-AU and per-class expression threshold calibration, yielding a combined PM T L = 1 .177 on the validation split, a +0 .054 improvement from calibration alone, driven by recovering Fear F1 from 3.8% to 33 .1% 
+
+and Sadness from 17 .1% to 28 .2% .
+
+## 2 Related Work 
+
+ABAW and Aff-Wild lineage. The Aff-Wild/Aff-Wild2 benchmark series intro-duced in-the-wild dimensional affect prediction and progressively combined the three core targets, continuous valence-arousal (VA), categorical expressions, and binary Action Units (AUs), into a joint multi-task challenge [19–21,38]. ABAW1– 6 built on this foundation, expanding dataset scale, task coverage, and evaluation protocols [7, 8, 10, 15, 16, 22]; the 7th ABAW competition then established the static-frame, three-task MTL format with the summed metric PM T L used in the current 11th ABAW challenge [23]. ABAW8–10 expanded toward multimodal and fine-grained behavior analysis, and ABAW11 continues this trajectory while retaining the VA+EXPR+AU MTL track [17, 18, 24]. 
+
+Datasets. s-Aff-Wild2 [11] is the benchmark for this challenge; related datasets (AffectNet, RAF-DB, DFEW, EmotioNet, BP4D, DISFA, and others) cover par-tial subsets of the task triad and are summarized in Appendix B (Table 7) [1, 3, 6, 9, 25–27, 33, 34, 36, 39]. 
+
+MTL for affect. Early MTL models showed that VA, expressions, and AUs are complementary representations learnable via shared encoders [12–14, 21]. Prac-tically, label incompleteness, task-structure heterogeneity (regression vs. classi-fication vs. multi-label detection), and negative transfer between tasks require per-task masking, selective fusion, and carefully tuned loss weights [31]. Recent ABAW solutions combine strong pretrained backbones (MAE, DINOv2) with task-aware fusion, staged training, and temporal modeling [4, 5, 28, 30, 35, 37]. ABAW 2026 Multi-Task Affect Analysis 3
+
+Generative and uncertainty-aware prediction. Diffusion and flow-matching mod-els applied to structured prediction have shown that generative transports over label space can outperform deterministic regressors when targets are inherently multimodal; in affective computing, uncertainty in VA estimation has been ad-dressed via Gaussian heads and evidential regression, but these scalar-variance extensions cannot capture multimodal ambiguity across the joint affect space. Conflict-aware fusion approaches specifically highlight that ambivalent facial be-havior, where modality cues disagree, calls for richer predictive models than point estimates [2]. Rectified flow [32] offers an elegant solution: a straight-line transport from noise to data that enables fast few-step inference over the joint 22-dimensional affect target, to our knowledge the first such application in a heterogeneous MTL setting. 
+
+SOTA and direct comparisons. The most directly comparable public SOTA is the 7th ABAW MTL leaderboard (same task triad and metric); ABAW8/9 use different task splits and are not directly comparable [17, 24]. The leading entry reaches PM T L = 1 .529 via progressive staged training, task-selective fusion, and temporal context [30]; the official challenge baseline is PM T L = 0 .34 [23]. 
+
+## 3 Method 
+
+3.1 Overview 
+
+We propose AffectFlow-DINO , a frame-level multi-task model for the ABAW 2026 MTL challenge. Since s-Aff-Wild2 distributes data as isolated cropped face images rather than video sequences, designing a strictly frame-level system is the faithful choice for this benchmark; temporal sequence reconstruction is treated as an orthogonal future extension rather than a limitation of the current scope. Given a cropped face image x, the model simultaneously predicts continuous valence-arousal (VA), categorical facial expression (EXPR), and binary Action Unit (AU) activations. Beyond deterministic point prediction, it learns a con-ditional rectified-flow distribution over the joint affect representation, enabling uncertainty-aware, one-to-many prediction at inference. The core motivation is the inherent perceptual ambiguity of in-the-wild fa-cial behavior: a subtle smile, partial occlusion, or low-intensity expression may correspond to several plausible VA and AU configurations. Rather than collaps-ing this uncertainty to a single point estimate, AffectFlow learns a generative transport map from isotropic Gaussian noise to the conditional target distri-bution p(y | x). This produces a family of plausible affect vectors per image, whose mean improves over deterministic prediction while their spread reflects prediction uncertainty. The model comprises four components, illustrated in Figure 1: 1. a frozen DINOv3 ViT-S/16 backbone that extracts rich facial representa-tions; 4 S.E. Bekhouche et al. 
+
+Fig. 1: Overview of AffectFlow-DINO. A frozen DINOv3 ViT-S/16 backbone encodes the face into a shared embedding z. Three deterministic task heads produce point predictions for VA, expression, and AUs. The conditional rectified-flow head receives z
+
+together with a linearly interpolated noised target yt and a sinusoidal time embedding 
+
+γ(t), and learns to predict the transport velocity. At inference, N trajectories are integrated from noise to the target space and averaged to produce the final prediction. 
+
+2. a shared projection head mapping backbone features into a compact affect embedding; 3. three deterministic task heads for VA regression, expression classification, and AU detection; 4. a conditional rectified-flow head that models the joint affect distribution conditioned on the image embedding. 
+
+3.2 Joint Affect Representation and Masked Supervision 
+
+Each training sample consists of a cropped, aligned face frame xi paired with up to three partially available annotations. We represent the full affect target as a 22-dimensional vector: 
+
+yi = vi, a i, e (1)  
+
+> i
+
+, . . . , e (8)  
+
+> i
+
+, u (1)  
+
+> i
+
+, . . . , u (12) 
+
+> i
+
+ ∈ R22 , (1) where vi, a i ∈ [−1, 1] are valence and arousal, ei ∈ { 0, 1}8 is a one-hot expression vector over eight categories, and ui ∈ { 0, 1}12 is a binary AU vector. Embedding heterogeneous targets, continuous VA, categorical expressions, and binary AUs, ABAW 2026 Multi-Task Affect Analysis 5
+
+into a single R22 space is a deliberate design choice that enables a unified Euler integration over a shared continuous manifold (Eq. (10)). Categorical and bi-nary dimensions are treated as unconstrained real-valued scores during the flow trajectory; discrete predictions are recovered only at the final inference step via argmax and sigmoid thresholding (Eq. (11)), avoiding per-task generative pro-cesses at the known cost of trajectories visiting off-manifold intermediate val-ues, a trade-off shared with continuous label-space generative models. Step-wise projection is deliberately avoided since rectified flow’s straight-line trajectories reliably arrive on the target manifold at t=1 . The s-Aff-Wild2 annotations are incomplete: a significant fraction of frames are annotated for only one or two tasks. We therefore construct a per-sample binary validity mask mi ∈ { 0, 1}22 
+
+and apply it to every loss term, ensuring that missing targets neither contribute gradients nor distort the flow training signal. 
+
+3.3 DINOv3 Visual Backbone 
+
+The visual encoder is a DINOv3 ViT-S/16 kept frozen throughout training. Its self-supervised DINO objectives [35] enforce spatial semantic consistency across patch tokens, unlike reconstruction-based pre-training such as MAE [5], making it well-suited to Action Unit detection, where muscle activations manifest as spatially localised deformations. For each face image xi resized to 224 × 224 , the encoder extracts a d-dimensional feature vector from the [CLS] token: 
+
+hi = fθ (xi) ∈ Rd. (2) A shared projection head then maps hi to the working embedding dimension: 
+
+zi = ϕ Wh hi
+
+, (3) where ϕ denotes LayerNorm followed by GELU activation, and Wh ∈ RD×d is a learned linear projection with D = 768 .
+
+3.4 Deterministic Multi-Task Heads 
+
+Three task-specific two-layer MLP heads with LayerNorm, GELU activation, and dropout are attached to the shared embedding zi:
+
+ˆyV A i = tanh  MLP V A (zi) ∈ [−1, 1] 2, (4) 
+
+ˆyEXP R i = MLP EXP R (zi) ∈ R8, (5) 
+
+ˆyAU i = MLP AU (zi) ∈ R12 . (6) The tanh nonlinearity in Eq. (4) constrains VA predictions to the official anno-tation range. Expression logits in Eq. (5) are trained with masked cross-entropy, and AU logits in Eq. (6) with masked binary cross-entropy. AU activations are obtained at inference by thresholding the sigmoid output. 6 S.E. Bekhouche et al. 
+
+3.5 Conditional Rectified Flow 
+
+The deterministic heads yield accurate point predictions but cannot represent the uncertainty and multimodality inherent in ambiguous facial images. The AffectFlow component addresses this by learning a conditional generative model 
+
+p(y | x) via rectified flow [32]. 
+
+Training. For each sample (xi, y i), we draw noise ϵ ∼ N (0 , I 22 ) and a time scalar 
+
+t ∼ U (0 , 1) , and form the linear interpolant: 
+
+yt = (1 − t) ϵ + t y i. (7) The rectified-flow objective minimizes the squared error between the predicted and the true constant velocity field v∗ = yi − ϵ:
+
+Lflow =
+
+> 22
+
+X
+
+> j=1
+
+m(j)
+
+> i
+
+
+
+ˆv(j) 
+
+> i
+
+− v∗(j)
+
+> i
+
+222 X
+
+> j=1
+
+m(j) 
+
+> i
+
++ ε, (8) The mask mi ensures that absent labels do not contribute to the flow train-ing signal. Formally, zeroing the missing velocity dimensions supervises only the annotated marginal p(yT | x) (where T denotes the annotated task subset for that frame); under the mild assumption that annotation missingness is indepen-dent of true affect values, each masked step is a valid update for the full joint 
+
+p(y | x), and the union of annotated marginals across the dataset collectively constrains the full joint conditional while preserving its marginal consistency. This assumption is not fully met in practice: if rare expressions or AUs are sys-tematically less likely to be annotated (e.g. because annotators skip ambiguous or low-intensity frames disproportionately common to those classes), the anno-tated marginal is a biased estimate of the true one, and the learned flow could inherit that bias rather than merely inheriting the class imbalance itself. The velocity ˆvi is predicted by a flow network rψ :
+
+ˆvi = rψ
+
+ [zi, y t, γ (t)] , (9) with γ(t) a sinusoidal time embedding and [·] denoting concatenation. 
+
+Inference. To obtain a prediction for image x, we draw N independent noise samples {ϵ(n)}Nn=1 , each initialized at y(n)0 = ϵ(n). Each sample is propagated forward with T Euler integration steps of step size ∆t = 1 /T :
+
+y(n) 
+
+> k+1
+
+= y(n) 
+
+> k
+
++ ∆t r ψ
+
+ [z, y (n) 
+
+> k
+
+, γ (tk)] , k = 0 , . . . , T − 1, (10) ABAW 2026 Multi-Task Affect Analysis 7
+
+where tk = k ∆t . The final predictions are obtained by averaging over the N
+
+trajectories at t = 1 :
+
+¯y = 1
+
+> NN
+
+X
+
+> n=1
+
+y(n) 
+
+> T
+
+, (11) 
+
+ˆyV A = clamp  ¯y1:2 , −1, 1,
+
+ˆyEXP R = arg max  ¯y3:10 
+
+,
+
+ˆyAU k = 1σ(¯ y10+ k) > τ , k = 1 , . . . , 12 .
+
+The threshold τ is a tunable decoding parameter; we ablate it across validation data in Section 4. This inference procedure contrasts fundamentally with deter-ministic MTL: the same face image generates a distribution over affect states, providing uncertainty estimates alongside the official prediction. 
+
+3.6 Training Objective 
+
+The full training objective is a weighted combination of the deterministic multi-task loss and the flow loss: 
+
+L = Ldet + β Lflow , (12) where 
+
+Ldet = λV A LV A + λEXP R LEXP R + λAU LAU . (13) The flow weight β controls the balance between learning a high-quality generative model and optimizing task metrics directly. An ablation over β ∈ { 0.25 , 0.5, 1.0, 2.0}
+
+(Appendix C.1) finds that β ∈ { 0.5, 1.0} achieve equivalent best validation 
+
+PM T L ; we adopt β = 1 .0 as the default. The model is optimized with AdamW and the best checkpoint is selected by validation PM T L = PV A + PEXP R + PAU .
+
+## 4 Experiments 
+
+4.1 Experimental Setup 
+
+All models are trained on the official ABAW 2026 frame-level training split of s-Aff-Wild2 and evaluated on the provided validation split. The training set contains 142,382 frames with partially available labels: 103,917 valid VA, 90,645 valid expression, and 103,316 valid AU rows. The validation set contains 26,876 frames with full VA and AU labels and 15,440 valid expression labels. All invalid labels are excluded via per-task binary masks as described in Section 3. 
+
+Label statistics and class imbalance. Expression labels exhibit an 8 × imbalance: Other (27.4%), Neutral (26.5%), and Happiness (20.0%) dominate, while Fear (3.4%) and Disgust (3.5%) together account for under 7% of valid labels. For AUs, AU25 is active in 68% of valid training rows while AU15, AU23, and AU24 are positive in only 2–5%, yielding a 29 × overall imbalance; full per-class 8 S.E. Bekhouche et al.                                                             
+
+> Table 1: Contribution of each training objective. Det-only: β= 0 ; Flow-only: λdet = 0 ,
+> β= 1 ; AffectFlow: β= 1 , both objectives jointly. Rows marked “sanity” verify that applying a decode mode the model was not trained for is harmful. Model Decode CCC-V CCC-A PV A PEXP R PAU PM T L
+> Official baseline –––––– 0.4500 Det-only ( β= 0 )Deterministic 0.234 0.163 0.199 0.216 0.378 0.793 Det-only ( β= 0 )Flow (sanity) −0.017 −0.003 −0.010 0.127 0.285 0.402 Flow-only ( λdet = 0 ) Flow 0.253 0.169 0.211 0.191 0.371 0.773 Flow-only ( λdet = 0 ) Det (sanity) 0.062 −0.003 0.030 0.117 0.262 0.408 AffectFlow ( β= 1 )Deterministic 0.232 0.168 0.200 0.218 0.384 0.802 AffectFlow ( β= 1 )Flow 0.290 0.186 0.238 0.212 0.376 0.826
+
+statistics are in Appendix F (Table 20). Notably, joint three-task supervision is available for only 36.6% of training frames, making per-task masking essential. Unless stated otherwise, all experiments share the following configuration: a frozen DINOv3 ViT-S/16 backbone, input resolution 224 × 224 , AdamW opti-mizer (lr=1e-4, weight decay=1e-2), 20 training epochs, batch size 64, and check-point selection by the validation composite metric PM T L = PV A +PEXP R +PAU ,where PV A is the mean CCC of valence and arousal, PEXP R is expression macro-F1, and PAU is mean AU F1. For flow-based evaluation, predictions are produced with N = 16 samples and T = 30 Euler steps unless the ablation varies those parameters. 
+
+4.2 What Does Each Training Objective Contribute? 
+
+We isolate the contribution of each training objective by comparing three train-ing regimes: deterministic supervision only ( β = 0 , no flow loss); flow supervision only (no deterministic task losses, λdet = 0 ); and both objectives jointly ( β = 1 ), which we call AffectFlow . Each checkpoint is decoded both deterministically and with flow sampling, yielding the six-condition study in Table 1. The det-only sanity check (det-only checkpoint decoded with flow) collapses to PM T L = 0 .402 , and the flow-only sanity check (flow-only checkpoint decoded deterministically) collapses to PM T L = 0 .408 : each decode mode requires its corresponding training objective. Flow-only training with flow decoding reaches 
+
+PM T L = 0 .773 , confirming that the flow head does learn a meaningful condi-tional distribution even without deterministic task supervision. However, Affect-Flow’s flow decoding ( PM T L = 0 .826 ) substantially outperforms flow-only train-ing ( PM T L = 0 .773 ), revealing that deterministic supervision acts as an auxiliary training signal for the flow head: the task losses encourage the shared embedding to encode affect-discriminative features, which in turn improve the quality of the learned flow trajectories. Symmetrically, deterministic heads trained without the flow objective (det-only) perform comparably to those in AffectFlow under de-terministic decoding (0.793 vs. 0.802), indicating that the flow loss does not ABAW 2026 Multi-Task Affect Analysis 9              
+
+> Table 2: Effect of low-learning-rate DINOv3 fine-tuning. Both rows use the same fine-tuned checkpoint. Decode CCC-V CCC-A PV A PEXP R PAU PM T L
+> Flow 0.336 0.279 0.307 0.236 0.385 0.928 Deterministic 0.352 0.285 0.318 0.285 0.441 1.045
+
+harm the task heads but adds the generative pathway as an orthogonal capabil-ity. Flow decoding on trained AffectFlow yields large gains in CCC-V ( +0 .058 )and CCC-A ( +0 .018 ) relative to its own deterministic decode, lifting PV A from 0.200 to 0.238 at a modest cost to PAU . This pattern, flow sampling improv-ing VA most, is consistent throughout all ablations: continuous targets benefit most from distributional averaging, while categorical and binary tasks benefit somewhat less. Flow loss weight β and inference efficiency sweeps are in Appendix C: β ∈
+
+[0 .5, 1.0] is a stable plateau (we adopt β = 1 .0); flow sampling saturates at N = 8 
+
+samples and T = 10 Euler steps (we use N = 16 , T = 30 ), consistent with the straight-line trajectory property of rectified flow [32]. Minor sweeps for VA loss weight and global AU threshold yield no improvement (Appendix E.1, E.2); the latter motivates per-AU calibration in Section 4.4. 
+
+4.3 Low-Learning-Rate DINOv3 Fine-Tuning 
+
+The frozen-backbone experiments isolate the contribution of AffectFlow, but they leave the visual representation unchanged. We therefore fine-tune the DI-NOv3 backbone end-to-end with a smaller learning rate ( 10 −5), batch size 32, and the same 20-epoch schedule. Table 2 compares deterministic and flow de-coding for the fine-tuned checkpoint. Fine-tuning provides the largest gain observed so far, raising PM T L from the best frozen-backbone result of 0.831 to 1.045. Interestingly, deterministic decoding outperforms flow decoding after fine-tuning. This suggests that once the visual encoder is adapted to the target domain, the deterministic heads become substantially stronger, while the flow head may require retuning of its loss weight, sampling temperature, or training schedule. We explored four expression-specific modifications to address the majority-class collapse: expression loss weight scaling, focal loss, per-task separate projec-tion heads, and their combination. All four fail to improve PEXP R over the Af-fectFlow baseline and consistently degrade PV A ; full results are in Appendix E.3. The common failure mode is that scaling or reweighting the cross-entropy loss, regardless of form, cannot overcome the gradient domination by Neutral and Other without structural sampling changes. This motivates the class-balanced sampling and positive-weighting strategies evaluated below. We also explored patch soft-pool (PSP) aggregation, which learns per-channel attention weights over the 196 frozen ViT patch tokens and concatenates the re-sult with the CLS token (Appendix C.3). PSP deterministic reaches PM T L =10 S.E. Bekhouche et al.                               
+
+> Table 3: Per-AU threshold calibration (post-hoc). VA and PEXP R are unchanged; only PAU and PM T L improve. Checkpoint PAU (def.) PAU (cal.) PM T L (def.) PM T L (cal.) AffectFlow, Flow ( N=16, T=30) 0.376 0.441 0.823 0.888
+> Separate projection heads, Flow 0.371 0.436 0.797 0.862 Fine-tuned backbone, Det 0.441 0.497 1.045 1.101
+
+0.859 , the best frozen-backbone result without calibration, by capturing spatially-localised AU information, but is not combined with backbone fine-tuning in this study. 
+
+4.4 Per-AU Threshold Calibration 
+
+Appendix E.2 showed that a single global AU threshold cannot improve over 
+
+τ = 0 .5. We therefore tune an independent threshold per AU on the validation set by grid search, leaving VA and expression predictions unchanged. Table 3 reports the gain from this post-hoc step on three representative checkpoints. Per-AU calibration is theoretically principled rather than an ad-hoc leader-board trick: the AU head predicts sigmoid activation probabilities p(AU k=1 | x)
+
+conditioned on the image, so the optimal decision boundary need not equal 0.5, particularly when class-imbalanced BCE training systematically suppresses pre-dicted probabilities for rare AUs. This suppression is confirmed by the per-class analysis in Section 4.5: AU15 and AU23 have near-zero F1 at threshold 0.5 despite non-trivial true positive rates, meaning the model has learned genuine discriminative signal that the default threshold cannot recover. The rectified-flow head further reinforces this framing: by modeling p(y | x) as a full conditional distribution, AffectFlow provides per-sample uncertainty information alongside point predictions; per-AU calibration exploits this probabilistic output to find the threshold at which the flow-informed sigmoid posterior best separates posi-tives from negatives. Per-AU calibration yields a consistent PAU gain of approx-imately +0.06 across all checkpoints, with no retraining cost. Rare AUs such as AU15 and AU23 benefit most from lower thresholds, while frequently active AUs (AU25, AU7) prefer thresholds near 0.55–0.60. The best overall validation score is PM T L = 1 .101 , obtained by combining low-LR DINOv3 fine-tuning with deterministic decoding and per-AU calibration. An analogous post-hoc calibra-tion strategy applied to expression class predictions (Section 4.7) yields a further 
+
++0 .054 PM T L gain on top of per-AU calibration. 
+
+4.5 Per-Class Analysis and Class-Weighted Expression Loss 
+
+The macro-F1 metric used for checkpoint selection conceals large per-class dis-parities. Full per-class expression F1 for the AffectFlow and fine-tuned models is in Appendix I (Table 24), alongside the per-AU breakdown (Table 25); Hap-piness and Other achieve F 1 > 0.49 , but Fear ( F 1 = 6 .3–6.9% ) and Sadness ABAW 2026 Multi-Task Affect Analysis 11 
+
+(F 1 = 4 .3–7.1% ) are catastrophically low even after fine-tuning. The model col-lapses 77% of Sadness, 64% of Surprise, and 41% of Fear into “Other”, which absorbs the bulk of gradient mass under standard cross-entropy. AU prediction mirrors the same pattern: AU15 and AU23 have near-zero F1 at τ = 0 .5 despite non-trivial true positive rates (see Appendix I). 
+
+Class-weighted cross-entropy. We replace standard cross-entropy with an inverse-frequency weighted variant assigning each class c weight wc = Nvalid /(8 nc) (Ap-pendix F, Table 20). After seven training epochs (deterministic validation, frozen backbone), the best checkpoint reaches PEXP R = 0 .239 and PM T L = 0 .834 ,compared to PEXP R = 0 .218 and PM T L = 0 .802 for the AffectFlow baseline at the same evaluation protocol. The improvement is concentrated in the mi-nority classes: Disgust F1 rises from 11 .8% to 39 .0% and Surprise from 2.8% to 
+
+12 .8% , while Fear ( 0.3% ) and Sadness ( 8.5% ) remain the primary bottleneck, suggesting that their imbalance severity requires additional intervention beyond loss reweighting. Imbalance remedies are detailed in Appendix G. In brief: a class-balanced 
+
+WeightedRandomSampler raises PEXP R to 0.251 (+0 .039 over AffectFlow flow), the best frozen-backbone expression result; per-AU BCE positive weighting raises 
+
+PAU to 0.427 –0.439 , the best frozen-backbone AU result without calibration; and label smoothing (Appendix E.4) and global AU loss weight (Appendix E.5) pro-vide no meaningful gains. Critically, AU positive-weighted training is incompat-ible with flow decoding ( PM T L degrades to 0.745 –0.777 ) because the reweighted loss shifts predicted probability distributions incompatibly with the rectified-flow sampler. 
+
+4.6 Flow Retuning after Backbone Fine-Tuning 
+
+Section 4.3 showed that low-LR fine-tuning of the DINOv3 backbone improves all tasks substantially, but leaves the flow head undertuned: deterministic de-coding outperforms flow decoding in the fine-tuned setting. We address this by reactivating the flow objective ( β = 0 .5) during fine-tuning, retuning the flow head jointly with the backbone. Table 4 compares fine-tuning with a frozen flow head against fine-tuning with flow retuning under both decode modes. Flow retuning at β=0 .5 under deterministic decoding reaches PM T L = 1 .062 ,surpassing plain fine-tuning without calibration ( 1.045 ), while flow decoding (PM T L = 0 .956 ) substantially outperforms the AffectFlow frozen-backbone flow baseline ( 0.826 ), confirming that the flow head recovers distributional capability after backbone adaptation. Increasing the flow weight to β=1 .0 further improves deterministic decoding to PM T L = 1 .073 , driven by a large CCC-V gain ( 0.387 vs. 0.308 for β=0 .5) at a modest cost to CCC-A and PAU . After per-AU calibration, this configuration reaches PM T L = 1 .123 , surpassing the calibrated plain fine-tuning baseline of 
+
+1.101 ; post-hoc expression calibration (Section 4.7) further raises this to PM T L =1.177 . Flow decoding for β=1 .0 (PM T L = 0 .931 ) trails the β=0 .5 flow variant (0.956 ), suggesting that the stronger flow objective reshapes the learned target 12 S.E. Bekhouche et al.                                                                     
+
+> Table 4: Flow retuning after backbone fine-tuning for β∈ { 0.5,1.0}.†per-AU thresh-old calibration applied. Config Decode CCC-V CCC-A PV A PEXP R PAU PM T L
+> Fine-tuned Det 0.352 0.285 0.318 0.285 0.441 1.045 Fine-tuned †Det 0.352 0.285 0.318 0.285 0.497 1.101 Fine-tuned+flow retune ( β=0 .5)Flow ( N=16, T=30) 0.296 0.284 0.290 0.279 0.386 0.956 Fine-tuned+flow retune ( β=0 .5)Det 0.308 0.273 0.291 0.303 0.469 1.062 Fine-tuned+flow retune ( β=1 .0)Flow ( N=16, T=30) 0.313 0.281 0.297 0.252 0.382 0.931 Fine-tuned+flow retune ( β=1 .0)Det 0.387 0.263 0.325 0.296 0.453 1.073 Fine-tuned+flow retune ( β=1 .0)†Det 0.387 0.263 0.325 0.296 0.502 1.123
+
+distribution in a way that marginally reduces flow-sampled consistency while benefiting the deterministic readout. In both variants, deterministic decoding outperforms flow decoding after retuning, indicating that further alignment of the flow head with the adapted backbone remains an open direction. Kitchen-sink fine-tuning (Appendix H) applies class-weighted cross-entropy and per-AU positive weighting jointly during backbone fine-tuning. The combi-nation does not improve PM T L over plain fine-tuning: PM T L = 1 .041 vs. 1.045 ,with the AU gain ( +0 .042 ) offset by a PV A drop ( −0.047 ). This confirms that frozen-backbone reweighting strategies do not stack with backbone adaptation: once the backbone is fine-tuned, flow retuning is the more effective path. Re-placing ViT-S with ViT-B improves PV A (0.354 vs. 0.325 ) but degrades PEXP R 
+
+(0.255 vs. 0.296 ), yielding PM T L = 1 .116 calibrated; horizontal-flip test-time augmentation reduces all scores to PM T L = 1 .111 calibrated, full results in Ap-pendix D. 
+
+4.7 Per-Class Expression Threshold Calibration 
+
+Section 4.4 showed that per-AU threshold calibration yields a consistent +0 .06 
+
+PAU gain by finding per-AU decision boundaries that maximise F1 on the valida-tion set. We apply the same post-hoc principle to the expression head: per-class logit weights are tuned on the validation set to maximise macro-F1, directly addressing the systematic under-prediction of minority classes (Fear, Sadness) caused by the 8× expression imbalance. The full per-class breakdown is in Ap-pendix I (Table 26, Figure 3). Fear benefits most ( 0.038 → 0.331 , +0 .293 ), fol-lowed by Sadness ( 0.171 → 0.282 , +0 .111 ) and Disgust ( 0.465 → 0.507 , +0 .042 ); majority classes (Happiness, Other) are essentially unchanged. The large Fear gain confirms that the model has learned genuine discriminative signal for the rarest class: the default argmax simply never predicts it because its logit mag-nitude is suppressed relative to Neutral and Other by the imbalanced training distribution. Calibration recovers this latent signal without any retraining cost, in direct analogy to how per-AU threshold calibration recovers rare-AU signal (AU15, AU23) in Section 4.4. ABAW 2026 Multi-Task Affect Analysis 13 
+
+Table 5: Best validation result per configuration (frozen backbone unless noted); abridged, full table (18 configurations) in Appendix A. AF = AffectFlow; Det = de-terministic decode; Flow = flow decode ( N =16, T =30 unless varied); β = flow loss weight; FT = low-LR backbone fine-tuning. Configuration CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+Official baseline – – – – – 0.450 DINOv3 Det, no flow ( β=0 ) 0.234 0.163 0.199 0.216 0.378 0.793 AF β=0 .5, Flow, T =30 0.289 0.188 0.239 0.211 0.376 0.826 AF β=1 , Flow + per-AU cal 0.288 0.185 0.237 0.210 0.441 0.888 PSP CLS+patch, Det 0.271 0.198 0.235 0.236 0.389 0.859 AU pos-wt + CW-CE, Det 0.259 0.163 0.211 0.240 0.439 0.890 AF FT, Det 0.352 0.285 0.318 0.285 0.441 1.045 AF FT, Det + per-AU cal 0.352 0.285 0.318 0.285 0.497 1.101 FT+Flow retune β=1 .0, Det 0.387 0.263 0.325 0.296 0.453 1.073 FT+Flow retune β=1 .0, Det+per-AU cal 0.387 0.263 0.325 0.296 0.502 1.123 ViT-B FT, Det+per-AU cal 0.416 0.293 0.354 0.255 0.507 1.116 FT+Flow retune, AU cal+expr cal 0.387 0.263 0.325 0.350 0.502 1.177 
+
+Combining per-class expression calibration with per-AU calibration on the fine-tuned+flow retune ( β=1 .0) checkpoint yields the best overall result: PV A =0.325 + PEXP R = 0 .350 + PAU = 0 .502 = PMTL = 1.177 , a +0 .054 improve-ment over the flow-retuned, per-AU-calibrated baseline ( 1.123 ). 
+
+4.8 Summary of Ablation Results 
+
+Table 5 collects the best representative result per configuration (all models use frozen DINOv3 unless noted; full 18-configuration table in Appendix A). Both training objectives are needed: flow-only ( PM T L = 0 .773 ) and det-only-with-flow-decode ( 0.402 ) both underperform jointly-trained AffectFlow ( 0.826 ), and patch soft-pool further lifts the frozen-backbone deterministic result to 0.859 .The best frozen-backbone result without calibration is 0.890 (AU positive weight-ing combined with class-weighted cross-entropy; Appendix G), while per-AU calibration alone raises AffectFlow flow to 0.888 . Backbone fine-tuning is the dominant lever, lifting the best result to 1.045 (1.101 calibrated); flow retuning (β=1 .0) on top of it reaches 1.073 (1.123 calibrated), and post-hoc expression calibration adds a further +0 .054 for the best overall result PMTL = 1.177 .Kitchen-sink fine-tuning (Appendix H) and all expression/AU reweighting abla-tions (Appendices E, G) do not compound with backbone fine-tuning. 
+
+4.9 Discussion and Open Challenges 
+
+All results in this paper are on the local s-Aff-Wild2 validation split; the SOTA scores cited in Section 2 are from the 7th ABAW hidden test set and are not directly comparable. The current best validated result ( PM T L = 1 .177 ) substan-tially improves over the official baseline ( PM T L = 0 .45 ); Figure 2 in Appendix E visualises the full progression across key configurations. Within our controlled 14 S.E. Bekhouche et al. 
+
+ablation study the gap is most pronounced in PEXP R (best uncalibrated: 0.296 ;best calibrated: 0.350 ); two principal factors account for it. First, expression pre-diction remains the most challenging task: the per-class breakdown (Table 24) reveals that Fear and Sadness F1 remain below 7% at the default threshold, with predictions collapsed into “Other”. The 8× expression imbalance is the proximate cause; class-weighted cross-entropy and balanced sampling partially close the gap (PEXP R = 0 .239 –0.251 ), while post-hoc expression calibration recovers the la-tent rare-class signal directly, raising Fear F1 from 0.038 to 0.331 and Sadness from 0.171 to 0.282 without retraining. Second, the flow head requires retuning after backbone fine-tuning to recover distributional prediction capability: reac-tivating the flow objective during fine-tuning is beneficial, with β=1 .0 yielding the strongest deterministic result ( PM T L = 1 .073 ; 1.123 with per-AU calibra-tion; 1.177 with combined calibration), though deterministic decoding continues to outperform flow decoding in all fine-tuned variants. This suggests the flow objective acts as a structure-aware regularizer for z, enforcing joint affect struc-ture that benefits the deterministic heads even when flow decoding is not used at inference. 
+
+## 5 Conclusion 
+
+We introduced AffectFlow-DINO, a multi-task facial affect model that treats in-the-wild facial behavior as a conditional distribution p(y | x) rather than a deterministic mapping, learned via a rectified-flow head over the joint 22-dimensional affect space and validated through 26 controlled ablations on s-Aff-Wild2. Three lessons emerge. The flow and deterministic objectives are complemen-tary: flow-only training collapses without the deterministic anchor, and deterministic-only inference discards distributional capability. Flow sampling benefits VA es-timation most, the task most sensitive to continuous ambiguity, and saturates rapidly, consistent with rectified flow’s straight-line transport. Backbone adap-tation is the dominant lever, but the flow head must be retrained jointly during fine-tuning, or the generative pathway degrades. A broader implication is that severe class imbalance suppresses learned sig-nals without erasing them: post-hoc calibration unlocks near-zero F1 for rare categories (Fear, Sadness, AU15, AU23) at zero cost, suggesting decision bound-aries can surface rare-class signal already encoded in the representation. Closing the gap to SOTA likely requires temporal aggregation, more expres-sive fine-tuned decoding, and joint backbone-flow multi-task scaling from the start. 
+
+## References 
+
+> 1. Barros, P., Churamani, N., Lakomkin, E., Siqueira, H., Sutherland, A., Wermter, S.: Omg-emotion behavior dataset. In: Int. Joint Conf. Neural Netw. pp. 1–7 (2018)
+
+ABAW 2026 Multi-Task Affect Analysis 15 2. Bekhouche, S.E., Telli, H., Benlamoudi, A., Herrouz, S.E., Taleb-Ahmed, A., Ha-did, A.: Conflict-aware multimodal fusion for ambivalence and hesitancy recogni-tion. arXiv preprint arXiv:2603.15818 (2026) 3. Benitez-Quiroz, C.F., Srinivasan, R., Martinez, A.M.: Emotionet: An accurate, real-time algorithm for the automatic annotation of a million facial expressions in the wild. In: IEEE Conf. Comput. Vis. Pattern Recog. pp. 5562–5570 (2016) 4. Cabacas-Maso, J., Ortega-Beltran, E., Benito-Altamirano, I., Ventura, C.: Enhanc-ing facial expression recognition through dual-direction attention mixed feature networks: Application to 7th abaw challenge (2024) 5. He, K., Chen, X., Xie, S., Li, Y., Dollar, P., Girshick, R.: Masked autoencoders are scalable vision learners. In: IEEE Conf. Comput. Vis. Pattern Recog. pp. 16000– 16009 (2022) 6. Jiang, X., Zong, Y., Zheng, W., Tang, C., Xia, W., Lu, C., Liu, J.: Dfew: A large-scale database for recognizing dynamic facial expressions in the wild. In: ACM Int. Conf. Multimedia. pp. 2881–2889 (2020) 7. Kollias, D.: Abaw: Valence-arousal estimation, expression recognition, action unit detection and multi-task learning challenges. In: IEEE Conf. Comput. Vis. Pattern Recog. Worksh. pp. 2328–2336 (2022) 8. Kollias, D.: Abaw: Learning from synthetic data and multi-task learning challenges. In: Eur. Conf. Comput. Vis. pp. 157–172. Springer (2023) 9. Kollias, D.: Multi-label compound expression recognition: C-expr database and network. In: IEEE Conf. Comput. Vis. Pattern Recog. pp. 5589–5598 (2023) 10. Kollias, D., Schulc, A., Hajiyev, E., Zafeiriou, S.: Analysing affective behavior in the first abaw 2020 competition. In: IEEE Int. Conf. Autom. Face Gesture Recognit. pp. 794–800 (2020) 11. Kollias, D., Shao, C., Kaloidas, O., Patras, I.: Behaviour4all: In-the-wild facial behaviour analysis toolkit. arXiv preprint arXiv:2409.17717 (2024) 12. Kollias, D., Sharmanska, V., Zafeiriou, S.: Face behavior a la carte: Expressions, affect and action units in a single network. arXiv preprint arXiv:1910.11111 (2019) 13. Kollias, D., Sharmanska, V., Zafeiriou, S.: Distribution matching for heterogeneous multi-task learning: A large-scale face study. arXiv preprint arXiv:2105.03790 (2021) 14. Kollias, D., Sharmanska, V., Zafeiriou, S.: Distribution matching for multi-task learning of classification tasks: A large-scale study on faces and beyond. In: AAAI. vol. 38, pp. 2813–2821 (2024) 15. Kollias, D., Tzirakis, P., Baird, A., Cowen, A., Zafeiriou, S.: Abaw: Valence-arousal estimation, expression recognition, action unit detection and emotional reaction in-tensity estimation challenges. In: IEEE Conf. Comput. Vis. Pattern Recog. Worksh. pp. 5888–5897 (2023) 16. Kollias, D., Tzirakis, P., Cowen, A., Zafeiriou, S., Kotsia, I., Baird, A., Gagne, C., Shao, C., Hu, G.: The 6th affective behavior analysis in-the-wild (abaw) competi-tion. In: IEEE Conf. Comput. Vis. Pattern Recog. Worksh. pp. 4587–4598 (2024) 17. Kollias, D., Tzirakis, P., Cowen, A., Zafeiriou, S., Kotsia, I., Granger, E., Pedersoli, M., Bacon, S., Baird, A., Gagne, C., et al.: Advancements in affective and behavior analysis: The 8th abaw workshop and competition. In: IEEE Conf. Comput. Vis. Pattern Recog. Worksh. pp. 5572–5583 (2025) 18. Kollias, D., Tzirakis, P., Cowen, A., Zafeiriou, S., Kotsia, I., Granger, E., Pedersoli, M., Bacon, S., Madsen, J., Belharbi, S., Aslam, M.H., Shao, C., Hu, G.: From affect to complex behavior: Advancing multimodal human-centered ai at the 10th abaw workshop and competition (2026) 16 S.E. Bekhouche et al. 19. Kollias, D., Tzirakis, P., Nicolaou, M.A., Papaioannou, A., Zhao, G., Schuller, B., Kotsia, I., Zafeiriou, S.: Deep affect prediction in-the-wild: Aff-wild database and challenge, deep architectures, and beyond. Int. J. Comput. Vis. 127 (6–7), 907–929 (2019) 20. Kollias, D., Zafeiriou, S.: Expression, affect, action unit recognition: Aff-wild2, multi-task learning and arcface. arXiv preprint arXiv:1910.04855 (2019) 21. Kollias, D., Zafeiriou, S.: Affect analysis in-the-wild: Valence-arousal, expressions, action units and a unified framework. arXiv preprint arXiv:2103.15792 (2021) 22. Kollias, D., Zafeiriou, S.: Analysing affective behavior in the second abaw2 com-petition. In: IEEE Int. Conf. Comput. Vis. Worksh. pp. 3652–3660 (2021) 23. Kollias, D., Zafeiriou, S., Kotsia, I., Dhall, A., Ghosh, S., Shao, C., Hu, G.: 7th abaw competition: Multi-task learning and compound expression recognition. In: Eur. Conf. Comput. Vis. pp. 31–45. Springer (2024) 24. Kollias, D., Zafeiriou, S., Kotsia, I., Slabaugh, G., Senadeera, D.C., Zheng, J., Ya-dav, K.K.K., Shao, C., Hu, G.: From emotions to violence: Multimodal fine-grained behavior analysis at the 9th abaw. In: IEEE Int. Conf. Comput. Vis. Worksh. pp. 1–12 (2025) 25. Kossaifi, J., Tzimiropoulos, G., Todorovic, S., Pantic, M.: Afew-va database for va-lence and arousal estimation in-the-wild. In: IEEE Int. Conf. Autom. Face Gesture Recognit. pp. 327–333 (2017) 26. Kossaifi, J., Walecki, R., Panagakis, Y., Shen, J., Schmitt, M., Ringeval, F., Han, J., Pandit, V., Toisoul, A., Schuller, B., et al.: Sewa db: A rich database for audio-visual emotion and sentiment research in the wild. In: IEEE Trans. Pattern Anal. Mach. Intell. (2019) 27. Li, S., Deng, W., Du, J.: Reliable crowdsourcing and deep locality-preserving learn-ing for expression recognition in the wild. In: IEEE Conf. Comput. Vis. Pattern Recog. pp. 2852–2861 (2017) 28. Li, X., Du, W., Yang, H.: Affective behavior analysis using task-adaptive and au-assisted graph network (2024) 29. Lin, T.Y., Goyal, P., Girshick, R., He, K., Dollár, P.: Focal loss for dense object de-tection. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 2980–2988 (2017) 30. Liu, C., Zhang, W., Qiu, F., Li, L., Wang, D., Yu, X.: 7abaw-affective behaviour analysis via progressive learning (2024) 31. Liu, S., Johns, E., Davison, A.J.: End-to-end multi-task learning with attention. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (2019) 32. Liu, X., Gong, C., Liu, Q.: Flow straight and fast: Learning to generate and transfer data with rectified flow. In: International Conference on Learning Representations (2023) 33. Mavadati, S.M., Mahoor, M.H., Bartlett, K., Trinh, P., Cohn, J.F.: Disfa: A spon-taneous facial action intensity database. In: IEEE Int. Conf. Autom. Face Gesture Recognit. pp. 1–8 (2013) 34. Mollahosseini, A., Hasani, B., Mahoor, M.H.: Affectnet: A database for facial ex-pression, valence, and arousal computing in the wild. IEEE Trans. Affect. Comput. 
+
+10 (1), 18–31 (2017) 35. Oquab, M., Darcet, T., Moutakanni, T., Vo, H.V., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust visual features without supervision. In: arXiv preprint arXiv:2304.07193 (2023) ABAW 2026 Multi-Task Affect Analysis 17 
+
+Table 6: Best validation result per configuration (frozen backbone unless noted); unabridged version of Table 5. AF = AffectFlow; Det = deterministic decode; Flow =flow decode ( N =16, T =30 unless varied); β = flow loss weight; FT = low-LR backbone fine-tuning. Configuration CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+Official baseline – – – – – 0.450 DINOv3 Det, no flow ( β=0 ) 0.234 0.163 0.199 0.216 0.378 0.793 AF β=0 .5, Flow, T =30 0.289 0.188 0.239 0.211 0.376 0.826 AF β=1 , Flow, T =50 0.287 0.188 0.237 0.219 0.375 0.831 AF β=1 , Flow + per-AU cal 0.288 0.185 0.237 0.210 0.441 0.888 PSP CLS+patch, Flow 0.282 0.139 0.210 0.210 0.381 0.801 PSP CLS+patch, Det 0.271 0.198 0.235 0.236 0.389 0.859 Balanced sampler, Flow 0.264 0.213 0.238 0.251 0.375 0.864 AU pos-wt, Det 0.261 0.167 0.214 0.237 0.427 0.878 AU pos-wt + CW-CE, Det 0.259 0.163 0.211 0.240 0.439 0.890 AF FT, Det 0.352 0.285 0.318 0.285 0.441 1.045 AF FT, Det + per-AU cal 0.352 0.285 0.318 0.285 0.497 1.101 FT+Flow retune β=0 .5, Det 0.308 0.273 0.291 0.303 0.469 1.062 Kitchen-sink FT+CW+pos-wt, Det 0.319 0.223 0.271 0.288 0.483 1.041 FT+Flow retune β=1 .0, Det 0.387 0.263 0.325 0.296 0.453 1.073 FT+Flow retune β=1 .0, Det+per-AU cal 0.387 0.263 0.325 0.296 0.502 1.123 ViT-B FT, Det+per-AU cal 0.416 0.293 0.354 0.255 0.507 1.116 FT+Flow retune, AU cal+expr cal 0.387 0.263 0.325 0.350 0.502 1.177 
+
+36. Wang, Y., Sun, Y., Huang, Y., Liu, Z., Gao, S., Zhang, W., Ge, W., Zhang, W.: Ferv39k: A large-scale multi-scene dataset for facial expression recognition in videos. In: IEEE Conf. Comput. Vis. Pattern Recog. pp. 20922–20931 (2022) 37. Yu, J., Zhang, Y., Lu, X., Zheng, Y., Wang, Y., Zhu, L.: Solution for 8th compe-tition on affective and behavior analysis in-the-wild (2025) 38. Zafeiriou, S., Kollias, D., Nicolaou, M.A., Papaioannou, A., Zhao, G., Kotsia, I.: Aff-wild: Valence and arousal in-the-wild challenge. In: IEEE Conf. Comput. Vis. Pattern Recog. Worksh. pp. 1980–1987 (2017) 39. Zhang, X., Yin, L., Cohn, J.F., Canavan, S., Reale, M., Horowitz, A., Liu, P., Girard, J.M.: Bp4d-spontaneous: A high-resolution spontaneous 3d dynamic facial expression database. Image Vis. Comput. 32 (10), 692–706 (2014) 
+
+## A Full Results Summary 
+
+Table 6 is the unabridged version of the main paper’s results summary (Sec-tion 4.8), including intermediate and negative-result configurations omitted there for space. 
+
+## B Related Datasets 
+
+Table 7 provides an overview of datasets relevant to ABAW-style joint affect modeling. s-Aff-Wild2 is the only benchmark that combines all three task tar-18 S.E. Bekhouche et al. 
+
+Table 7: Datasets related to ABAW-style affective behavior analysis. “All 3” indicates joint availability of valence-arousal, expression, and AU labels in the same benchmark family.                                     
+
+> Dataset Modality Setting Main labels Relevance to ABAW MTL Aff-Wild / Aff-Wild2 Video / A/V In-the-wild VA, EXPR, AU Core ABAW benchmark family; Aff-Wild2 is the main source for joint affect supervision. s-Aff-Wild2 Images In-the-wild VA, EXPR, AU Static Aff-Wild2 subset used by recent ABAW MTL challenges, including the local 11th ABAW files. AffectNet Images In-the-wild EXPR, VA Useful for large-scale expression and VA pre-training, but not a full AU benchmark. RAF-DB Images In-the-wild EXPR Common categorical expression pretrain-ing/evaluation dataset. DFEW / FERV39k Video In-the-wild EXPR Dynamic FER datasets useful for temporal fa-cial expression representation learning. EmotioNet Images In-the-wild AU, EXPR AU-oriented large-scale facial behavior data; useful for AU pretraining. BP4D / DISFA Video Controlled AU Strong AU references, but less representative of unconstrained ABAW conditions. AFEW-VA / SEWA / OMG-Emotion Video or A/V In-the-wild VA Related continuous affect datasets, especially for temporal and audiovisual VA modeling. C-EXPR-DB / BAH Video or A/V In-the-wild Compound expressions, AH Recent ABAW extensions beyond the classic MTL triad.
+
+Table 8: Effect of flow loss weight β. Flow decoding with N = 16 , T = 30 .
+
+β CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+0.25 0.280 0.183 0.231 0.214 0.376 0.821 0.5 0.289 0.188 0.239 0.211 0.376 0.826 
+
+1.0 0.290 0.186 0.238 0.212 0.376 0.826 2.0 0.253 0.199 0.226 0.193 0.379 0.798 
+
+gets (VA, EXPR, AU) as static image crops, making it the natural fit for this challenge. 
+
+## C Flow Weight, Inference Efficiency, and Patch Soft-Pool 
+
+C.1 Flow Loss Weight 
+
+Table 8 sweeps the flow loss weight β ∈ { 0.25 , 0.5, 1.0, 2.0}, with all other hyper-parameters fixed and flow decoding at inference ( N = 16 , T = 30 ). Performance is stable for β ∈ [0 .5, 1.0] ; at β = 2 .0 the flow objective domi-nates and PM T L drops. We adopt β = 1 .0 as the default. 
+
+C.2 Inference Efficiency 
+
+Table 9 sweeps sample count N (left) and integration steps T (right) on the AffectFlow checkpoint. Sampling saturates at N = 8 and all step counts are within 0.007 PM T L 
+
+of each other. N = 1 already outperforms the official baseline ( PM T L = 0 .45 ), consistent with the straight-line trajectory property of rectified flow; we use 
+
+N = 16 , T = 30 as the default. ABAW 2026 Multi-Task Affect Analysis 19 
+
+Table 9: Inference efficiency on the AffectFlow checkpoint. Left : sample count ( T =30 ). Right : Euler steps ( N = 16 ). 
+
+N PV A PEXP R PM T L 
+
+1 0.170 0.199 0.740 8 0.233 0.217 0.826 16 0.238 0.212 0.826 32 0.242 0.213 0.829 
+
+T PV A PEXP R PM T L 
+
+10 0.239 0.210 0.824 20 0.239 0.214 0.829 30 0.238 0.212 0.826 50 0.237 0.219 0.831 Table 10: PSP vs. AffectFlow baseline. Frozen DINOv3 ViT-S/16, 20 epochs. Config Decode CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+AffectFlow Flow ( N =16, T =30) 0.290 0.186 0.238 0.212 0.376 0.826 AffectFlow Det 0.232 0.168 0.200 0.218 0.384 0.802 PSP Flow 0.282 0.139 0.210 0.210 0.381 0.801 PSP Det 0.271 0.198 0.235 0.236 0.389 0.859 
+
+C.3 PSP: Patch Soft-Pool Feature Aggregation 
+
+Rather than using only the DINOv3 [CLS] token, patch soft-pool (PSP) learns per-channel attention weights over the 196 spatial patch tokens and concatenates the result with the CLS token before projection: 
+
+hPSP  
+
+> i
+
+= hCLS  
+
+> i
+
+, P196  
+
+> p=1
+
+σ(j) 
+
+> p
+
+· h(p,j )
+
+> i
+
+dj=1 , (14) where σ(j) = softmax( w(j)), weights initialised to uniform. This doubles the projection input to 2d = 768 ; only the pooling weights are trained (frozen back-bone). PSP Det reaches PM T L = 0 .859 , the best frozen-backbone result without calibration ( +0 .033 over AffectFlow flow), with consistent gains in all three tasks. PSP Flow underperforms AffectFlow Flow ( 0.801 vs. 0.826 ), likely because the doubled input dimension requires longer retuning of the flow head; combining PSP with backbone fine-tuning is left as future work. 
+
+## D ViT-B Backbone and Test-Time Augmentation 
+
+Table 11 compares the ViT-B backbone and horizontal-flip test-time augmenta-tion (TTA) against the flow-retuned ( β=1 .0) best checkpoint. ViT-B (ViT-B/16, 86M parameters) improves valence (CCC-V 0.416 vs. 
+
+0.387 ) and per-AU calibrated score ( 0.507 vs. 0.502 ), but degrades PEXP R by 
+
+0.041 , yielding PM T L = 1 .116 calibrated, below the ViT-S best ( 1.123 ). The VA–EXPR trade-off suggests ViT-B captures finer spatial VA signal but is harder to fine-tune for balanced expression prediction in 20 epochs. Horizontal-flip TTA hurts all three sub-scores; flip changes asymmetric AU patterns (e.g. AU12 corner-of-mouth), explaining the regression. 20 S.E. Bekhouche et al. 
+
+Table 11: ViT-B backbone and horizontal-flip TTA vs. the flow-retuned ViT-S check-point. † per-AU calibration applied. Config Decode CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+Flow-retuned ViT-S Det 0.387 0.263 0.325 0.296 0.453 1.073 Flow-retuned ViT-S † Det 0.387 0.263 0.325 0.296 0.502 1.123 
+
+ViT-B Det 0.416 0.293 0.354 0.255 0.452 1.061 ViT-B † Det 0.416 0.293 0.354 0.255 0.507 1.116 Flow-retuned ViT-S+TTA Det (avg) 0.366 0.261 0.313 0.293 0.453 1.059 Flow-retuned ViT-S+TTA † Det (avg) 0.366 0.261 0.313 0.293 0.504 1.111 
+
+Table 12: Effect of VA loss weight λV A . Flow decoding with N = 16 samples and 
+
+T = 30 steps. 
+
+λV A CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+1 0.290 0.186 0.238 0.212 0.376 0.826 2 0.289 0.184 0.237 0.219 0.375 0.830 
+
+4 0.259 0.194 0.226 0.196 0.378 0.800 
+
+## E Additional Ablation Studies 
+
+This appendix collects ablations that did not improve over the AffectFlow base-line: VA loss weight, global AU threshold sweep, expression-enhancement strate-gies, label smoothing, and global AU loss weight. 
+
+E.1 VA Loss Weighting 
+
+Arousal estimation is the weakest component across all runs. Table 12 tests whether increasing the VA loss weight λV A ∈ { 1, 2, 4} can improve the arousal CCC without sacrificing other tasks. Doubling the VA weight ( λV A = 2 ) yields the best PM T L by improving 
+
+PEXP R without harming PV A , suggesting minor positive cross-task regulariza-tion. At λV A = 4 the stronger VA supervision improves arousal but reduces expression performance and the overall score, consistent with negative transfer at extreme task weight imbalances [31]. The gain at λV A = 2 is marginal ( +0 .004 
+
+PM T L ) and not consistent across ablations; we retain the default λV A = 1 .
+
+E.2 Global AU Threshold Sweep 
+
+The default AU decision threshold is 0.5. Because AU labels are multi-label and class-imbalanced, we additionally evaluate a simple global threshold sweep on the AffectFlow checkpoint. Table 13 shows that a single global threshold does not improve over the default value; lower thresholds increase false positives, while a high threshold of 0.7 sharply reduces AU F1. ABAW 2026 Multi-Task Affect Analysis 21 0.0 0.2 0.4 0.6 0.8 1.0 1.2     
+
+> PMTL
+> Official baseline
+> DINOv3 det, no flow (E1)
+> AffectFlow =1 (E3)
+> AffectFlow + per-AU cal
+> Backbone fine-tuning (E9)
+> FT + flow retune, =1 (E22)
+> FT + per-AU cal (E9)
+> E22 + per-AU cal
+> E22 + per-AU + expr cal (E27)
+> 0.450
+> 0.793
+> 0.826
+> 0.888
+> 1.045
+> 1.073
+> 1.101
+> 1.123
+> 1.177
+> Baseline
+> Frozen backbone
+> Fine-tuned
+> FT + both calibrations
+
+Fig. 2: PM T L progression across key configurations. Color encodes training stage: frozen backbone (light blue), fine-tuned (dark blue), fine-tuned with both calibrations (red). The dotted line marks the official baseline ( PM T L = 0 .450 ). Backbone fine-tuning is the largest single jump; post-hoc per-AU and per-class calibration provide a further 
+
++0 .132 at zero retraining cost. 
+
+Table 13: Global AU threshold sweep on the AffectFlow checkpoint. Flow decoding uses N = 16 samples and T = 30 steps. AU threshold CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+0.3 0.289 0.192 0.240 0.212 0.359 0.811 0.4 0.287 0.187 0.237 0.214 0.359 0.809 0.5 0.290 0.190 0.240 0.215 0.375 0.830 
+
+0.6 0.287 0.190 0.238 0.210 0.370 0.818 0.7 0.290 0.188 0.239 0.213 0.174 0.627 
+
+This result confirms that a single global threshold is too coarse for the het-erogeneous AU imbalance structure; per-AU calibration (Section 4.4 of the main paper) is necessary. 
+
+E.3 Expression Enhancement Failures 
+
+Four expression-specific modifications were explored in sequence. All fail to im-prove PEXP R over the AffectFlow baseline and consistently degrade PV A .
+
+Expression Loss Weight Boost. A lightweight proxy for class-balanced training is to increase λEXP R , the scalar weight on the expression cross-entropy term, without changing the sampler or loss form. Table 14 sweeps λEXP R ∈ { 1, 2, 4}
+
+on the main AffectFlow checkpoint with flow decoding. 22 S.E. Bekhouche et al. 
+
+Table 14: Effect of expression loss weight λEXP R . Flow decoding with N = 16 samples and T = 30 steps. 
+
+λEXP R CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+1 0.290 0.186 0.238 0.212 0.376 0.826 
+
+2 0.230 0.201 0.216 0.196 0.378 0.790 4 0.230 0.207 0.218 0.204 0.377 0.800 
+
+Table 15: Effect of focal loss on the expression head ( γ). Flow decoding with N = 16 
+
+samples and T = 30 steps. 
+
+γ CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+0 (AffectFlow baseline) 0.290 0.186 0.238 0.212 0.376 0.826 
+
+1 0.252 0.192 0.222 0.193 0.379 0.794 2 0.256 0.190 0.223 0.192 0.379 0.794 
+
+Increasing λEXP R does not improve expression macro-F1 and consistently degrades PV A . Because the cross-entropy loss is dominated by majority classes (Neutral, Happiness) regardless of the weight, scaling the loss up merely com-petes for capacity with the VA task without directing gradient towards minority classes. 
+
+Focal Loss for Expression. We replace the masked cross-entropy for expression with a focal loss [29] that down-weights easy majority-class samples via the modulating factor (1 − pt)γ . Table 15 reports flow-decoding results for γ ∈ { 1, 2}
+
+with all other settings identical to AffectFlow. Focal loss does not improve PEXP R and reduces PV A by approximately 0.016. We attribute this to the relatively small number of valid expression labels (90K training frames) combined with heavy class skew: the focal modulator suppresses gradient from majority classes without providing enough additional signal on rare classes to compensate for the lost VA supervision. 
+
+Per-Task Separate Projection Heads. To reduce negative transfer through the shared 768 → 768 projection, we give each task head its own projection MLP while keeping a shared projection for the flow network. Table 16 compares this design against the shared-projection AffectFlow model. Separate projections slightly reduce all three sub-scores, suggesting that the shared representation acts as a useful regularizer rather than a harmful bottle-neck in the frozen-backbone regime. 
+
+Focal Loss with Separate Projection Heads. Combining focal loss with separate projection heads yields the configuration in Table 17: focal loss ( γ = 2 ) plus per-task projections. ABAW 2026 Multi-Task Affect Analysis 23 
+
+Table 16: Effect of per-task separate projection heads. Flow decoding with N = 16 
+
+samples and T = 30 steps. Projection CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+Shared (AffectFlow) 0.290 0.186 0.238 0.212 0.376 0.826 
+
+Separate 0.278 0.183 0.230 0.196 0.371 0.797 
+
+Table 17: Combined focal loss ( γ = 2 ) and separate projection heads. Flow decoding with N = 16 samples and T = 30 steps. Config CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+AffectFlow baseline 0.290 0.186 0.238 0.212 0.376 0.826 
+
+Combined 0.277 0.182 0.230 0.199 0.371 0.800 
+
+The combined variant improves PEXP R marginally over separate projection heads alone ( +0 .003 ) but remains well below the AffectFlow baseline. The con-sistent failure of these expression-enhancement strategies establishes that expres-sion imbalance requires structural remedies (class-balanced sampling, positive-weighted losses) rather than loss reweighting or architectural changes alone. 
+
+E.4 Label Smoothing 
+
+Label smoothing distributes a fraction ϵ of the one-hot probability mass uni-formly across expression classes, providing mild regularization against over-confident predictions. Table 18 sweeps ϵ ∈ { 0.05 , 0.10 , 0.20 }.Mild smoothing ( ϵ = 0 .05 ) raises PEXP R to 0.230 and CCC-V to 0.276 ,but the gain is small and diminishes rapidly: at ϵ = 0 .20 , PEXP R falls below the unsmoothed baseline. Label smoothing alone is insufficient to close the expression imbalance gap. 
+
+E.5 Global AU Loss Weight 
+
+As an alternative to per-AU positive weighting, Table 19 sweeps the global AU loss weight λAU ∈ { 0.5, 1.0, 2.0}.Neither reducing nor increasing λAU changes PM T L appreciably; both vari-ants plateau at 0.819 . Per-AU positive weighting (Section G.2 below) achieves a larger PAU gain ( +0 .043 ) than any global weight setting, confirming that per-class reweighting is more effective than global loss scaling for AU detection. 
+
+## F Class Distribution Statistics 
+
+Table 20 provides the full per-class expression counts and AU positive rates referenced throughout the paper. 24 S.E. Bekhouche et al. 
+
+Table 18: Label smoothing sweep for the expression head (frozen backbone, deter-ministic decode). 
+
+ϵ CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+0.00 (AffectFlow Det) 0.232 0.168 0.200 0.218 0.384 0.802 0.05 0.276 0.160 0.218 0.230 0.368 0.816 0.10 0.273 0.159 0.216 0.223 0.368 0.807 0.20 0.265 0.172 0.218 0.193 0.391 0.802 
+
+Table 19: Global AU loss weight sweep (frozen backbone, deterministic decode). 
+
+λAU CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+1.0 (AffectFlow baseline) 0.232 0.168 0.200 0.218 0.384 0.802 0.5 0.277 0.158 0.218 0.237 0.365 0.819 2.0 0.275 0.160 0.217 0.236 0.366 0.819 
+
+## G Imbalance Remedies: Balanced Sampling and AU Positive Weighting 
+
+G.1 Balanced Expression Sampling 
+
+WeightedRandomSampler assigns each training frame a sampling probability in-versely proportional to its expression class count, rebalancing the effective class distribution without modifying the loss function. Table 21 compares the bal-anced sampler alone and the balanced sampler combined with class-weighted cross-entropy against the AffectFlow flow baseline. The balanced sampler raises PEXP R to 0.251 (+0 .039 over AffectFlow flow) and lifts PM T L to 0.864 , the best frozen-backbone result for expression. Combin-ing balanced sampling with class-weighted cross-entropy gives PEXP R = 0 .246 
+
+under deterministic decode but PV A drops substantially ( 0.193 vs. 0.238 ), indi-cating that the combined strategy over-suppresses gradient on majority classes at the cost of valence-arousal prediction. 
+
+G.2 BCE Positive Weighting for AUs 
+
+We set each AU’s BCE positive weight to nneg /n pos computed from the train-ing set (Table 20). One variant applies positive weighting to the AU head alone; another further adds class-weighted expression cross-entropy. Table 22 reports deterministic predictions throughout: flow decoding degrades both runs (PM T L = 0 .777 for AU positive weighting alone and 0.745 for the combined variant) because the reweighted loss shifts predicted probability distributions incompatibly with the rectified-flow sampler. AU positive weighting raises PAU from 0.384 to 0.427 (+0 .043 ) at train-ing time. Adding expression class weighting further lifts PAU to 0.439 , yielding ABAW 2026 Multi-Task Affect Analysis 25 
+
+Table 20: Class distribution in the s-Aff-Wild2 training and validation splits. Left :expression counts, frequency, and inverse-frequency weight wc = Nvalid /(8 nc) (used in the class-weighted cross-entropy experiment, Section 4.5 of the main paper). Right : AU positive rate (% of valid rows with AU=1) and BCE pos_weight = nneg /n pos (used in the AU positive-weighting experiment, Section G.2 below).                                                                                
+
+> Class Tr count Tr% Val% wc
+> Neutral 23,976 26.5 12.2 0.47 Anger 4,555 5.0 3.2 2.49 Disgust 3,168 3.5 3.7 3.58 Fear 3,122 3.4 8.1 3.63 Happiness 18,135 20.0 24.3 0.63 Sadness 7,609 8.4 12.3 1.49 Surprise 5,228 5.8 6.5 2.17 Other 24,852 27.4 29.8 0.46 Total 90,645 8×imbalance ratio AU Tr% +Val% +pos_w AU1 18.1 20.6 4.5 AU2 8.5 9.5 10.8 AU4 19.7 20.2 4.1 AU6 29.6 32.8 2.4 AU7 40.0 49.2 1.5 AU10 37.1 42.5 1.7 AU12 25.9 31.0 2.9 AU15 2.4 2.9 41.0 AU23 2.9 2.8 33.7 AU24 4.8 3.0 19.7 AU25 68.3 76.0 0.5 AU26 10.4 10.9 8.6 29 ×imbalance (AU25/AU15)
+
+Table 21: Expression class-balance strategies. All variants use a frozen backbone (20 epochs); decode mode matches best-checkpoint evaluation. Strategy Decode CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+Baseline Flow 0.290 0.186 0.238 0.212 0.376 0.826 CW-CE Det – – 0.210 0.239 0.385 0.834 Balanced Flow 0.264 0.213 0.238 0.251 0.375 0.864 
+
+CW+Balanced Det 0.225 0.162 0.193 0.246 0.394 0.833 
+
+PM T L = 0 .890 , the best frozen-backbone result without calibration, marginally surpassing AffectFlow after per-AU calibration ( 0.888 ). 
+
+## H Kitchen-Sink Fine-Tuning 
+
+We test whether the most effective frozen-backbone interventions, class-weighted cross-entropy and per-AU BCE positive weighting, transfer additively to the fine-tuned setting. Both are applied jointly during the same low-LR fine-tuning run as the plain fine-tuning experiment (Section 4.3 of the main paper). Table 23 reports deterministic predictions with and without per-AU calibration. The kitchen-sink combination does not improve PM T L over plain fine-tuning without calibration ( 1.041 vs. 1.045 ), despite raising PAU from 0.441 to 0.483 .The AU gain is offset by a PV A drop from 0.318 to 0.271 : class-weighted cross-entropy reduces gradient allocation for the VA task when the backbone is jointly optimized, consistent with the pattern seen when combining balanced sampling with class-weighted CE (Section G.1). Expression macro-F1 ( 0.288 ) is nearly identical to plain fine-tuning ( 0.285 ), confirming that AU positive weighting 26 S.E. Bekhouche et al. 
+
+Table 22: AU BCE positive weighting (frozen backbone, deterministic decode). Flow decoding degrades under the reweighted loss. Config CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+AffectFlow baseline, Det 0.232 0.168 0.200 0.218 0.384 0.802 AU pos-wt 0.261 0.167 0.214 0.237 0.427 0.878 AU pos-wt + CW-CE 0.259 0.163 0.211 0.240 0.439 0.890 Table 23: Kitchen-sink fine-tuning: FT + class-weighted CE + AU pos-weight, deter-ministic decode. † per-AU calibration applied. Config CCC-V CCC-A PV A PEXP R PAU PM T L 
+
+Plain FT, Det 0.352 0.285 0.318 0.285 0.441 1.045 Kitchen-sink FT+CW+pos-wt, Det 0.319 0.223 0.271 0.288 0.483 1.041 Kitchen-sink FT+CW+pos-wt †, Det 0.319 0.223 0.271 0.288 0.503 1.061 
+
+absorbs gradient competition without a meaningful expression benefit. After per-AU calibration, the kitchen-sink variant reaches PM T L = 1 .061 , below the best overall flow-retuned ( β=1 .0) calibrated result ( 1.123 ). These results indicate that once the backbone is fine-tuned, frozen-backbone class-reweighting strategies add little value and can harm PV A ; flow retuning is a more effective path. 
+
+## I Per-Class and Per-AU F1 Breakdowns 
+
+Table 24 reports the full per-class expression F1 for the AffectFlow and fine-tuned models referenced in Section 4.5 of the main paper, and Table 25 reports the per-AU F1 scores before and after per-AU threshold calibration for the fine-tuned checkpoint. Table 26 and Figure 3 report the per-class expression calibration results from Section 4.7 of the main paper. AU15 and AU23, the two rarest AUs (positive rate 2.4% and 2.9%), have near-zero F1 at the default threshold but recover to 10 .8% and 18 .9% after per-AU calibration, confirming that the model has learned discriminative signal that the imbalanced training objective systematically suppresses. ABAW 2026 Multi-Task Affect Analysis 27 
+
+Table 24: Expression F1 (%) per class for AffectFlow (flow, N =16) and the fine-tuned backbone (deterministic). Class AffectFlow Flow Fine-tuned Det Neutral 35.7 41.1 Anger 1.1 25.3 Disgust 11.8 37.0 Fear 6.3 6.9 Happiness 55.2 52.2 Sadness 4.3 7.1 Surprise 2.8 10.2 Other 52.7 48.6 Macro-F1 21.2 28.5 Neutral Anger Disgust Fear Happiness Sadness Surprise Other 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> F1 Score
+> +0.29
+> +0.11
+> Default (macro F1 = 0.296)
+> Calibrated (macro F1 = 0.350)
+
+Fig. 3: Per-class expression F1 before (light) and after (dark) threshold calibration on the fine-tuned+flow retune ( β=1 .0) checkpoint. Dotted horizontal lines mark the macro F1 at each setting. Fear benefits most ( 0.038 → 0.331 , +0 .293 ), followed by Sadness ( 0.171 → 0.282 , +0 .111 ); macro F1 rises from 0.296 to 0.350 .28 S.E. Bekhouche et al. 
+
+Table 25: Per-AU F1 (%) for the fine-tuned model (deterministic) at threshold 0.5 and after per-AU calibration. AU F1@0.5 F1@cal AU1 51.3 55.2 AU2 41.7 44.3 AU4 47.9 53.4 AU6 50.4 55.9 AU7 66.0 73.4 AU10 66.7 70.7 AU12 64.8 65.3 AU15 0.0 10.8 AU23 0.5 18.9 AU24 22.1 23.3 AU25 85.3 87.8 AU26 33.0 37.5 Mean 44.1 49.7 
+
+Table 26: Per-class expression F1 before (default arg max ) and after per-class weight calibration on the fine-tuned+flow retune ( β=1 .0) deterministic predictions. Macro-F1 improves from 0.296 to 0.350 .Expression Default F1 Calibrated F1 Neutral 0.368 0.377 Anger 0.219 0.212 Disgust 0.465 0.507 Fear 0.038 0.331 Happiness 0.526 0.525 Sadness 0.171 0.282 Surprise 0.154 0.145 Other 0.426 0.425 Macro-F1 ( PEXP R ) 0.296 0.350
