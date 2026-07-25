@@ -6,184 +6,121 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-22
-- 运行时间：2026-07-22 21:49:35 UTC
+- 最新运行日期：2026-07-25
+- 运行时间：2026-07-25 21:23:20 UTC
 - 运行状态：成功
-- 本次总论文数：54
-- 精读区：41
+- 本次总论文数：33
+- 精读区：20
 - 速读区：13
 
 ### 今日简报（AI）
-今日精读41篇论文，聚焦长视频理解、情感模型效率与结构化视觉推理等前沿方向。  
-最值得关注的是高斯混合建模在长视频中的事件感知视觉分配，以及轻量级多模态情感模型是否真正需要超大参数量。  
-建议关注视觉标记合并与场景图思维如何让多模态检索和推理变得更高效。
-- 详情：[/202607/22/README](/202607/22/README)
+今天精读20篇顶会论文，在视觉长时推理与多任务情感分析上发现两篇满分突破  
+ChronoStitch 用免训练的视觉记忆缝合实现超长时序推理，AffectFuse 通过跨任务特征融合让情感行为识别更准  
+想跟上多模态前沿的读者，下周可重点追踪训练自由方法，并关注音频-文本交叉注意力在犹豫识别中的应用
+- 详情：[/202607/25/README](/202607/25/README)
 
 ### 精读区论文标签
-1. [Gaussian Mixture Modeling for Event-Aware Visual Allocation in Long Video Understanding](/202607/22/2607.12557v1-gaussian-mixture-modeling-for-event-aware-visual-allocation-in-long-video-understanding)  
+1. [ChronoStitch: Training-Free Composition of Visual KV Memories for Long-Horizon Temporal Reasoning](/202607/25/2607.19547v1-chronostitch-training-free-composition-of-visual-kv-memories-for-long-horizon-temporal-reasoning)  
    标签：评分：10.0/10、query:long-video
-   evidence：高斯混合建模用于长视频理解中的事件感知视觉分配
-2. [Do We Really Need Multimodal Emotion Language Models Larger Than 1B Parameters?](/202607/22/2607.12787v1-do-we-really-need-multimodal-emotion-language-models-larger-than-1b-parameters)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：质疑多模态情感识别中大型模型的必要性
-3. [InCarEmo: A Multimodal Dataset for In-Cabin Emotion Recognition and Driver State Monitoring](/202607/22/2607.14683v1-incaremo-a-multimodal-dataset-for-in-cabin-emotion-recognition-and-driver-state-monitoring)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：融合可见光/红外视频、音频和对话文本的车内情绪识别多模态数据集
-4. [Modularized Dynamic-Granularity Video LLM for Multi-Event Long Video Understanding](/202607/22/2607.15778v1-modularized-dynamic-granularity-video-llm-for-multi-event-long-video-understanding)  
-   标签：评分：10.0/10、query:long-video
-   evidence：模块化视频LLM用于多事件长视频理解
-5. [Audio-Visual Flamingo: Open Audio-Visual Intelligence for Long and Complex Videos](/202607/22/2607.16107v1-audio-visual-flamingo-open-audio-visual-intelligence-for-long-and-complex-videos)  
-   标签：评分：10.0/10、query:long-video
-   evidence：提出了一个开放的音频-视觉大语言模型，用于长视频中音频、图像和文本的联合理解与推理。
-6. [ZifaMem: Structured Memory for Persona, Preference, and Emotional Continuity in AI Companions](/202607/22/2607.17564v1-zifamem-structured-memory-for-persona-preference-and-emotional-continuity-in-ai-companions)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：结构化记忆系统实现AI伴侣的情感连续性，提升情感智能
-7. [EmoEUS: Uncertainty Supervision for Multimodal Emotion Recognition in Conversation](/202607/22/2607.18336v1-emoeus-uncertainty-supervision-for-multimodal-emotion-recognition-in-conversation)  
-   标签：评分：10.0/10、query:affective-ai
-   evidence：不确定性监督的多模态对话情绪识别
-8. [Segregate, Refine, Integrate: Decomposing Multimodal Fusion for Sentiment Analysis](/202607/22/2607.12686v1-segregate-refine-integrate-decomposing-multimodal-fusion-for-sentiment-analysis)  
+   evidence：组合视觉KV记忆实现长视频时序推理
+2. [AffectFuse: Cross-Task Feature Fusion with Temporal Modeling for Multi-Task Affective Behavior Analysis](/202607/25/2607.16546v1-affectfuse-cross-task-feature-fusion-with-temporal-modeling-for-multi-task-affective-behavior-analysis)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：用于情感分析的多模态融合方案，分离模态特定与跨模态路径
-9. [AVSCap: Orchestrating Audio-Visual Synergy for Omni-modal Video Captioning](/202607/22/2607.12820v1-avscap-orchestrating-audio-visual-synergy-for-omni-modal-video-captioning)  
+   evidence：多任务情感行为分析，融合时序建模与跨任务特征融合
+3. [From Modalities to Propositions: A Language-Centric Framework for Multimodal Intelligence](/202607/25/2607.16560v1-from-modalities-to-propositions-a-language-centric-framework-for-multimodal-intelligence)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：通过原子命题和语义码本实现语言中心的多模态表示，用于跨模态推理和检索
+4. [Efficient Audio-Visual Event Recognition via Knowledge Distillation and Dynamic INT8 Quantization of a Hybrid Cross-Attention Network](/202607/25/2607.16980v1-efficient-audio-visual-event-recognition-via-knowledge-distillation-and-dynamic-int8-quantization-of-a-hybrid-cross-attention-network)  
    标签：评分：9.0/10、query:long-video
-   evidence：协调视听协同实现全模态视频字幕，融合视觉、语音和音效
-10. [CD-MED: Cross-Domain Multimodal Emotion Descriptor for Visual Comparison of Digital Objects](/202607/22/2607.12958v1-cd-med-cross-domain-multimodal-emotion-descriptor-for-visual-comparison-of-digital-objects)  
+   evidence：通过高效压缩实现音视频事件检测并便于部署
+5. [Learning Emotion from Motion: Kinetic Multi-Stream Skeleton Modeling with Metadata-Conditioned Weak Label Distributions](/202607/25/2607.17121v1-learning-emotion-from-motion-kinetic-multi-stream-skeleton-modeling-with-metadata-conditioned-weak-label-distributions)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：跨域多模态情感描述符，实现电影和音乐等数字对象的情感检测与比较
-11. [AffectFlow-DINO: Uncertainty-Aware Multi-Task Affect Estimation via Conditional Rectified Flow](/202607/22/2607.13250v1-affectflow-dino-uncertainty-aware-multi-task-affect-estimation-via-conditional-rectified-flow)  
+   evidence：基于骨架的动态多流情绪识别建模
+6. [SpEmoC: A Balanced Speaker-Segment Multimodal Emotion Benchmark](/202607/25/2607.18109v1-spemoc-a-balanced-speaker-segment-multimodal-emotion-benchmark)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：通过条件校正流对多任务面部情感估计进行不确定性建模
-12. [FOLIO: Focused Semantic Memory for Streaming Video Understanding](/202607/22/2607.13298v1-folio-focused-semantic-memory-for-streaming-video-understanding)  
+   evidence：面向对话的多模态情感基准，同步音视频文本
+7. [Context-structured Video Anomaly Detection with Large Vision-Language Models](/202607/25/2607.19077v1-context-structured-video-anomaly-detection-with-large-vision-language-models)  
    标签：评分：9.0/10、query:long-video
-   evidence：采用聚焦语义记忆实现高效流式视频理解，降低内存开销
-13. [TANDE: Disentangling Verbal and Nonverbal Backchannels in Emotional AI-Avatar Conversations with Young Adults](/202607/22/2607.13357v1-tande-disentangling-verbal-and-nonverbal-backchannels-in-emotional-ai-avatar-conversations-with-young-adults)  
+   evidence：使用大规模视觉-语言模型进行上下文结构化视频异常检测，无需预定义异常提示词
+8. [Associative Emotional Learning in Convolutional Neural Networks](/202607/25/2607.19327v2-associative-emotional-learning-in-convolutional-neural-networks)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：大语言模型驱动的情感AI虚拟人及反馈消歧
-14. [AspectCLIP: Optimizing CLIP Representation Space via Aspect-Guided Consistency Regularization](/202607/22/2607.13805v2-aspectclip-optimizing-clip-representation-space-via-aspect-guided-consistency-regularization)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：通过方面引导一致性正则化改进CLIP跨模态表示学习
-15. [CF-Net: Conflict Fusion with Speaker Normalisation and Certainty Weighting for Ambivalence/Hesitancy Recognition](/202607/22/2607.13976v1-cf-net-conflict-fusion-with-speaker-normalisation-and-certainty-weighting-for-ambivalencehesitancy-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：通过冲突融合利用视觉、音频、文本检测矛盾/犹豫
-16. [CF-Net: Conflict Fusion with Speaker Normalisation and Certainty Weighting for Ambivalence/Hesitancy Recognition](/202607/22/2607.13976v2-cf-net-conflict-fusion-with-speaker-normalisation-and-certainty-weighting-for-ambivalencehesitancy-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：利用冲突融合和说话人标准化的多模态犹豫/矛盾识别
-17. [Task-Specific Feature Fusion Method for Multi-Task Affective Behavior Analysis](/202607/22/2607.13986v1-task-specific-feature-fusion-method-for-multi-task-affective-behavior-analysis)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：任务自适应特征融合的多任务情感行为分析
-18. [Enhancing Small Language Models Reasoning through Knowledge Graph Grounding](/202607/22/2607.14149v1-enhancing-small-language-models-reasoning-through-knowledge-graph-grounding)  
+   evidence：用CNN模拟联合情绪学习进行视觉效价处理，与大脑机制相关。
+9. [Scaling Laws for Hypernetwork-Based Knowledge Injection in Large Language Models](/202607/25/2607.19604v1-scaling-laws-for-hypernetwork-based-knowledge-injection-in-large-language-models)  
    标签：评分：9.0/10、query:affective-kb
-   evidence：神经符号智能体框架将知识图谱基础注入小语言模型
-19. [Memory-Driven Self-Disclosure and Relational Turning Points: A Longitudinal Multimodal Study of Human-AI Interaction](/202607/22/2607.14593v2-memory-driven-self-disclosure-and-relational-turning-points-a-longitudinal-multimodal-study-of-human-ai-interaction)  
+   evidence：基于超网络的大语言模型知识注入及缩放定律研究
+10. [Adaptive Capitulation: A Structural Failure Mode of LLM Responses in Vulnerability Contexts](/202607/25/2607.19629v1-adaptive-capitulation-a-structural-failure-mode-of-llm-responses-in-vulnerability-contexts)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：针对情感对话智能体的记忆增强纵向研究，探讨关系构建与情感延续
-20. [Autoregressive Modeling of Film with Applications in Video Montage](/202607/22/2607.14645v1-autoregressive-modeling-of-film-with-applications-in-video-montage)  
+   evidence：发现LLM在回应情感脆弱用户时的失败模式，直接关系到构建情感智能与安全的LLM。
+11. [The Maskability Index: Predicting Task-Objective Alignment in Pretrained Language Models](/202607/25/2607.20265v1-the-maskability-index-predicting-task-objective-alignment-in-pretrained-language-models)  
+   标签：评分：9.0/10、query:affective-kb
+   evidence：在ATOMIC2020常识知识库补全基准上评估提示对齐性
+12. [PercepCap: Video Captioner with Structured Spatio-Temporal Perception](/202607/25/2607.20389v1-percepcap-video-captioner-with-structured-spatio-temporal-perception)  
    标签：评分：9.0/10、query:long-video
-   evidence：自回归Transformer建模视频序列用于蒙太奇编辑
-21. [VideoSEMA: a scalable and efficient Mamba-like attention for video understanding](/202607/22/2607.14711v2-videosema-a-scalable-and-efficient-mamba-like-attention-for-video-understanding)  
+   evidence：感知驱动的视频描述，显式建模时空感知
+13. [REGARD: Regional Affective Differences in Large Language Models](/202607/25/2607.20722v1-regard-regional-affective-differences-in-large-language-models)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：使用VAD维度分析LLMs的情感框架
+14. [Explainable graph attention network for stress recognition (StressGAT) via differential action units](/202607/25/2607.20819v1-explainable-graph-attention-network-for-stress-recognition-stressgat-via-differential-action-units)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：基于差异动作单元的图注意力网络用于面部压力识别
+15. [Efficient and Interpretable Body-Based Emotion Recognition with Lightweight Temporal Convolutional Networks](/202607/25/2607.20820v1-efficient-and-interpretable-body-based-emotion-recognition-with-lightweight-temporal-convolutional-networks)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：基于体态的高效情绪识别作为情感计算技术
+16. [AUCH-Net: Action Unit-Based Consistency-Aware Hypergraph Network for Cross-Domain Few-Shot Facial Expression Recognition](/202607/25/2607.21004v1-auch-net-action-unit-based-consistency-aware-hypergraph-network-for-cross-domain-few-shot-facial-expression-recognition)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：基于动作单元的跨域少样本面部表情识别用于情感检测
+17. [EmoAgent-R1: Towards Multimodal Emotion Understanding with Reinforcement Learning-based Dynamic Agent Specialization](/202607/25/2607.21013v1-emoagent-r1-towards-multimodal-emotion-understanding-with-reinforcement-learning-based-dynamic-agent-specialization)  
+   标签：评分：9.0/10、query:affective-ai
+   evidence：提出基于强化学习的动态智能体专业化用于多模态情感识别
+18. [ProCap: Prominence-guided Object Rectification for Faithful and Comprehensive Video Captioning](/202607/25/2607.21022v1-procap-prominence-guided-object-rectification-for-faithful-and-comprehensive-video-captioning)  
    标签：评分：9.0/10、query:long-video
-   evidence：分离时空注意力Mamba-like模型用于高效视频分类
-22. [Dialogue Summarization with Emotion Dynamics Using Topic- and Participant-Centric Decomposition](/202607/22/2607.14769v1-dialogue-summarization-with-emotion-dynamics-using-topic--and-participant-centric-decomposition)  
+   evidence：显著性感知的后处理修正用于视频描述生成
+19. [MVEI & EmObserver: Empowering MLLM-Oriented Visual Emotional Intelligence via Emotion Statement Judgement](/202607/25/2607.21061v1-mvei--emobserver-empowering-mllm-oriented-visual-emotional-intelligence-via-emotion-statement-judgement)  
    标签：评分：9.0/10、query:affective-ai
-   evidence：利用多模态输入显式建模情感动态进行对话摘要
-23. [Video = World + Event Stream](/202607/22/2607.15038v2-video--world--event-stream)  
+   evidence：通过情感语句判断赋予多模态大语言模型视觉情感智能
+20. [Self-Supervised Learning of Structured Dynamics from Videos](/202607/25/2607.21576v1-self-supervised-learning-of-structured-dynamics-from-videos)  
    标签：评分：9.0/10、query:long-video
-   evidence：将视频建模为世界加事件流，用于实时事件理解
-24. [SceneBind: Binding What and Where Across Vision, Audio and Language](/202607/22/2607.15265v1-scenebind-binding-what-and-where-across-vision-audio-and-language)  
-   标签：评分：9.0/10、query:long-video
-   evidence：SceneBind构建融合视觉、音频和语言的全局模态场景表示，包含显式3D空间结构，实现跨模态理解。
-25. [Physiological Prior-Driven Label Enhancement for Cross-Subject EEG Emotion Recognition](/202607/22/2607.15566v1-physiological-prior-driven-label-enhancement-for-cross-subject-eeg-emotion-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：基于脑电图的情感识别与神经生理先验
-26. [Efficient Frame Selection for Long Videos at Test Time with Attention-Based MLLM Selectors](/202607/22/2607.15689v1-efficient-frame-selection-for-long-videos-at-test-time-with-attention-based-mllm-selectors)  
-   标签：评分：9.0/10、query:long-video
-   evidence：DAFS利用基于注意力的帧选择实现长视频高效理解
-27. [AuEmoChat: Authentic Emotion Understanding and Rendering for Conversational Speech Synthesis](/202607/22/2607.15755v1-auemochat-authentic-emotion-understanding-and-rendering-for-conversational-speech-synthesis)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：面向对话语音合成的真实情感理解与渲染
-28. [Vision-Language Assistant for Emotional Reactions to Risky Driving](/202607/22/2607.16181v1-vision-language-assistant-for-emotional-reactions-to-risky-driving)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：检测危险驾驶行为并利用大语言模型生成情绪化反应的流水线
-29. [Searching Videos as Trees: Self-Correcting Agents for Grounded Long Video QA](/202607/22/2607.16189v1-searching-videos-as-trees-self-correcting-agents-for-grounded-long-video-qa)  
-   标签：评分：9.0/10、query:long-video
-   evidence：提出基于树搜索的长视频问答定位方法，通过时间树对语义连贯片段进行自纠正搜索。
-30. [Explainable Lightweight Compact Deep Models for Speech Emotion Recognition](/202607/22/2607.16803v1-explainable-lightweight-compact-deep-models-for-speech-emotion-recognition)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：面向语音情感识别的可解释轻量模型
-31. [Should Missing Modalities Always Be Necessary to Repair for Multi-modal Sentiment Analysis?](/202607/22/2607.17262v1-should-missing-modalities-always-be-necessary-to-repair-for-multi-modal-sentiment-analysis)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：多模态情感分析中的选择性模态修复
-32. [EII-SCL: Harnessing Emotional Inertia for Multimodal Emotion Recognition in Conversation](/202607/22/2607.17366v1-eii-scl-harnessing-emotional-inertia-for-multimodal-emotion-recognition-in-conversation)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：通过情绪惯性先验进行对话中的多模态情绪识别
-33. [TimeLens2: Generalist Video Temporal Grounding with Multimodal LLMs](/202607/22/2607.17423v1-timelens2-generalist-video-temporal-grounding-with-multimodal-llms)  
-   标签：评分：9.0/10、query:long-video
-   evidence：通用视频时间定位，用于长视频中的事件检测
-34. [HAS: Highlight-guided Attention Steering for Multimodal LLM Video Summarization](/202607/22/2607.17994v1-has-highlight-guided-attention-steering-for-multimodal-llm-video-summarization)  
-   标签：评分：9.0/10、query:long-video
-   evidence：高亮引导注意力导向的多模态LLM视频摘要
-35. [Style over Substance: A Shortcut Audit of Emotion-Description Preference Evaluation](/202607/22/2607.18508v1-style-over-substance-a-shortcut-audit-of-emotion-description-preference-evaluation)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：对多模态情绪理解中情绪描述偏好评估的捷径审计
-36. [Fusion Embedding: A Unified Embedding Space for Text, Image, Video, and Audio](/202607/22/2607.18666v1-fusion-embedding-a-unified-embedding-space-for-text-image-video-and-audio)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：统一文本、图像、视频和音频的跨模态检索嵌入
-37. [PeakFlow: Peak-Guided Coarse-to-Refined Modeling for EEG-Based Dynamic Affective Trajectory Prediction](/202607/22/2607.18671v1-peakflow-peak-guided-coarse-to-refined-modeling-for-eeg-based-dynamic-affective-trajectory-prediction)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：基于EEG的动态情感轨迹预测捕捉情绪的神经关联
-38. [Semantic Primes as Explanans for Emotion in Large Language Models](/202607/22/2607.18691v1-semantic-primes-as-explanans-for-emotion-in-large-language-models)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：使用自然语义元语言的语义基元解释大语言模型中的情感
-39. [Mitigating Modality and Language-Style Gaps for Zero-Shot Video Moment Retrieval](/202607/22/2607.19027v1-mitigating-modality-and-language-style-gaps-for-zero-shot-video-moment-retrieval)  
-   标签：评分：9.0/10、query:long-video
-   evidence：基于自相似性的零样本视频时刻检索方法，检测事件并规避模态差异
-40. [IGGT4D: Streaming 4D Instance-Grounded Geometry Transformer](/202607/22/2607.19228v1-iggt4d-streaming-4d-instance-grounded-geometry-transformer)  
-   标签：评分：9.0/10、query:long-video
-   evidence：用于长动态场景在线4D理解的流式Transformer
-41. [Associative Emotional Learning in Convolutional Neural Networks](/202607/22/2607.19327v1-associative-emotional-learning-in-convolutional-neural-networks)  
-   标签：评分：9.0/10、query:affective-ai
-   evidence：在CNN中建模联想情绪学习，通过巴甫洛夫范式连接视觉场景与情绪效价
+   evidence：自监督分离相机和物体运动，用于视频动态建模
 
 ### 速读区论文标签
-1. [Do All Visual Tokens Matter Equally? Object-Evidence Preserving Token Merging for Vision-Language Retrieval](/202607/22/2607.04605v2-do-all-visual-tokens-matter-equally-object-evidence-preserving-token-merging-for-vision-language-retrieval)  
+1. [Audio-Text Cross-Attention with Psycholinguistic Support Features for Ambivalence/Hesitancy Recognition](/202607/25/2607.13345v1-audio-text-cross-attention-with-psycholinguistic-support-features-for-ambivalencehesitancy-recognition)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：提出对象感知的标记合并方法，实现高效视觉-语言检索，提升跨模态表示效率
-2. [Scene Graph Thinking: Reinforcing Structured Visual Reasoning for Multimodal Large Language Models](/202607/22/2607.05716v3-scene-graph-thinking-reinforcing-structured-visual-reasoning-for-multimodal-large-language-models)  
+   evidence：使用音频-文本和心理语言学特征的矛盾/犹豫识别
+2. [ScanFocus: A Coarse-to-Fine Framework for Spatio-Temporal Video Grounding](/202607/25/2607.13421v1-scanfocus-a-coarse-to-fine-framework-for-spatio-temporal-video-grounding)  
+   标签：评分：8.0/10、query:long-video
+   evidence：提出粗到细的时空视频定位框架，解决长视频处理中全局建模与精确边界定位的平衡问题。
+3. [Stop Thinking, Start Looking: Efficient Post-Training for Multimodal Document Question Answering via Reasoning-Free Alignment](/202607/25/2607.14682v1-stop-thinking-start-looking-efficient-post-training-for-multimodal-document-question-answering-via-reasoning-free-alignment)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：基于场景图的多模态大模型视觉推理，增强跨模态表征
-3. [Uncovering Latent Depression Severity for Binary Depression Detection via Advantage-weighting Ranking](/202607/22/2607.05901v1-uncovering-latent-depression-severity-for-binary-depression-detection-via-advantage-weighting-ranking)  
+   evidence：提出直接对齐视觉特征与定位输出的训练框架，推进多模态跨模态表示学习
+4. [VideoSEMA: a scalable and efficient Mamba-like attention for video understanding](/202607/25/2607.14711v1-videosema-a-scalable-and-efficient-mamba-like-attention-for-video-understanding)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：使用视听数据的多模态抑郁检测与时序建模
-4. [MobileWan: Closing the Quality Gap for Mobile Video Diffusion](/202607/22/2607.06173v1-mobilewan-closing-the-quality-gap-for-mobile-video-diffusion)  
+   evidence：新颖的高效拆分时空注意力机制用于视频理解
+5. [FlashDecoder: Real-Time Latent-to-Pixel Streaming Decoder with Transformers](/202607/25/2607.14898v1-flashdecoder-real-time-latent-to-pixel-streaming-decoder-with-transformers)  
    标签：评分：8.0/10、query:affective-ai
-   evidence：通过递归蒸馏和结构化压缩将大规模视频扩散Transformer部署到移动端
-5. [Sparse Attention for Dense Open-Vocabulary Prediction in CLIP](/202607/22/2607.07135v1-sparse-attention-for-dense-open-vocabulary-prediction-in-clip)  
-   标签：评分：8.0/10、query:affective-ai
-   evidence：为CLIP提出新颖稀疏注意力，改善开放词汇密集预测中的空间定位，推进视觉-语言变换器模型。
-6. [VisCo: Leveraging Large Language Models as Intrinsic Encoders for Visual Token Compression](/202607/22/2607.12756v1-visco-leveraging-large-language-models-as-intrinsic-encoders-for-visual-token-compression)  
+   evidence：基于Transformer的实时流式视频解码器
+6. [IoUPD: IoU-Aware Privileged Distillation for Visual Grounding with Multimodal Large Language Models](/202607/25/2607.15732v1-ioupd-iou-aware-privileged-distillation-for-visual-grounding-with-multimodal-large-language-models)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：利用LLM作为内在编码器进行视觉Token压缩，优化跨模态模型效率
-7. [AVQ-Attention: Adaptive Vector-Quantized Attention](/202607/22/2607.12789v1-avq-attention-adaptive-vector-quantized-attention)  
+   evidence：IoU感知的跨模态视觉定位蒸馏方法
+7. [How to Build Marcus's Algebraic Mind: From Minsky's Emotion-Machine Viewpoint](/202607/25/2607.16623v1-how-to-build-marcuss-algebraic-mind-from-minskys-emotion-machine-viewpoint)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：用于高效Transformer的自适应向量量化注意力
-8. [AspectCLIP: Optimizing CLIP Representation Space via Aspect-Guided Consistency Regularization](/202607/22/2607.13805v1-aspectclip-optimizing-clip-representation-space-via-aspect-guided-consistency-regularization)  
+   evidence：基于代数表示构建情感机器的认知架构
+8. [Differentiable Logic Gate Networks for Low-Latency EEG Classification on Edge Devices](/202607/25/2607.18149v1-differentiable-logic-gate-networks-for-low-latency-eeg-classification-on-edge-devices)  
    标签：评分：7.0/10、query:affective-ai
-   evidence：方面引导的一致性正则化改进跨模态表示学习
-9. [Video = World + Event Stream](/202607/22/2607.15038v1-video--world--event-stream)  
-   标签：评分：7.0/10、query:long-video
-   evidence：事件流捕获一切变化，支持实时预测世界响应
-10. [Accuracy Without Grounding: Diagnosing Visual Dependency Dissociation in Video LLM Benchmarks](/202607/22/2607.13305v1-accuracy-without-grounding-diagnosing-visual-dependency-dissociation-in-video-llm-benchmarks)  
-   标签：评分：6.0/10、query:long-video
-   evidence：诊断视频LLM基准中的视觉依赖性，揭示理解视频语义的差距
-11. [Constraint-Anchored Reasoning Traces](/202607/22/2607.16727v1-constraint-anchored-reasoning-traces)  
+   evidence：基于脑电图的情绪识别使用高效逻辑门网络
+9. [Text Template Tokens Are Implicit Semantic Registers in Diffusion Transformers](/202607/25/2607.19139v1-text-template-tokens-are-implicit-semantic-registers-in-diffusion-transformers)  
+   标签：评分：7.0/10、query:affective-ai
+   evidence：对文本到图像扩散变换器(DiT)进行因果可解释性分析
+10. [MGDT: MLLM-Guided Diffusion Transformer with Relation-Adaptive Mixture-of-Experts for Multimodal Knowledge Graph Completion](/202607/25/2607.15592v1-mgdt-mllm-guided-diffusion-transformer-with-relation-adaptive-mixture-of-experts-for-multimodal-knowledge-graph-completion)  
    标签：评分：6.0/10、query:affective-kb
-   evidence：提出神经符号框架，结合自然语言与符号约束，可迁移至情感推理任务。
-12. [MultiLoReFT: Decoupling Shared and Modality-Specific Subspaces in Multimodal Learning via Low-Rank Representation Fine-Tuning](/202607/22/2607.16789v1-multiloreft-decoupling-shared-and-modality-specific-subspaces-in-multimodal-learning-via-low-rank-representation-fine-tuning)  
+   evidence：提出基于扩散的多模态知识图谱补全框架，可作为注入外部结构化知识的方法。
+11. [Test-Time Training for Modality Order Consistency in Vision-Language Models](/202607/25/2607.20351v1-test-time-training-for-modality-order-consistency-in-vision-language-models)  
    标签：评分：6.0/10、query:affective-ai
-   evidence：通过低秩微调解耦多模态学习中的共享与模态特定子空间
-13. [Kernelized Linear Attention: Breaking the Capacity Wall with Symmetric Cones](/202607/22/2607.17419v1-kernelized-linear-attention-breaking-the-capacity-wall-with-symmetric-cones)  
-   标签：评分：6.0/10、query:long-video
-   evidence：线性注意力实现常数时间推理降低内存与计算，适用于长视频理解
+   evidence：提出测试时训练提升视觉语言模型跨模态一致性。
+12. [SoftReason: A Fully Differentiable Neuro-Soft-Symbolic Deductive Reasoning Architecture over High-Dimensional Perceptual Data](/202607/25/2607.20402v1-softreason-a-fully-differentiable-neuro-soft-symbolic-deductive-reasoning-architecture-over-high-dimensional-perceptual-data)  
+   标签：评分：6.0/10、query:affective-kb
+   evidence：提出一种可微神经符号架构，用于知识图谱和感知数据的推理。
+13. [Differentiable Logic Programming to Mitigate Reasoning Shortcuts in Neurosymbolic Systems](/202607/25/2607.21185v1-differentiable-logic-programming-to-mitigate-reasoning-shortcuts-in-neurosymbolic-systems)  
+   标签：评分：6.0/10、query:affective-kb
+   evidence：基于矩阵的可微逻辑编程缓解神经符号系统推理捷径
 
 
 <div class="dpr-home-promo-card">

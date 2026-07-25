@@ -1,0 +1,361 @@
+Title: AffectFuse: Cross-Task Feature Fusion with Temporal Modeling for Multi-Task Affective Behavior Analysis
+
+URL Source: https://arxiv.org/pdf/2607.16546v1
+
+Published Time: Tue, 21 Jul 2026 00:23:19 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# AffectFuse: Cross-Task Feature Fusion with Temporal Modeling for Multi-Task Affective Behavior Analysis 
+
+## Dipit Saha * Mohammad Raihan Rashid * Shah Mohammad Abdul Mannan *
+
+## Ahnaf Tahmid * Md. Mehedi Hasan * M. Saifur Rahman †
+
+## Bangladesh University of Engineering and Technology 
+
+{2105050,2105046,2105056,2105041,2105052}@ugrad.cse.buet.ac.bd mrahman@cse.buet.ac.bd 
+
+## Abstract 
+
+Affective behavior recognition in the wild requires joint pre-diction of continuous valence-arousal, categorical facial expression, and multi-label action units from unconstrained face images. We present our system for the Multi-Task Learn-ing (MTL) track of the 11th Affective Behavior Analysis in-the-wild (ABAW) competition on s-Aff-Wild2 , the static selected-frame version of Aff-Wild2. The method focuses on post-encoder adaptation: frozen AffectNet-supervised back-bones provide multi-resolution features, while task-specific temporal heads and cross-task fusion modules select the use-ful signals for each target. For action-unit recognition, we adapt MAE-Face with Low-Rank Adaptation (LoRA) and use DISFA through per-unit expert routing rather than di-rect sequential transfer. Ablations over backbone, temporal, fusion, and AU-adaptation choices define the final configu-ration. The final system obtains P = 1 .7302 on the official validation split, showing that post-encoder adaptation and task-wise modeling choices provide a strong MTL pipeline without training a new large-scale face foundation model. Code is available here. 
+
+## 1. Introduction 
+
+The Affective Behavior Analysis in-the-wild (ABAW) com-petition series [ 9, 19 , 22 – 24 , 26 ] studies emotion recogni-tion from faces recorded in unconstrained conditions. Its Multi-Task Learning (MTL) track ties three related problems together on the static selected-frame s-Aff-Wild2 subset of Aff-Wild2 [ 12 , 16 , 39 ]: on roughly 221K frames, one model must regress continuous valence and arousal [34 ], classify one of eight expressions (the six basic emotions, Neutral ,and a broad Other state), and detect twelve action units 
+
+(AUs) [ 5]. We denote these tasks as valence–arousal (VA), 
+
+> *Equal contribution.
+> †Corresponding author.
+
+expression recognition (EXPR), and AU detection. A single number P (Eq. (1)) sums the mean valence/arousal concor-dance correlation coefficient, the macro-F1 over the eight expressions, and the mean F1 over the twelve action units. The three tasks reward different structure: expression is a local, discrete identity; valence and arousal drift slowly; and action-unit detection is a sparse multi-label problem dominated by rare units. Our system focuses on the stages after feature extrac-tion. We use frozen, publicly available AffectNet-supervised face encoders, mainly EfficientNet-B2 and DDAMFN, then build task-specific candidate heads on top of their features. The final configuration is selected through ablation studies over backbone, fusion, temporal, and AU-adaptation choices. Three observations shape this design. First, these frozen supervised features are already strong for expression and valence/arousal, so these tasks benefit more from temporal modeling and cross-task fusion than from retraining the en-coder. Second, action units are the task where frozen features stall, so we adapt MAE-Face with LoRA under a collapse-guarded AU objective. Third, because every added module can overfit validation, the ablation path must remain explicit. We make the following contributions. • A data-efficient pipeline. The pipeline built from frozen AffectNet-supervised face encoders, light task heads, and ablation-guided component selection reaches a valida-tion P of 1.7302 without training a new large-scale face foundation model (Sec. 3). • The encoder is not always the bottleneck. We show that supervised frozen features are strong for expression and valence/arousal, and give a recipe that recovers the after-encoder gains: cross-task feature fusion (Sec. 3.6), a LoRA-adapted action-unit encoder trained under a collapse-guarded loss (Sec. 3.5), and per-unit expert rout-ing that folds in external DISFA data without the domain collapse of sequential fine-tuning (Sec. 3.7). • A compact ablation study. We report the useful validation arXiv:2607.16546v1 [cs.CV] 17 Jul 2026 gains and the negative results that mark the edge of what frozen transfer can do on this data (Sec. 4.3). 
+
+## 2. Related Work 
+
+ABAW multi-task learning. The challenge has run va-lence/arousal estimation, expression recognition, and action-unit detection, singly and jointly, across successive edi-tions [ 9, 10 , 14 , 17 , 19 , 22 –26 ], all on the partially labelled s-Aff-Wild2 subset of Aff-Wild2 [ 12 , 13 , 15 , 16 ], where many frames carry only a subset of the three label types; here, the prefix “s” denotes the static selected-frame version used for MTL. The organizers also study label-distribution match-ing for this heterogeneous structure [ 18 , 21 ] and release in-the-wild analysis toolkits [ 20 ]. A 7th-edition MTL sys-tem [ 28 ] combined a masked-autoencoder extractor, cross-task feature fusion, an LSTM temporal module, and a progressive separate-then-joint training schedule; its abla-tion shows action-unit features lifting expression and va-lence/arousal, most on arousal, while fusion slightly hurts the action-unit branch itself. These observations motivate our own fusion ablations. HSEmotion [ 35 , 37 ] instead used small AffectNet backbones with per-unit adaptive thresholds and inference-time temporal smoothing, the last of which we also adopt. 
+
+Frozen backbones, external data, and rare classes. 
+
+DDAMFN [ 40 ] and AffectNet-supervised EfficientNet mod-els [ 32 , 38 ] give strong in-domain expression and va-lence/arousal features that we use without further train-ing; a masked autoencoder [ 6, 41 ] instead serves here as a fine-tuning target for action units, not a frozen feature source. External corpora are the usual lever for rare action units: BP4D is a common choice in prior work, and we use DISFA [ 30 , 31 ] for the positives Aff-Wild2 lacks, though we find lab-recorded data transfers poorly when used to ini-tialise the in-the-wild encoder and route it in per column instead. Because rare expressions and sparse AU positives affect the macro-F1 terms directly, we report class-wise and unit-wise validation diagnostics to expose which labels drive the remaining errors. 
+
+## 3. Method 
+
+3.1. Candidate Pipeline 
+
+The system overview is shown in Fig. 1. It is a staged col-lection of task-specific candidate models rather than a single end-to-end multi-task network. Pretrained encoders first pro-duce per-frame features; lightweight heads, temporal models, fusion modules, and ensembles are then evaluated for each task. For validation metric Mt, the selected predictor for task t is 
+
+f ⋆t = arg max  
+
+> f∈C t
+
+Mt(f ), P = X
+
+> t
+
+Mt(f ⋆t ), (1)                 
+
+> Table 1. Pretrained encoders and per-frame outputs. Encoder Pretraining Input Emb. EXPR logits ENET -B2 AffectNet 260 21408 8DDAMFN AffectNet 112 2512 8MAE-Face ViT-B self-sup. faces 224 21536 –
+
+where MVA is mean valence/arousal CCC [ 27 ], MEXPR is eight-class macro-F1, and MAU is mean F1 over 12 action units. This task-wise selection is used to organize the abla-tion study and to choose the final validation configuration. 
+
+3.2. Frozen Affective Experts and Features 
+
+We use three complementary pretrained face encoders (Tab. 1). The first is enet_b2_8 , an EfficientNet-B2 from the EmotiEffNet family (E NET ) [ 35 , 36 , 38 ]; at 260 × 260 
+
+it returns an embedding ei ∈ R1408 and eight expression logits pEi . DDAMFN [ 40 ] operates at 112 × 112 and returns 
+
+di ∈ R512 and logits pDi ∈ R8. Both models are AffectNet-supervised and remain frozen. Because their output classes use different conventions, both logit vectors are permuted to the Aff-Wild2 challenge order before use. The main expression representation is 
+
+xei = [ di ∥ epDi ∥ ei ∥ epEi ] ∈ R1936 , (2) where the tildes denote remapped logits. Initial VA, EXPR, and AU heads use di, xei , and ei, respectively. The third encoder is a self-supervised MAE-Face ViT-B [ 4 , 6 , 41 ]. At 224 × 224 , its class token and mean patch token are concatenated into a 1536-dimensional feature. MAE-Face is weak as a frozen affect candidate but becomes the AU expert after the adaptation in Sec. 3.5. Frozen outputs are cached once; adapted MAE features are cached after each fine-tuning stage. 
+
+3.3. Initial Heads and Objectives 
+
+The initial candidates are shallow MLP heads trained on cached features. VA uses a two-output, tanh-bounded regres-sor on di with MSE plus a CCC loss for each axis. EXPR uses an eight-way softmax head on xei , optimized with class-weighted cross-entropy and label smoothing. AU uses 12 independent sigmoid outputs on ei and a masked asymmet-ric loss (ASL [ 1]), a multi-label cross-entropy that down-weights easy negatives to counter the heavy positive/negative imbalance of rare units. Missing annotations contribute no loss or metric: VA frames marked −5 and EXPR labels marked −1 are ignored, while AU labels marked −1 are masked independently for each column. Thus a frame can supervise any available task or AU without requiring a complete multi-task annotation. PER-FRAME ENCODERS INPUT  FEATURES  TASK HEADS  POST-PROCESSING 
+
+AND FINAL PREDICTION   
+
+> ALIGNED FACE CROPS
+> s-Aff-Wild2
+> per-video frame
+> sequence
+> 8
+> 8
+> D
+> E
+> M
+> 8 logits = each encoder's AffectNet
+> 8-class expression scores - a cheap prior
+> DDAMFN
+> logits
+> EmotiEffNet
+> embedding
+> EmotiEffNet
+> logits
+> Concatanated
+> vector
+
+VALENCE–AROUSAL 
+
+ACTION UNITS 
+
+EXPRESSION 
+
+> LoRA-MAE AU head
+> EmotiEffNet AU head
+> per-AU select
+> (bes t expert per AU)
+> 12 AUs
+> GRU : Valence
+> GRU : Arousal
+> valence,
+> arousal
+
+12 × sigmoid   
+
+> Fa Fv
+> Bi-GRU : Expression
+> Fv
+> Fv, Fa are GRU hiddent states
+> 8 expression scores
+> clip [−1,1] →
+> 7-frame smooth
+> valence &
+> arousal
+> per frame
+> 7-frame smooth → class bias b → argmax
+> 1 of 8 expressions
+> 7-frame smooth → per-AU threshold θ
+> 12 AUs present/absent
+
+DDAMFN++ 
+
+> AffectNet-sup
+> 112² | frozen
+
+EmotiEffNet 
+
+> enet_b2_8
+> AffectNet-sup
+> 260² | frozen
+> MAE-Face ViT-B
+> self-sup faces
+> 224² | LoRA-FT for AU
+> DDAMFN
+> embedding
+> AU feature
+> cross-fused
+
+Figure 1. Overview of AffectFuse. Frozen AffectNet-supervised encoders and an AU-adapted MAE-Face encoder produce per-frame features. The AU representation is fused into the temporal VA and EXPR heads, while the AU branch remains independent. A seven-frame moving average and task-specific calibration produce the final predictions. 
+
+3.4. Temporal Candidate Heads 
+
+For temporal candidates, frames are grouped by video, sorted by frame index, and partitioned into fixed-length windows; the last short window is padded by repeating its final frame. Gated recurrent unit (GRU) [ 3 ] and bidirectional GRU heads are evaluated for VA and EXPR. Bidirectional context is valid because inference is offline and the complete recording is available. We also evaluate the Temporal Convergence Module (TCM) described in [ 28 ], a two-layer long short-term memory (LSTM) [ 7] followed by LeakyReLU, on the donor-augmented VA and EXPR features. Temporal modeling did not provide the same benefit for AU, so retained sequence candidates focus on VA and EXPR. Window length is selected as a task-level hyperparameter: increasing L from 32 to 48 substantially improved the fused temporal candidates, and the final implementation uses L =48 for both tasks. 
+
+3.5. Parameter-Efficient AU Adaptation 
+
+Frozen features gave limited gains for AU, so we adapt MAE-Face on Aff-Wild2 AU labels. LoRA updates are inserted into the attention QKV/output projections and the two MLP projections of every transformer block, 
+
+W ′ = W + αr BA, r = 16 , α = 32 . (3) Here r is the adapter rank, which fixes the size of B ∈ Rd×r
+
+and A ∈ Rr×k and hence the parameter budget, while α/r 
+
+sets the magnitude of the update; we keep LoRA’s two-constant form [ 8] so that r can be retuned without rescaling the update. All LayerNorm parameters, the AU head, and the complete final four transformer blocks are also optimized. This leaves 31 .53 M of 89 .0M parameters trainable. Optimization uses layer-wise learning-rate decay of 0.65 ,linear warmup followed by cosine decay, gradient clipping, image augmentation, and an exponential moving average with decay 0.999 . The masked AU loss is 
+
+LAU = LASL + λ(τ )LsF1 , (4) where LsF1 is a bounded sigmoid-F1 surrogate [ 2] with 
+
+β = 2 , and λ(τ ) is ramped in after warmup. An earlier unbounded surrogate collapsed to an all-positive solution. During the ramp, the metric term is therefore disabled for the remainder of training if the validation predicted-positive rate exceeds 0.80 or AU F1 falls below 0.42 .3.6. Cross-Task Feature Fusion 
+
+Let F au i ∈ R1536 denote the feature from an AU-adapted MAE-Face encoder. AU serves as a donor to the other tasks. For EXPR, a BiGRU first consumes [xei ∥F au i ]; a second can-didate also receives the pre-classifier valence representation 
+
+F vi :
+
+ze, 1 
+
+> i
+
+= [ xei ∥F au i ], ze, 2 
+
+> i
+
+= [ xei ∥F au i ∥F vi ]. (5) VA is split into separate valence and arousal heads. Both first use [di∥F au i ]; their pre-classifier states are then cross-fused: 
+
+zvi = [ di∥F au i ∥F ai ], zai = [ di∥F au i ∥F vi ]. (6) The LSTM-based convergence module is added as another VA/EXPR candidate on the donor-augmented features. We do not feed VA or EXPR features back into the AU branch, since AU fusion reduced validation performance in the cor-responding ablations. 
+
+3.7. External AU Transfer and Per-Unit Harvest 
+
+We prepare DISFA as 75,087 landmark-aligned 224 × 224 
+
+crops from 27 subjects. It annotates 8 of the 12 challenge AUs; AU7, AU10, AU23, and AU24 are stored as −1 and masked. In Stage A, MAE-Face is LoRA-adapted on DISFA using a subject-disjoint holdout. Stage B continues that model on all Aff-Wild2 AUs. The resulting direct AU candi-dates do not surpass the Aff-Wild2-only expert, consistent with a laboratory-to-in-the-wild domain gap, but they remain in the AU pool and are reused as VA/EXPR donors. We also train the feature-level candidate ftmix on 
+
+[xei ∥F AW  
+
+> i
+
+∥F D→AW  
+
+> i
+
+], where the two MAE features come from the Aff-Wild2-only and DISFA-initialized Stage-B en-coders. Although ftmix is not the best complete AU pre-dictor, it remains available to the per-unit harvest. The fusion stack is likewise rerun with the DISFA-initialized donor and with both MAE donors concatenated. Finally, aumix selects an expert independently for each AU column: 
+
+r⋆j = arg max  
+
+> r∈R
+
+F val 1,j (r), ˆyAU  
+
+> i,j
+
+= fr⋆j ,j (xi). (7) Each route retains its expert’s fitted threshold. This design follows the official AU metric, which averages column-wise 
+
+F1, and lets different AU labels use different sources when their validation behavior differs. 
+
+3.8. Variance-Reduction Ensembles 
+
+The final stage expands the pools with variance-reduced pre-dictors. We rerun the fusion stack with three random seeds and average predictions from matching candidate families. We then form top-K cross-candidate ensembles by averag-ing the K = 3 highest-scoring validation candidates for each task. Horizontal flip test-time augmentation, defined by averaging original and flipped predictions, is evaluated in the same way. All variants re-enter the per-task argmax in Eq. (1). The final pool selects a seed ensemble for VA and a top-three ensemble for EXPR, while AU retains aumix . Flip augmen-tation is not used because it lowers validation scores for all three tasks. 
+
+3.9. Post-Processing 
+
+Let S7 denote a centered seven-frame moving average ap-plied separately within each video. The selected outputs are converted to predictions as 
+
+byVA  
+
+> i
+
+= clip  S7(yVA )i, −1, 1 ,
+
+bci = arg max 
+
+> c
+
+S7(ℓEXPR )i,c + bc ,
+
+bai,j = 1S7
+
+ σ(ℓAU  
+
+> i,j
+
+) ≥ θj
+
+ .
+
+(8) The EXPR bias b ∈ R8 and the 12 AU thresholds θj are fitted on validation after smoothing. These parameters, together with the selected candidate and AU route map, are saved and reused unchanged at inference. 
+
+## 4. Experiments 
+
+4.1. Dataset 
+
+For the MTL track, a total of 142,382 training images and 26,876 validation images from s-Aff-Wild2 , the static selected-frame version of Aff-Wild2 [ 11 ], are provided by the organizers. After removing duplicate entries from the an-notation files, the training and validation datasets consist of 141,431 and 26,666 images, respectively. Rows with invalid labels are masked in the corresponding task losses using the official sentinels. 
+
+Extra Data. We preprocessed DISFA [ 31 ] into 75,087 landmark-aligned crops over 27 subjects; 8 of our 12 AUs are coded there. We additionally acquired and audited Af-fectNet+ [33]. 
+
+4.2. Implementation Details 
+
+We used a multi-backbone, multi-resolution feature extrac-tion pipeline for the MTL track. EfficientNet-B2 was evalu-ated at 260 × 260 , DDAMFN at 112 × 112 , and MAE-Face at 224 × 224 , matching each backbone’s native input setting. The prediction heads were optimized with AdamW using task-appropriate objectives: CCC loss for VA, cross-entropy for EXPR, and asymmetric binary loss for AU detection. All experiments were conducted on an NVIDIA RTX Pro 6000 GPU; complete hyperparameter settings, including batch size, learning rate, scheduler, and optimizer configuration, are provided in the released code. 4.3. Experimental Results 
+
+Analysis on the Validation Dataset. We evaluate our final approach to the MTL challenge on the official validation dataset. Table 2 gives the main validation score. Figure 2 shows the EXPR confusion matrix on the same split. 
+
+Table 2. Quantitative results on the officially provided validation dataset.             
+
+> Method Avg. CCC Fexpr FAUs P
+> Organizer score –––0.4500
+> Ours 0.6596 0.5097 0.5609 1.7302
+
+Figure 2. EXPR confusion matrix on validation set. 
+
+Table 3 summarizes the complete validation path. Start-ing from frozen backbone features and plain task heads, the ablation adds one family of candidates at each stage and re-ports the selected task-wise configuration. The largest gains come from temporal modeling, cross-task feature fusion, and the final variance reduction step, while AU-specific changes mainly stabilize the action-unit branch. 
+
+Table 3. Validation progression.                                                           
+
+> Stage VA EXPR AU P∆
+> Frozen backbones, plain heads 0.5294 0.3948 0.5287 1.4529 –AU on concat. features + ASL 0.5870 0.4165 0.5401 1.5436 +0.091 AU: LoRA fine-tuned MAE 0.5870 0.4165 0.5573 1.5608 +0.017 GRU tuning 0.6188 0.4314 0.5573 1.5969 +0.036 Decoupled window + BiGRU 0.6235 0.4477 0.5573 1.6284 +0.032
+> Cross-task feature fusion 0.6260 0.4841 0.5573 1.6674 +0.039
+> DISFA + re-fusion 0.6369 0.4841 0.5573 1.6783 +0.011 Per-AU mixture of experts 0.6361 0.4838 0.5659 1.6858 +0.008
+> Temporal window 32 →48 0.6526 0.5035 0.5609 1.7170 +0.031
+> Multi-seed + top-3 ensembling 0.6596 0.5097 0.5609 1.7302 +0.013
+
+The following ablations unpack the main rows of Table 3: backbone choice, MAE-Face adaptation, fusion, external AU data, temporal window length, and ensembling. 
+
+Impact of Backbone Diversity. Table 4 compares the frozen feature sets used before temporal modeling. The two AffectNet backbones gave the best pair; extra frozen backbones did not improve validation scores. 
+
+Table 4. Backbone comparison. Candidate EXPR AU Decision 
+
+EfficientNet-B2+DDAMFN++ 0.4165 0.5401 used + POSTER++ [29] 0.4164 0.5373 no gain MAE-Face, frozen 0.3770 – low EXPR 
+
+POSTER++ changed EXPR by only −0.0001 and re-duced AU, so it was not used in the final frozen feature set. Frozen MAE-Face was also weaker for EXPR before task-specific adaptation. 
+
+Impact of Fine-tuning the MAE Feature Extractor. Ta-ble 5 shows the AU result after LoRA fine-tuning MAE-Face. 
+
+Table 5. LoRA fine-tuning MAE-Face for AU. Unfreeze Params AU P Gain 2 15.9 M 0.5485 1.5520 +0.0084 4 30.1 M 0.5519 1.5554 +0.0118 
+
+6 ∼37 M 0.5573 1.5608 +0.0172 
+
+8 ∼44 M 0.5544 1.5579 +0.0143 
+
+Six unfrozen blocks gave the best AU score. The same MAE fine-tuning did not help EXPR or VA (Table 6); the EXPR run saturated at 0.4012 , below our frozen feature ensemble. Figure 3 shows the AU stats at the unit level on the validation set. 
+
+Figure 3. AU per-unit F1 on validation set. Table 6. Fine-tuning MAE-Face for EXPR and VA. Task ft-MAE + concat + temp. Frozen best         
+
+> EXPR 0.3667 0.3909 0.4012 0.4477
+> VA 0.4332 0.4429 0.5579 0.6235
+
+Impact of Feature Fusion. Table 7 shows the useful can-didates introduced at the fusion stage. 
+
+> Table 7. Fusion-stage candidates.
+
+Task Before Best candidate Gain EXPR 0.4477 0.4841 (Fau + Fv ) +0.0364 
+
+VA 0.6235 0.6260 (TCM) +0.0025 Fusion mainly helped EXPR. AU features alone were not enough, but combining AU and valence features raised EXPR from 0.4477 to 0.4841 . VA improved slightly through the temporal convergence module rather than cross-task donors. AU was kept unfused because all fusion variants were below 0.5573 .
+
+Impact of External AU Data. Table 8 evaluates sequential DISFA-to-Aff-Wild2 AU transfer, where the final compari-son is measured on the official Aff-Wild2 validation split. 
+
+> Table 8. Impact of DISFA sequential transfer.
+
+Training path AU Stage-A, held-out DISFA subjects 0.7280 
+
+Stage-B on Aff-Wild2 (lr ×0.4) 0.5451 
+
+Aff-Wild2-only training 0.5573 
+
+DISFA pre-training worked on held-out DISFA subjects, but after transfer to Aff-Wild2 it did not surpass the Aff-Wild2-only AU model. We therefore did not use this branch as the final AU classifier; its useful role was as an additional donor in the later re-fusion step. 
+
+Impact of the Temporal Module. Table 9 shows the effect of window size and hidden dimension before fusion. 
+
+> Table 9. Temporal module before fusion.
+
+W / H VA EXPR 32 / 256 0.6016 0.4149 
+
+32 / 512 0.6188 0.4314 
+
+32 / 768 0.6086 0.4295 
+
+48 / 512 0.6235 0.4105 Hidden size 512 was best in this sweep. A longer win-dow helped VA but reduced raw EXPR, so later heads were allowed to use task-specific windows. 
+
+> Table 10. Temporal window after fusion.
+
+Task W =32 W=48 ∆
+
+EXPR 0.4838 0.5035 +0.020 VA 0.6361 0.6526 +0.017 AU 0.5659 0.5609 −0.005 
+
+P 1.6858 1.7170 +0.031 
+
+On the fused pipeline, increasing the window to 48 im-proved VA and EXPR and raised P by +0 .031 . This shows that the best temporal length depends on the feature repre-sentation, not only on the task. 
+
+Impact of Variance Reduction. Table 11 reports the final ensembling step.                    
+
+> Table 11. Multi-seed, top-K, and flip-TTA. Task Before Seed/top-KFlip-TTA Selected VA 0.6526 0.6596 0.6577 3-seed ens. EXPR 0.5034 0.5097 0.5040 top-3 ens. AU 0.5609 0.5609 0.5606 unchanged
+> P1.7168 1.7302 –
+
+Multi-seed and top-K ensembling improved VA and EXPR. Flip-TTA was lower for all tasks, likely because expressions and AUs can be asymmetric after a horizontal flip. We therefore excluded flip-TTA and retained the multi-seed/top-K configuration, which gave the best validation score of P = 1 .7302 .
+
+## 5. Conclusion 
+
+A data-efficient pipeline of frozen AffectNet-supervised face encoders, cross-task feature fusion, a LoRA-adapted action-unit expert, and per-unit routing of external data reaches a validation P of 1.7302 on the 11th ABAW MTL track, with strong valence/arousal and expression performance, without training a new large-scale face foundation model or relying on a licensed AU corpus. The system is built through a staged ablation framework that compares backbone, fusion, tempo-ral, AU-adaptation, and ensembling choices under the same validation protocol. Two findings carry beyond our entry. The encoder is not always the bottleneck for valence/arousal and expression, since a fine-tuned autoencoder saturates be-low the frozen supervised ensemble; effort is better spent after the encoder, on action units. The remaining validation errors point to action-unit coverage and expression-class confusion as the main residual issues. Strong frozen fea-tures combined thoughtfully after the encoder, and selected through explicit ablations, offer a reproducible route without training a new large-scale face foundation model. 
+
+## References 
+
+[1] Emanuel Ben-Baruch, Tal Ridnik, Nadav Zamir, Asaf Noy, Itamar Friedman, Matan Protter, and Lihi Zelnik-Manor. Asymmetric loss for multi-label classification. In Proceed-ings of the IEEE/CVF International Conference on Computer Vision , pages 82–91, 2021. 2 [2] Gabriel Bénédict, Vincent Koops, Daan Odijk, and Maarten de Rijke. sigmoidf1: A smooth f1 score surrogate loss for multilabel classification. arXiv preprint arXiv:2108.10566 ,2021. 3 [3] Kyunghyun Cho, Bart van Merriënboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, and Yoshua Bengio. Learning phrase representations using rnn encoder-decoder for statistical machine translation. In Pro-ceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pages 1724–1734, 2014. 3 [4] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representa-tions (ICLR) , 2021. 2 [5] Paul Ekman and Wallace V Friesen. Facial action coding system. Environmental Psychology & Nonverbal Behavior ,1978. 1 [6] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, and Ross Girshick. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 16000– 16009, 2022. 2 [7] Sepp Hochreiter and Jürgen Schmidhuber. Long short-term memory. Neural Computation , 9(8):1735–1780, 1997. 3 [8] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language models. In Interna-tional Conference on Learning Representations (ICLR) , 2022. 3[9] Dimitrios Kollias. Abaw: Valence-arousal estimation, expres-sion recognition, action unit detection & multi-task learning challenges. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2328–2336, 2022. 1, 2 [10] Dimitrios Kollias. Abaw: Learning from synthetic data & multi-task learning challenges. In European Conference on Computer Vision , pages 157–172. Springer, 2023. 2 [11] Dimitrios Kollias and Stefanos Zafeiriou. Aff-wild2: Extend-ing the aff-wild database for affect recognition. arXiv preprint arXiv:1811.07770 , 2018. 4 [12] Dimitrios Kollias and Stefanos Zafeiriou. Expression, affect, action unit recognition: Aff-wild2, multi-task learning and arcface. arXiv preprint arXiv:1910.04855 , 2019. 1, 2 [13] Dimitrios Kollias and Stefanos Zafeiriou. Affect analysis in-the-wild: Valence-arousal, expressions, action units and a unified framework. arXiv preprint arXiv:2103.15792 , 2021. 2[14] Dimitrios Kollias and Stefanos Zafeiriou. Analysing affective behavior in the second abaw2 competition. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 3652–3660, 2021. 2 [15] Dimitrios Kollias, Viktoriia Sharmanska, and Stefanos Zafeiriou. Face behavior a la carte: Expressions, af-fect and action units in a single network. arXiv preprint arXiv:1910.11111 , 2019. 2 [16] Dimitrios Kollias, Panagiotis Tzirakis, Mihalis A Nicolaou, Athanasios Papaioannou, Guoying Zhao, Björn Schuller, Irene Kotsia, and Stefanos Zafeiriou. Deep affect prediction in-the-wild: Aff-wild database and challenge, deep architec-tures, and beyond. International Journal of Computer Vision ,pages 1–23, 2019. 1, 2 [17] Dimitrios Kollias, Attila Schulc, Elnar Hajiyev, and Stefanos Zafeiriou. Analysing affective behavior in the first abaw 2020 competition. In 2020 15th IEEE International Conference on Automatic Face and Gesture Recognition (FG 2020) , pages 794–800. IEEE, 2020. 2 [18] Dimitrios Kollias, Viktoriia Sharmanska, and Stefanos Zafeiriou. Distribution matching for heterogeneous multi-task learning: a large-scale face study. arXiv preprint arXiv:2105.03790 , 2021. 2 [19] Dimitrios Kollias, Panagiotis Tzirakis, Alice Baird, Alan Cowen, and Stefanos Zafeiriou. Abaw: Valence-arousal esti-mation, expression recognition, action unit detection & emo-tional reaction intensity estimation challenges. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5888–5897, 2023. 1, 2 [20] Dimitrios Kollias, Chunchang Shao, Odysseus Kaloidas, and Ioannis Patras. Behaviour4all: in-the-wild facial behaviour analysis toolkit. arXiv preprint arXiv:2409.17717 , 2024. 2 [21] Dimitrios Kollias, Viktoriia Sharmanska, and Stefanos Zafeiriou. Distribution matching for multi-task learning of classification tasks: a large-scale study on faces & beyond. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence ,pages 2813–2821, 2024. 2 [22] Dimitrios Kollias, Panagiotis Tzirakis, Alan Cowen, Stefanos Zafeiriou, Irene Kotsia, Alice Baird, Chris Gagne, Chun-chang Shao, and Guanyu Hu. The 6th affective behavior analysis in-the-wild (abaw) competition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4587–4598, 2024. 1, 2 [23] Dimitrios Kollias, Stefanos Zafeiriou, Irene Kotsia, Abhinav Dhall, Shreya Ghosh, Chunchang Shao, and Guanyu Hu. 7th abaw competition: Multi-task learning and compound expression recognition. In European Conference on Computer Vision , pages 31–45. Springer, 2024. [24] Dimitrios Kollias, Panagiotis Tzirakis, Alan Cowen, Stefanos Zafeiriou, Irene Kotsia, Eric Granger, Marco Pedersoli, Simon Bacon, Alice Baird, Chris Gagne, et al. Advancements in affective and behavior analysis: The 8th abaw workshop and competition. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 5572–5583, 2025. 1 [25] Dimitrios Kollias, Stefanos Zafeiriou, Irene Kotsia, Greg Slabaugh, Damith Chamalke Senadeera, Jianian Zheng, Kaushal Kumar Keshlal Yadav, Chunchang Shao, and Guanyu Hu. From emotions to violence: Multimodal fine-grained behavior analysis at the 9th abaw. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 1–12, 2025. [26] Dimitrios Kollias, Panagiotis Tzirakis, Alan Cowen, Stefanos Zafeiriou, Irene Kotsia, Eric Granger, Marco Pedersoli, Simon Bacon, Jens Madsen, Soufiane Belharbi, Muhammad Haseeb Aslam, Chunchang Shao, and Guanyu Hu. From affect to complex behavior: Advancing multimodal human-centered ai at the 10th abaw workshop & competition, 2026. 1, 2 [27] Lawrence I-Kuei Lin. A concordance correlation coefficient to evaluate reproducibility. Biometrics , 45(1):255–268, 1989. 2[28] Chen Liu, Wei Zhang, Feng Qiu, Lincheng Li, Dadong Wang, and Xin Yu. Affective behaviour analysis via progressive learning. arXiv preprint arXiv:2407.16945 , 2024. 2, 3 [29] Jiawei Mao, Rui Xu, Xuesong Yin, Yuanqi Chang, Binling Nie, and Aibin Huang. Poster++: A simpler and stronger facial expression recognition network. Pattern Recognition ,157:110951, 2025. 5 [30] S. Mohammad Mavadati, Mohammad H. Mahoor, Kevin Bartlett, and Philip Trinh. Automatic detection of non-posed facial action units. In 2012 19th IEEE International Confer-ence on Image Processing (ICIP) , pages 1817–1820. IEEE, 2012. 2 [31] S. Mohammad Mavadati, Mohammad H. Mahoor, Kevin Bartlett, Philip Trinh, and Jeffrey F. Cohn. Disfa: A sponta-neous facial action intensity database. IEEE Transactions on Affective Computing , 4(2):151–160, 2013. 2, 4 [32] Ali Mollahosseini, Behzad Hasani, and Mohammad H. Ma-hoor. Affectnet: A database for facial expression, valence, and arousal computing in the wild. IEEE Transactions on Affective Computing , 10(1):18–31, 2017. 2 [33] Arsha Pourramezan Fard, Mohammad M. Hosseini, Timo-thy D. Sweeny, and Mohammad H. Mahoor. Affectnet+: A database for enhancing facial expression recognition with soft-labels. IEEE Transactions on Affective Computing , 2025. 4[34] James A Russell. A circumplex model of affect. Journal of Personality and Social Psychology , 39(6):1161–1178, 1980. 1[35] Andrey V. Savchenko. Video-based frame-level facial analy-sis of affective behavior on mobile devices using efficientnets. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops , pages 2359–2366, 2022. 2 [36] Andrey V. Savchenko. Mt-emotieffnet for multi-task human affective behavior analysis and learning from synthetic data. In European Conference on Computer Vision Workshops (EC-CVW) , pages 45–59. Springer, 2023. 2 [37] Andrey V. Savchenko. Hsemotion team at the 7th abaw chal-lenge: Multi-task learning and compound facial expression recognition. arXiv preprint arXiv:2407.13184 , 2024. 2 [38] Mingxing Tan and Quoc Le. Efficientnet: Rethinking model scaling for convolutional neural networks. In International Conference on Machine Learning (ICML) , pages 6105–6114. PMLR, 2019. 2 [39] Stefanos Zafeiriou, Dimitrios Kollias, Mihalis A Nicolaou, Athanasios Papaioannou, Guoying Zhao, and Irene Kotsia. Aff-wild: Valence and arousal in-the-wild challenge. In 2017 IEEE Conference on Computer Vision and Pattern Recogni-tion Workshops (CVPRW) , pages 1980–1987. IEEE, 2017. 1[40] Saining Zhang, Yuhang Zhang, Ye Zhang, Yufei Wang, and Zhigang Song. A dual-direction attention mixed feature net-work for facial expression recognition. Electronics , 12(17): 3595, 2023. 2 [41] Wei Zhang, Bowen Ma, Feng Qiu, and Yu Ding. Multi-modal facial affective analysis based on masked autoencoder. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5792–5801, 2023. 2
