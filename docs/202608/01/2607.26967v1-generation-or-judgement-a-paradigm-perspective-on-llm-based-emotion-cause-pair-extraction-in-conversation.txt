@@ -1,0 +1,355 @@
+Title: Generation or Judgement? A Paradigm Perspective on LLM-Based Emotion-Cause Pair Extraction in Conversation
+
+URL Source: https://arxiv.org/pdf/2607.26967v1
+
+Published Time: Thu, 30 Jul 2026 01:00:27 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Generation or Judgement? A Paradigm Perspective on LLM-Based Emotion–Cause Pair Extraction in Conversation 
+
+## Weijie Feng, Hongchuang Wang, Binbin Liu, Zhiyong Cheng 
+
+Hefei University of Technology wjfeng@hfut.edu.cn, hongchuangwang@mail.hfut.edu.cn, binbin.liu@hfut.edu.cn, jason.zy.cheng@gmail.com 
+
+Abstract 
+
+Emotion–cause pair extraction in conversation (ECPEC) iden-tifies utterance pairs in which one utterance causes an emo-tion expressed in another. Recent LLM-based approaches for-mulate ECPEC at markedly different granularities, ranging from generating complete pair sets to judging individual can-didate pairs. In this paper, we make the surprising observation that task formulation substantially affects performance, where pair-level judgement outperforms dialogue-level generation in all 18 controlled comparisons. We investigate the sources of this paradigm gap and find that many relations omitted by dialogue-level generation remain recognizable under explicit pair queries, under which the model recognizes 92.7%–98.1% of emotion–cause relations. This suggests that LLMs can rec-ognize emotion–cause relations but struggle to discover and return complete pair sets. Pair-level judgement alleviates this burden, although its candidate rankings are more reliable than the binary decisions produced by a shared threshold. Based on this diagnosis, we introduce an auxiliary retriever that se-lectively re-examines ambiguous boundary cases, yielding consistent F1 improvements of 0.50–1.46 points across three datasets while maintaining an inference time of only 1.49 ×
+
+that of the baseline paradigm. These findings show that task decomposition and candidate scope are critical to effectively utilizing LLMs for ECPEC. 
+
+## 1 Introduction 
+
+Emotion–cause pair extraction in conversation (ECPEC) aims to identify emotion–cause utterance pairs, where a cause ut-terance triggers or explains the emotion conveyed by a target utterance (Li et al. 2023; Wang et al. 2023). ECPEC may in-volve multiple speakers and multiple causes, requiring causal reasoning over conversational context. Prior studies (Jeong and Bak 2023; Liu et al. 2023; An et al. 2023; Wang, Tang, and Zhu 2024; Ma et al. 2026) have primarily addressed this task using task-specific architectures that explicitly model conversational context, speaker interactions, and emotion– cause dependencies. Recently, LLMs have demonstrated strong language understanding and contextual reasoning ca-pabilities (Huang and Chang 2023; Wang et al. 2024; Lou, Zhang, and Yin 2024), which provide a natural foundation for emotion–cause reasoning. Thus, recent studies (Luo et al. 2024; Ju et al. 2025; Wang et al. 2026; Wu et al. 2026) have increasingly explored LLM-based approaches to ECPEC. Although LLM-based ECPEC is still in its early stages, 
+
+Figure 1: Paradigm gap and unrealized separation potential. JUD consistently outperforms G EN , while the shared decision boundary realizes only part of the separation permitted by candidate rankings. existing studies have explored markedly different ways of using LLMs. Tu et al. (Tu et al. 2026), for example, evaluate GPT-4 by asking it to predict the emotions and causes of all utterances from the complete conversation, whereas Luo et al. (Luo et al. 2024) and Arefa et al. (Arefa et al. 2024) decompose the task into emotion recognition followed by target-specific cause prediction. Ju et al. (Ju et al. 2025) for-mulate each target–candidate pair as a yes-or-no question and use GPT-3.5 to refine the candidate decision. More elab-orate systems embed LLMs into a speaker-centric cognition– perception–reasoning agent (Wang et al. 2026) or use multi-LLM debate to resolve emotion and pair predictions disputed by generative and discriminative models (Wu et al. 2026). Despite this diversity, existing studies have not converged on a common way of posing ECPEC to LLMs, leaving open how to utilize their capabilities effectively for the task. arXiv:2607.26967v1 [cs.CL] 29 Jul 2026 Figure 2: Illustration of the three LLM-based ECPEC paradigms. To explore this open question, we rethink LLM-based ECPEC from a paradigm perspective. We distill existing ap-proaches, according to their task-decomposition granularity, into three representative paradigms: dialogue-level genera-tion (G EN ), target-level selection (S EL ), and pair-level judge-ment (J UD ) (§2). Surprisingly, we find that paradigm choice leads to substantial differences in ECPEC performance, with JUD consistently outperforming G EN across LLM backbones and input modalities (as shown in Figure 1(a)), demonstrating the broad generality of this paradigm gap (§3). To understand what drives this gap, we then delve into fur-ther analysis to examine how task decomposition affects the recognition of emotion–cause pairs and the recovery of com-plete cause sets (§4–§5). We find that many pairs omitted by GEN remain recognizable under more explicit queries. More generally, when directly asked whether a specified utterance causes the emotion in another, the LLM recognizes 92.7%– 98.1% of gold emotion–cause pairs. Moreover, G EN misses more pairs when a dialogue contains more gold pairs, a target utterance has multiple causes, or the cause is farther from the target. These findings suggest that G EN struggles mainly because it must discover and return all pairs at once, rather than because the LLM cannot recognize them. J UD reduces this burden by asking the LLM to examine one candidate at a time, but combining these decisions into a complete cause set remains difficult, where the model often scores gold causes above negative candidates, yet a single decision threshold cannot separate them reliably across targets (Figure 1(b)). Overall, the paradigm gap arises because finer-grained task decomposition better exposes the pair-recognition ability of LLMs, but this ability is more reliably reflected in candidate rankings than in binary judgements. Guided by these findings, we develop a lightweight remedy for the judgement paradigm that uses an auxiliary retriever to selectively re-examine ambiguous cases around the decision boundary. The remedy consistently improves F1 by 0.50–1.46 points across three datasets, showing that adapting decision boundaries is a viable improvement direction. Finally, our efficiency analysis shows that restricting pair-level queries to the local scope improves macro F1 over G EN -Full by 14.47 points while limiting inference time to 1.33 ×, compared with 9.08 × for J UD -Full. Our findings show that finer-grained task decomposition, combined with a controlled candidate scope can better harness the reasoning capability of LLMs for ECPEC task while maintaining a practical balance between effectiveness and efficiency. 
+
+## 2 Background 
+
+This work focuses on the task of emotion–cause pair extrac-tion in conversation (ECPEC). Given a multi-turn dialogue 
+
+D = {(ui, s i, xi)}Ni=1 , where ui denotes the i-th utterance and si is speaker corresponding to ui, xi contains textual features and, when available, acoustic and visual features. The goal of ECPEC is to identify all emotion–cause pairs in 
+
+D:
+
+P∗ = (ue, u c) | uc causes the emotion in ue , (1) Notably, an emotion utterance may have multiple causes and may also serve as its own cause. Encouraged by the strong reasoning capabilities of LLMs, recent ECPEC studies have increasingly explored LLM-based solutions. We distill LLM-based ECPEC approaches into three paradigms according to their inference granularity (Figure 2), namely dialogue-level generation, target-level selection, and pair-level judgement. 
+
+Dialogue-level generation. Dialogue-level generation (G EN ) takes the complete dialogue D as input and uses a single LLM call to jointly predict an emotion label and a set of cause utterances for every utterance ui ∈ D :
+
+(i, y i, Ci)Ni=1 = f GEN (D), (2) where yi is the predicted emotion label of ui, Ci denotes the set of utterance indices predicted to cause the emotion expressed in ui, and f GEN is the LLM inference function. 
+
+Target-level selection. Target-level selection (S EL ) decom-poses the prediction for a dialogue D containing N utter-ances into N utterance-conditioned LLM calls. Each call fixes one utterance ui as the target, treats each eligible utter-ance uj ∈ D , including ui itself, as a candidate cause, and predicts the emotion label yi and cause-index set Ci:
+
+(yi, Ci) = f SEL (D, u i). (3) 
+
+Pair-level judgement. Pair-level judgement (J UD ) further decomposes the target-conditioned prediction in S EL into in-dependent binary decisions over individual target–candidate pairs. For each target utterance ui and each eligible candi-date utterance uj , it uses a separate LLM call to determine whether uj causes the emotion expressed in ui:
+
+f JUD (D, u i, u j ) ∈ { yes , no }. (4) Although J UD theoretically incurs O(N 2) LLM calls by ex-haustively enumerating all target–candidate pairs in D, our later analysis shows that restricting the candidate causes for each target ui to {uj | max(1 , i − 4) ≤ j ≤ i} preserves performance while reducing the number of calls to O(N ).ECF ConvECPE RECCON Method P R F1 P R F1 P R F1                                                                                                             
+
+> Conventional Method
+> MRC 44.46 57.65 50.20 25.92 47.05 33.42 52.19 52.86 52.47
+> CENTER 47.90 43.65 44.75 37.98 45.60 41.44 47.39 46.88 47.13
+> SCALE 55.01 60.67 57.70 40.31 51.74 45.32 56.31 61.60 58.83
+> Prior LLM-based Methods
+> DEC-Debate ♯69.51 55.52 61.73 50.18 50.54 50.36 ---
+> GMEC-GPT ♯55.92 50.93 53.31 ------
+> MSPF+ ♯---50.31 57.91 53.84 56.29 54.91 55.59
+> Controlled LLM Paradigms
+> GEN -Full 60.04 53.82 56.76 28.45 23.55 25.77 50.36 55.01 52.58
+> GEN -Local 64.98 51.31 57.34 50.37 31.75 38.95 56.55 56.42 56.49
+> SEL -Full 64.69 57.61 60.94 52.62 55.09 53.83 52.33 57.22 54.66
+> SEL -Local 66.52 55.15 60.30 56.13 53.32 54.69 57.67 53.20 55.34
+> JUD -Full 51.46 74.32 60.81 33.27 79.48 46.90 52.01 65.93 58.15
+> JUD -Local 67.74 57.39 62.14 58.16 56.92 57.53 63.60 54.78 58.86
+
+Table 1: Overall ECPEC performance comparison. Shading 
+
+and underlining indicate the best and second-best results. ♯
+
+denotes the results taken from the original papers. 
+
+## 3 How Does Task Paradigm Shape ECPEC? 
+
+This section first compares the three LLM-based ECPEC paradigms against representative ECPEC methods and exam-ines the performance differences among the paradigms (§3.2). We then investigate whether these paradigm-level differences persist across different experimental settings (§3.3). 
+
+3.1 Experimental Setup 
+
+We evaluate the three paradigms on ECF (Wang et al. 2023), ConvECPE (Li et al. 2023), and RECCON (Poria et al. 2021). LLaMA-3.1-8B (Llama Team 2024) serves as the primary backbone for all three paradigms, while Qwen-2.5-7B (Qwen Team 2025) and GLM-4-9B (Team GLM 2024) are included to assess backbone generality. Unless otherwise stated, all ex-periments use text-only inputs. A key experimental setting is the candidate scope, which determines the range of utterances considered as candidate causes for each target emotion utter-ance. Across the three datasets, 87.0%–93.9% of gold cause utterances are either the target utterance itself or one of its four preceding utterances, as detailed in Appendix Table 10. We therefore conduct all experiments under two candidate scopes: the local scope considers utterances uj satisfying 
+
+0 ≤ i − j ≤ 4 for each target ui, and the full scope considers every utterance in the dialogue, including both preceding and following utterances. Further details on experiment protocols are provided in Appendix B. 
+
+3.2 LLMs Are Competitive for ECPEC 
+
+Table 1 compares controlled implementations of the three LLM-based paradigms with conventional ECPEC methods and prior LLM-based methods. The results first demonstrate that LLMs provide a competitive foundation for ECPEC. Un-der the local scope, J UD achieves F1 scores of 62.14, 57.53,                           
+
+> LLaMA-3.1-8B Qwen-2.5-7B GLM-4-9B Input Local Full Local Full Local Full Text +4.80 +4.05 +5.13 +8.32 +1.98 +5.65 Multimodal + MLP +3.41 +5.75 +3.77 +6.60 +1.90 +5.25 Multimodal + GraphSmile +4.94 +7.81 +4.46 +7.11 +5.49 +6.48
+
+Table 2: F1 improvement of J UD over G EN across settings on ECF. and 58.86 on ECF, ConvECPE, and RECCON, respectively, outperforming the strongest baselines in Table 1, which ob-tain 61.73, 53.84, and 58.83. Thus, appropriately designed LLM paradigms can achieve state-of-the-art ECPEC perfor-mance. Performance, however, varies substantially across the three paradigms. Under local scope, their F1 scores range from 57.34 to 62.14 on ECF, from 38.95 to 57.53 on Con-vECPE, and from 55.34 to 58.86 on RECCON. The corre-sponding ranges under full scope are 56.76–60.94, 25.77– 53.83, and 52.58–58.15. J UD achieves the highest F1 in four of the six settings. The exceptions are ECF and ConvECPE under full scope, where S EL achieves 60.94 and 53.83 F1 respectively, compared with 60.81 and 46.90 for J UD . The paradigm-level difference is particularly pronounced on Con-vECPE, where the F1 spread reaches 18.58 points under local scope and 28.06 points under full scope. Overall, adopting an LLM alone does not guarantee ECPEC performance, while the paradigm through which the task is learned and performed critically shapes its effectiveness. 
+
+3.3 The Paradigm Gap Persists Across Settings 
+
+Using G EN and J UD as the two endpoints of the task-decomposition spectrum, we next examine whether the ad-vantage of pair-level judgement generalizes across back-bone architectures and input representations. Using ECF, which also provides multimodal dialogue data, we eval-uate three LLM backbones under three input configura-tions: text-only input, MLP-fused multimodal features, and GraphSmile-enhanced (Li, Wang, and Zeng 2025) multi-modal representations. For each configuration, we report 
+
+∆F 1 = F 1JUD − F 1GEN . As shown in Table 2, ∆F 1 is positive in all 18 backbone–input–scope combinations, rang-ing from 1.90 to 8.32 points. The advantage persists with both multimodal input configurations and reaches 4.46–7.81 points with GraphSmile-enhanced representations. Thus, pro-viding additional multimodal evidence does not eliminate the performance difference between the two paradigms. More-over, the advantage is larger under full scope than under local scope in eight of the nine backbone–input configurations, indicating that pair-level decomposition generally becomes more beneficial as the candidate scope expands. 
+
+Takeaway. LLMs provide a competitive foundation for ECPEC, but their effectiveness varies substantially with task decomposition. Pair-level judgement (J UD ) con-sistently outperforms dialogue-level generation (G EN )across different settings. Figure 3: Emotion–cause pairs omitted by G EN .
+
+Figure 4: Results under progressive task decomposition. 
+
+## 4 Why Does G EN Miss Emotion–Cause Pairs? 
+
+This section diagnoses why G EN misses valid emotion–cause pairs. We first determine whether these missed pairs are be-yond the LLM’s recognition ability or merely overlooked by GEN (§4.1). We then locate where the omissions arise in the generation process (§4.2), and examine the conditions under which G EN is prone to omission (§4.3). 
+
+4.1 GEN Omits Pairs It Can Recognize 
+
+We ask whether the emotion–cause pairs omitted by G EN 
+
+are beyond LLM recognition or remain recoverable under finer-grained task paradigms. Section 3 shows that S EL and JUD recognize substantially more gold pairs than G EN , but aggregate recall does not reveal whether their additional true positives correspond to the emotion–cause pairs omitted by GEN . We therefore use both paradigms as references to re-examine the omissions of G EN . To evaluate this, we define the recoverable omission rate (ROR, see Appendix C) of G EN 
+
+as the proportion of gold pairs missed by G EN but correctly identified by another paradigm. Figure 3 partitions the gold emotion–cause pairs according to whether they are recog-nized by G EN and the corresponding reference paradigm, with the value to the right of each bar reporting the ROR. Across the six dataset–scope conditions, J UD recovers 25.8– 74.9% of the gold pairs omitted by G EN , whereas S EL recov-ers 24.3–51.8%. The ROR is higher with J UD as the reference in all six conditions. The highest RORs occur on ConvECPE, where J UD recovers 54.6% of the gold pairs omitted by G EN 
+
+under local scope and 74.9% under full scope. In the latter setting, J UD recovers 1,097 of the 1,464 gold pairs missed by GEN , whereas G EN itself correctly identifies only 451 gold pairs. These results show that many emotion–cause pairs omitted by G EN can still be identified by LLMs in practice, but are not reliably exposed through holistic generation.                                                                      
+
+> ECF ConvECPE RECCON Metric Low Mid High Low Mid High Low Mid High #Dialogues 88 77 79 10 11 10 62 92 71 Avg. #Gold Pairs 2.5 6.6 14.5 37.4 58.9 89.3 4.2 6.9 12.3 GEN Recall 55.3 61.1 50.3 43.0 18.4 19.1 62.8 59.4 49.5 SEL Recall 59.0 62.5 55.2 49.2 53.5 58.7 65.5 61.6 51.5 JUD Recall 69.1 77.6 73.8 71.9 79.5 82.6 73.2 70.7 60.3 GEN P/G 1.02 0.96 0.84 0.95 0.78 0.81 1.80 1.11 0.87
+
+Table 3: Performance versus the number of gold pairs. 
+
+4.2 Omissions Arise During Set-Level Prediction 
+
+We next locate where these omissions arise by progressively exposing the four key decisions hidden within G EN . The first asks the model to generate all emotion–cause pairs di-rectly from the dialogue. The second provides a gold emotion target and its emotion label, removing target discovery and emotion-label prediction. The third additionally enumerates all candidate causes, replacing implicit cause search with candidate-set prediction. The final condition presents one target–candidate pair at a time, removing the need to jointly select and return a complete cause set. We probe the same LLaMA-3.1-8B checkpoint, which is jointly fine-tuned on the three gold-target formats, with dialogue generation evaluated as an additional probe. As shown in Figure 4, providing the gold target raises pair recall by 1.51–15.67 points across the six dataset–scope conditions, while listing the candidate ut-terances adds another 3.20–24.67 points. These gains suggest that target and candidate discovery account for part of the omissions. The largest increase, however, consistently occurs when candidate-set prediction is decomposed into isolated pair judgements, improving recall by 30.83–55.04 points and yielding final recall of 92.72%–98.07%. This pattern locates the dominant omission bottleneck in jointly selecting and returning a complete cause set. 
+
+4.3 When Is G EN More Likely to Miss Pairs? 
+
+We next examine conditions under which G EN is more likely to miss gold emotion–cause pairs. 
+
+Number of gold pairs. We first examine whether G EN 
+
+omits more gold pairs as the number of pairs in a dialogue increases. Within each dataset, we partition dialogues into approximately equal-sized low-, medium-, and high-count groups according to their numbers of gold pairs. We report recall to measure the proportion of gold pairs recovered and the predicted-to-gold ratio (P/G) to assess whether G EN ’s output-set size grows proportionally with the gold set. As shown in Table 3, recall under full-scope in the high-count group is lower than in the low-count group by 5.0–23.9 points. P/G likewise decreases from 1.02 to 0.84, from 0.95 to 0.81, and from 1.80 to 0.87. These decreases indicate that, in high-count dialogues, G EN recovers a smaller proportion of the required pairs and produces fewer predictions relative to the gold-set size. The cross-paradigm comparison is most revealing on ConvECPE, where G EN recall decreases by 23.9 points, whereas the recalls of S EL and J UD increase by 9.5 Any Cause Cause Recall Complete #Causes 1 2 ≥ 3 1 2 ≥ 3 1 2 ≥ 3GEN 52.2 61.3 61.3 52.2 43.4 29.8 52.2 25.5 7.8 SEL 67.1 77.4 78.2 67.1 55.9 39.3 67.1 34.3 7.7 JUD 82.2 89.7 89.1 82.2 74.3 54.9 82.2 58.8 23.2 
+
+Table 4: Cause recovery (%) versus the number of causes. 
+
+Figure 5: Pair recall (%) versus emotion–cause distances. and 10.7 points, respectively. By contrast, all three paradigms decline on RECCON, suggesting that high-count dialogues in this dataset are also intrinsically more difficult. 
+
+Number of gold causes. We next examine whether G EN 
+
+becomes less complete as the number of gold causes per tar-get increases. We group targets by cause count and report whether at least one cause is recovered (Any Cause), the pro-portion recovered (Cause Recall), and whether all causes are recovered (Complete). Table 4 reports the average result for three datasets under full-scope, G EN ’s any-cause recovery remains stable, while its cause recall falls from 52.2% to 29.8% and complete recovery from 52.2% to 7.8%. Among targets with at least three causes, it recovers some but not all causes in 53.5% of cases, indicating difficulty in con-structing a complete cause set. This problem affects all three paradigms, although J UD mitigates it with 54.9% cause recall and 23.2% complete recovery in the same group. 
+
+Emotion–cause distance. Finally, we examine whether GEN is more likely to miss a gold pair when its emotion tar-get and cause are farther apart. We report pair recall for local (d ≤ 4) and long-range ( d > 4) gold pairs under full-scope, where d denotes the utterance-index distance. As shown in Figure 5, G EN ’s recall decreases from local to long-range pairs by 33.4, 12.6, and 46.3 points on the three datasets. Long-range pairs are therefore more difficult for G EN , as they are for the other two paradigms. However, even among local pairs, J UD outperforms G EN by 20.8, 61.2, and 11.0 points across the three datasets. Thus, long distance aggra-vates G EN ’s omissions but cannot explain them alone, as substantial omissions persist even when the cause is nearby. 
+
+Takeaway. LLMs can recognize emotion–cause pairs, but GEN omits many during set-level prediction, especially with more gold pairs per dialogue, more gold causes per target, or longer emotion–cause distances.                                             
+
+> ECF ConvECPE RECCON Outcome Local Full Local Full Local Full Case-1 60.33 74.31 59.70 79.55 55.90 68.98 Case-2 2.84 2.12 6.29 1.87 4.10 2.18 Case-3 29.32 20.29 20.33 16.21 27.86 23.61 Case-4 7.51 3.27 13.69 2.37 12.14 5.24 ISR 80.48 74.52 65.80 50.12 71.31 70.08 RSR 47.41 43.82 34.03 10.17 37.94 42.50
+
+Table 5: Pairwise ranking and threshold outcomes (%). 
+
+## 5 Why Does J UD Work? When Does It Fail? 
+
+This section first briefly summarizes why pair-level J UD , at the opposite end of the task-decomposition spectrum from dialogue-level G EN , is more effective (§5.1). We then investi-gate where J UD reaches its limits from two perspectives. We first examine whether J UD correctly ranks and separates gold causes from negative candidates within a given candidate scope, and then analyze how its pair-level errors accumulate as the scope expands (§5.2). 
+
+5.1 Explicit Pair Query Reduce Extraction Burden 
+
+GEN must discover emotion targets and their causes before jointly selecting and returning a complete pair set. By ex-plicitly specifying both the target and candidate cause, J UD 
+
+instead reduces each query to judging one explicit emotion– cause pair. As shown in Table 1 and Figure 4, many gold pairs omitted under coarser paradigms are recovered when presented individually to the same checkpoint. Together with the analysis in Section 4, these results show that J UD is effec-tive because it removes the set-level prediction bottleneck and more directly elicits the LLM’s pair-recognition capability. 
+
+5.2 The Capability Boundary of J UD 
+
+Expanding the candidate scope from local to full covers more gold pairs and improves J UD ’s recall, but substantially lowers its precision and ultimately reduces F1. This recall–precision trade-off suggests that the advantage of J UD reaches a limit. We locate this boundary from two perspectives: whether gold causes are correctly ranked above and separated from nega-tives, and how pair-level errors accumulate as the candidate space expands. 
+
+Ranking versus thresholding. To determine whether this degradation arises mainly from ranking or thresholding, we examine the judgement score and Yes-or-No decision as-signed by J UD to each candidate utterance. Reliable cause-set prediction requires every gold cause to outrank every nega-tive candidate and the decision threshold to separate them. For each target utterance, we therefore compare every gold cause with every negative candidate and divide the compar-isons into four cases: gold cause is accepted and the negative candidate rejected (Case-1); gold cause scores higher, but both are accepted (Case-2); gold cause scores higher, but both are rejected (Case-3); or gold cause is ranked below or tied with the negative candidate (Case-4). As shown in Table 5, Case-4 accounts for only 2.37%–13.69% of comparisons, ECF ConvECPE RECCON Metric Local Added Full Local Added Full Local Added Full #Gold 1,758 115 1,873 1,666 249 1,915 1,655 112 1,767 #Neg. 8,543 23,026 31,569 6,139 86,293 92,432 8,120 19,346 27,466 TP 1,361 31 1,392 1,446 76 1,522 1,140 25 1,165 TPR (%) 77.42 26.96 74.32 86.79 30.52 79.48 68.88 22.32 65.93 FP 1,223 90 1,313 2,620 433 3,053 1,011 64 1,075 FPR (%) 14.32 0.39 4.16 42.68 0.50 3.30 12.45 0.33 3.91 Precision (%) 52.67 25.62 51.46 35.56 14.93 33.27 53.00 28.09 52.01 Recall (%) 72.66 1.66 74.32 75.51 3.97 79.48 64.52 1.41 65.93 
+
+Table 6: Error accumulation under candidate-space expan-sion. whereas Case-2 and Case-3 together account for 18.08%– 32.16% and are more frequent in every setting. Case-3 also consistently dominates Case-2, showing that thresholding errors more often reject correctly ranked gold causes than accept negatives. Thus, failures arise more often from fail-ing to separate correctly ordered gold–negative comparisons than from ranking them incorrectly. Pairwise comparisons, however, do not show whether all candidates for a target can be separated simultaneously. We therefore define the Ideal Separability Ratio (ISR) as the proportion of targets whose lowest-scoring gold cause outranks their highest-scoring neg-ative. An oracle target-specific threshold could fully separate these targets without changing their rankings. ISR ranges from 50.12% to 80.48%, whereas the Realized Separability Ratio (RSR), which measures complete separation under the threshold used by J UD , reaches only 10.17%–47.41%. The resulting 27.58–39.95 point gap identifies target utterances whose rankings are already separable but whose cause sets are not realized by the threshold. 
+
+Error accumulation. We next ask whether pair-level errors accumulate when many independently judged candidates are combined into cause sets. We partition the candidates from the same full-scope run into Local ( 0 ≤ i−j ≤ 4) and Added (i−j ≥ 5 or i−j < 0) regions. As shown in Table 6, the Added region of J UD has an FPR of only 0.33%–0.50%, substan-tially below the Local FPR of 12.45%–42.68%. However, the Added region contains 19,346–86,293 negatives, 2.38–14.06 times as many as the Local region, but only 112–249 gold pairs. Consequently, this low per-pair FPR still produces 64– 433 additional false positives for only 25–76 true positives. These predictions contribute just 1.41–3.97 points to full-scope recall while lowering precision by 0.99–2.29 points. Although 85.8%–94.0% of full-scope false positives originate from the harder Local region, candidate expansion introduces a secondary accumulation effect: even rare errors become consequential when independent judgements are made over a large negative space. 
+
+Takeaway. JUD is effective because it reduces ECPEC to recognizing one explicit pair at a time. However, it remains constrained by a shared decision boundary and error accumulation as the candidate space expands.                       
+
+> Metric ECF ConvECPE RECCON
+> JUD F1 62.14 57.53 58.86 + Retriever F1 63.60 (+1.46) 58.03 (+0.50) 59.39 (+0.53)
+> ∆Precision -2.50 -0.93 -3.13
+> ∆Recall +4.65 +1.93 +3.57 Correct additions rate 44.9 38.9 34.4
+
+Table 7: Effectiveness of the proposed remedy under local scope. Correct additions rate denotes the percentage of newly accepted pairs that are gold pairs. 
+
+## 6 A Diagnosis-Guided Remedy 
+
+Based on the above analyses, we develop a lightweight rem-edy around three design choices. 1 We adopt pair-level J UD 
+
+rather than dialogue-level G EN , as explicit pair queries better expose the relation recognition capability of LLMs. 2 We use local as the default candidate scope because it retains most gold pairs while limiting the error accumulation and in-ference cost caused by full-scope expansion. 3 We introduce a localized approximation to target-specific boundary adapta-tion. Directly estimating a reliable target-specific boundary is difficult, while Table 5 shows that 16.21%–29.32% of in-stances fall into Case-3, where gold causes are ranked above negative candidates yet both are rejected. This prevalent under-selection motivates a localized correction that reconsid-ers only the highest-ranked rejected candidate. We implement this correction using an auxiliary retriever initialized from the trained J UD checkpoint and further fine-tuned on a mixture of original pair-judgement instances and boundary-candidate instances. At inference, the retriever re-examines the highest-ranked rejected candidate. If accepted, the candidate is added to the original prediction; otherwise, the prediction remains unchanged. 
+
+Effectiveness. We evaluate the final correction against its pipeline-aligned J UD -Local baseline for each dataset. As shown in Table 7, the correction yields modest but consis-tent Pair-F1 improvements of 0.50–1.46 points across the three datasets, increasing macro F1 by 0.83 points. The gains are recall-driven: recall increases by 1.93–4.65 points, while precision decreases by 0.93–3.13 points. Among the can-didates newly accepted by the retriever, 34.4%–44.9% are gold causes. Although the accepted additions contain false positives, the recovered gold causes are sufficient to produce a net F1 improvement on every dataset. The overall gains remain incremental because the correction reconsiders only one rejected boundary candidate per target and recovers only 11.71%–19.12% of the gold causes presented for reconsid-eration. Nevertheless, the consistent improvements obtained without changing the original candidate rankings show that the shared decision boundary is an actionable source of error. More comprehensive estimation of target-specific decision boundaries therefore represents a promising direction for future ECPEC research. 
+
+Inference efficiency. Beyond effectiveness, another prac-tical concern is the inference cost of the three paradigms and the proposed remedy. Table 8 compares their inference Configuration Queries Input tokens Output tokens Time                             
+
+> GEN -Full 1.0 1.00 ×1.00 ×1.00 ×
+> GEN -Local 1.0 1.03 ×0.99 ×0.98 ×
+> SEL -Full 12.8 22.00 ×1.27 ×1.39 ×
+> SEL -Local 12.8 22.32 ×1.25 ×1.36 ×
+> JUD -Full 303.7 792.27 ×2.16 ×9.08 ×
+> JUD -Local 53.9 88.90 ×0.38 ×1.33 ×
+> + Retriever 66.2 111.19 ×0.38 ×1.49 ×
+
+Table 8: Inference-cost comparison of the selected configu-rations. Input tokens, output tokens, and inference time are normalized to G EN -Full. costs. Although J UD -Full incurs substantially higher costs than G EN -Full, restricting candidate causes to the local scope reduces its inference time from 9.08 × to 1.33 ×. Notably, despite processing 88.90 × more input tokens, J UD -Local consumes only 0.38 × as many output tokens because each query requires only a short binary response. The retriever uses next-token classification without text generation, leav-ing the output-token cost unchanged. It increases the number of queries and input tokens by 22.8% and 25.1% over J UD -Local, respectively, while adding only 11.8% inference time. Its total inference time remains 1.49 × that of G EN -Full, far below the 9.08 × cost of J UD -Full. Thus, the remedy trades a measurable but controlled increase in inference cost for consistent F1 gains. These gains nevertheless remain modest because the rem-edy performs only a localized correction rather than directly estimating a reliable target-specific decision boundary. Its main value is therefore to demonstrate that the shared deci-sion boundary is an actionable source of error, while more comprehensive boundary adaptation remains an open chal-lenge. The effectiveness and efficiency results jointly show that utilizing the existing pair-recognition ability of LLMs requires appropriate task decomposition and controlled candi-date scopes, as well as decision mechanisms that can reliably translate this ability into final predictions. 
+
+## 7 Related Work 
+
+Conventional ECPEC methods. Emotion–cause analysis originated from emotion cause extraction, which identifies the cause of a given emotion (Lee, Chen, and Huang 2010; Gui et al. 2016). Xia and Ding (Xia and Ding 2019) later introduced emotion–cause pair extraction (ECPE) to jointly identify emotions and their causes. Subsequent studies devel-oped pipeline, end-to-end, graph-based, sequence-labeling, and machine-reading-comprehension methods for document-level ECPE (Ding, Xia, and Yu 2020; Chen et al. 2020; Fan et al. 2021; Chen et al. 2022; Zhu et al. 2024). Poria et al. (Poria et al. 2021) introduced emotion-cause recognition in conversations through RECCON, and Li et al. (Li et al. 2023) subsequently formalized ECPEC as the joint extrac-tion of emotion–cause utterance pairs and released the Con-vECPE dataset. Later ECPEC methods capture pair relations, speaker interactions, dialogue context, and event structure using mixture-of-experts, machine-reading-comprehension, and graph-based architectures (Jeong and Bak 2023; Liu et al. 2023; An et al. 2023; Wang, Tang, and Zhu 2024). Mul-timodal extensions further incorporate acoustic and visual information and strengthen cross-modal interaction, task cou-pling, and global pair modeling (Wang et al. 2023; Li et al. 2024; Hu et al. 2024; Li et al. 2025; Tu et al. 2026; Xie et al. 2026; Ma et al. 2026). This line of work primarily advances task-specific architectures, whereas we study how different inference paradigms shape the use of LLMs for ECPEC. 
+
+LLM-based ECPEC methods. LLMs have recently been incorporated into ECPEC as primary predictors, auxiliary rea-soners, or components of hybrid systems. Several SemEval-2024 systems use GPT-based emotion recognition followed by a separate cause extractor (Levchenko, Wolert, and An-druszkiewicz 2024; Kazakov, Petukhova, and Kochmar 2024), while others use LLMs for multi-stage cause prediction or instruction-tuned joint prediction (Arefa et al. 2024; Cheng et al. 2024; Luo et al. 2024). Ju et al. (Ju et al. 2025) develop a single-stage generative framework augmented with pair-level yes-or-no decisions obtained from GPT-3.5. At the dialogue level, Tu et al. (Tu et al. 2026) evaluate GPT-4 by asking it to predict emotions and causes for the complete conver-sation. Wu et al. (Wu et al. 2026) instead generate causes for individual targets and apply pair-level debate to disputed candidates. More elaborate systems also embed LLMs into multi-stage agent frameworks (Wang et al. 2026). These ap-proaches often combine multiple inference granularities and differ substantially in backbone, modality, supervision, and candidate scope. We therefore distill their inference opera-tions into dialogue-level generation, target-level selection, and pair-level judgement, and compare these paradigms un-der controlled settings. 
+
+## 8 Conclusion 
+
+This work rethinks LLM-based ECPEC from a paradigm perspective by systematically comparing dialogue-level gen-eration, target-level selection, and pair-level judgement. We identify a consistent paradigm gap: finer-grained task de-composition better exposes the ability of LLMs to recognize emotion–cause pairs, allowing pair-level judgement to con-sistently outperform dialogue-level generation. Our analyses show that dialogue-level generation is primarily limited by the burden of discovering and returning complete pair sets, whereas pair-level judgement is limited by the difficulty of converting reliable candidate rankings into binary decisions under a shared decision boundary. Guided by this diagnosis, we develop an auxiliary retriever that selectively re-examines ambiguous boundary cases, yielding consistent F1 improve-ments across all three datasets. Overall, our analysis suggests that, among the evaluated configurations, J UD -Local offers the most practical foundation for LLM-based ECPEC, bal-ancing the performance benefits of pair-level decomposition against its inference cost. Developing reliable target-specific decision boundaries remains an important direction for trans-lating strong candidate rankings into more accurate emotion– cause pair predictions. We leave this direction to future work. References 
+
+An, J.; Ding, Z.; Li, K.; and Xia, R. 2023. Global-View and Speaker-Aware Emotion Cause Extraction in Conversations. 
+
+IEEE/ACM Transactions on Audio, Speech, and Language Processing , 31: 3814–3823. Arefa; Ansari, M. A.; Saxena, C.; and Ahmad, T. 2024. JMI at SemEval 2024 Task 3: Two-step approach for multimodal ECAC using in-context learning with GPT and instruction-tuned Llama models. In Ojha, A. K.; Do ˘gru ¨oz, A. S.; Tay-yar Madabushi, H.; Da San Martino, G.; Rosenthal, S.; and Ros ´a, A., eds., Proceedings of the 18th International Work-shop on Semantic Evaluation (SemEval-2024) , 1561–1576. Mexico City, Mexico: Association for Computational Lin-guistics. Busso, C.; Bulut, M.; Lee, C.-C.; Kazemzadeh, A.; Mower, E.; Kim, S.; Chang, J. N.; Lee, S.; and Narayanan, S. S. 2008. IEMOCAP: Interactive Emotional Dyadic Motion Capture Database. Language Resources and Evaluation , 42(4): 335– 359. Chen, S.; Shi, X.; Li, J.; Wu, S.; Fei, H.; Li, F.; and Ji, D. 2022. Joint Alignment of Multi-Task Feature and Label Spaces for Emotion Cause Pair Extraction. In Calzolari, N.; Huang, C.-R.; Kim, H.; Pustejovsky, J.; Wanner, L.; Choi, K.-S.; Ryu, P.-M.; Chen, H.-H.; Donatelli, L.; Ji, H.; Kurohashi, S.; Paggio, P.; Xue, N.; Kim, S.; Hahm, Y.; He, Z.; Lee, T. K.; Santus, E.; Bond, F.; and Na, S.-H., eds., Proceedings of the 29th International Conference on Computational Linguis-tics , 6955–6965. Gyeongju, Republic of Korea: International Committee on Computational Linguistics. Chen, Y.; Hou, W.; Li, S.; Wu, C.; and Zhang, X. 2020. End-to-End Emotion-Cause Pair Extraction with Graph Con-volutional Network. In Scott, D.; Bel, N.; and Zong, C., eds., 
+
+Proceedings of the 28th International Conference on Com-putational Linguistics , 198–207. Barcelona, Spain (Online): International Committee on Computational Linguistics. Cheng, Z.; Niu, F.; Lin, Y.; Cheng, Z.-q.; Peng, X.; and Zhang, B. 2024. MIPS at SemEval-2024 Task 3: Multi-modal Emotion-Cause Pair Extraction in Conversations with Multimodal Language Models. In Ojha, A. K.; Do ˘gru ¨oz, A. S.; Tayyar Madabushi, H.; Da San Martino, G.; Rosenthal, S.; and Ros ´a, A., eds., Proceedings of the 18th International Workshop on Semantic Evaluation (SemEval-2024) , 667–674. Mexico City, Mexico: Association for Computational Lin-guistics. Ding, Z.; Xia, R.; and Yu, J. 2020. End-to-End Emotion-Cause Pair Extraction Based on Sliding Window Multi-Label Learning. In Webber, B.; Cohn, T.; He, Y.; and Liu, Y., eds., 
+
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , 3574–3583. Online: Association for Computational Linguistics. Fan, C.; Yuan, C.; Gui, L.; Zhang, Y.; and Xu, R. 2021. Multi-Task Sequence Tagging for Emotion-Cause Pair Extraction Via Tag Distribution Refinement. IEEE/ACM Transactions on Audio, Speech, and Language Processing , 29: 2339–2350. Gui, L.; Wu, D.; Xu, R.; Lu, Q.; and Zhou, Y. 2016. Event-Driven Emotion Cause Extraction with Corpus Construction. In Su, J.; Duh, K.; and Carreras, X., eds., Proceedings of the 2016 Conference on Empirical Methods in Natural Lan-guage Processing , 1639–1649. Austin, Texas: Association for Computational Linguistics. Hu, E. J.; Shen, Y.; Wallis, P.; Allen-Zhu, Z.; Li, Y.; Wang, S.; Wang, L.; and Chen, W. 2022. LoRA: Low-Rank Adaptation of Large Language Models. In International Conference on Learning Representations .Hu, G.; Zhu, Z.; Hershcovich, D.; Hu, L.; Seifi, H.; and Xie, J. 2024. UniMEEC: Towards Unified Multimodal Emotion Recognition and Emotion Cause. In Al-Onaizan, Y.; Bansal, M.; and Chen, Y.-N., eds., Findings of the Association for Computational Linguistics: EMNLP 2024 , 5248–5261. Mi-ami, Florida, USA: Association for Computational Linguis-tics. Huang, J.; and Chang, K. C.-C. 2023. Towards Reasoning in Large Language Models: A Survey. In Rogers, A.; Boyd-Graber, J.; and Okazaki, N., eds., Findings of the Associa-tion for Computational Linguistics: ACL 2023 , 1049–1065. Toronto, Canada: Association for Computational Linguistics. Jeong, D.; and Bak, J. 2023. Conversational Emotion-Cause Pair Extraction with Guided Mixture of Experts. In Vla-chos, A.; and Augenstein, I., eds., Proceedings of the 17th Conference of the European Chapter of the Association for Computational Linguistics , 3288–3298. Dubrovnik, Croatia: Association for Computational Linguistics. Ju, X.; Zhang, D.; Li, J.; Li, S.; and Zhou, G. 2025. Enhanced Generative Framework With LLMs for Multimodal Emotion-Cause Pair Extraction in Conversations. IEEE Transactions on Multimedia , 27: 4924–4935. Kazakov, R.; Petukhova, K.; and Kochmar, E. 2024. PetKaz at SemEval-2024 Task 3: Advancing Emotion Classification with an LLM for Emotion-Cause Pair Extraction in Conver-sations. In Ojha, A. K.; Do ˘gru ¨oz, A. S.; Tayyar Madabushi, H.; Da San Martino, G.; Rosenthal, S.; and Ros ´a, A., eds., 
+
+Proceedings of the 18th International Workshop on Seman-tic Evaluation (SemEval-2024) , 1127–1134. Mexico City, Mexico: Association for Computational Linguistics. Kong, D.; Yu, N.; Yuan, Y.; Fu, G.; and Gong, C. 2022. Discourse-Aware Emotion Cause Extraction in Conversa-tions. arXiv:2210.14419. Lee, S. Y. M.; Chen, Y.; and Huang, C.-R. 2010. A Text-Driven Rule-Based System for Emotion Cause Detection. In Inkpen, D.; and Strapparava, C., eds., Proceedings of the NAACL HLT 2010 Workshop on Computational Approaches to Analysis and Generation of Emotion in Text , 45–53. Los Angeles, CA: Association for Computational Linguistics. Levchenko, S.; Wolert, R.; and Andruszkiewicz, P. 2024. PWEITINLP at SemEval-2024 Task 3: Two Step Emotion Cause Analysis. In Ojha, A. K.; Do ˘gru ¨oz, A. S.; Tayyar Mad-abushi, H.; Da San Martino, G.; Rosenthal, S.; and Ros ´a, A., eds., Proceedings of the 18th International Workshop on Semantic Evaluation (SemEval-2024) , 1097–1105. Mexico City, Mexico: Association for Computational Linguistics. Li, B.; Fei, H.; Li, F.; Chua, T.-s.; and Ji, D. 2024. Multimodal Emotion-Cause Pair Extraction with Holistic Interaction and Label Constraint. ACM Transactions on Multimedia Comput-ing, Communications, and Applications , 21(11): 1–19. Li, G.; Duan, X.; Wang, C.; and Peng, S. 2025. An adaptive hybrid machine reading comprehension framework for multi-modal emotion-cause pair extraction in conversations. Engi-neering Applications of Artificial Intelligence , 162: 112333. Li, J.; Wang, X.; and Zeng, Z. 2025. Tracing Intricate Cues in Dialogue: Joint Graph Structure and Sentiment Dynamics for Multimodal Emotion Recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence , 47(10): 8786– 8803. Li, W.; Li, Y.; Pandelea, V.; Ge, M.; Zhu, L.; and Cambria, E. 2023. ECPEC: Emotion-Cause Pair Extraction in Conver-sations. IEEE Transactions on Affective Computing , 14(3): 1754–1765. Li, Y.; Su, H.; Shen, X.; Li, W.; Cao, Z.; and Niu, S. 2017. DailyDialog: A Manually Labelled Multi-turn Dialogue Dataset. In Kondrak, G.; and Watanabe, T., eds., Proceedings of the Eighth International Joint Conference on Natural Lan-guage Processing (Volume 1: Long Papers) , 986–995. Taipei, Taiwan: Asian Federation of Natural Language Processing. Liu, C.; Niu, C.; Xie, J.; Jia, Y.; and Zan, H. 2023. Emotion-Cause Pair Extraction in Conversations Based on Multi-Turn MRC with Position-Aware GCN. In 2023 International Con-ference on Asian Language Processing (IALP) , 25–30. Llama Team. 2024. The Llama 3 Herd of Models. arXiv:2407.21783. Lou, R.; Zhang, K.; and Yin, W. 2024. Large language model instruction following: A survey of progresses and challenges. 
+
+Computational Linguistics , 50(3): 1053–1095. Luo, M.; Zhang, H.; Wu, S.; Li, B.; Han, H.; and Fei, H. 2024. NUS-Emo at SemEval-2024 Task 3: Instruction-Tuning LLM for Multimodal Emotion-Cause Analysis in Conversations. In Ojha, A. K.; Do ˘gru ¨oz, A. S.; Tayyar Madabushi, H.; Da San Martino, G.; Rosenthal, S.; and Ros ´a, A., eds., Pro-ceedings of the 18th International Workshop on Semantic Evaluation (SemEval-2024) , 1589–1596. Mexico City, Mex-ico: Association for Computational Linguistics. Ma, T.; Feng, W.; Wang, X.; and Cheng, Z. 2026. Emo-tion–Cause Pair Extraction in Conversations via Semantic Decoupling and Alignment. In Liakata, M.; Moreira, V. P.; Zhang, J.; and Jurgens, D., eds., Findings of the Associa-tion for Computational Linguistics: ACL 2026 , 12697–12711. Association for Computational Linguistics. ISBN 979-8-89176-395-1. Poria, S.; Majumder, N.; Hazarika, D.; Ghosal, D.; Bhardwaj, R.; Jian, S. Y. B.; Hong, P.; Ghosh, R.; Roy, A.; Chhaya, N.; Gelbukh, A.; and Mihalcea, R. 2021. Recognizing Emotion Cause in Conversations. Cognitive Computation , 13(5): 1317– 1332. Qwen Team. 2025. Qwen2.5 Technical Report. arXiv:2412.15115. Team GLM. 2024. ChatGLM: A Family of Large Lan-guage Models from GLM-130B to GLM-4 All Tools. arXiv:2406.12793. Tu, G.; Wang, J.; Yang, L.; Liang, B.; Cambria, E.; Li, W.; and Xu, R. 2026. Multi-Task Mutual Learning for Multimodal Emotion-Cause Pair Extraction in Conversations. Informa-tion Fusion , 127: 103877. Wang, B.; Tang, K.; and Zhu, P. 2024. Enhancing Emotion-Cause Pair Extraction in Conversations via Center Event Detection and Reasoning. In Al-Onaizan, Y.; Bansal, M.; and Chen, Y.-N., eds., Findings of the Association for Com-putational Linguistics: EMNLP 2024 , 10773–10783. Miami, Florida, USA: Association for Computational Linguistics. Wang, B.; Wu, L.; Guo, S.; Wang, K.; Wang, Q.; Zhang, T.; Liu, J.; and Khan, H. U. 2026. HCPRA: A Hierarchi-cal Cognition–Perception–Reasoning Agent Framework for Emotion-Cause Pair Extraction in Conversations. In Proceed-ings of the 49th International ACM SIGIR Conference on Research and Development in Information Retrieval , 1892– 1902. ACM. ISBN 979-8-4007-2599-9. Wang, F.; Ding, Z.; Xia, R.; Li, Z.; and Yu, J. 2023. Mul-timodal Emotion-Cause Pair Extraction in Conversations. 
+
+IEEE Transactions on Affective Computing , 14(3): 1832– 1844. Wang, X.; Salmani, M.; Omidi, P.; Ren, X.; Rezagholizadeh, M.; and Eshaghi, A. 2024. Beyond the Limits: A Survey of Techniques to Extend the Context Length in Large Lan-guage Models. In Larson, K., ed., Proceedings of the Thirty-Third International Joint Conference on Artificial Intelli-gence, IJCAI-24 , 8299–8307. International Joint Conferences on Artificial Intelligence Organization. Survey Track. Wu, S.; Lin, J.; Wang, X.; Jiang, D.; and Cambria, E. 2026. Bridging Discrepancies in Debate: Joint Debate for Enhanc-ing Multimodal Emotion-Cause Pair Extraction in Conversa-tion. IEEE Transactions on Affective Computing , 1–15. Xia, R.; and Ding, Z. 2019. Emotion-Cause Pair Extraction: A New Task to Emotion Analysis in Texts. In Korhonen, A.; Traum, D.; and M `arquez, L., eds., Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics , 1003–1012. Florence, Italy: Association for Com-putational Linguistics. Xie, B.; Wang, J.; Guo, H.; Chen, P.; Zhang, H.; Jiang, B.; Wang, Y.; and Chen, L. 2026. MSPF: A Multi-Semantic Prompting Fusion Framework for Emotion-Cause Pair Ex-traction in Conversations. Information Processing & Man-agement , 63(1): 104356. Zhu, P.; Wang, B.; Tang, K.; Zhang, H.; Cui, X.; and Wang, Z. 2024. A Knowledge-Guided Graph Attention Network for Emotion-Cause Pair Extraction. Knowledge-Based Systems ,286: 111342. A Prompt Templates 
+
+This section presents the prompt templates used for the three controlled paradigms. 
+
+Prompt for dialogue-level generation (G EN )
+
+You are an expert in emotion--cause pair extraction in conversations. Given the following conversation, identify the emotion expressed in each utterance and the utterance IDs that cause that emotion. Emotion labels must be selected from: [EMOTION LABEL SET] 
+
+Rules: 
+
+1. If an utterance is neutral, set "cause ids" to []. 2. If an utterance expresses anon-neutral emotion, "cause ids" should contain the IDs of all utterances that trigger or explain that emotion. 3. A cause may be the emotion utterance itself. 4. [SCOPE INSTRUCTION] 5. Return only a valid JSON list without any explanation. 
+
+Conversation: 
+
+[DIALOGUE] 
+
+Output format: 
+
+[ {"utterance id": [ID], "emotion": "[EMOTION]", "cause ids": [[CAUSE IDS]] } ]
+
+Prompt for target-level selection (S EL )
+
+You are an expert in emotion--cause pair extraction in conversations. Given the following conversation and target utterance, identify the emotion expressed in the target and select all utterances that cause that emotion. Emotion labels must be selected from: [EMOTION LABEL SET] 
+
+Rules: 
+
+1. If the target utterance is neutral, [IDS] must be []. 2. If the target utterance expresses a non-neutral emotion, [IDS] should contain the IDs of all utterances that trigger or explain that emotion. 3. A cause may be the target utterance itself. 4. [SCOPE INSTRUCTION] 5. Return only the filled template without any explanation. 
+
+Conversation: 
+
+[DIALOGUE] 
+
+Target utterance: 
+
+[TARGET ID]. [TARGET SPEAKER]: [TARGET TEXT] 
+
+Output template: 
+
+[TARGET TEXT] contains [CLASS] emotion, corresponding to [CAUSE IDS]. 
+
+Prompt for pair-level judgement (J UD )
+
+You are an expert in emotion--cause pair extraction in conversations. Given the following conversation, determine whether the candidate cause utterance triggers or explains anon-neutral emotion expressed in the target utterance. A valid cause may be an event, statement, behavior, or contextual clue that triggers or explains the target emotion. 
+
+Conversation: 
+
+[DIALOGUE] 
+
+Target utterance: 
+
+[TARGET ID]. [TARGET SPEAKER]: [TARGET TEXT] 
+
+Candidate cause utterance: 
+
+[CANDIDATE ID]. [CANDIDATE SPEAKER]: [CANDIDATE TEXT] 
+
+Question: 
+
+Does the candidate cause utterance cause a non-neutral emotion expressed in the target utterance? Answer only "yes" or "no". 
+
+Answer: 
+
+For local scope, [SCOPE INSTRUCTION] is replaced with: 
+
+Only consider the target utterance itself and up to four preceding utterances as possible causes. 
+
+For full scope, it is replaced with: 
+
+Consider every utterance in the conversation as a possible cause, regardless of its position relative to the target utterance. 
+
+## B Detailed Experimental Protocol 
+
+B.1 Datasets 
+
+We conduct experiments on ECF (Wang et al. 2023), Con-vECPE (Li et al. 2023), and RECCON (Poria et al. 2021). These benchmarks differ substantially in dialogue length, pair density, and the number of annotated emotion–cause pairs, providing complementary evaluation conditions. Table 9 re-ports the statistics of three benchmarks.                
+
+> Statistic RECCON ConvECPE ECF
+> #Dialogue 1,106 151 1,374 #Utterance 11,104 7,433 13,619 #Emotion–Cause Pairs 9,124 9,473 9,794 Train/Val/Test 75/5/20 80/–/20 70/10/20
+
+Table 9: Statistics of three datasets. 
+
+ECF. ECF is a multimodal ECPEC benchmark derived from the television series Friends . It provides textual, acous-tic, and visual information together with utterance-level emo-tion labels and emotion–cause pair annotations. Our primary experiments use only the dialogue transcripts so that the three paradigms receive the same textual evidence. The additional multimodal experiment uses the acoustic and visual inputs provided by the benchmark. 
+
+ConvECPE. ConvECPE is constructed from IEMO-CAP (Busso et al. 2008) and contains relatively long dyadic conversations. Compared with ECF and RECCON, its test di-alogues are substantially longer and therefore induce a much larger candidate space under the full scope. This property makes ConvECPE particularly useful for examining omis-sion under set generation and false-positive accumulation under pair-level judgement. 
+
+RECCON. RECCON is a widely used benchmark for emotion-cause pair extraction and consists of two subsets. RECCON-DD, annotated from DailyDialog (Li et al. 2017), serves as the primary corpus for model training and eval-uation, while RECCON-IE, annotated from IEMOCAP, is a smaller subset used exclusively to assess model general-ization. In this work, we choice the RECCON-DD subset only and construct each gold pair from an annotated emotion utterance and one of its annotated cause utterances. 
+
+B.2 Candidate Scope 
+
+For each target emotion utterance ui, the candidate scope determines which utterances are considered as potential causes. Under local scope, the candidate set is restricted to 
+
+{uj | 0 ≤ i−j ≤ 4}, which includes the target itself and its four preceding utterances. Under full scope, every utterance in the dialogue is treated as a candidate cause, including utterances occurring after the target.                  
+
+> Statistic ECF ConvECPE RECCON-DD
+> #Gold Pairs 1,873 1,915 1,767 Mean |d|0.83 1.85 1.38
+> 0≤d≤493.9% 87.0% 93.7%
+
+Table 10: Utterance-distance statistics of gold emotion–cause pairs, where d = i − j for target utterance ui and cause utterance uj .Table 10 reports the utterance-distance distribution of gold emotion–cause pairs. Most gold causes occur close to their target emotion utterances. Specifically, 93.9%, 87.0%, and 93.7% of the gold pairs in ECF, ConvECPE, and RECCON-DD, respectively, satisfy 0 ≤ i − j ≤ 4. Based on this consistent locality pattern, we use local scope as a empirical setting shared across datasets. We also report results under full scope to evaluate the three paradigms. Under local scope, gold pairs outside the candidate scope remain part of the evaluation and are counted as false negatives if not predicted. 
+
+B.3 Competitive Baselines 
+
+We compare the three controlled LLM paradigms with six representative ECPEC baselines. MRC (Liu et al. 2023) re-formulates ECPEC as a three-stage machine reading compre-hension process that sequentially identifies emotions, extracts their causes, and verifies candidate pairs. A position-aware GCN models dialogue structure and speaker interactions. 
+
+CENTER (Wang, Tang, and Zhu 2024) detects center events and constructs event-aware graphs to model contextual re-gions and interactions among candidate emotion–cause pairs. It jointly optimizes center event detection, emotion and cause extraction, and pair prediction. SCALE (Ma et al. 2026) models global contextual, local temporal, and intra-speaker dependencies using a shared conversation graph. It derives emotion- and cause-oriented representations and aligns them through optimal transport. GMEC-GPT (Ju et al. 2025) en-hances the generative GMEC framework by using GPT-3.5 to refine its predictions. The refinement incorporates prediction confidence, retrieved examples, and visual descriptions gener-ated by MiniGPT-4. DEC-Debate (Wu et al. 2026) combines an LLM-based generative model with a multimodal discrimi-native model. Their conflicting emotion and pair predictions are resolved through multi-round LLM debates and majority voting. MSPF+ (Xie et al. 2026) performs pair verification by fusing tagging-based, synonym-based, and causal-claim prompt representations. It further filters candidate pairs using a validation-selected utterance-distance threshold. Since this work focuses on comparing LLM task paradigms rather than providing an exhaustive ECPEC leader-board, we include only a compact set of representative base-lines. We therefore omit additional agent-based LLM systems, such as HCPRA (Wang et al. 2026), and task-specific archi-tectures, such as DAM (Kong et al. 2022), GSECE-UC (An et al. 2023), and PRG-M OE (Jeong and Bak 2023). 
+
+B.4 Reproducibility 
+
+Training details. We use LLaMA-3.1-8B (Llama Team 2024) as the primary backbone and further evaluate Qwen-2.5-7B (Qwen Team 2025) and GLM-4-9B (Team GLM 2024). For the paradigm-specific comparison, a separate LoRA adapter (Hu et al. 2022) is fine-tuned for each back-bone and task paradigm using the same training split. All experiments use deterministic single-pass inference with tem-perature 0. For J UD , a candidate pair is predicted as positive when the normalized probability of the Yes token is greater than 0.5; ties are assigned to No. The threshold is fixed across datasets and is not tuned on validation or test data. The train-ing hyperparameters are summarized in Table 11.                                                                    
+
+> LLaMA-3.1-8B Qwen-2.5-7B GLM-4-9B Hyperparameter GEN SEL JUD GEN SEL JUD GEN SEL JUD
+> LoRA r8816 8816 888LoRA α16 16 32 16 16 32 16 16 16 Dropout 0.00 0.00 0.05 0.00 0.00 0.05 0.00 0.00 0.05 Learning rate 5e-5 5e-5 5e-5 5e-5 5e-5 5e-5 5e-5 5e-5 5e-5 Batch size 1 (8) 1 (8) 1 (8) 1 (8) 1 (8) 1 (8) 1 (8) 1 (8) 1 (8) Epochs 662662662
+
+Table 11: Hyperparameters for paradigm-specific fine-tuning. 
+
+Implementation. Our implementation uses Python 3.10.20, PyTorch 2.11.0, Transformers 5.9.0, PEFT 0.19.1, and CUDA 12.8. All experiments are conducted on a server equipped with eight NVIDIA GeForce RTX 5090 GPUs (32 GB each) with two Intel Xeon Platinum 8457C CPUs and 1 TB of system memory. We use a random seed of 13 and report results from a single run. 
+
+Evaluation metrics. Predictions from all three paradigms are converted into sets of ordered emotion–cause utterance-index pairs. Duplicate pairs are removed, and indices outside the dialogue or the evaluated candidate scope are discarded. A prediction is correct only when both utterance indices exactly match a gold pair. Let P and G denote the predicted and gold pair sets over the complete test set. We compute 
+
+P = |P ∩ G| |P| , R = |P ∩ G| |G| , F1 = 2P R P + R . (5) 
+
+## C Definition of Recoverable Omission Rates 
+
+For each experimental condition, let Y denote the gold rela-tion set. We use the subscripts G, S, and J to refer to G EN ,SEL , and J UD , respectively, and let bYG, bYS , and bYJ denote their predicted relation sets. The gold relations omitted by GEN are defined as 
+
+F N G = Y \ bYG. (6) The gold relations correctly identified by S EL and J UD are 
+
+T P S = Y ∩ bYS , T P J = Y ∩ bYJ . (7) 
+
+GEN →SEL . The recoverable omission rate from G EN to SEL measures the proportion of gold relations omitted by GEN but correctly identified by S EL :
+
+RO G→S = |F N G ∩ T P S ||F N G| . (8) 
+
+GEN →JUD . The recoverable omission rate from G EN to JUD measures the proportion of gold relations omitted by GEN but correctly identified by J UD :
+
+RO G→J = |F N G ∩ T P J ||F N G| . (9) Both rates use the same set of G EN false negatives as the denominator and are therefore directly comparable. A higher rate indicates that a larger proportion of the relations omitted by G EN remain identifiable under the corresponding finer-grained paradigm. All sets are aggregated over the test set before computing the rates. 
+
+## D Use of AI Assistants 
+
+AI assistants were used only for language polishing, format-ting assistance, and consistency checking. All research ideas, experimental designs, implementations, analyses, and con-clusions were developed and verified by the authors.

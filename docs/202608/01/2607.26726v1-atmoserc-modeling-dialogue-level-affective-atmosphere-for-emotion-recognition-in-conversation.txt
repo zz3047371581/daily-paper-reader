@@ -1,0 +1,631 @@
+Title: AtmosERC: Modeling Dialogue-Level Affective Atmosphere for Emotion Recognition in Conversation
+
+URL Source: https://arxiv.org/pdf/2607.26726v1
+
+Published Time: Thu, 30 Jul 2026 00:49:28 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# AtmosERC: Modeling Dialogue-Level Affective Atmosphere for Emotion Recognition in Conversation 
+
+# Weijie Feng, Tongwei Zhang, Binbin Liu, Zhiyong Cheng 
+
+Hefei University of Technology wjfeng@hfut.edu.cn, tongweizhang@mail.hfut.edu.cn, binbin.liu@hfut.edu.cn, jason.zy.cheng@gmail.com 
+
+Abstract 
+
+Emotion Recognition in Conversation (ERC) aims to predict utterance-level emotions in dialogues and has largely advanced through context-centric modeling. However, global context is a heterogeneous signal, and not all contextual information is equally relevant to emotion prediction. This paper focuses on the affect-oriented component of this signal, termed dialogue-level affective atmosphere, which captures a latent tendency commonly reflected in conversational emotion patterns. To estimate and exploit this tendency, we propose AtmosERC, a graph-based ERC framework that models each dialogue as a conversational graph over utterances and speakers. A relation-aware graph extractor filters and fuses heterogeneous graph signals to produce dialogue-level and speaker-conditioned af-fective priors. The resulting compact prior guides lightweight sequential emotion prediction and can also be verbalized into prompt-level cues for LLM-based ERC without modifying backbone models. Experiments on four ERC benchmarks show that AtmosERC improves lightweight ERC, enhances LLM-based ERC as a plug-in cue, and yields more stable predictions under local emotional deviations. 
+
+# 1 Introduction 
+
+Emotion Recognition in Conversation (ERC) aims to iden-tify the emotion of each utterance in dialogues (Poria et al. 2019b), and supports applications in dialogue systems (Gong, Min, and Zhang 2023), social media analysis (Kumar, Do-gra, and Dabas 2015), and human-computer interaction (Hu et al. 2021). ERC is inherently context-dependent, since the emotion conveyed by an utterance depends on its seman-tics, dialogue history, and speaker interactions (Ghosal et al. 2019). Accordingly, contextual modeling has become a cen-tral theme in ERC, motivating a broad line of work that models and exploits conversational context through recur-rent dynamics (Poria et al. 2017; Majumder et al. 2019; Hu et al. 2023), self-attention (Zhong, Wang, and Miao 2019; Li et al. 2020; Shen et al. 2021a; Mao et al. 2021), graph struc-tures (Ghosal et al. 2019; Hu et al. 2021; Chen et al. 2023; Ai et al. 2025; Li, Wang, and Zeng 2025), pretrained language models (Kim and Vossen 2021; Wang et al. 2024; Yu et al. 2024), and more recently LLM-based prompting or reason-ing (Lei et al. 2024; Fu et al. 2025; Lian et al. 2025; Jing et al. 2026). These methods usually treat global context as a mono-lithic signal for utterance-level emotion prediction (Shou 
+
+Figure 1: Relationship between global context distance and atmosphere distance. Each point denotes a dialogue pair. et al. 2025; Wu et al. 2025), yet global context mixes hetero-geneous factors, such as topics, events, speaker relations, and affective cues, not all of which directly or consistently benefit ERC. Among these factors, the affect-oriented component is particularly relevant to ERC, as it reflects the stable affective tendency of a dialogue (George 1990; Barsade and Knight 2015). We refer to this component as dialogue-level affective atmosphere, or simply atmosphere. Atmosphere is grounded in global context but focuses on dialogue-level affective tendency rather than preserving all contextual information. To empirically examine this dis-tinction, Figure 1 plots the distance between global context representations against the distance between atmosphere rep-resentations for dialogue pairs from IEMOCAP (Busso et al. 2008). The overall upward trend indicates that dialogues with more dissimilar global contexts also tend to exhibit more dissimilar affective atmospheres, suggesting that atmosphere remains grounded in dialogue context. At the same time, the visible dispersion around the trend line shows that global con-text distance does not fully determine atmosphere distance, suggesting that atmosphere is related to but not reducible to global context. Details are provided in Appendix D.3. Although atmosphere is not directly observable, its preva-lence can be probed through statistical regularities in conver-sational emotions. Specifically, we examine such regularities arXiv:2607.26726v1 [cs.CL] 29 Jul 2026 0 20 40 60 80 100 
+
+> DailyDialog  EmoryNLP  MELD  IEMOCAP
+> 86.6
+> 42.3
+> 59.3
+> 62.2
+> 93.2
+> 21.2
+> 55.4
+> 71.0
+> 88.4
+> 11.8
+> 38.9
+> 54.8
+> 81.0
+> 4.7
+> 25.0
+> 29.0
+> 14.3
+> 14.3
+> 14.3
+> 16.7
+> %
+> Mean
+> p(x>50%)
+> p(x>60%)
+> p(x>70%)
+> Uniform baseline
+
+(a) Dominant-emotion concentration across ERC benchmarks. 
+
+(b) Emotion trajectories on IEMOCAP. Each row represents a dia-logue, and colors denote utterance-level valence. 
+
+Figure 2: Empirical evidence for affective atmosphere. through dominant-emotion concentration and utterance-level valence trajectories. As shown in Figure 2a, dominant emo-tions account for a substantially larger share of utterances than expected under uniform baselines, indicating that many dialogues contain a discernible affective tendency. In addition, Figure 2b shows that utterance-level valence often forms lo-cally coherent segments, revealing the presence of relatively stable dialogue-level affective tendencies. Together, these observations motivate atmosphere as dialogue-level affective evidence for ERC, while its latent nature requires estimation from the input conversation. To estimate and exploit this latent affective signal, we pro-pose AtmosERC, a graph-based ERC framework that derives dialogue-level affective atmosphere as an explicit affective prior. Since atmosphere reflects a global and relatively sta-ble affective tendency, AtmosERC represents each dialogue as a conversational graph over utterances and speakers to capture global dialogue structure. A relation-aware graph extractor then filters and fuses relation-specific graph sig-nals to estimate the dialogue-level atmosphere. To make the estimated atmosphere reusable across ERC paradigms, At-mosERC encodes it as a compact vectorized prior. The prior guides lightweight sequential decoding and also serves as prompt-level cues for LLM-based ERC without modifying the backbone models. The main contributions of this work are summarized as follows: • We propose AtmosERC, a graph-based ERC framework that estimates dialogue-level affective atmosphere from heterogeneous utterance–utterance and utterance–speaker relations. • We operationalize atmosphere as a reusable affective prior by distilling the affect-oriented component of global con-text into a compact representation that is independent of specific ERC decoders. • Extensive experiments on four ERC benchmarks show that AtmosERC improves lightweight ERC, enhances LLM-based ERC as a plug-in cue, and provides more stable emotion prediction under local emotional devia-tions. 
+
+# 2 Related Work 
+
+Previous works have extensively modeled conversational con-text, emotion dynamics, and speaker interactions for the ERC task (Poria et al. 2019b; Wu et al. 2025). Representative approaches include recurrent models for turn-level emotion transitions (Jiao, Lyu, and King 2020; Zhao et al. 2022; Hu, Wei, and Huai 2021), Transformer- (Zhong, Wang, and Miao 2019; Li et al. 2020; Mao et al. 2021) and PLM-based (Kim and Vossen 2021; Wang et al. 2024; Yu et al. 2024) mod-els for long-range contextual aggregation, and graph-based models for explicit dependency modeling over conversational structures (Chen et al. 2023; Tu et al. 2024; Ai et al. 2025; Li, Wang, and Zeng 2025). While effective, these methods gen-erally use contextual modeling to refine utterance-level rep-resentations for prediction, rather than to explicitly estimate dialogue-level affective atmosphere as a reusable affective prior. Recent LLM-based ERC methods further improve emotion reasoning via prompting (Jing et al. 2026; Lei et al. 2024), personality modeling (Wang et al. 2024), or open-vocabulary prediction (Lian et al. 2025). These methods typically rely on LLMs to infer the affective tendency of the target utterance implicitly from the input dialogue (Shou et al. 2025), but do not explicitly construct a dialogue-level affective atmosphere that is separated from utterance-level prediction. Moreover, recent evidence (Laban et al. 2026) suggests that reasoning over long dialogue contexts remains challenging for LLMs, which makes explicit dialogue-level affective cues potentially useful for LLM-based ERC. Our work differs by operationalizing dialogue-level af-fective atmosphere as an explicit prior and revisiting graph modeling as an effective means of estimating the prior. The prior is separated from downstream prediction, allowing it to guide lightweight ERC and to serve as a prompt-level cue for LLM-based ERC without modifying model backbones. Extended related work is provided in Appendix A. Figure 3: Overall architecture of our AtmosERC. 
+
+# 3 Methodology 
+
+We present AtmosERC, an atmosphere-aware framework for ERC, as illustrated in Figure 3. The methodology centered on two questions: how dialogue-level affective atmosphere can be estimated and how it can be used for emotion predic-tion. We first formalize ERC and represent atmosphere as a latent dialogue-level affective prior (§3.1). We then estimate this prior with a relation-aware graph extractor over conver-sational structures involving utterances and speakers (§3.2). Finally, we use the extracted priors in two downstream set-tings, including atmosphere-guided lightweight ERC (§3.3) and prompt-level plug-in for LLM-based ERC (§3.4). 
+
+3.1 Preliminary 
+
+Task Definition. Given a conversation represented as an ordered sequence of N utterances C = ( u1, u 2, . . . , u N ),each utterance ui is produced by a speaker sπ(ui), where π(·)
+
+maps an utterance to the index of its corresponding speaker. The conversation involves M distinct speakers (M ≥ 2) ,denoted as {s1, . . . , s M }. The goal of ERC is to assign an emotion label yi ∈ Y to each utterance ui, where Y is the set of predefined emotion categories. 
+
+Dialogue-level Affective Atmosphere. We operationalize the affective atmosphere of a conversation as an embedding 
+
+a ∈ Rd, where d denotes the embedding dimension. For-mally, a is treated as a continuous latent variable shared by all utterances in C, obtained by filtering dialogue-context signals into a compact affective prior rather than retaining the full contextual representation. In the absence of direct atmosphere annotations, we approximate atmosphere with ob-servable utterance-level emotion statistics, such as dominant-emotion patterns, when supervision or analysis is required. 
+
+Textual Feature Extraction. We encode each utterance 
+
+ui ∈ C into a feature embedding x(u) 
+
+> i
+
+∈ Rd using a pre-trained RoBERTa (Liu et al. 2019). RoBERTa is used solely as a frozen feature extractor, with its parameters unchanged throughout the framework, thereby decoupling utterance-level feature learning from atmosphere modeling. 
+
+3.2 Graph-based Atmosphere Extractor 
+
+We design the graph-based atmosphere extractor based on two considerations. (1) Atmosphere is a dialogue-level signal 
+
+that should be estimated from entire conversation, making graph modeling a natural choice. (2) Atmosphere should em-phasize stable affective tendencies , while GNNs can act as low-pass filters over graph signals (NT and Maehara 2019), helping attenuate transient utterance-level variations. Conse-quently, our atmosphere extractor consists of three steps, i.e.,  
+
+> 1
+
+conversational graph construction, 2 relation-specific graph filtering, and 3 atmosphere extraction. 
+
+Relation-aware Conversational Graph. To support dialogue-level atmosphere estimation, we represent each con-versation C as a heterogeneous graph G = ( V, E, R), where 
+
+V denotes the node set, E denotes the edge set, and R denotes the set of relation types. 
+
+Nodes. Following prior work (Song et al. 2023), the node set V = V(u) ∪ V (s) consists of two disjoint subsets, namely utterance node set V(u) and speaker node set V(s). Each ut-terance ui ∈ C corresponds to an utterance node v(u) 
+
+> i
+
+∈ V (u),initialized with utterance representation x(u) 
+
+> i
+
+. Each speaker 
+
+sj corresponds to a speaker node v(s) 
+
+> j
+
+∈ V (s), initialized with a learnable embedding x(s) 
+
+> j
+
+∈ Rd that encodes speaker identity information. 
+
+Edges. Conversational dependencies are heterogeneous in nature, motivating multiple relation types r ∈ R :
+
+r1: Inter-speaker dependency captures short-range cross-speaker influence. We add a directed edge  v(u) 
+
+> i
+
+, v (u)
+
+> j
+
+
+
+if 1 ≤ j − i ≤ W and π(ui)̸ = π(uj ), where W ∈ N+
+
+denotes the context window size. r2: Intra-speaker dependency models speaker-specific emo-tional continuity across consecutive speaker turns. We add a directed edge  v(u) 
+
+> i
+
+, v (u)
+
+> j
+
+ if uj is the next utter-ance by the same speaker after ui.
+
+r3: Global semantic similarity enables sparse long-range information exchange beyond local temporal neighbor-hoods. We add an undirected edge  v(u) 
+
+> i
+
+, v (u)
+
+> j
+
+ if i̸ = j
+
+and cos  x(u) 
+
+> i
+
+, x(u)
+
+> j
+
+ > τ s, where τs is a semantic simi-larity threshold. 
+
+r4: Utterance-speaker affiliation connects each utterance node with its corresponding speaker node to support speaker-aware affective aggregation. We add a directed edge  v(u) 
+
+> i
+
+, v (s)
+
+> π(ui)
+
+ for each utterance ui.
+
+Relation-specific Graph Filtering. Different relation types capture distinct affective dependencies, which may be obscured if all edges are mixed within a single message-passing process. We therefore stack L relation-specific graph filtering layers, where each layer first propagates mes-sages under individual relations and then fuses the resulting relation-wise representations. At the l-th ∈ { 1, . . . , L } layer, for a target node vi ∈ V and a relation r ∈ R , let Nr (vi)
+
+denote the set of neighbors connected to vi via relation r. We update the relation-specific representation of vi as: 
+
+h(l) 
+
+> i,r
+
+= GNN (l)
+
+> r
+
+ h(l−1)  
+
+> i
+
+, P   
+
+> vj∈N r(vi)
+
+h(l−1) 
+
+> j
+
+, (1) where GNN (l) 
+
+> r
+
+(·) is a relation-specific GNN, such as GAT (Brody, Alon, and Yahav 2022), that aggregates af-fective signals from neighbors under relation r. The initial state is given by h(0)  
+
+> i
+
+= xi, while h(l−1)  
+
+> j
+
+aggregates the fused information from the layer before. Different relations capture distinct affective dependencies and may contribute unequally to atmosphere estimation. To preserve relation-specific signals, we fuse the relation-wise representations 
+
+{h(l) 
+
+> i,r
+
+| r ∈ R} with an element-wise operator: 
+
+¯h(l) 
+
+> i
+
+= AGG  {h(l) 
+
+> i,r
+
+| r ∈ R} , (2) where AGG( ·) implements as max aggregation. We then apply a non-linear activation followed by layer normalization to obtain the final node representation: 
+
+h(l) 
+
+> i
+
+= LayerNorm  ReLU( ¯h(l) 
+
+> i
+
+). (3) Notably, utterance nodes aggregate signals from r1–r3,whereas speaker nodes are updated exclusively via r4.
+
+Atmosphere Extraction. To derive a stable dialogue-level atmosphere, we aggregate filtered representations across layers and derive atmosphere prior from the conversation. Specifically, we stack the relation-specific propagation and fusion operations for L layers to obtain progressively filtered node representations. At layer l, we denote the row-wise representation matrices of utterance and speaker nodes as 
+
+H(u,l ) ∈ RN ×d and H(s,l ) ∈ RM ×d, respectively, where 
+
+H(u,l ) 
+
+> i, :
+
+= ( h(u,l ) 
+
+> i
+
+)⊤ and H(s,l ) 
+
+> j, :
+
+= ( h(s,l ) 
+
+> j
+
+)⊤. We obtain com-pact graph-filtered representations by projecting the layer-wise concatenation of each node: 
+
+H(u) 
+
+> i, :
+
+= FC u
+
+ H(u, 0) i, :∥ · · · ∥ H(u,L )i, :,
+
+H(s) 
+
+> j, :
+
+= FC s
+
+ H(s, 0) j, :∥ · · · ∥ H(s,L )j, :, (4) where H(u) ∈ RN ×d, H(s) ∈ RM ×d, (·∥· ) denotes feature-wise concatenation, and FC u(·) and FC s(·) are learnable linear projections. To estimate the dialogue-level affective atmosphere, we apply max pooling over H(u):
+
+a = Pool( H(u)), (5) where Pool( ·) denotes max pooling. The resulting vector 
+
+a ∈ Rd represents the estimated affective atmosphere of the conversation, which serves as a dialogue-level prior for subsequent emotion prediction. In addition, H(s) is re-tained as auxiliary speaker-conditioned affective priors for the lightweight ERC model, where each row h(s) 
+
+> j
+
+provides a speaker-conditioned prior for speaker sj .
+
+3.3 Atmosphere-aware Lightweight ERC 
+
+Based on the extracted atmosphere prior, we instantiate a lightweight ERC model to examine whether the atmosphere can directly benefit conversational emotion prediction. The lightweight model uses the extracted priors as initialization signals for dynamic emotion decoding. Specifically, the atmo-sphere embedding a initializes the utterance-level temporal decoder, while the speaker-conditioned priors H(s) initial-ize speaker-specific states. The original utterance represen-tations {x(u) 
+
+> i
+
+}Ni=1 remain the inputs to the decoder, ensuring that local emotion dynamics are modeled from utterance semantics while being guided by dialogue-level and speaker-conditioned affective priors. 
+
+Atmosphere-conditioned Emotion Dynamics. We design an atmosphere-conditioned decoder to model utterance-level emotion dynamics under the dialogue-level affective prior. For each utterance ui, the decoder maintains a latent state 
+
+o(u) 
+
+> i
+
+that captures the evolving emotional trajectory of the conversation. At each turn, the state is updated from the orig-inal utterance representation x(u) 
+
+> i
+
+, while the initial decoding state is determined by the estimated atmosphere. Formally, we use a simple BiGRU: 
+
+o(u) 
+
+> i
+
+= BiGRU u
+
+ x(u) 
+
+> i
+
+; a. (6) In practice, a is used to initialize both the forward and back-ward hidden states of the BiGRU, so that local utterance-level dynamics are decoded under a dialogue-level affective prior. 
+
+Speaker-specific State Dynamics. We further introduce a speaker-state decoder to track speaker-conditioned affective dynamics throughout the conversation. Each row h(s) 
+
+> j
+
+of 
+
+H(s) initializes the state of speaker sj . During decoding, a speaker state is updated only when that speaker produces an utterance. At turn i, given the speaker index j = π(ui) and the utterance-level state o(u) 
+
+> i
+
+, we update the speaker state as: 
+
+h(s) 
+
+> j,i
+
+= GRU s
+
+ o(u) 
+
+> i
+
+, h(s)
+
+> j,i −1
+
+, (7) while keeping the states of all other speakers unchanged. Atmosphere-guided Emotion Prediction. For each utter-ance ui, emotion prediction is based on both the atmosphere-conditioned state o(u) 
+
+> i
+
+and the updated speaker state h(s)
+
+> π(ui)
+
+:
+
+oi = o(u) 
+
+> i
+
+; h(s)
+
+> π(ui)
+
+. (8) The fused representation oi is fed into a linear classifier followed by softmax to obtain the emotion label ˆy ∈ Y . The lightweight model is trained with the standard cross-entropy loss over all utterances. 
+
+3.4 Atmosphere Plug-in for LLM-based ERC 
+
+We further examine whether the extracted atmosphere can serve as a prompt-level plug-in for LLM-based ERC meth-ods. Since prompt-based LLMs cannot directly consume the continuous vector a, we verbalize it into a discrete descriptor and inject it into the original ERC prompt without modifying the LLM backbone or decoding procedure. 
+
+Atmosphere Verbalization. To make the continuous atmo-sphere vector usable by LLM-based methods, we discretize it into a textual atmosphere descriptor. Since atmosphere has no direct annotation, we first derive a dialogue-level proxy target from the dominant emotion in each training dialogue: 
+
+z⋆ = arg max 
+
+> y∈Y
+> N
+
+X
+
+> i=1
+
+I(yi = y). (9) We then train a lightweight verbalization head to predict this proxy from the atmosphere vector aq = softmax  FC v (a), bz = arg max  
+
+> y∈Y
+
+q[y]. (10) The head is optimized to predict z⋆ from a on training di-alogues, and bz is used as the textual descriptor for prompt injection. During inference, bz is computed solely from a,which is extracted from the input dialogue without access to utterance-level emotion labels. 
+
+Prompt-level Atmosphere Injection. Given a target ut-terance ui and its dialogue context, we inject the predicted descriptor bz into the original LLM-based ERC prompt as an explicit atmosphere prior. Specifically, we prepend a short atmosphere instruction to the original prompt while keeping the remaining prompt format unchanged:        
+
+> The overall affective atmosphere of this dialogue is <ATMOSPHERE>.
+
+Here, <ATMOSPHERE> is filled with the predicted descriptor 
+
+bz. This plug-in setting allows us to evaluate whether the atmo-sphere prior provides complementary information under the same backbone, prompt structure, and decoding configura-tion. Detailed prompt templates are provided in Appendix B. 
+
+# 4 Experimental Setups 
+
+4.1 Datasets 
+
+We evaluate our model on four widely used bench-mark datasets for ERC: IEMOCAP (Busso et al. 2008), 
+
+MELD (Poria et al. 2019a), EmoryNLP (Zahiri and Choi 2018), and DailyDialog (Li et al. 2017). Dataset statistics are summarized in Table 1, and detailed dataset descriptions are provided in Appendix C.1.                                                 
+
+> Dataset # Conversations # Utterances Avg. Avg. train /val /test train /val /test Turns Spk.
+> IEMOCAP 120 /–/31 5810 /–/ 1623 49.2 2MELD 1039 /114 /280 9989 / 1109 / 2610 9.6 2.7 EmoryNLP 713 /99 /85 9934 / 1344 / 1328 11.5 3.2 DailyDialog 11118 / 1000 / 1000 87170 / 8069 / 7740 7.9 2
+
+Table 1: Dataset statistics. 
+
+4.2 Baselines 
+
+We organize the compared methods according to the two evaluation settings. For the lightweight ERC setting, we compare AtmosERC with representative non-LLM ERC baselines, including sequence-based methods such as Di-alogueRNN (Majumder et al. 2019), SGED (Bao et al. 2022), and SACL-LSTM (Hu et al. 2023); Transformer-based meth-ods such as DialogXL (Shen et al. 2021a), MultiEMO (Shi and Huang 2023), and CFN-ESA (Li et al. 2024); graph-based methods such as DialogueGCN (Ghosal et al. 2019), DAG-ERC (Shen et al. 2021b), and GS-MCC (Ai et al. 2025); knowledge-enhanced methods such as SKAIG (Li et al. 2021), SKIER (Li et al. 2023b), and CauAIN (Zhao, Zhao, and Lu 2022); and PLM-based methods such as EmoBERTa (Kim and Vossen 2021), ERC-DP (Wang et al. 2024), and EACL (Yu et al. 2024). For the LLM-based plug-in setting, we evaluate whether atmosphere enhances representative LLM-based ERC methods, including Instruc-tERC (Lei et al. 2024), LaERC-S (Fu et al. 2025), and Causal-ERC (Jing et al. 2026). Detailed descriptions of baselines are provided in Appendix C.2. 
+
+4.3 Experiment Details 
+
+We use only the textual modality for all experiments, and report micro-averaged F1-score (micro-F1) on DailyDialog and weighted-average F1-score on the remaining datasets. To avoid ambiguity between the two usages of our method, we denote the lightweight ERC model as AtmosERC and the LLM plug-in variant as AtmosERC-P. For the lightweight ERC setting, we report the average performance over multi-ple random seeds. For LLM-based plug-in experiments, we keep the original backbone, prompt template, and decoding configuration unchanged. All experiments are conducted on the same machine with two Intel®Xeon®Platinum 8457C CPUs, and 8 NVIDIA GeForce RTX 5090 GPUs with 32GB memory each. Detailed settings are provided in Appendix C.3. The code and data will be released upon acceptance of this paper. 
+
+# 5 Results and Analysis 
+
+We organize the results to answer the following research questions: RQ1 : Does the extracted atmosphere improve lightweight ERC models? RQ2 : Can atmosphere serve as a plug-in prior for LLM-based ERC methods? RQ3 : Does atmosphere support prediction recovery after local emotional deviations? RQ4 : Which factors contribute to atmosphere estimation? Method IEMOCAP MELD EmoryNLP DailyDialog                                                                 
+
+> Sequence-based Methods
+> DialogueRNN 64.76 63.61 37.44 57.32 SGED 68.53 65.46 40.24 -SACL-LSTM 69.22 66.45 39.65 -
+> Transformer-based Methods
+> DialogXL 65.94 62.41 34.73 54.93 MultiEMO 64.48 61.23 --CFN-ESA 66.57 65.81 --
+> Graph-based Methods
+> DialogueGCN 64.91 63.02 38.10 57.52 DAG-ERC 68.03 63.65 39.02 59.33 GS-MCC 66.00 62.50 --
+> Knowledge-Enhanced Methods
+> SKAIG 66.96 65.18 38.88 59.75 SKIER 68.42 67.39 40.07 62.31
+> CauAIN 67.61 65.46 –58.21
+> PLM-based Methods
+> EmoBERTa 68.57 66.51 --ERC-DP 69.64 67.34 40.10 -EACL 70.41 67.12 40.24 -
+> Ours
+> AtmosERC 71.29 69.22 40.75 59.68
+
+Table 2: Overall performance of non-LLM ERC methods on four benchmark datasets. 
+
+5.1 Atmosphere Improves Lightweight ERC 
+
+Table 2 reports the overall performance of AtmosERC and representative lightweight ERC baselines. AtmosERC achieves the best results on IEMOCAP, MELD, and EmoryNLP, with gains of +0 .88 , +1 .83 , and +0 .51 over the strongest reported baselines, respectively. It is also com-petitive on DailyDialog, outperforming most baselines but lagging behind SKIER by 2.63 points. One possible reason is that DailyDialog contains a large proportion (83.10%) of neutral utterances, where the overall affective tendency is rel-atively weak and thus provides a less distinctive atmosphere prior. The advantage is more evident when AtmosERC is compared with graph-based ERC methods that also model conversational structure. Compared with the representative baseline DAG-ERC, AtmosERC improves by +3 .26 on IEMOCAP, +5 .57 on MELD, +1 .73 on EmoryNLP, and 
+
++0 .35 on DailyDialog. These improvements indicate that the advantage does not merely come from graph aggregation, but from converting graph-encoded dialogue context into an explicit atmosphere prior that guides utterance-level emotion prediction. Overall, these results show that when atmosphere is properly extracted and reused, even a lightweight ERC model can achieve competitive performance. 
+
+5.2 Atmosphere Enhances LLM-based ERC 
+
+For a fair paired comparison, we evaluate each LLM back-bone and its atmosphere-augmented variant with the same                           
+
+> Method IEMOCAP MELD
+> General-purpose LLMs
+> GPT-5.4-mini 57.72 62.84 + AtmosERC-P 60.12 (+2.40) 63.72 (+0.88) Gemini-3-flash 59.82 63.94 + AtmosERC-P 61.22 (+1.40) 64.56 (+0.62) DeepSeek-v4 55.94 63.41 + AtmosERC-P 59.00 (+3.06) 64.31 (+0.90)
+> ERC-specific LLM Methods
+> InstructERC 67.28 67.76 + AtmosERC-P 68.18 (+0.90) 67.96 (+0.20) LaERC-S 69.54 69.50 + AtmosERC-P 71.32 (+1.78) 68.93 (-0.57) Causal-ERC 69.26 65.47 + AtmosERC-P 69.32 (+0.06) 66.19 (+0.72)
+
+Table 3: Prompt-level atmosphere plug-in results under paired evaluation. base prompts and decoding parameters, with the descriptor injection as the sole differentiator. For ERC-specific LLMs, we further re-implement their native pipelines and apply the same paired evaluation protocol. As shown in Table 3, inject-ing the extracted atmosphere label consistently improves all general-purpose LLMs on both IEMOCAP and MELD, with gains of up to +3 .06 . This suggests that dialogue-level af-fective atmosphere provides useful global guidance for ERC task, especially when the backbone lacks task-specific induc-tive biases. For ERC-specific LLM methods, AtmosERC-P improves InstructERC and Causal-ERC on both datasets and improves LaERC-S substantially on IEMOCAP ( +1 .78 ), but brings negative gains in MELD ( −0.57 ). One possible reason is the short dialogues in MELD hinder reliable atmosphere es-timation, rendering the injected descriptor marginally useful and prone to degrading LaERC-S prompts. Appendix D.2 fur-ther provides a proxy-based diagnostic analysis, where replac-ing the extracted atmosphere with a dominant-emotion-based atmosphere proxy leads to additional gains for ERC-specific LLMs. This indicates that stronger atmosphere estimation could further improve prompt-level atmosphere injection. 
+
+5.3 Atmosphere Supports Prediction Recovery 
+
+We further examine whether the extracted atmosphere helps recover atmosphere-consistent predictions after local emo-tional deviations. For each conversation, we define the dom-inant emotion y∗ as the most frequent utterance-level la-bel, and extract triplets (ui−1, u i, u i+1 ) satisfying yi−1 =
+
+yi+1 = y∗ and yi̸ = y∗. Here, ui is treated as a local de-viation from the dialogue-level affective tendency, while 
+
+ui+1 tests whether the model can return to an atmosphere-consistent prediction. We report three correctness conditions, i.e., correct prediction on ui+1 , on (ui, u i+1 ), and on the full triplet (ui−1, u i, u i+1 ).As shown in Table 4, the lightweight version of AtmosERC is competitive in next-utterance recovery and achieves the best results under the stricter pair-level condition across all four datasets, with scores of 39.32, 55.84, 33.33, and 76.92, Methods IEMOCAP MELD EmoryNLP DailyDialog                                                                                        
+
+> Correct prediction on ui+1
+> DAG-ERC 78.43 71.43 45.83 83.43 SACL-LSTM 86.27 72.73 52.08 81.66 AtmosERC 83.41 72.72 52.08 84.02
+> DeepSeek-v4 60.78 76.62 --+AtmosERC-P 76.47 72.73 --Causal-ERC 84.31 72.72 --+AtmosERC-P 90.20 75.32 --
+> Correct prediction on (ui, u i+1 )
+> DAG-ERC 27.46 51.95 29.17 73.37 SACL-LSTM 21.57 42.86 18.75 44.97 AtmosERC 39.32 55.84 33.33 76.92
+> DeepSeek-v4 39.22 38.96 --+AtmosERC-P 43.14 38.96 --Causal-ERC 47.05 38.96 --+AtmosERC-P 43.14 40.26 --
+> Correct prediction on (ui−1, u i, u i+1 )
+> DAG-ERC 21.57 31.17 10.42 38.46
+> SACL-LSTM 17.65 29.87 10.42 37.87 AtmosERC 31.37 33.77 12.50 36.09 DeepSeek-v4 27.45 31.16 --+AtmosERC-P 33.33 32.48 --Causal-ERC 41.18 29.87 --+AtmosERC-P 39.21 29.87 --
+
+Table 4: Transition analysis on local emotional deviations.  
+
+> Green
+
+marks the better result within each paired comparison. respectively. These results indicate that atmosphere modeling helps recover the dominant affective trajectory while still recognizing the intervening deviation. Under the full-triplet condition (ui−1, u i, u i+1 ), AtmosERC remains strongest on IEMOCAP, MELD, and EmoryNLP, but falls slightly behind DAG-ERC on DailyDialog, again suggesting that atmosphere cues are less reliable in short and highly neutral dialogues. For LLM-based ERC, the plug-in results show a similar but less uniform pattern. On IEMOCAP, AtmosERC-P substan-tially improves next-utterance recovery for both DeepSeek-v4 and Causal-ERC, with gains of +15 .69 and +5 .89 , respec-tively, and also improves DeepSeek-v4 under the pair-level and full-triplet conditions. On MELD, the gains are smaller and less stable, possibly because its conversations contain more frequent emotional shifts, making the dialogue-level atmosphere less stable and harder to estimate. 
+
+5.4 Ablation of Atmosphere Modeling 
+
+Table 5 analyzes the factors that contribute to atmosphere es-timation and lightweight ERC from two perspectives: model components and conversational relations. At the component level, removing the graph-based atmosphere extractor sub-stantially degrades performance across all datasets. In this variant, the extractor is replaced with non-structured pool-ing over RoBERTa utterance features, and speaker priors are derived from one-hot speaker indicators. Removing the                                                     
+
+> Variants IEMOCAP MELD EmoryNLP DailyDialog
+> Component ablation
+> Full model 71.29 69.22 40.75 59.68
+> w/o GAE 67.86 63.63 40.12 59.21 w/o SSU 67.27 63.62 39.12 59.32
+> Relation ablation
+> w/o r167.94 63.44 39.07 59.33 w/o r267.99 63.54 39.32 59.37 w/o r369.07 63.49 38.96 59.19 w/o (r1&r2)67.92 63.57 38.97 59.14 w/o (r1&r3)68.10 63.45 38.95 59.31 w/o (r2&r3)68.35 63.49 38.80 59.21
+
+Table 5: Ablation results on model components and relation types. GAE denotes graph atmosphere extractor, and SSU denotes speaker-specific state updater GRU s.speaker-conditioned prior also leads to consistent drops, indi-cating that speaker-level affective guidance complements the dialogue-level atmosphere. At the relation level, ablating any utterance–utterance rela-tion r1–r3 hurts performance, and joint removals generally lead to larger degradation, while the utterance–speaker af-filiation relation r4 is kept unchanged. These results show that atmosphere extraction benefits from both component-level modeling and heterogeneous conversational relations, where different factors provide complementary evidence for estimating dialogue-level atmosphere. 
+
+# 6 Discussion and Conclusion 
+
+Beyond downstream performance, an important question is whether the learned prior captures affective atmosphere rather than merely generic global context. We leave this in Ap-pendix D of the supplementary material by analyzing the relation between global context and atmosphere, comparing the learned prior with non-structured global context pooling, and probing its alignment with affective regularities. The re-sults support the interpretation that the learned prior captures affect-oriented dialogue-level information that is not fully explained by generic context representations. At the same time, atmosphere remains a latent construct, and dominant emotion or valence patterns can only serve as coarse observ-able proxies. This suggests a useful direction for future work: developing richer supervision or multimodal signals for more precise atmosphere estimation. Overall, we propose AtmosERC, an atmosphere-aware framework for ERC that estimates dialogue-level affective at-mosphere as an explicit prior. AtmosERC derives atmosphere from conversational through a relation-aware graph extrac-tor, and applies the resulting prior to both lightweight ERC and prompt-level enhancement for LLM-based ERC. Experi-ments on four benchmarks show that atmosphere modeling improves lightweight ERC, enhances LLM-based prompting, and supports more stable prediction under local emotional deviations. These findings suggest that affective atmosphere provides a reusable affective prior for conversational emotion understanding. References 
+
+Ai, W.; Zhang, F.; Shou, Y.; Meng, T.; Chen, H.; and Li, K. 2025. Revisiting Multimodal Emotion Recognition in Conversation from the Perspective of Graph Spectrum. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence ,volume 39, 11418–11426. Bao, Y.; Ma, Q.; Wei, L.; Zhou, W.; and Hu, S. 2022. Speaker-Guided Encoder-Decoder Framework for Emotion Recog-nition in Conversation. In Proceedings of the International Joint Conference on Artificial Intelligence , 4051–4057. Barsade, S. G.; and Knight, A. P. 2015. Group Affect. Annual Review of Organizational Psychology and Organizational Behavior , 2(1): 21–46. Brody, S.; Alon, U.; and Yahav, E. 2022. How Attentive are Graph Attention Networks? In International Conference on Learning Representations .Busso, C.; Bulut, M.; Lee, C.-C.; Kazemzadeh, A.; Mower, E.; Kim, S.; Chang, J. N.; Lee, S.; and Narayanan, S. S. 2008. IEMOCAP: Interactive Emotional Dyadic Motion Capture Database. Language Resources and Evaluation , 42(4): 335– 359. Chen, F.; Shao, J.; Zhu, S.; and Shen, H. T. 2023. Multi-variate, Multi-Frequency and Multimodal: Rethinking Graph Neural Networks for Emotion Recognition in Conversation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 10761–10770. Fu, Y.; Okada, S.; Wang, L.; Guo, L.; Song, Y.; Liu, J.; and Dang, J. 2021. CONSK-GCN: Conversational Semantic-and Knowledge-Oriented Graph Convolutional Network for Multimodal Emotion Recognition. In IEEE International Conference on Multimedia and Expo , 1–6. Fu, Y.; Wu, J.; Wang, Z.; Zhang, M.; Shan, L.; Wu, Y.; and Li, B. 2025. LaERC-S: Improving LLM-Based Emotion Recognition in Conversation with Speaker Characteristics. In 
+
+Proceedings of the 31st International Conference on Compu-tational Linguistics , 6748–6761. George, J. M. 1990. Personality, Affect, and Behavior in Groups. Journal of Applied Psychology , 75(22): 107–116. Ghosal, D.; Majumder, N.; Gelbukh, A.; Mihalcea, R.; and Poria, S. 2020. COSMIC: COmmonSense Knowledge for eMotion Identification in Conversations. In Findings of the Association for Computational Linguistics: EMNLP 2020 ,2470–2481. Ghosal, D.; Majumder, N.; Poria, S.; Chhaya, N.; and Gel-bukh, A. 2019. DialogueGCN: A Graph Convolutional Neu-ral Network for Emotion Recognition in Conversation. In 
+
+Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing , 154–164. Gong, Z.; Min, Q.; and Zhang, Y. 2023. Eliciting Rich Posi-tive Emotions in Dialogue Generation. In Proceedings of the First Workshop on Social Influence in Conversations , 1–8. Hazarika, D.; Poria, S.; Zadeh, A.; Cambria, E.; Morency, L.-P.; and Zimmermann, R. 2018. Conversational Memory Net-work for Emotion Recognition in Dyadic Dialogue Videos. In 
+
+Proceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguistics ,2122–2132. Hu, D.; Bao, Y.; Wei, L.; Zhou, W.; and Hu, S. 2023. Super-vised Adversarial Contrastive Learning for Emotion Recog-nition in Conversations. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics ,10835–10852. Hu, D.; Wei, L.; and Huai, X. 2021. DialogueCRN: Contex-tual Reasoning Networks for Emotion Recognition in Con-versations. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th Inter-national Joint Conference on Natural Language Processing ,7042–7052. Hu, J.; Liu, Y.; Zhao, J.; and Jin, Q. 2021. MMGCN: Mul-timodal Fusion via Deep Graph Convolution Network for Emotion Recognition in Conversation. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing , 5666–5675. Jiao, W.; Lyu, M.; and King, I. 2020. Exploiting Unsuper-vised Data for Emotion Recognition in Conversations. In Cohn, T.; He, Y.; and Liu, Y., eds., Findings of the Association for Computational Linguistics: EMNLP 2020 , 4839–4846. Jing, R.; Geng Tu; Yice Zhang; and Ruifeng Xu. 2026. Causal-ERC: A Multimodal Framework with Causal Prompt-ing for Emotion Recognition in Conversations with Large Language Models. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, 31383–31391. Kim, T.; and Vossen, P. 2021. EmoBERTa: Speaker-Aware Emotion Recognition in Conversation with RoBERTa. arXiv:2108.12009. Kumar, A.; Dogra, P.; and Dabas, V. 2015. Emotion analysis of Twitter using opinion mining. In 2015 Eighth International Conference on Contemporary Computing , 285–290. Laban, P.; Hayashi, H.; Zhou, Y.; and Neville, J. 2026. LLMs Get Lost in Multi-Turn Conversation. In The Fourteenth International Conference on Learning Representations .Lei, S.; Dong, G.; Wang, X.; Wang, K.; Qiao, R.; and Wang, S. 2024. InstructERC: Reforming Emotion Recognition in Conversation with Multi-Task Retrieval-Augmented Large Language Models. arXiv:2309.11911. Li, J.; Ji, D.; Li, F.; Zhang, M.; and Liu, Y. 2020. HiTrans: A Transformer-Based Context- and Speaker-Sensitive Model for Emotion Detection in Conversations. In Proceedings of the 28th International Conference on Computational Linguis-tics , 4190–4200. Li, J.; Lin, Z.; Fu, P.; and Wang, W. 2021. Past, Present, and Future: Conversational Emotion Recognition through Struc-tural Modeling of Psychological Knowledge. In Findings of the Association for Computational Linguistics: EMNLP 2021 , 1204–1214. Li, J.; Wang, X.; Liu, Y.; and Zeng, Z. 2024. ERNetCL: A Novel Emotion Recognition Network in Textual Conversation Based on Curriculum Learning Strategy. Knowledge-Based Systems , 286: 111434. Li, J.; Wang, X.; Lv, G.; and Zeng, Z. 2023a. GraphMFT: A Graph Network Based Multimodal Fusion Technique for Emotion Recognition in Conversation. Neurocomputing , 550: 126427. Li, J.; Wang, X.; and Zeng, Z. 2025. Tracing Intricate Cues in Dialogue: Joint Graph Structure and Sentiment Dynamics for Multimodal Emotion Recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence , 47(10): 8786– 8803. Li, W.; Zhu, L.; Mao, R.; and Cambria, E. 2023b. SKIER: A Symbolic Knowledge Integrated Model for Conversational Emotion Recognition. In Proceedings of the AAAI Confer-ence on Artificial Intelligence , volume 37, 13121–13129. Li, Y.; Su, H.; Shen, X.; Li, W.; Cao, Z.; and Niu, S. 2017. DailyDialog: A Manually Labelled Multi-Turn Dialogue Dataset. In Proceedings of the Eighth International Joint Conference on Natural Language Processing , 986–995. Lian, Z.; Zhang, F.; Zhang, Y.; Tao, J.; Liu, R.; Chen, H.; and Li, X. 2025. AffectGPT-R1: Leveraging Reinforcement Learning for Open-Vocabulary Multimodal Emotion Recog-nition. arXiv:2508.01318. Liu, Y.; Ott, M.; Goyal, N.; Du, J.; Joshi, M.; Chen, D.; Levy, O.; Lewis, M.; Zettlemoyer, L.; and Stoyanov, V. 2019. RoBERTa: A Robustly Optimized BERT Pretraining Ap-proach. arXiv:1907.11692. Majumder, N.; Poria, S.; Hazarika, D.; Mihalcea, R.; Gel-bukh, A.; and Cambria, E. 2019. DialogueRNN: An Attentive RNN for Emotion Detection in Conversations. In Proceed-ings of the AAAI Conference on Artificial Intelligence , vol-ume 33, 6818–6825. Mao, Y.; Liu, G.; Wang, X.; Gao, W.; and Li, X. 2021. Dia-logueTRM: Exploring Multi-Modal Emotional Dynamics in a Conversation. In Findings of the Association for Computa-tional Linguistics: EMNLP 2021 , 2694–2704. NT, H.; and Maehara, T. 2019. Revisiting Graph Neural Net-works: All We Have is Low-Pass Filters. arXiv:1905.09550. Poria, S.; Cambria, E.; Hazarika, D.; Majumder, N.; Zadeh, A.; and Morency, L.-P. 2017. Context-Dependent Sentiment Analysis in User-Generated Videos. In Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics , 873–883. Poria, S.; Hazarika, D.; Majumder, N.; Naik, G.; Cambria, E.; and Mihalcea, R. 2019a. MELD: A Multimodal Multi-Party Dataset for Emotion Recognition in Conversations. In 
+
+Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics , 527–536. Poria, S.; Majumder, N.; Mihalcea, R.; and Hovy, E. 2019b. Emotion Recognition in Conversation: Research Challenges, Datasets, and Recent Advances. IEEE Access , 7: 100943– 100953. Shen, W.; Chen, J.; Quan, X.; and Xie, Z. 2021a. DialogXL: All-in-One XLNet for Multi-Party Conversation Emotion Recognition. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, 13789–13797. Shen, W.; Wu, S.; Yang, Y.; and Quan, X. 2021b. Directed Acyclic Graph Network for Conversational Emotion Recog-nition. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th Inter-national Joint Conference on Natural Language Processing ,1551–1560. Shi, T.; and Huang, S.-L. 2023. MultiEMO: An Attention-Based Correlation-Aware Multimodal Fusion Framework for Emotion Recognition in Conversations. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics , 14752–14766. Shou, Y.; Meng, T.; Ai, W.; and Li, K. 2025. Multimodal Large Language Models Meet Multimodal Emotion Recog-nition and Reasoning: A Survey. arXiv:2509.24322. Song, R.; Giunchiglia, F.; Shi, L.; Shen, Q.; and Xu, H. 2023. SUNET: Speaker-Utterance Interaction Graph Neural Net-work for Emotion Recognition in Conversations. Engineering Applications of Artificial Intelligence , 106315. Tu, G.; Xie, T.; Liang, B.; Wang, H.; and Xu, R. 2024. Adap-tive Graph Learning for Multimodal Conversational Emotion Detection. In Proceedings of the AAAI Conference on Artifi-cial Intelligence , volume 38, 19089–19097. Wang, Y.; Wang, B.; Zhao, Y.; Zhao, D.; Jin, X.; Zhang, J.; He, R.; and Hou, Y. 2024. Emotion Recognition in Conver-sation via Dynamic Personality. In Proceedings of the 2024 Joint International Conference on Computational Linguistics, Language Resources and Evaluation , 5711–5722. Wu, C.; Cai, Y.; Liu, Y.; Zhu, P.; Xue, Y.; Gong, Z.; Hirschberg, J.; and Ma, B. 2025. Multimodal Emotion Recog-nition in Conversations: A Survey of Methods, Trends, Chal-lenges and Prospects. In Findings of the Association for Computational Linguistics: EMNLP 2025 , 6257–6274. Yu, F.; Guo, J.; Wu, Z.; and Dai, X. 2024. Emotion-Anchored Contrastive Learning Framework for Emotion Recognition in Conversation. In Findings of the Association for Computa-tional Linguistics: NAACL 2024 , 4521–4534. Zahiri, S. M.; and Choi, J. D. 2018. Emotion Detection on TV Show Transcripts with Sequence-Based Convolutional Neural Networks. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 18, 44–52. Zhang, D.; Wu, L.; Sun, C.; Li, S.; Zhu, Q.; and Zhou, G. 2019. Modeling Both Context- and Speaker-Sensitive Depen-dence for Emotion Detection in Multi-Speaker Conversations. In Proceedings of the Twenty-Eighth International Joint Con-ference on Artificial Intelligence , 5415–5421. Zhao, J.; Zhang, T.; Hu, J.; Liu, Y.; Jin, Q.; Wang, X.; and Li, H. 2022. M3ED: Multi-Modal Multi-Scene Multi-Label Emotional Dialogue Database. In Proceedings of the 60th Annual Meeting of the Association for Computational Lin-guistics , 5699–5710. Zhao, W.; Zhao, Y.; and Lu, X. 2022. CauAIN: Causal Aware Interaction Network for Emotion Recognition in Conversa-tions. In Proceedings of the Thirty-First International Joint Conference on Artificial Intelligence , 4524–4530. Zhong, P.; Wang, D.; and Miao, C. 2019. Knowledge-Enriched Transformer for Emotion Detection in Textual Con-versations. In Proceedings of the 2019 Conference on Em-pirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Pro-cessing , 165–176. A Extended Related Work 
+
+Context Modeling in Conversation. Conversations con-tain complex relational structures arising from dialogue his-tory, speaker interactions, and long-range dependencies (Wu et al. 2025). Early ERC methods mainly modeled contextual dependencies with recurrent architectures (Poria et al. 2017; Majumder et al. 2019; Jiao, Lyu, and King 2020; Zhao et al. 2022), while later approaches adopted Transformers and pre-trained language models to aggregate broader conversational context (Zhong, Wang, and Miao 2019; Li et al. 2020; Mao et al. 2021; Kim and Vossen 2021; Yu et al. 2024). More recently, graph-based methods explicitly construct conver-sational graphs over utterances or speakers, using relational edges to model structural dependencies (Ghosal et al. 2019; Fu et al. 2021; Shen et al. 2021b; Chen et al. 2023; Tu et al. 2024; Ai et al. 2025; Li, Wang, and Zeng 2025). Although these methods have substantially advanced contextual model-ing for ERC, they usually use context to refine utterance-level representations. The stable affective component of dialogue-level context is rarely separated from local utterance features or formulated as a reusable global prior. Our work differs by explicitly defining dialogue-level affective atmosphere and estimating it as an affective prior for downstream emotion prediction. 
+
+Emotional Dynamics Modeling. Another line of work focuses on utterance-level emotional dynamics, where intra-speaker emotional continuity and inter-speaker influence jointly shape emotion evolution (Poria et al. 2019b; Ghosal et al. 2019). Existing methods track such dynamics through recurrent networks, attention mechanisms, speaker-aware modeling, or personality-related attributes (Hazarika et al. 2018; Majumder et al. 2019; Ghosal et al. 2020; Bao et al. 2022; Hu et al. 2023; Wang et al. 2024). Graph-based mod-els further introduce speaker-related signals by using speaker embeddings, speaker nodes, or relation-specific edges (Zhang et al. 2019; Song et al. 2023; Hu et al. 2021; Li et al. 2023a; Chen et al. 2023; Ai et al. 2025). However, emotional dynam-ics are not purely local. A dialogue may maintain a relatively stable affective tendency while individual utterances fluctu-ate due to transient contextual triggers. Existing dynamic modeling methods mainly focus on how emotions evolve across turns, but rarely distinguish local emotional fluctua-tions from the dialogue-level affective atmosphere underlying the conversation. In contrast, our method uses the estimated atmosphere as a dialogue-level prior to guide local emotion decoding. 
+
+LLM-based ERC. Recent studies have introduced LLMs into ERC through instruction tuning, retrieval-augmented reasoning, causal prompting, personality modeling, and open-vocabulary prediction (Lei et al. 2024; Jing et al. 2026; Lian et al. 2025; Fu et al. 2025). These methods benefit from stronger language understanding and reasoning capabilities, but they usually encode the dialogue as textual context and rely on the model to implicitly infer the overall emotional tendency. Dialogue-level affective cues are typically not ex-plicitly estimated, represented, or injected as a separate prior. 
+
+Dialogue-level Affective Atmosphere. Dialogue-level af-fective atmosphere is related to, but distinct from, conven-tional context modeling and emotional dynamics modeling. Context modeling focuses on using surrounding utterances, speakers, or external knowledge to support utterance-level prediction (Ghosal et al. 2019; Zhong, Wang, and Miao 2019; Fu et al. 2021; Chen et al. 2023; Tu et al. 2024; Ai et al. 2025), while emotional dynamics modeling focuses on how emotions change over time and across speakers (Hazarika et al. 2018; Majumder et al. 2019; Ghosal et al. 2020; Bao et al. 2022; Hu et al. 2023). In contrast, atmosphere refers to a relatively stable dialogue-level affective tendency that persists beneath local emotional fluctuations. Although prior ERC methods may implicitly encode such information in contextual representations, to our knowledge, no prior work explicitly formulates dialogue-level affective atmosphere as a reusable global prior for ERC. 
+
+# B Prompt Design 
+
+Here we present the prompt template used for the atmosphere plug-in experiments. For each target utterance, we prepend the verbalized atmosphere descriptor bz to the original ERC prompt as a dialogue-level affective prior. The descriptor 
+
+bz is predicted from the extracted atmosphere vector a and does not rely on gold utterance labels during inference. Apart from this additional atmosphere instruction, the dialogue context, target utterance, candidate emotion set, and decoding procedure follow the original LLM-based ERC method. 
+
+Prompt Template 
+
+You are given a conversation and a target utterance. The overall affective atmosphere of this conversation is [ATMOSPHERE] .
+
+Dialogue Context: 
+
+[Dialogue context] 
+
+Target Utterance: 
+
+[Target utterance] 
+
+Please predict the emotion label of the target utterance from the predefined emotion set. Here, [ATMOSPHERE] is filled with the textual emotion name corresponding to bz.
+
+# C Detailed Experimental Setups 
+
+C.1 Datasets 
+
+We evaluate our model on four widely used benchmark datasets for ERC. 
+
+IEMOCAP (Busso et al. 2008) is a multimodal ERC dataset consisting of dyadic conversations performed by professional actors following scripted scenarios. Each utterance is anno-tated with one of six emotion categories: neutral, happiness, sadness, anger, frustrated, and excited. 
+
+MELD (Poria et al. 2019a) is a multimodal conversational emotion dataset collected from the TV series Friends . It con-tains multi-party conversations annotated with seven emotion labels: neutral, happiness, surprise, sadness, anger, disgust, and fear. EmoryNLP (Zahiri and Choi 2018) is another ERC dataset derived from TV show scripts of Friends , differing from MELD in both scene selection and emotion annotation scheme. It includes seven emotion categories: neutral, sad, mad, scared, powerful, peaceful, and joyful. 
+
+DailyDialog (Li et al. 2017) is a large-scale text-based dataset composed of human-written daily conversations. Each utter-ance is labeled with one of seven emotion categories: neutral, happiness, surprise, sadness, anger, disgust, and fear. Since explicit speaker annotations are not available, we treat utter-ance turns as speaker turns by default. 
+
+C.2 Baselines 
+
+We provide detailed descriptions of the baselines used in the two evaluation settings: non-LLM baselines for lightweight ERC evaluation and LLM-based baselines for prompt-level plug-in evaluation. 
+
+Sequence-based Methods. DialogueRNN (Majumder et al. 2019) models conversational emotion dynamics with recurrent neural networks and explicit speaker state track-ing. SGED (Bao et al. 2022) enhances sequence-based ERC by modeling speaker-aware emotional dynamics with gated recurrent architectures. SACL-LSTM (Hu et al. 2023) incor-porates supervised adversarial contrastive learning into an LSTM-based framework to improve emotion representation learning. 
+
+Transformer-based Methods. DialogXL (Shen et al. 2021a) extends Transformer architectures to conversational settings by modeling long-range contextual dependencies across dialogue turns. MultiEMO (Shi and Huang 2023) adopts a Transformer-based framework to capture multi-modal emotional cues through cross-modal attention. CFN-ESA (Li et al. 2024) introduces emotion-shift awareness into a cross-modal fusion framework for dialogue emotion recognition. 
+
+Graph-based Methods. DialogueGCN (Ghosal et al. 2019) formulates ERC as a graph learning problem and ex-plicitly models speaker interactions and contextual depen-dencies. DAG-ERC (Shen et al. 2021b) employs directed acyclic graphs to capture causal and temporal dependencies among utterances. GS-MCC (Ai et al. 2025) revisits multi-modal ERC from the graph-spectrum perspective and models conversational dependencies with graph-based contextual representations. 
+
+Knowledge-enhanced Methods. SKAIG (Li et al. 2021) incorporates structured external knowledge to enhance emo-tion reasoning in conversations. SKIER (Li et al. 2023b) leverages commonsense knowledge to improve contextual emotion understanding. CauAIN (Zhao, Zhao, and Lu 2022) introduces causal-aware knowledge modeling to support emo-tion recognition in dialogue contexts. 
+
+PLM-based Methods. EmoBERTa (Kim and Vossen 2021) fine-tunes pretrained language models for utterance-level emotion classification. ERC-DP (Wang et al. 2024) incorporates dynamic personality representations into a pre-trained language model framework for ERC. EACL (Yu et al. 2024) leverages pretrained contextual representations with contrastive learning objectives for conversational emotion recognition. 
+
+LLM-based Methods. InstructERC (Lei et al. 2024) is a generative LLM-based ERC framework that reformulates ERC with instruction tuning, retrieval augmentation, and multi-task supervision. LaERC-S (Fu et al. 2025) improves LLM-based ERC by modeling speaker characteristics, includ-ing mental states and behaviors, through a two-stage learning framework. Causal-ERC (Jing et al. 2026) integrates multi-modal information, models speaker-aware context, and em-ploys causal prompts based on the Peak-End Rule to enhance long-context modeling. 
+
+C.3 Reproducibility 
+
+We summarize the hyperparameter settings in Table 6. For all experiments, utterance representations are extracted using RoBERTa, which is used solely as a frozen feature extractor and is not updated in any stage of our framework. The graph-based atmosphere extractor uses two GAT layers, and the semantic similarity threshold τs for constructing r3 edges is selected on the validation set. Excluding the frozen RoBERTa encoder, the graph-based atmosphere extractor contains 90M trainable parameters, and the full lightweight AtmosERC model contains 110M trainable parameters.                                                                
+
+> Parameter IEMOCAP MELD EmoryNLP DailyDialog
+> Hidden dim d1024 1024 1024 1024 Window size W4111Threshold τs0.95 0.95 0.90 0.70 GNN layers L2221Dropout rate 0.1 0.1 0.2 0.3 Optimizer AdamW AdamW AdamW AdamW Learning rate 5e−55e−55e−55e−5
+> Weight decay 1e−21e−21e−21e−2
+> Batch size 16 64 32 64 Epochs 150 80 50 50
+
+Table 6: Hyperparameter settings. For lightweight ERC evaluation, we report baseline results from the original papers when available. For AtmosERC, we report the average performance over multiple random seeds. For LLM-based plug-in evaluation, we conduct paired com-parisons by reproducing each baseline and its atmosphere-augmented variant under the same settings. The atmosphere descriptor is the only additional input in the augmented vari-ant. Because exact reproduction of independently reported LLM results is not always possible without complete imple-mentation details, our LLM-based results focus on within-setting comparisons rather than direct comparison with num-bers reported in the original papers. Due to the high cost of LLM inference, each LLM-based method is evaluated with one deterministic decoding pass, where the temperature is set to 0 to reduce sampling variance. All experiments were conducted on a single NVIDIA RTX 5090 GPU. D Extended Analysis 
+
+D.1 Edge Type Proportions 
+
+To clarify the edge type distribution of the constructed graphs, we report the average proportion of each edge type under a representative setting ( W = 1 , τs = 0 .95 ), as shown in Table 7. Since the proportions depend on graph construc-tion hyperparameters, these statistics should be interpreted as representative examples rather than fixed dataset properties. Importantly, the contribution of each relation is not strictly proportional to its frequency. For example, although r3 ac-counts for 79.81% of edges in IEMOCAP, removing it only slightly degrades performance; conversely, in EmoryNLP, where r3 accounts for only 5.30% of edges, removing it still harms performance.                     
+
+> Relation IEMOCAP MELD EmoryNLP DailyDialog
+> r16.17 20.18 32.41 22.41
+> r26.92 21.31 27.27 19.08
+> r379.81 28.68 5.30 32.79
+> r47.12 29.83 35.02 25.72
+
+Table 7: Average proportions ( %) of each edge type under 
+
+W = 1 and τs = 0 .95 .
+
+D.2 Gold-Proxy Analysis 
+
+To further examine the potential of atmosphere-based prompt-ing, we conduct a diagnostic upper-bound analysis with a proxy descriptor. For each dialogue, the proxy descriptor is defined as the dominant emotion, i.e., the most frequent utterance-level emotion label in that dialogue. This descrip-tor is derived from ground truth labels and is used only for diagnostic analysis.                     
+
+> Method IEMOCAP MELD
+> InstructERC 67.28 67.76 + AtmosERC-P 68.18 (+0.90) 67.96 (+0.20) + Gold proxy 69.96 (+2.68) 69.13 (+1.37) LaERC-S 69.54 69.50 + AtmosERC-P 71.32 (+1.78) 68.93 (-0.57) + Gold proxy 72.87 (+3.33) 69.67 (+0.17) Causal-ERC 69.26 65.47 + AtmosERC-P 69.32 (+0.06) 66.19 (+0.72) + Gold proxy 70.89 (+1.63) 67.25 (+1.78)
+
+Table 8: Diagnostic analysis with a dominant-emotion-based atmosphere proxy. As shown in Table 8, replacing the predicted atmosphere descriptor with this proxy yields larger gains across all paired ERC-specific LLM comparisons. This result suggests that dialogue-level affective cues can provide useful prompt-level guidance for LLM-based ERC. Meanwhile, the gap between predicted and proxy descriptors indicates remaining head-room in estimating and verbalizing atmosphere from the input conversation. 
+
+D.3 Affective Atmosphere Diagnostics 
+
+To make the comparison between atmosphere and context operational, we define global context as a non-structured pool-ing of frozen RoBERTa utterance representations. Specifi-cally, for a dialogue with utterance representations {x(u) 
+
+> i
+
+}Ni=1 ,we compute its context vector as c = 1
+
+> N
+
+PNi=1 x(u) 
+
+> i
+
+. Al-though other context encoders are possible, this choice pro-vides a strong and controlled textual context proxy. More-over, the learned atmosphere prior a is derived from the same RoBERTa features through relation-aware graph filtering. Thus, the following analyses compare context pooling c with affect-oriented atmosphere estimation a under the same base representation. 
+
+Distance-space Analysis. We first revisit the distance vi-sualization in Figure 4. Since true atmosphere is latent, we construct a dominant-emotion-based affective proxy z⋆ from the dominant emotion of each dialogue, and compare it with the context vector c defined above. Specifically, for each dia-logue pair (Ci, Cj ), we compute the global context distance and atmosphere distance by cosine distance and visualize the results in Figure 4. 
+
+Figure 4: Detailed visualization of global context distance versusdominant-emotion-based atmosphere-proxy distance. Each point denotes a dialogue pair (Ci, Cj ).The overall upward trend shows that atmosphere-proxy dis-tance increases with context distance, indicating that atmo-sphere remains grounded in context. However, the large dis-persion around the trend line shows that context distance does not fully determine atmosphere-proxy distance. More impor-tantly, dialogue pairs sharing the same dominant emotion are concentrated in low atmosphere-distance regions and tend to lie below the trend line. This indicates that affectively similar dialogues can remain close in atmosphere space even when their context differs, supporting the view that atmosphere captures an affect-oriented abstraction rather than simply duplicating global context. 
+
+Prior-source Comparison. We further compare the graph-extracted atmosphere prior a with global context pooling 
+
+c under the same base representation. Table 9 shows that replacing a with c consistently degrades performance across all benchmarks. This suggests that context pooling cannot fully substitute for the learned atmosphere prior, supporting the view that a captures affect-oriented information beyond global context.               
+
+> Prior IEMOCAP MELD EmoryNLP DailyDialog
+> Context c67.86 63.63 40.12 59.21 Atmosphere a71.29 69.22 40.75 59.68
+
+Table 9: ERC performance with context prior c and atmo-sphere prior a.
+
+Atmosphere-strength Analysis. We further examine whether the advantage of atmosphere prior holds under dif-ferent levels of dialogue-level affective regularity. For each dialogue, we compute the proportion of utterances belong-ing to its dominant emotion, and divide dialogues into low-, medium-, and high-strength buckets with a 1:1:1 split. Ta-ble 10 reports the performance gain of the atmosphere prior over the context prior in each group. The atmosphere prior improves over context in most groups, with especially clear gains in medium- and high-strength dialogues on IEMOCAP, EmoryNLP, and DailyDialog. MELD also shows consistent gains across all groups, although the largest gains appear in low- and medium-strength dialogues. These results suggest that the learned prior provides ERC-relevant affective guid-ance across different atmosphere-strength regimes, rather than acting as a uniform context feature.                 
+
+> Strength IEMOCAP MELD EmoryNLP DailyDialog
+> Low +0.62 +7.11 -0.61 +0.25 Medium +3.40 +5.92 +0.62 +0.62 High +5.40 +1.19 +1.23 +0.86
+
+Table 10: Performance gain of atmosphere prior over context prior across atmosphere-strength groups. 
+
+# E Use of AI Assistants 
+
+AI assistants were used only for language polishing, format-ting assistance, and consistency checking. All research ideas, experimental designs, implementations, analyses, and con-clusions were developed and verified by the authors.

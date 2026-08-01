@@ -1,0 +1,280 @@
+Title: The Visual Bottleneck: Sparse-Frame Adaptation of MLLMs for Joint Spatial-Temporal Video Grounding
+
+URL Source: https://arxiv.org/pdf/2607.24570v1
+
+Published Time: Tue, 28 Jul 2026 02:23:01 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# The Visual Bottleneck: Sparse-Frame Adaptation of MLLMs for Joint Spatial-Temporal Video Grounding 
+
+Jiameng Zhang 
+
+University of Zurich 
+
+jiameng.zhang@uzh.ch 
+
+Srikanth Madikeri 
+
+University of Zurich 
+
+srikanth.madikeriraghunathan@uzh.ch 
+
+Abstract 
+
+Large-scale video platforms process millions of uploads hourly, requiring moderation systems that can localize when and where policy viola-tions occur within each video. Processing every frame is infeasible at scale, so systems are con-strained to sparse inputs of 8 to 16 frames per video. (Miech et al., 2019; Tang et al., 2024) Yet state-of-the-art multimodal large language models (MLLMs) are pretrained on dense se-quences of hundreds of frames, creating a fun-damental mismatch between training and de-ployment conditions. This mismatch causes severe performance collapse: the Qwen3-VL 8B model drops from 56.0% to 22.3% temporal mIoU when frames are reduced to 16, a 60.2% relative degradation. We present a systematic empirical study of training strategies to close this gap for spatial-temporal video grounding. Our results suggest that visual feature extraction is the dominant bottleneck under sparse-frame inputs. Adapt-ing only the final three ViT layers, 4% of to-tal parameters, achieves 68.8% temporal mIoU and surpasses a zero-shot 8B model using dense inputs by 12.8 points. Language model fine-tuning, by contrast, offers negligible or negative returns. A boundary-aware sampling strategy, HYBRID 16, further improves temporal mIoU by 26 points over uniform sampling when tem-poral boundaries are available. We conclude that for sparse-frame video grounding, training strategy dominates model scale: a fine-tuned 2B model consistently outperforms a zero-shot 8B model, with or without dense frame access. 
+
+1 Introduction 
+
+Spatial-temporal video grounding requires models to localize when and where actions occur in videos given natural language queries (Gao et al., 2017; Hendricks et al., 2017). This capability is central to industrial applications such as content moderation, video retrieval, and automated surveillance, where systems must identify both the temporal extent and spatial location of query-relevant events at scale. A critical deployment reality has received insuf-ficient attention in prior work. Industrial video systems are constrained to sparse inputs of 8 to 16 frames per video to satisfy latency and throughput requirements, yet state-of-the-art multimodal large language models (MLLMs) are pretrained on dense sequences of hundreds of frames. The resulting mismatch between training and deployment condi-tions causes severe performance degradation that makes existing models impractical for real-world use without targeted adaptation. Prior work on video temporal grounding has largely focused on designing new model architec-tures and visual aggregation modules (Wasim et al., 2024; Liu et al., 2024b; Xiong et al., 2024; Gu et al., 2024), answering the question of how to build a better grounding model from scratch. We instead address a complementary and more prac-tical question: given a strong pretrained MLLM, what training strategy is most effective for sparse-frame spatial-temporal grounding? This question directly reflects the situation faced by practition-ers, who must adapt existing models to deployment constraints rather than design new architectures. We investigate this question through systematic experiments on Qwen3-VL models and Charades-STA (Gao et al., 2017; Sigurdsson et al., 2016). Since Charades-STA provides only temporal anno-tations, we construct a spatial annotation extension using GroundingDINO (Liu et al., 2023), yielding 3,951 bounding box annotations with 85% accep-tance rate under manual inspection. These anno-tations provide pseudo-labeled spatial supervision rather than exhaustively verified gold labels. Our experiments compare vision encoder versus lan-guage model adaptation, joint versus single-task training, and multiple frame sampling strategies under realistic sparse-input constraints. Our findings challenge common assumptions 1arXiv:2607.24570v1 [cs.CV] 27 Jul 2026 Figure 1: Overview of the train-dense/infer-sparse mismatch and our proposed solutions. Left: the Qwen3-VL 8B model drops from 56.0% to 22.3% temporal mIoU when frames are reduced from hundreds to 16. Center: our four key findings. Right: a fine-tuned 2B model outperforms a zero-shot 8B model on both temporal and spatial grounding. 
+
+about MLLM adaptation. Fine-tuning language model attention layers via DoRA (Liu et al., 2024a) degrades performance below zero-shot baselines, while adapting only the final three ViT layers achieves 68.8% temporal mIoU and surpasses a zero-shot 8B model using dense inputs by 12.8 points. This suggests that the pretrained language model already provides substantial temporal-query understanding, while sparse visual feature extrac-tion is the main bottleneck for sparse-frame ground-ing. A boundary-aware sampling strategy that real-locates frames from existing temporal annotations to action segments further improves temporal mIoU by 26 points over uniform sampling in annotation-aware settings. These findings yield four contributions. We iden-tify the training and deployment mismatch as a critical but underaddressed challenge for indus-trial video grounding and provide the first sys-tematic analysis of training strategies to close this gap. We show that adapting only 4% of model pa-rameters on a single GPU suffices to outperform models three times larger under zero-shot dense inference. We propose H YBRID 16, a boundary-aware sampling strategy for pre-annotated archives and re-inspection pipelines. We contribute a spa-tial annotation extension for Charades-STA and a paired evaluation framework using Peak and Ro-bust Performance Scores for comprehensive spatial-temporal assessment. 
+
+2 Related Work 
+
+Video Temporal Grounding. Early approaches to temporal grounding relied on cross-modal atten-tion mechanisms to align natural language queries with video features (Gao et al., 2017; Hendricks et al., 2017). Subsequent work focused on design-ing specialized architectures, including proposal-based methods that generate candidate temporal segments and rank them by query relevance, and proposal-free methods that directly regress tempo-ral boundaries. More recent work has explored in-tegrating temporal grounding with spatial localiza-tion. Wasim et al. (2024) extend GroundingDINO to spatio-temporal video grounding in an open-vocabulary setting, while Xiong et al. (2024) pro-pose structured video-language modeling with joint temporal grouping and spatial grounding. Liu et al. (2024b) address efficient image-to-video transfer learning for temporal grounding. In contrast to these architecture-focused approaches, we inves-tigate training strategy choices for adapting a pre-trained MLLM to sparse-frame grounding, a de-ployment constraint largely overlooked in prior work. 2Sparse Frame Processing for Video Ground-ing. Industrial-scale video platforms process mil-lions of uploads requiring real-time analysis, mak-ing dense frame processing computationally pro-hibitive (Miech et al., 2019). Prior work has ex-amined how frame sampling strategies influence temporal grounding performance (Zhu et al., 2023), and recent training-free approaches demonstrate that large pretrained models can localize moments without task-specific supervision (Zheng et al., 2024a). However, both lines of work assume ac-cess to dense frame sequences at inference time. The performance collapse that arises when models pretrained on dense inputs are deployed with sparse frames remains unaddressed. We provide the first systematic study of training strategies specifically designed to close this train-deploy gap. 
+
+Multimodal Large Language Models for Video. 
+
+MLLMs have emerged as a unified framework for vision-language tasks, combining pretrained vi-sion encoders with large language models through lightweight connectors (Alayrac et al., 2022; Li et al., 2023). Video-LLaMA (Zhang et al., 2023; Maaz et al., 2024) and Video-ChatGPT (Maaz et al., 2024) extend this paradigm to video inputs through instruction tuning on visual and auditory content. Recent models such as Qwen3-VL (Qwen Team, 2025) demonstrate strong performance on video un-derstanding benchmarks through multi-level visual feature fusion and extended context windows. Re-cent work specifically targeting temporal ground-ing with video LLMs, such as VTimeLLM (Huang et al., 2024), further demonstrates the importance of boundary-aware training for precise temporal localization. However, these models are pretrained on dense frame sequences, creating a fundamental mismatch with industrial deployment constraints that limit inputs to 8–16 frames per video. We di-rectly address this train-deploy mismatch through targeted adaptation strategies. 
+
+Parameter-Efficient Fine-Tuning. PEFT meth-ods reduce the cost of adapting large pretrained models by updating only a small subset of parame-ters. LoRA (Hu et al., 2021) decomposes weight updates into low-rank matrices, while DoRA (Liu et al., 2024a) further separates magnitude and di-rection components for more expressive adaptation. These methods have been widely applied to lan-guage model adaptation, but their effectiveness for video grounding remains underexplored. Our ex-periments demonstrate that applying DoRA to lan-guage model attention layers degrades performance below zero-shot baselines, while selective vision encoder fine-tuning achieves substantially stronger results, pointing to visual feature extraction rather than language reasoning as the primary bottleneck. 
+
+3 Dataset and Annotation 
+
+3.1 Charades-STA 
+
+Charades-STA (Gao et al., 2017) is a standard benchmark for video temporal grounding, contain-ing 12,408 training and 3,720 test query-segment pairs drawn from 9,849 indoor activity videos. Each query consists of a natural language descrip-tion paired with temporal boundary annotations marking the relevant action segment. Video dura-tions average approximately 30 seconds, provid-ing sufficient temporal context while remaining computationally tractable for sparse-frame process-ing. Charades-STA is particularly suitable for this study because its controlled indoor environment and dense temporal annotations allow focused eval-uation of spatial-temporal grounding under realistic computational constraints. 
+
+3.2 Spatial Annotation Pipeline 
+
+Since Charades-STA provides only temporal anno-tations, we extend the dataset with spatial bound-ing box annotations to enable joint spatial-temporal training and evaluation. We use GroundingDINO (Liu et al., 2023), an open-vocabulary object detec-tion model, to automatically generate spatial anno-tations from the existing natural language queries. The pipeline processes 131,000 frames extracted at 1 fps from Charades-STA videos, using the nat-ural language query associated with each video as the detection prompt. For example, given the query “person opens refrigerator,” GroundingDINO de-tects “person” and “refrigerator” in relevant frames and outputs bounding box coordinates with confi-dence scores. Detections with confidence below 0.3 are filtered out. To prevent redundant training examples, we retain one bounding box per query-video pair, selected by detection confidence and temporal proximity to the annotated action segment. Overrepresented object categories are subsampled to prevent class imbalance. This process yields 3,951 spatial annotations covering diverse indoor object categories. To assess annotation quality, we manually in-spect a random sample of 100 annotations. An an-notation is accepted if the predicted bounding box 3reasonably localizes the object referred to in the query. This inspection yields an 85% acceptance rate, indicating that the pipeline produces useful spatial supervision for training and diagnostic eval-uation. Because the full spatial split is not exhaus-tively human verified, we interpret spatial metrics as evaluation against high-confidence pseudo labels rather than fully gold spatial annotations. 
+
+3.3 Training Data 
+
+The 3,951 spatial annotations are combined with temporal samples to form five training configura-tions, as detailed in Section 4. Spatial instances use single frames at 480 ×360 resolution with bounding box annotations in [xmin , y min , x max , y max ] format. Temporal instances use 16 frames with ground truth start and end timestamps. Two non-overlapping test sets of 1,000 instances each are constructed from the Charades-STA test split using Even16 and Hy-brid16 sampling respectively, ensuring no overlap with training data. 
+
+4 Experimental Setup 
+
+4.1 Model and Training Strategy 
+
+We use Qwen3-VL 2B (Qwen Team, 2025) as our foundation model. The architecture consists of a Vision Transformer encoder (Dosovitskiy et al., 2021) (24 layers, approximately 300M parameters), a text Transformer decoder (28 layers, approxi-mately 1.5B parameters), and a DeepStack multi-modal connector that fuses features from multiple encoder depths. The model has been pretrained on large-scale vision-language data including video understanding tasks. Our training strategy freezes the text Trans-former entirely to preserve pretrained language un-derstanding, and also freezes early vision encoder layers (blocks 0–20) to retain general visual fea-tures such as edges, textures, and local patterns. We make trainable only the final three ViT blocks (21– 23), the Merger and DeepStack Merger projection modules, and the patch embedding and positional encoding layers. This yields approximately 70M trainable parameters, or 4% of the total 1.75B pa-rameters, enabling training on a single NVIDIA H100 (80GB GPU). Table 1 summarizes the pa-rameter distribution. 
+
+4.2 Frame Sampling Strategies 
+
+We compare three frame sampling strategies that balance temporal coverage and computational effi-              
+
+> Component Total Trainable
+> Text Transformer 1.5B 0Vision Encoder (Blocks 0–20) 180M 0Vision Encoder (Blocks 21–23) 45M 45M Merger Modules 20M 20M Embedding Layers 5M 5M Total 1.75B 70M (4%)
+> Table 1: Parameter distribution across model compo-nents.
+
+ciency. 
+
+FPS1 extracts one frame per second, yielding approximately 30 frames per video. This provides dense temporal coverage but results in variable se-quence lengths, and is used only for spatial annota-tion instances. 
+
+Even16 selects 16 frames uniformly across the entire video duration, ensuring fixed input size and consistent memory usage. This strategy reflects common practice in video understanding systems but may undersample action regions when the tar-get event occupies a small portion of the video timeline. 
+
+Hybrid16 addresses this limitation by allocat-ing 8 frames to the annotated action segment and 8 frames uniformly across the full video. This design concentrates coverage at temporal bound-aries where state transitions are most informative, while retaining global context, at zero additional annotation cost beyond the temporal labels already present in Charades-STA. Hybrid16 sampling re-quires temporal annotations at inference time and is therefore suited to pre-annotated video archives and re-inspection pipelines; for deployment scenar-ios where no temporal annotations are available, Even16 provides a fully annotation-free alternative with stable performance. Table 2 illustrates the difference between strate-gies for a representative video.             
+
+> Strategy In Segment Outside Total
+> FPS1 823 31 Even16 313 16 Hybrid16 10 616
+> Table 2: Frame distribution for a 30-second video with action segment at 11.2–16.7s.
+
+4Figure 2: Comparison of H YBRID 16 and Even16 sampling strategies for a 30-second video with action segment at 11.2–16.7s. H YBRID 16 concentrates 8 frames within the action segment (dark green) while distributing 8 frames uniformly (mint green). Even16 distributes all 16 frames uniformly across the video. 
+
+4.3 Training Configurations 
+
+We design five training configurations to evaluate the impact of data composition and sampling strat-egy. Each configuration is trained independently on Qwen3-VL 2B and evaluated on both Even16 and Hybrid16 test sets to assess generalization across frame distributions. Table 3 summarizes the con-figurations.                   
+
+> Config Size Sampling Ann.
+> BBx-only 3,951 FPS1 Spatial Even-only 7,000 Even16 Temporal Hybrid-only 7,000 Hybrid16 Temporal Evenbbx 6,500 FPS1 + Even16 Both Hybridbbx 6,500 FPS1 + Hybrid16 Both
+
+Table 3: Training configurations. Joint configurations (Evenbbx, Hybridbbx) combine 2,500 spatial and 4,000 temporal instances. 
+
+All models are trained for 3 epochs using AdamW with learning rate 5 × 10 −6, BF16 mixed precision, gradient checkpointing, and cosine an-nealing with 10% linear warmup. Images are re-sized to fit within 256 ×256 to 512 ×512 pixels while preserving aspect ratio. Training was con-ducted on a single NVIDIA H100 GPU using the LLaMA-Factory framework (Zheng et al., 2024b). 
+
+4.4 Evaluation Metrics 
+
+Temporal grounding performance is measured us-ing mean Intersection over Union (mIoU) and Re-call at IoU thresholds R@{0.3, 0.5, 0.7}. Spatial grounding is evaluated using spatial mIoU and Pre-cision@0.5. To assess joint spatial-temporal capa-bility, we propose two complementary metrics. The Peak Performance Score averages the best temporal mIoU across both test sets with spatial mIoU, mea-suring achievable performance under favorable con-ditions. The Robust Performance Score averages temporal mIoU across both test distributions with spatial mIoU, quantifying stability under distribu-tion shift. These paired metrics address the limita-tion of evaluating spatial and temporal grounding in isolation, which fails to capture trade-offs between the two dimensions. 
+
+Config Spatial Peak Robust 
+
+Hybridbbx 0.60 0.64 0.55 
+
+Evenbbx 0.55 0.51 0.50 Hybrid-only 0.00 0.37 0.24 Even-only 0.01 0.25 0.34 BBx-only 0.60 0.33 0.33 
+
+Table 4: Joint spatial-temporal evaluation using Peak and Robust Performance Scores. Peak = (best temporal + spatial mIoU) / 2. Robust = (average temporal + spatial mIoU) / 2. 
+
+55 Results 
+
+5.1 Vision Encoder vs. Language Model Adaptation 
+
+We first investigate which model component is most critical to adapt for sparse-frame grounding. As a baseline, we apply DoRA (Liu et al., 2024a) with rank 64 to all language model attention lay-ers while keeping the vision encoder frozen. This language-only adaptation degrades temporal mIoU to 15–16%, below the zero-shot baseline of 21– 22%, demonstrating that modifying language com-ponents disrupts pretrained temporal query under-standing without compensating benefits. The pre-trained language model already handles temporal queries adequately; further adaptation introduces noise rather than improvement. Adapting the vision encoder produces the op-posite effect. Fine-tuning only the final three ViT layers achieves 68.8% temporal mIoU on matched test distributions and over 55% spatial mIoU, more than three times higher than language-only adapta-tion. Table 5 summarizes the comparison.             
+
+> Strategy Params Even16 Hybrid16
+> Zero-shot 8B None 0.21 0.22 DoRA (LM only) LM attention 0.15 0.16 Vision-focused ViT 21–23 0.47 0.69
+> Table 5: Temporal mIoU for language model adaptation vs. vision encoder adaptation. Vision-focused training uses the Evenbbx and Hybridbbx configurations on their respective matched test sets.
+
+This asymmetry is further supported by zero-shot scaling results. Expanding the language model from 28 to 36 layers (2B to 4B, same vision en-coder) yields only 5.1 points improvement on Hy-brid16. Expanding the vision encoder from 24 to 27 layers (4B to 8B, same LM depth) yields 8.0 points despite adding fewer layers. Vision encoder ca-pacity contributes more to grounding performance than language model capacity, identifying visual feature extraction as the primary bottleneck. 
+
+5.2 Sparse Fine-tuning vs. Dense Zero-shot 
+
+Zero-shot models rely on dense frame processing to achieve competitive performance. The Qwen3-VL 8B model achieves 56.0% temporal mIoU us-ing all available frames but drops to 22.3% when limited to 16 frames, a 60% relative collapse. With-out task-specific training, models cannot identify which sparse frames contain action-relevant infor-mation. Fine-tuning reverses this relationship entirely. As shown in Table 6, the fine-tuned 2B model achieves 68.8% temporal mIoU using 16 frames, surpassing the zero-shot 8B model under dense pro-cessing by 12.8 points and under sparse processing by 46.5 points. At stricter evaluation thresholds, the advantage becomes more pronounced: the fine-tuned model achieves 64.0% Recall@0.7 on Hy-brid16 compared to 4.0% for zero-shot 8B. These results demonstrate that targeted adaptation can out-weigh model scale under sparse-frame constraints.                      
+
+> Model Frames mIoU R@0.5 R@0.7
+> Zero-shot 8B All frames 0.56 ––Zero-shot 8B 16 (Hyb16) 0.22 0.13 0.04 Zero-shot 2B 16 (Hyb16) 0.09 0.03 0.01 Fine-tuned 2B †16 (Hyb16) 0.69 0.74 0.64
+> Table 6: Temporal grounding performance comparing dense zero-shot inference against sparse fine-tuned mod-els. †Hybridbbx configuration.
+
+5.3 Frame Sampling Strategy 
+
+Sampling strategy creates strong dependencies be-tween training and test distributions. Models per-form best when test conditions match training con-ditions. Hybridbbx achieves 68.8% mIoU on Hy-brid16 test but drops to 33.6% on Even16 test, a 51% relative decline. Evenbbx shows the opposite pattern, achieving 47.4% on Even16 and 42.8% on Hybrid16, a more stable 10% decline under distri-bution shift. This asymmetry reflects different learned repre-sentations. Hybrid16 training concentrates frames near action boundaries, teaching the model to rec-ognize fine-grained temporal transitions. These specialized features prove highly effective under aligned test conditions but transfer poorly when frame distributions change. Even16 training ex-poses the model to frames from all temporal po-sitions, developing more general representations that maintain consistent performance across distri-butions at the cost of peak capability. For spatial grounding, sampling strategy has a much smaller effect. Hybridbbx achieves 59.7% spatial mIoU compared to 55.3% for Evenbbx, a 4.4 point difference, versus the 26 point gap ob-served for temporal grounding on matched distribu-tions. Spatial grounding depends on object localiza-tion within individual frames rather than temporal 6frame ordering, explaining its relative insensitivity to sampling strategy. 
+
+5.4 Joint vs. Specialized Training 
+
+Specialized models achieve the highest scores on their target tasks. Hybrid-only reaches 72.7% temporal mIoU on Hybrid16, outperforming Hy-bridbbx by 3.9 points. BBx-only achieves 60.0% spatial mIoU, exceeding Hybridbbx by 0.3 points. However, specialized models fail completely on the complementary task: Hybrid-only achieves 0.34% spatial mIoU and BBx-only achieves 6.0% tempo-ral mIoU. To assess overall joint capability, we apply the Peak and Robust Performance Scores introduced in Section 4. As shown in Table 4, Hybridbbx achieves the highest scores on both metrics (0.64 peak, 0.55 robust), demonstrating that joint training provides balanced capability across both tasks. The small gap between peak and robust scores (0.09) indicates consistent performance across test con-ditions. Specialized configurations score poorly on both metrics despite strong single-task perfor-mance, as near-zero performance on one dimension drags down the combined score. The performance trade-off from joint training is modest: 5.4% rela-tive loss for temporal grounding and 0.5% for spa-tial grounding, a reasonable cost for maintaining full dual-task capability within a single model. 
+
+6 Discussion 
+
+Why vision encoder adaptation succeeds. Tem-poral grounding requires recognizing subtle visual cues that indicate action boundaries, state changes, and temporal transitions. General-purpose vision encoders trained on image-text alignment do not capture these patterns well. The final ViT layers encode high-level semantic features that are most amenable to task-specific adaptation, while early layers capture low-level visual primitives that trans-fer well across tasks and benefit from being frozen. Training only 4% of parameters is sufficient be-cause the bottleneck is concentrated in these up-per layers, not distributed across the entire model. This finding aligns with concurrent observations in image understanding (Bi et al., 2024; Chen et al., 2024), suggesting it reflects a structural property of MLLM architectures rather than a dataset-specific artifact. 
+
+Why language model adaptation fails. Modern large language models acquire extensive knowl-edge of temporal concepts and action seman-tics during pretraining. They already understand phrases such as “person starts to drink” or “some-one picks up a phone” and can reason about tem-poral relationships between events. Adapting these representations with DoRA does not address the actual challenge, which is connecting linguistic concepts to visual observations in sparse frame se-quences. Modifying language components instead disrupts existing capabilities, explaining the perfor-mance degradation below zero-shot baselines. 
+
+Hybrid sampling and action boundaries. Hu-man actions have natural boundaries with con-centrated visual transitions at their start and end points. Hybrid16 exploits this structure by allocat-ing half its frame budget to the annotated action segment, providing dense coverage of precisely the frames that carry the most discriminative tempo-ral information. The large performance gap be-tween Hybrid16 and Even16 on matched distribu-tions (68.8% vs. 42.8%) demonstrates the value of boundary-aware sampling, while the robustness gap (51% vs. 10% decline under distribution shift) reveals the trade-off between specialization and generalization. For deployment scenarios where temporal boundaries are already available or can be supplied by an upstream system, Hybrid16 is the stronger annotation-aware option. For scenar-ios with unknown frame distributions, Even16 pro-vides more stable performance. 
+
+Practical implications. These findings pro-vide concrete guidance for practitioners adapting MLLMs to video grounding tasks. Vision encoder fine-tuning should be considered before language model adaptation, as our experiments indicate that it addresses the dominant bottleneck while preserv-ing pretrained linguistic capabilities. Hybrid frame sampling is applicable to datasets and workflows with temporal annotations, such as curated archives or re-inspection pipelines. Joint spatial-temporal training is recommended over specialized models for most deployment scenarios, as the modest 3–4 point performance trade-off is outweighed by the operational benefit of maintaining a single model for both tasks. 
+
+Implications for the research community. 
+
+Much prior work on video temporal grounding emphasizes cross-modal interaction mechanisms, attention-based fusion modules, and temporal rea-soning architectures (Wasim et al., 2024; Xiong 7et al., 2024). These approaches address how to better combine visual and linguistic information, implicitly assuming that the visual representations themselves are adequate. Our results challenge this assumption: in our setting, language adapta-tion provides negligible gains, while vision encoder adaptation yields over 200% relative improvement. This suggests that visual representation learning for sparse-frame grounding deserves greater attention as a research direction in its own right, comple-menting work on cross-modal fusion. Targeted adaptation of the vision encoder, rather than scal-ing model size or refining fusion mechanisms, may offer a more efficient path to deployment-ready spatial-temporal grounding. 
+
+7 Conclusion 
+
+We have presented a systematic empirical study of training strategies for spatial-temporal video grounding under the sparse-frame constraints of industrial deployment. Our evidence indicates that sparse visual feature extraction, rather than language-model adaptation, is the dominant bottle-neck in this setting. Adapting only the final three ViT layers surpasses language model fine-tuning by a factor of three and outperforms a zero-shot model four times larger. A boundary-aware frame sam-pling strategy further improves temporal ground-ing by 26 points under matched annotation-aware test conditions, and joint spatial-temporal training achieves balanced capability across both tasks with minimal trade-off. Together, these results show that targeted adaptation can be more effective than model scaling for sparse-frame video grounding, offering a practical path to high-performance de-ployment without requiring large models or dense frame processing. 
+
+8 Limitations 
+
+Our study has four primary limitations. First, all ex-periments are conducted on Charades-STA, which features short indoor activity videos with controlled environments; whether the findings generalize to long-form videos, egocentric recordings, or out-door scenes remains an open question. Second, spatial annotations are automatically generated by GroundingDINO and validated on a sample of 100 annotations (85% acceptance rate). As a result, spatial results should be interpreted as evaluation against high-confidence pseudo labels rather than fully human-verified gold annotations; larger-scale human validation would further strengthen the re-liability of spatial grounding evaluation. Third, the choice to fine-tune the final three ViT layers was based on preliminary experiments rather than systematic ablation; other layer selection strate-gies may yield further improvements. Fourth, the comparison between joint and specialized training is confounded by differences in training set size, as joint configurations use 6,500 instances while specialized models use 3,951–7,000; future work should control for this variable to isolate the effect of task composition from data quantity. We leave cross-dataset validation, layer selection ablation, and controlled joint training experiments to future work. 
+
+9 Ethical Considerations 
+
+This work studies video grounding methods that may be used in content moderation, archive search, and monitoring workflows. Such systems can af-fect privacy and fairness when applied to people in videos, especially if model predictions are used for enforcement or surveillance without human re-view. We therefore view the proposed methods as decision-support tools rather than standalone systems for high-stakes decisions. The spatial an-notations used in this study are generated with an automatic detector and are not exhaustively human verified, so downstream uses should account for annotation noise and potential detector bias. 
+
+References        
+
+> Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Ian Barr, Yossi Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob L. Menick, Sebastian Borgeaud, and 8 others. 2022. Flamingo: a visual language model for few-shot learning. arXiv preprint arXiv:2204.14198 .Jinhe Bi, Yujun Wang, Haokun Chen, Xun Xiao, Artur Hecker, Volker Tresp, and Yunpu Ma. 2024. LLaVA steering: Visual instruction tuning with 500x fewer parameters through modality linear representation-steering. arXiv preprint arXiv:2412.17339 .Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, Bin Li, Ping Luo, Tong Lu, Yu Qiao, and Jifeng Dai. 2024. InternVL: Scal-ing up vision foundation models and aligning for generic visual-linguistic tasks. In Proceedings of
+
+8the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 24185–24198. Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. 2021. An image is worth 16×16 words: Transformers for image recognition at scale. In International Conference on Learning Representations (ICLR) .Jiyang Gao, Chen Sun, Jia Yang, and Ram Nevatia. 2017. TALL: Temporal activity localization via lan-guage query. In Proceedings of the IEEE Interna-tional Conference on Computer Vision (ICCV) , pages 5267–5275. Xianyi Gu, Houwen Fan, Yutong Huang, Tianyu Luo, and Linghao Zhang. 2024. Context-guided spatio-temporal video grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , pages 18330–18339. Lisa Anne Hendricks, Oliver Wang, Eli Shechtman, Josef Sivic, Trevor Darrell, and Bryan Russell. 2017. Localizing moments in video with natural language. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , pages 5803–5812. Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2021. LoRA: Low-rank adap-tation of large language models. arXiv preprint arXiv:2106.09685 .Bin Huang, Xin Wang, Hong Chen, Zihan Song, and Wenwu Zhu. 2024. VTimeLLM: Empower LLM to grasp video moments. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , pages 14271–14280. Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. 2023. BLIP-2: Bootstrapping language-image pre-training with frozen image encoders and large lan-guage models. arXiv preprint arXiv:2301.12597 .Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, Kwang-Ting Cheng, and Min-Hung Chen. 2024a. DoRA: Weight-decomposed low-rank adaptation. In Proceedings of the 41st International Conference on Machine Learn-ing (ICML) , pages 32100–32121. Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, and Lei Zhang. 2023. Ground-ing DINO: Marrying DINO with grounded pre-training for open-set object detection. arXiv preprint arXiv:2303.05499 .Yifan Liu, Jing He, Wei Li, Jaehong Kim, Dennis Wei, Hanspeter Pfister, and C. Chen. 2024b. R 2-Tuning: Efficient image-to-video transfer learning for video temporal grounding. In European Conference on Computer Vision (ECCV) .Muhammad Maaz, Hanoona Rasheed, Salman Khan, and Fahad Shahbaz Khan. 2024. Video-ChatGPT: Towards detailed video understanding via large vision and language models. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (ACL) , pages 12585–12602. Antoine Miech, Dimitri Zhukov, Jean-Baptiste Alayrac, Makarand Tapaswi, Ivan Laptev, and Josef Sivic. 2019. HowTo100M: Learning a text-video embed-ding by watching hundred million narrated video clips. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 2630– 2640. Qwen Team. 2025. Qwen3-VL: Large language model for vision-language understanding with DeepStack connector. Technical report, Alibaba Group. Gunnar A. Sigurdsson, Gül Varol, Xiaolong Wang, Ali Farhadi, Ivan Laptev, and Abhinav Gupta. 2016. Hol-lywood in homes: Crowdsourcing data collection for activity understanding. In European Conference on Computer Vision (ECCV) , pages 510–526. Yunlong Tang, Jing Bi, Siting Xu, Luchuan Song, Su-san Liang, Teng Wang, Daoan Zhang, Jie An, Zitao Lin, Rongyi Zheng, Yiyang Zhu, Chao Xu, Shengkui Huang, Lijun Ding, Chenglin Xu, Guanhong Luo, Yonghe Dong, and Yiwei Bao. 2024. Video un-derstanding with large language models: A survey. 
+
+arXiv preprint arXiv:2312.17432 .Syed Tahoon Wasim, Muzammal Naseer, Salman Khan, Ming-Hsuan Yang, and Fahad Shahbaz Khan. 2024. VideoGrounding-DINO: Towards open-vocabulary spatio-temporal video grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 18909–18918. Yuanhao Xiong, Long Zhao, Boqing Gong, Ming-Hsuan Yang, Florian Schroff, Ting Liu, Cho-Jui Hsieh, and Liangzhe Yuan. 2024. Structured video-language modeling with temporal grouping and spatial ground-ing. In International Conference on Learning Repre-sentations (ICLR) .Hang Zhang, Xin Li, and Lidong Bing. 2023. Video-LLaMA: An instruction-tuned audio-visual language model for video understanding. In Proceedings of the 2023 Conference on Empirical Methods in Nat-ural Language Processing: System Demonstrations (EMNLP) , pages 543–553. Minghang Zheng, Xinhao Cai, Qingchao Chen, Yuxin Peng, and Yang Liu. 2024a. Training-free video tem-poral grounding using large-scale pre-trained models. In Proceedings of the European Conference on Com-puter Vision (ECCV) .Yaowei Zheng, Richong Zhang, Junhao Zhang, Yanhan Ye, Zheyan Luo, Zhangchi Feng, and Yongqiang Ma. 2024b. LlamaFactory: Unified efficient fine-tuning of 100+ language models. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (ACL) .
+
+9Jingkang Zhu, Dong Liu, Peng Zhou, Xin Di, Yiming Cheng, and 1 others. 2023. Rethinking the video sam-pling and reasoning strategies for temporal sentence grounding. arXiv preprint arXiv:2301.00514 .
+
+10 A Prompt Templates 
+
+All prompts follow the Qwen3-VL conversation format with interleaved image and text tokens. 
+
+A.1 Temporal Grounding Prompt 
+
+The temporal grounding prompt provides the model with a list of frame timestamps and the correspond-ing 16 video frames, followed by a natural language action query. The model is instructed to output only the start and end time in seconds. The timestamps reflect the sampling strategy used during training or evaluation: Hybrid16 timestamps concentrate near action boundaries, while Even16 timestamps are distributed uniformly across the video duration (see Section 4 for details). 
+
+> User: Timestamps: [t_1, t_2, ..., t_16]. <image> <image> ... <image> (16 frames) Locate the following action: {query}. Only output the start and end time in seconds. Assistant: {start_time}, {end_time}
+
+A.2 Spatial Grounding Prompt 
+
+The spatial grounding prompt provides the model with a single video frame and instructs it to out-put bounding box coordinates for the queried ob-jects. Coordinates are expressed in pixel space as 
+
+[xmin , y min , x max , y max ].
+
+> User: <image> Provide bounding box coordinates for the following objects: {query}. Only output coordinates as: [x_min, y_min, x_max, y_max]. Assistant: {object} <bbox> x_min y_min x_max y_max </bbox>
+
+B Training Loss Curves 
+
+Figure 3 presents training loss curves for all five configurations. All configurations converge smoothly within three epochs. BBx-only reaches a lower final loss than temporal configurations, re-flecting the simpler single-frame spatial grounding objective. Hybrid-only was stopped early at epoch 2.28 following loss plateau. Dashed vertical lines indicate epoch boundaries. 
+
+C Complete Experimental Results 
+
+Tables 7 and 8 present complete temporal and spa-tial grounding results across all training configura-
+
+Figure 3: Training loss curves for all five configurations. Hybrid-only training was stopped early at epoch 2.28 following loss plateau. 
+
+tions and test distributions. 
+
+D Model Scaling Analysis 
+
+Table 9 summarizes architectural differences across Qwen3-VL model sizes, and Table 10 presents zero-shot performance scaling results. 
+
+E Spatial Annotation Details 
+
+Table 11 shows the top object categories in the generated spatial annotations before subsampling. Door and person are heavily overrepresented, re-flecting the indoor household activity focus of Charades-STA. Subsampling to 3,951 annotations preserves category diversity while preventing class imbalance during training. 
+
+F Implementation Details 
+
+All models are trained using the LLaMA-Factory framework on a single NVIDIA H100 GPU (80GB) with PyTorch 2.9.1 and Hugging Face Transform-ers. Table 12 provides complete hyperparameter specifications. 
+
+G Spatial-Temporal Coupling Analysis 
+
+Table 13 illustrates an interaction between spatial and temporal grounding on video 50E06, which contains multiple queries involving small objects. When spatial localization is accurate (eats food, IoU s=0.84), temporal grounding is also strong (IoU t=1.00). When spatial accuracy degrades (drinks from cup, IoU s=0.45), temporal perfor-mance also suffers (IoU t=0.59), suggesting the two tasks interact through shared visual representations. 11 Configuration Test Set mIoU R@0.3 R@0.5 R@0.7 
+
+Zero-shot Dense (All Frames) 
+
+Qwen3-VL-2B All frames 0.55 – – –Qwen3-VL-4B All frames 0.56 – – –Qwen3-VL-8B All frames 0.56 – – –
+
+Zero-shot Sparse (16 Frames) 
+
+Qwen3-VL-2B Even16 0.13 0.15 0.04 0.01 Qwen3-VL-2B Hybrid16 0.09 0.13 0.03 0.01 Qwen3-VL-4B Even16 0.15 0.21 0.06 0.02 Qwen3-VL-4B Hybrid16 0.14 0.20 0.07 0.03 Qwen3-VL-8B Even16 0.21 0.33 0.12 0.05 Qwen3-VL-8B Hybrid16 0.22 0.36 0.13 0.04 
+
+Fine-tuned 2B (16 Frames) 
+
+BBx-only Even16 0.06 0.08 0.03 0.01 BBx-only Hybrid16 0.06 0.09 0.05 0.02 Even-only Even16 0.51 0.72 0.57 0.36 Even-only Hybrid16 0.49 0.70 0.54 0.31 Hybrid-only Even16 0.24 0.38 0.19 0.08 Hybrid-only Hybrid16 0.73 0.81 0.77 0.68 Evenbbx Even16 0.47 0.70 0.52 0.30 Evenbbx Hybrid16 0.43 0.61 0.46 0.27 Hybridbbx Even16 0.34 0.53 0.33 0.13 Hybridbbx Hybrid16 0.69 0.78 0.74 0.64 
+
+Table 7: Complete temporal grounding results across all configurations and test distributions.                            
+
+> Configuration mIoU P@0.5 P@0.7
+> Zero-shot Baselines
+> Qwen3-VL-2B 0.03 0.00 0.00 Qwen3-VL-4B 0.03 0.00 0.00 Qwen3-VL-8B 0.03 0.00 0.00
+> Fine-tuned 2B
+> BBx-only 0.60 0.67 0.52 Even-only 0.01 0.00 0.00 Hybrid-only 0.00 0.00 0.00 Evenbbx 0.55 0.61 0.44 Hybridbbx 0.60 0.67 0.47
+
+Table 8: Complete spatial grounding results.             
+
+> Model ViT Layers LM Layers Params
+> Qwen3-VL-2B 24 28 ∼2.5B Qwen3-VL-4B 24 36 ∼4.5B Qwen3-VL-8B 27 36 ∼8.5B
+
+Table 9: Qwen3-VL model architecture specifications. The 2B and 4B models share identical vision encoders; only the language model depth differs.                   
+
+> Model Even16 Hybrid16 Spatial
+> Qwen3-VL-2B 0.13 0.09 0.03 Qwen3-VL-4B 0.15 0.14 0.03 Qwen3-VL-8B 0.21 0.22 0.03 2B →4B gain +0.02 +0.05 0.00 4B →8B gain +0.07 +0.08 +0.01
+
+Table 10: Zero-shot performance scaling across model sizes. The 2B →4B transition expands only the lan-guage model (28 →36 layers); the 4B →8B transition also expands the vision encoder (24 →27 layers), yield-ing larger gains despite fewer added layers.                 
+
+> Category Instances Percentage
+> door 8,586 16.2% person 4,718 8.9% book 3,200 6.0% towel 2,100 4.0% blanket 1,800 3.4% Total (pre-subsample) 53,000+ 100% Final annotations 3,951 –
+
+Table 11: Top object categories in spatial annotations before subsampling. 
+
+12 Table 12: Training hyperparameters                                                                 
+
+> Parameter Value Notes Applies to Optimizer AdamW –All Learning Rate 5×10 −6–All Batch Size (per device) 4 / 2 4 for BBx, 2 for others BBx / Other Gradient Accumulation Steps 8–All Effective Batch Size 32 / 16 32 for BBx, 16 for others BBx / Other Training Epochs 3–All Warmup Ratio 0.1 Linear warmup for first 10% of steps All LR Scheduler Cosine Cosine annealing after warmup All Mixed Precision BF16 –All Gradient Checkpointing Enabled –All Max Sequence Length 1024 / 4096 1024 for BBx, 4096 for others BBx / Other Image Min Pixels 65,536 256 ×256 All Image Max Pixels 262,144 512 ×512 All
+> Query GT Pred IoU tIoU s
+> drinks from cup 15.9–24.9 15.9–21.2 0.59 0.45 eats food 0.0–5.1 0.0–5.1 1.00 0.84 puts cup down 21.2–27.1 15.9–21.2 0.00 0.29
+
+Table 13: Spatial-temporal coupling effects (Video 50E06). IoU t = temporal IoU, IoU s = spatial IoU. 
+
+H Practical Deployment Scenarios 
+
+We outline three representative deployment scenar-ios and recommended configurations based on our experimental findings. 
+
+Video Archive Retrieval. For pre-annotated video archives, Hybridbbx with Hybrid16 sampling is preferred. Given a query such as “person drink-ing coffee,” the system samples 8 frames from the annotated action segment and 8 frames uniformly, achieving 68% temporal mIoU and 60% spatial mIoU. Processing a 30-second video requires ap-proximately 2–3 seconds on standard hardware. 
+
+Content Moderation. Large-scale platforms pro-cessing high volumes of user uploads should use a two-tiered approach. First, Evenbbx with uniform 16-frame sampling provides fast baseline screening at approximately 200ms per video, achieving 42– 47% temporal mIoU and 55% spatial mIoU. Videos flagged for potential violations are then reprocessed with Hybridbbx, increasing processing time to ap-proximately 3 seconds while improving temporal mIoU to 68%. This cascaded approach balances throughput with accuracy for critical cases. 
+
+Real-Time Monitoring. Systems with strict la-tency constraints and no temporal annotations should use Evenbbx with uniform 16-frame sam-pling, achieving 42–47% temporal mIoU at ap-proximately 150ms per video. New cameras can be added without retraining or manual annotation, providing operational flexibility. In all scenarios, fine-tuned 2B models with sparse sampling offer the best balance of accu-racy, efficiency, and deployability. Dense frame processing with large zero-shot models is not rec-ommended due to high computational cost without meaningful accuracy gains. 13 I Qualitative Examples 
+
+The following figures present representative suc-cess and failure cases from the Hybridbbx model evaluated on Hybrid16 test data. Each figure shows the sampled frames alongside the query, ground truth temporal boundaries, and model predictions. 
+
+Figure 4: Success cases from the Hybridbbx model on Hybrid16 test data. Top: person closes the pantry door (GT: 11.8–17.5s, Pred: 11.8–17.5s, IoU: 1.00). Middle: person was laughing (GT: 10.5–15.7s, Pred: 10.5–15.7s, IoU: 1.00). Bottom: person is cooking on a stove (GT: 0.0–14.4s, Pred: 0.0–14.4s, IoU: 1.00). 
+
+14 Figure 5: Failure cases from the Hybridbbx model on Hybrid16 test data. Top: person laughs (GT: 23.7–32.0s, Pred: 11.0–17.9s, IoU: 0.00), where the model predicts the same interval as the co-occurring person runs into a table action. Middle: person awakens in bed (GT: 13.5–19.2s, Pred: 0.0–4.1s, IoU: 0.00), a gradual state change with minimal discrete motion. Bottom: person takes a glass of water (GT: 22.2–27.8s, Pred: 1.9–15.4s, IoU: 0.00), a small-object interaction with a 20-second temporal offset. 
+
+15
