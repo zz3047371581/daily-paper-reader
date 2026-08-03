@@ -1,0 +1,594 @@
+Title: FORGE: Frame Orthogonality in Relevance Geometry for Long-Form Video Understanding
+
+URL Source: https://arxiv.org/pdf/2607.25266v2
+
+Published Time: Mon, 03 Aug 2026 00:19:00 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+Citation G. Kaviani and G. AlRegib, “FORGE: Frame Orthogonality in Relevance Geometry for Long-Form Video Understanding,” arXiv:2607.25266 [cs.CV], 2026. 
+
+DOI https://doi.org/10.48550/arXiv.2607.25266 
+
+Preprint https://arxiv.org/abs/2607.25266 
+
+Review Under review at the International Journal of Computer Vision .
+
+Code & Data https://alregib.ece.gatech.edu/software-and-datasets/ 
+
+Bib @article {kaviani2026forge, title= {FORGE: Frame Orthogonality in Relevance Geometry for Long-Form Video Understanding },author= {Ghazal Kaviani and Ghassan AlRegib },year= {2026 },eprint= {2607.25266 },archivePrefix= {arXiv },primaryClass= {cs.CV },doi= {10.48550/arXiv.2607.25266 },url= {https://arxiv.org/abs/2607.25266 },}
+
+Copyright © 2026 The Authors. This is a preprint of a manuscript currently under review. It is distributed under the arXiv.org perpetual, non-exclusive license. 
+
+Contact alregib@gatech.edu https://alregib.ece.gatech.edu/ arXiv:2607.25266v2 [cs.CV] 30 Jul 2026 FORGE: Frame Orthogonality in Relevance Geometry for Long-Form Video Understanding 
+
+Ghazal Kaviani 1* and Ghassan AlRegib 1
+
+> 1
+
+OLIVES at the Center for Signal and Information Processing (CSIP), School of Electrical and Computer Engineering, Georgia Institute of Technology, Atlanta, GA, USA. *Corresponding author(s). E-mail(s): gkaviani3@gatech.edu; 
+
+Abstract 
+
+Multimodal large language models (MLLMs) have enabled long-form video understanding at a scale that was not previously possible. However, the density of relevant content decreases sharply as video sequence length increases, and exposing the model to more irrelevant content measurably reduces its accuracy. In this paper, we address the problem of maximizing query-relevant information in a frame subset selected at inference time, without training. FORGE (Frame Orthogonality in Relevance Geometry ) is a model-agnostic method that induces a query-conditioned geometry on a pretrained multimodal embedding space, unifying relevance and diversity into a single objective. In this space, frames that cover independent query-relevant directions are far apart, and selecting the subset of maximum information captures diverse query-relevant content within the budget. Experiments on Video-MME and LongVideoBench at budgets of 16, 32, and 64 frames show that FORGE improves the unified keyframe selection score by 11.0–15.3 points over the strongest training-free baseline and up to doubles keyframe recall (0.415 vs. 0.204 at K=64 on Video-MME). The gains extend to question answering, where accuracy improves in every evaluated setting across eight open-source MLLMs spanning 4B to 32B parameters, by up to 8.7 points over uniform sampling and 5.2 points over the strongest baseline. Our findings suggest that aligning the embedding space with the query’s high-dimensional structure is a promising direction for inference-time video understanding. 
+
+Keywords: long-form video understanding, video question answering, keyframe selection, mutual information, vision-language models, multimodal large language models 
+
+11 Introduction 
+
+Multimodal large language models (MLLMs) are currently the dominant approach to video under-standing. Their recent advancements extend the application from short clips to long-form videos spanning several minutes to hours [1–4]. MLLMs face a persistent challenge with any long-form input; the difficulty is compounded in long-form video because task-relevant information becomes increasingly sparse as the sequence length grows. The evidence needed to answer a typical ques-tion is sparse, spanning a median of 2.1% of the duration on Video-MME and 1.5% on LongVideoBench [5–7]. At inference time, the practical question is not how much of the video an MLLM can see, but which part of it contains the information the model needs. Over the years, different approaches have been proposed to address long video understanding. Some build long-video MLLMs that extend the context window to process more frames at once [8– 10]. Processing more frames, however, does not guarantee better understanding when irrelevant content degrades attention to relevant regions [11, 12]. Another line of work compresses or prunes tokens to fit more content into the same bud-get [13–15]. Token compression is largely orthog-onal to the choice of input frames and can be applied on top of most other approaches, including ours. A third line uses agentic and LLM-in-the-loop pipelines that make iterative or several sepa-rate calls to an MLLM over parts of the video to caption, summarize, or provide a judgment, and combine the results into a final answer [16–18]. These pipelines perform well, but the repeated MLLM calls make them substantially costly [19], and scale poorly on consumer hardware. A fourth line is training-free frame selection: the MLLM stays fixed and a subset of frames is picked at inference time, replacing the uniform-sampling protocol that long-video MLLMs default to when no selector is applied [20–24]. We work in this fam-ily. It requires no training, runs the MLLM once, and is model-agnostic, which makes it portable across MLLMs and compatible with the other approaches. Given a fixed frame budget, the objective at inference time becomes selecting the maxi-mum relevant information within that budget for a query, i.e., the natural language question the MLLM is asked to answer. Prior methods reduce each frame’s query-relevance to a scalar and then spread their choices along a separate space, e.g., temporal position, visual features, or cluster mem-bership. But the query embedding is a high-dimensional vector where frames can be close to one another along some dimensions and far along others. Collapsing the query’s rank to a scalar, which we refer to as scalar collapse , loses this directional structure and flattens the relevance from a full vector to a number. Consequently, the selection that follows cannot tell which query dimensions a frame covers and which it does not; frames concentrate on whichever dimensions dom-inate the scalar, while the evidence the answer requires often lies along the remaining dimen-sions and goes unselected. Because that evidence occupies only a narrow interval of the video, the loss is visible on the timeline. Figure 1 illustrates scalar collapse in three selectors on a single query whose annotated answer region is shaded. Tem-poral sampling spreads picks along the timeline and recovers 25% of its frames from inside the region, similarity-based sampling ranks frames by their pointwise match to the query and recovers none, and visual sampling diversifies frames in a query-agnostic embedding and recovers 6%. None of the three reliably place frames inside the answer region, because a high similarity score indicates that a frame resembles the query rather than that it carries the evidence the answer requires. We propose FORGE (Frame Orthogonality in Relevance Geometry) , an inference-time, model-agnostic method that maximizes query-relevant information within a selection budget. FORGE 
+
+builds a query-conditioned geometry in which frame orthogonality reflects independent query-relevant content, and selects K frames by maxi-mizing the information content of a subspace in this geometry. To our knowledge, FORGE is the first training-free frame selector that preserves the query’s representational structure on the geome-try where selection happens, so that relevance and diversity are unified into a single selection objec-tive rather than computed as two objectives on separate feature spaces. On Video-MME [5] and LongVideoBench [6], FORGE improves keyframe recall, scene coverage, and their unified selection score over five representative baselines in every evaluated set, and these improvements translate 2Fig. 1 : Scalar collapse in three training-free selectors, shown on a single query and video. The top row shows raw query-frame similarity along the timeline; high scores do not reliably coincide with the annotated answer region (shaded). Temporal sampling selects by position, similarity-based sampling by a scalar query-match score, and visual sampling by diversity in a query-agnostic embedding, recovering 25%, 0%, and 6% of their frames from inside the annotated region respectively (red borders). FORGE 
+
+> induces a query-conditioned geometry that unifies the three signals into a single selection objective and recovers 62% (green borders).
+
+to higher downstream accuracy on video ques-tion answering across a comprehensive set of open-source MLLMs. Our contributions are as follows: 
+
+• We identify scalar collapse in existing training-free selectors, which reduce query-relevance to a per-frame scalar balanced against a query-agnostic spread on another feature, e.g., temporal position, visual fea-tures, or cluster membership. 
+
+• We propose FORGE , a training-free, model-agnostic method that induces a query-conditioned geometry on the frame embed-dings, unifying relevance and diversity into a single selection objective. 
+
+• FORGE consistently outperforms five rep-resentative baselines on relevance, coverage, and a unified score on Video-MME and LongVideoBench, and on downstream accu-racy on long-video question answering across a comprehensive set of open-source MLLMs. 
+
+## 2 Related Work 
+
+Long-video understanding in the MLLM era 
+
+Video understanding has progressed from clip-level recognition into the realm of multimodal large language models, in which a sequence of frame embeddings is processed with a text query and the output is produced based on both inputs. The datasets and benchmarks have expanded accordingly, with recent multi-task video question-answering benchmarks testing perception, tem-poral reasoning, grounding, and retrieval across video samples that range from short clips to hour-long videos. Research in this domain is shaped by a few coupled constraints: the length of the input the model is given, the amount of content the model can hold, and the reasoning the model is asked to perform, and the four paradigms reviewed below correspond to solutions targeted at these constraints. 3Long-context and memory-based MLLMs 
+
+Increasing the length of input that an MLLM can handle has motivated a family of architec-tural changes. Video-XL [8] and LongVLM [25] extend the context window for hour-scale inputs, while VideoLLaMB [9] introduces recurrent mem-ory bridges that maintain long-term state across a streaming input. SeViLA [26] chains image-language models to localize and answer over longer videos. General-purpose MLLMs such as Qwen2.5-VL [3], Qwen3-VL [27], Video-LLaVA [1], Video-ChatGPT [2], and InternVL [4] act as the down-stream backbones on which most long-video meth-ods are evaluated. FORGE is a model-agnostic method that does not modify the backbone, enlarge the context, or change the memory mech-anism, but it can compose with any of the MLLMs above and more. 
+
+Token compression and pruning 
+
+A complementary paradigm addresses the input length challenge at the level of the token stream. VisionZip [13] and VFlowOpt [28] prune tokens using information-flow signals inside the MLLM; FastVID [14] applies dynamic density pruning; AdaReTaKe [15] and PruneVid [29] reduce tem-poral and cross-frame redundancy; and Spar-seVLM [30], FlowCut [31], DynamicViT [32], and the spatial-temporal token selector of Wang et al. [33] operate at the transformer-block level. These methods compress or prune the token stream the MLLM has already received, indepen-dent of which parts of the video carry the infor-mation the query requires, and they benefit from being fed a stream with a higher density of query-relevant content. FORGE is complementary to these approaches on both counts. 
+
+Agentic and iterative pipelines 
+
+Another approach is to treat video understand-ing as an interactive process in which an LLM or MLLM is repeatedly invoked as a reasoner over parts of the video. VideoAgent [16] and its memory-augmented variant [34] caption and re-query clips in a loop; Deep Video Discovery [17] and AIR [18] build adaptive tool-use and reason-ing loops that decide what to read next; Active Video Perception [19] iterates evidence seeking and reports cost reductions relative to exhaus-tive agentic baselines. Frame-Voyager [35] and Re-thinking Temporal Search [36] cast selection itself as a learned or search-driven procedure, and VideoTree [37] organizes the video into a hierar-chical representation that an LLM reasons over. 
+
+FORGE does not invoke the MLLM during selec-tion and does not iterate; it produces its subset in a single forward pass over the frame embeddings and the query, at a fraction of the compute these pipelines require (Section 4). 
+
+Frame selection 
+
+Closest to the present work is the literature on frame selection itself, which splits cleanly into supervised and training-free categories. 
+
+Supervised and task-specific selectors. 
+
+The supervised lineage trains a selector from task annotations. AdaFrame [38] and MARL [39] learn sampling policies via reinforcement signals; ClipBERT [40] sparsely samples clips for end-to-end video-language training; Flexible Frame Selection [41] learns how many frames each video requires; M-LLM-based selection [42] fine-tunes an MLLM to choose frames for downstream question answering. Adjacent to this line, video summarization was not designed for long-video question answering but operates under the same input interface long-video MLLMs expect, pro-ducing a short subset from a long video that can be consumed by the MLLM without modifica-tion. Including a summarization baseline therefore serves as a direct test of whether a generic sum-mary preserves the information the MLLM needs to answer the query, or discards too much evidence in the process. CSTA [43] and the spatiotempo-ral ViT of Hsu et al. [44] train attention-based summarizers from labeled summaries, and query-focused video summarization addresses the query-aware variant of this problem: category-specific selection [45], submodular mixtures over objec-tives [46], diverse sequential subset selection [47], and query-focused or query-controllable summa-rization [48–50]. All of these methods require labeled summaries, saliency annotations, or task supervision that long-video MLLM benchmarks do not provide at inference time. 4Training-free selectors. 
+
+The training-free lineage operates with a frozen visual encoder and a frozen MLLM, deriving the subset of frames from the video and the query alone. We organize existing methods by the axis along which they spread their picks. A first group ranks frames by a query-grounded relevance scalar and takes the top-K with no additional spreading: TiFRe [51] parses the query into target objects and ranks frames by CLIP similarity to those objects, and Divide-then-Ground [52] adapts the selection to the query type before ranking. A second group combines a relevance scalar with spreading along the tem-poral axis: AKS [20] selects relevance peaks under a coverage constraint; BOLT [22] applies inverse-transform sampling to the relevance dis-tribution; Think-Clip-Sample [53] allocates aslow-fast budget across clips under query guid-ance. A third group combines a relevance scalar with spreading over visual or cluster structure: MaxInfo [23] selects a maximum-volume subset of visual embeddings; KTV [54] clusters DINO features and picks representatives; SeViCES [55] consolidates semantic-visual evidence; the ASCS baseline [7] combines adaptive similarity with K-means cluster sampling; MDP3 [21] and Q-Frame [24] additionally wrap this third axis in a structured DPP-style kernel. Across all three groups the relevance representation and the spreading representation inhabit separate feature spaces. FORGE replaces this two-stage construc-tion with a single query-conditioned geometry, on which relevance-weighted orthogonality of the frame embeddings carries both properties simul-taneously. Long-video understanding can be cast as an information-bottleneck problem. Regardless of how large the context window becomes, inference quality depends on the signal-to-noise ratio of query-relevant content in the input, which pro-motes the identification of that content to an optimization problem in its own right. The formal objective for this problem is the query-conditional mutual information between the selected subset and the answer, which is intractable at inference time in the absence of a joint distribution over frames, queries, and answers. A tractable surro-gate is therefore required. The next section for-malizes the objective and develops the surrogate we adopt. 
+
+## 3 Method 
+
+A video is represented as a sequence of N frames indexed by t ∈ { 1, . . . , N }, paired with a text query Q. Each frame has a d-dimensional visual embedding et ∈ Rd produced by a pretrained visual encoder, and we collect the embeddings into a matrix E ∈ RN ×d. A relevance score st ∈ R
+
+is computed for each frame against the query through a multimodal matching model that reads both the query text and the frame. We use s ∈ RN
+
+for the full score vector. The selection task is to pick a subset S ⊆ { 1, . . . , N } of size |S| = K
+
+that is passed to the downstream MLLM in place of the full video, denoted VS , with answer A.The selection objective is the query-conditional mutual information (MI), denoted I(·), between the selected subset and the answer: 
+
+S⋆ = arg max  
+
+> S⊆{ 1,...,N }|S|=K
+
+I(VS ; A | Q). (1) 
+
+From mutual information to query-conditioned volume 
+
+Computing I(VS ; A | Q) directly requires a model of the joint distribution over frames, queries, and answers that is unavailable at inference time. Applying the definition of conditional mutual information [60] to Eq. (1) gives 
+
+I(VS ; A | Q) = H(A | Q) − H(A | VS , Q ). (2) The first term, H(A | Q), is the inherent uncertainty of the answer given only the query and is constant with respect to S. Maximizing mutual information therefore reduces to minimiz-ing H(A | VS , Q ), that is, selecting the subset that makes the answer most predictable. Two complementary properties follow: each selected frame should be individually relevant to the query, and the selected frames together should span the query-relevant content rather than concen-trate on one instance of it. The remaining term is intractable without access to the downstream 5Fig. 2 : The FORGE geometry. FORGE induces a query-conditioned geometry on the pretrained frame embeddings, separating query-relevant frames along query-aligned directions while collapsing non-relevant frames toward the origin. Selecting the K frames that span the maximum volume in this geometry unifies relevance and diversity into a single objective, and the selected frames contain the query-relevant content the MLLM needs to answer correctly. The bottom panel shows an example selection; green-bordered frames fall inside the annotated answer region. 
+
+model, and FORGE reaches a computable objec-tive in three steps. Selection is performed on frame embeddings rather than on raw frames; by the data processing inequality I(f (VS ); A | Q) ≤
+
+I(VS ; A | Q) for any deterministic feature map 
+
+f , so the embedding-space objective is a lower bound on Eq. (1) and FORGE maximizes the bound. Answer uncertainty is taken to decrease as the selected frames carry more independent query-relevant content, which puts the entropy of the selected features in place of the entropy of the answer. Modeling the query-conditioned embeddings as Gaussian, that entropy is an affine function of the log-determinant of the subset’s Gram matrix. The objective becomes the log-volume a subset spans in a geometry conditioned on the query. The log-volume objective is submodular and, in its standard regularized form, monotone, so greedy selection carries the classical (1 − 1/e )approximation guarantee [56, 59]. It also inher-its the diminishing-returns behavior of conditional mutual information: a frame redundant with those already selected yields near-zero marginal gain in either objective. Because the geometry is con-ditioned on the query, the diversity the objec-tive rewards is diversity of query-relevant content rather than visual diversity in general. Concretely, a subset of frames that are all rel-evant but near-duplicates spans a small volume because the warped embeddings point in similar directions. A subset of diverse frames that are not query-relevant spans a small volume because the warping has collapsed them near the origin. The volume grows only when the two properties hold jointly. 
+
+FORGE 
+
+The methods surveyed in Section 2 treat rele-vance and diversity as separate objectives opti-mized in disjoint feature spaces. A scalar score 6ranks individual frames, while a query-agnostic axis (temporal position, visual clusters, or embed-ding distance) spreads the selection. FORGE 
+
+resolves scalar collapse by folding the relevance signal into the embedding geometry itself, so that a single volume objective in the resulting space simultaneously favors relevant frames and penal-izes redundancy among them. The construction, illustrated in Figure 2, is a single forward com-putation: the raw relevance scores are refined into frame weights that induce a query-conditioned embedding space, and the K frames spanning the largest volume in this geometry are read off by greedy orthogonalization. 
+
+Relevance as a scale-adaptive signal. 
+
+The geometry is driven by a relevance signal that reads both the global score s and its local struc-ture. For a window of half-width W around frame 
+
+t, the local contrast lc t = st − mean( st−W :t+W )measures the sharpness with which a frame stands out against its temporal neighborhood. The two signals capture different information: the global score isolates a distinctive visual cue when one exists, and the local contrast surfaces structure when the global landscape is flat, as happens for queries without a sharp cue or for videos where many frames look alike. FORGE combines them with ˜st = st+λ·lc t, λ = clip 
+
+ c
+
+std( s) + ϵ , λ min , λ max 
+
+
+
+,
+
+(3) where λ is read off the score distribution of the current video and query rather than tuned. A high-variance global score yields a small λ and the global signal carries the selection; a flat global score yields a large λ and the local contrast is surfaced. The adaptive choice of λ follows the prin-ciple of automatic scale selection, in which the signal itself indicates the informative scale rather than the scale being fixed in advance [61], applied here to two scales rather than a continuum of resolutions. The combined score is then passed through a mean-centered sigmoid 
+
+wt = sigmoid 
+
+
+
+τ · ˜st − mean(˜ s)std(˜ s)
+
+
+
+, (4) which produces a frame weight wt ∈ (0 , 1) that preserves the absolute differences introduced by the scale-adaptive blend rather than compressing them to a fixed range. The constants c, λmin , λmax ,
+
+W , τ , and ϵ are fixed implementation constants shared across all datasets, queries, and MLLMs, and will be released with the public code. 
+
+A query-conditioned geometry. 
+
+The frame weights induce a query-conditioned transformation of the visual embedding space ˜E = diag( w) · E, (5) so that frames with higher query relevance point farther from the origin and frames with low relevance collapse toward it. The scaling leaves each embedding’s direction unchanged; the angu-lar structure is reshaped by the projection that follows. Because high-weight frames dominate the singular value decomposition of ˜E, the top singu-lar vectors align with the directions that query-relevant frames span. Projecting all frames onto that subspace discards the directions in which irrelevant frames were distinctive, collapsing their angular separation, while relevant frames that dif-fer along query-relevant dimensions retain their spread. Volume maximization in the projected geometry therefore rewards diversity of query-relevant content rather than visual diversity in general. To work in the intrinsic geometry of this warped space rather than its ambient coordinates, 
+
+FORGE takes the singular values σi of ˜E and reads them as a distribution ˆ σi = σi/ P 
+
+> j
+
+σj . The spectral entropy Hσ = − P 
+
+> i
+
+ˆσi log ˆ σi has per-plexity exp( Hσ ), a standard estimate of effective rank, and the projection dimension is set to R =round(exp( Hσ )). Projecting ˜E onto the subspace spanned by its top-R right singular vectors yields ˜Eproj ∈ RN ×R, (6) the feature space in which the selection is per-formed. The dimension R is determined by the data: videos whose warped embeddings concen-trate along a few directions (a short event, a sin-gle speaker) are projected low-dimensional, while videos whose warped embeddings spread across many directions retain more dimensions. 7Algorithm 1 FORGE 
+
+Input: Embeddings E ∈ RN ×d, relevance scores 
+
+s ∈ RN , budget K
+
+Output: Selected frame set S, |S| = K
+
+Compute scale-adaptive score ˜s and frame weights w
+
+Form the query-conditioned geometry ˜Eproj 
+
+S ← ∅ , Z ← ˜Eproj 
+
+for k = 1 to K do 
+
+i⋆ ← arg max i ∥Zi∥2, S ← S ∪ { i⋆}
+
+Orthogonalize Z against Zi⋆
+
+end for return S
+
+Selection as volume maximization. 
+
+In the projected geometry, we identify the subset that is jointly relevant and non-redundant with the subset whose warped embeddings span the largest volume. FORGE reads this subset greed-ily. Starting from Z(0) = ˜Eproj and S = ∅, each iteration selects 
+
+i⋆ = arg max  
+
+> i
+
+∥Z(k) 
+
+> i
+
+∥2, (7) appends i⋆ to S, and updates the residuals by sub-tracting the component of every row along Z(k) 
+
+> i⋆
+
+.Each iteration therefore picks the frame whose residual is most orthogonal to the span of the frames already chosen. Eq. (7) is greedy ascent on the log-volume objective, since appending a frame raises the log-determinant of the Gram matrix by the log of its squared residual norm; the selection therefore carries the (1 − 1/e ) guarantee stated above. Algorithm 1 summarizes the full procedure: a single pass through the scores and embeddings, no training, and no per-video tuning. 
+
+## 4 Experiments 
+
+We present our experimental setup, followed by the main results on selection quality and down-stream video question answering, an evaluation across MLLMs, an ablation of FORGE ’s mecha-nisms, an analysis of the properties of the selection approaches we evaluate, and an evaluation of cost efficiency. 
+
+Setup 
+
+Datasets and metrics. We evaluate on Video-MME [5] and LongVideoBench [6], two long-form videoQA benchmarks. Video-MME includes 900 videos totaling 254 hours with 2,700 human-annotated questions, while LongVideoBench con-sists of 3,763 videos spanning over 760 hours with 6,678 multiple-choice questions. We report selec-tion quality with Keyframe Recall (KFR), Scene Hit Rate (SHR), and the Unified Keyframe Selec-tion Score (UKSS) introduced by Li et al. [7], and downstream performance with top-1 accuracy. All experiments use frame budgets K ∈ { 16 , 32 , 64 }.
+
+Models and baselines. We evaluate 
+
+FORGE against an exhaustive set of recent state-of-the-art training-free methods covering the approaches surveyed in Sec. 2 [7, 20, 21, 23, 43], with uniform sampling as the floor baseline. Downstream video understating is assessed on a comprehensive collection of open-source MLLMs across multiple model families and parameter scales, with the frame pool, decoding settings, and input preprocessing fixed across all experiments so that only the selection method varies. The specific baselines and MLLMs used in each experiment are listed in the corresponding table. Training-based and language-model-in-the-loop methods are not directly comparable in cost (Sec. 2, 2) and are not included in this comparison. 
+
+Implementation. All methods, including 
+
+FORGE , sample from a 1-FPS pool from each video, and use the same pretrained visual encoder for frame embeddings and the same pretrained multimodal encoder for query relevance scores. Each method’s parameters are fixed across both datasets and all budgets, with no per-video tun-ing. All baselines are reproduced from their pub-lic code or published papers. Reproducibility. FORGE is deterministic given a video, query, and frame budget, and all MLLMs are evaluated with fixed decoding settings, so repeated runs yield identical selections and identical answers. All reported numbers were confirmed over three independent runs. 8Method Video-MME                                                                                                                                 
+
+> K=16 K=32 K=64 KFR SHR UKSS KFR SHR UKSS KFR SHR UKSS Uniform .182 .618 .380 .178 .714 .401 .163 .811 .407 AKS [20] .216 .749 .441 .208 .766 .442 .201 .830 .451 ASCS [7] .250 .649 .439 .229 .755 .455 .198 .801 .436 MDP3 [21] .220 .677 .432 .209 .773 .445 .204 .846 .455 MaxInfo [23] .167 .588 .358 .166 .705 .387 .155 .772 .388
+> FORGE .356 .758 .551 .385 .834 .583 .415 .886 .608 LongVideoBench
+> K=16 K=32 K=64 KFR SHR UKSS KFR SHR UKSS KFR SHR UKSS Uniform .073 .326 .184 .067 .443 .207 .059 .565 .222 AKS [20] .130 .586 .312 .101 .590 .286 .082 .671 .284 ASCS [7] .168 .564 .347 .140 .650 .344 .111 .729 .331 MDP3 [21] .157 .571 .336 .152 .674 .354 .151 .783 .372 MaxInfo [23] .069 .336 .185 .065 .436 .206 .057 .555 .219
+> FORGE .272 .681 .458 .272 .762 .472 .271 .832 .482
+
+Table 1: Selection quality on Video-MME (top) and LongVideoBench (bottom) at K ∈ {16 , 32 , 64 }, reported as Keyframe Recall (KFR), Scene Hit Rate (SHR), and the Uni-fied Keyframe Selection Score (UKSS) of Li et al. [7]. FORGE rows are highlighted; best results are bolded , second-best underlined. FORGE leads every competitor on UKSS at every budget on both benchmarks. 
+
+4.1 Main results: selection quality and downstream accuracy 
+
+FORGE improves both selection quality and downstream accuracy on video question answer-ing with MLLMs, across both benchmarks and all three frame budgets. Selection quality is computed using ground-truth keyframe and scene annota-tions in Table 1, and downstream top-1 VQA accuracy for two primary MLLMs is reported in Table 2. Table 1 shows that FORGE ’s KFR gain over baselines is larger than its SHR gain. SHR rewards selecting any frame in a related scene, so any method that distributes its picks across the video timeline has a higher probability of hitting ascene-relevant region. KFR, in contrast, rewards selecting more of the specific frames annotated as keyframes within those scenes, and FORGE 
+
+consistently picks more keyframes while keeping a high SHR. This indicates that the additional frames FORGE selects at larger budgets continue to be scene-relevant and inside the annotated keyframe regions rather than spread to irrelevant regions on the timeline, despite the sparsity of answer-relevant content in long videos. As shown in Table 2, FORGE outperforms all baselines by a larger margin on LongVideoBench, where videos are longer on average and answer 
+
+MLLM Method Video-MME 
+
+K=16 K=32 K=64 Qwen2.5-VL 7B [3] Uniform 56.00% 58.22% 60.67% AKS [20] 59.68% 59.80% 61.16% ASCS [7] 57.31% 58.59% 59.61% MDP3 [21] 57.02% 60.32% 61.26% MaxInfo [23] 56.79% 58.17% 59.82% CSTA [43] 58.00% 59.20% –
+
+FORGE 60.56% 62.82% 63.49% 
+
+Gemma3 12B [62] Uniform 59.05% 62.35% 63.26% AKS [20] 63.58% 63.44% 63.96% ASCS [7] 60.94% 63.09% 63.25% MDP3 [21] 61.79% 62.86% 65.42% MaxInfo [23] 61.96% 63.38% 63.52% CSTA [43] – – –
+
+FORGE 65.52% 67.34% 67.91% 
+
+MLLM Method LongVideoBench 
+
+K=16 K=32 K=64 Qwen2.5-VL 7B [3] Uniform 53.89% 56.89% 58.81% AKS [20] 55.64% 54.15% 56.44% ASCS [7] 57.07% 58.84% 60.13% MDP3 [21] 56.15% 55.89% 57.59% MaxInfo [23] 47.87% 49.15% 50.37% CSTA [43] 38.2% 39.3% 38.7% 
+
+FORGE 60.25% 63.14% 63.66% 
+
+Gemma3 12B [62] Uniform 51.35% 52.18% 56.17% AKS [20] 52.86% 52.81% 53.35% ASCS [7] 53.94% 53.35% 54.58% MDP3 [21] 52.80% 54.75% 54.93% MaxInfo [23] 46.93% 50.25% 49.16% CSTA [43] 39.4% 40.2% 37.8% 
+
+FORGE 58.18% 59.94% 61.36% 
+
+Table 2: Top-1 VQA accuracy on Video-MME (top) and LongVideoBench (bottom) at K ∈ { 16 , 32 , 64 } for Qwen2.5-VL 7B and Gemma3 12B. FORGE rows are highlighted; best results are bolded , second-best underlined. FORGE is the top method on every MLLM, benchmark, and budget combination. 
+
+regions are narrower. Despite FORGE ’s consis-tent improvement over uniform sampling at every budget, several baselines perform worse than it with more frames. This pattern reveals a distinc-tion between similarity and relevance. Methods that rank frames by pointwise similarity to the query select frames that look like the query, but not necessarily content that is relevant to the answer. 
+
+Takeaway. When the similarity-selected frames do not overlap with the relevant con-tent, the result is worse than query-agnostic uniform sampling. Preserving the query’s high-dimensional structure in the selection geometry, rather than collapsing it to a scalar similarity 
+
+9MLLM Method Video-MME LongVideoBench                                                                                              
+
+> K=16 K=32 K=64 K=16 K=32 K=64 LLaVA-OneVision 7B [63] Uniform 56.04% 57.44% 58.26% 56.59% 56.29% 58.96%
+> FORGE 60.27% 62.36% 62.17% 61.38% 62.94% 61.88%
+> Qwen2.5-VL 7B [3] Uniform 56.00% 58.22% 60.67% 53.89% 56.89% 58.81%
+> FORGE 60.56% 62.82% 63.49% 60.25% 63.14% 63.66%
+> Gemma3 12B [62] Uniform 59.05% 62.35% 63.26% 51.35% 52.18% 56.17%
+> FORGE 65.52% 67.34% 67.91% 58.18% 59.94% 61.36%
+> Qwen2.5-VL 32B [3] Uniform 58.60% 60.48% 63.62% 55.99% 57.49% 59.49%
+> FORGE 62.42% 63.47% 66.87% 61.59% 64.67% 64.41%
+> Long-video specialized backbones
+> LongVA 7B [64] Original (128 f) 52.6% 51.3%
+> FORGE (32 f ) 63.47% 64.67%
+> SeViLA 4B [26] Original 39.5% 39.3%
+> FORGE 59.94% 60.02%
+> Token-compression backbones
+> InternVideo2.5-Chat 8B [65] Uniform 57.26% 58.15% 61.78% 54.46% 56.36% 60.76%
+> FORGE 61.71% 64.02% 64.58% 61.85% 65.02% 65.03%
+> InternVL2.5 26B [66] Uniform 62.89% 64.96% 66.04% 60.40% 62.20% 64.14%
+> FORGE 66.91% 69.10% 68.54% 65.33% 67.83% 65.05%
+
+Table 3: Top-1 accuracy on additional MLLMs spanning a 4B–32B parameter range. Italic group labels indicate models with a specialized design for long-video or token compression. 
+
+FORGE rows are in bold. 
+
+score, yields frames that contain the information the MLLM needs to answer correctly. 
+
+4.2 Generalization across MLLM backbones 
+
+To assess whether the improvements are specific to a particular MLLM model, we evaluate FORGE 
+
+on additional open-source MLLMs spanning dif-ferent architectural categories and a 4B–32B parameter range; results are reported in Table 3. The improvement over uniform sampling is sta-ble across standard instruction-tuned models at all parameter scales, and extends to long-video spe-cialized backbones such as LongVA and SeViLA, which process frames differently from standard MLLMs. The accuracy advantage is preserved even for token-compression backbones, where the MLLM itself suppresses redundant visual tokens, suggesting that frame-level selection and token-level compression are complementary rather than redundant. 
+
+Takeaway. Because FORGE ’s selection is computed before any MLLM reads the frames, the consistent gain across all evaluated backbones is a property of the selected frames and not of any par-ticular MLLM’s capabilities, confirming that the method is model-agnostic. 
+
+4.3 Ablation: contribution of each component 
+
+FORGE ’s selection is defined by a unified query-conditioned geometry in which frames are weighted by wt, derived from both the global rel-evance score s and the local contrast lc (Eq. 3), and the selected subset is the one that spans the largest volume in this geometry. We ablate each component of wt individually: FORGE (λ=0 )
+
+removes the local-contrast term, and FORGE ( No query warp) sets wt=1, reducing selec-tion to volume maximization on the pretrained embeddings. Figure 5 reports the accuracy of each variant on six MLLMs across both benchmarks. Full FORGE outperforms both partial variants in every panel, with the query-conditioned geometry accounting for most of the accuracy improvement on LongVideoBench. Figure 5 shows that removing the query warp leads to a larger accuracy drop than zeroing the local-contrast term on both benchmarks, and on LongVideoBench pushes most MLLMs below uni-form sampling. Without the warp, volume max-imization spans the pretrained embedding space along directions the query does not select, and a selection composed of such frames is worse than uniform sampling when answer-relevant content is sparse. Removing the local-contrast term reduces accuracy but never below uniform sampling, as it refines an already query-conditioned signal rather than replacing it. 
+
+Takeaway. Removing the query-conditioned weighting leads to a larger accuracy drop than removing the local-contrast term, showing that the query-conditioned geometry is what lets a single selection objective optimize relevance and diver-sity jointly. 
+
+4.4 Properties of the selected frames 
+
+We analyze three properties of the frame sets selected by each method: visual redundancy, tem-poral distribution relative to uniform sampling, and consistency of the selection under a budget increase, reported in Table 4. These properties are in tension with one another, and each competing method performs well on one or two at the expense of the others. The metrics reported in Table 4 infdicate that AKS, MDP3, and MaxInfo produce near-uniform temporal distributions, with MaxInfo additionally achieving the lowest visual redundancy. ASCS’s 
+
+K=16 and K=32 selections are largely disjoint, and Top-k combines the highest visual redun-dancy with the most query-concentrated temporal 10 (a) LongVideoBench, 15-min video. 
+
+(b) Video-MME, 43-min video. 
+
+Fig. 3 : Qualitative comparison of KFR and SHR on a Video-MME and a LongVideoBench Video at K=32, illustrating the KFR margin reported in Table 1. Each row shows the 32 thumbnails selected by one method, with green borders for frames inside the annotated answer regions and red borders for frames outside. Blue markers along the timeline shows the ground-truth answer regions. FORGE selects more frames inside the annotated regions, where the competing selectors find it challenging to find key frames.                          
+
+> Method Pairwise Cosine ↓Wasserstein Jaccard 16 →32 AKS [20] 0.7260 0.0236 0.6610 ASCS [7] 0.6952 0.0848 0.8133 MDP3 [21] 0.6848 0.0562 0.5518 MaxInfo [23] 0.5772 0.0671 0.5000
+> FORGE 0.6937 0.1096 0.5000
+> Top-k (reference) 0.7582 0.1425 0.5000 Uniform (reference) 0.6809 –0.8807
+
+Table 4: Properties of the selected frame sets at K = 32 on Video-MME. Pairwise cosine similarity measures visual redundancy (lower is less redundant). Wasserstein distance to the uniform distribution on [0 , 1] measures how query-conditional the temporal placement is (values near zero indi-cate near-uniform, query-independent placement). Jaccard dis-tance between the K = 16 and K = 32 selections measures selection consistency under a budget increase (0.5 corresponds to exact containment of the smaller set in the larger one). Top-k and Uniform are included as reference points for query-driven temporal concentration and for query-independent sampling. 
+
+distribution. FORGE achieves a balanced pro-file across all three properties: it is temporally query-conditioned, its K=16 selection is exactly contained in its K=32 selection, and its visual redundancy sits in the middle of the range, below the query-concentrated Top-k and AKS selections and above the redundancy-minimizing MaxInfo. Concentrating the selection inside query-relevant regions admits some visual similarity which is the cost of not spreading picks across irrelevant content. 
+
+Takeaway. No competing method simultane-ously satisfies all three properties, while FORGE 
+
+does, confirming that unifying relevance and diversity in a single geometry produces frame sets that no method optimizing a single property can match. 
+
+11 (a) Video-MME, 46-min video. 
+
+(b) LongVideoBench, 16-min video. 
+
+(c) LongVideoBench, 25-min video. 
+
+Fig. 4 : Qualitative comparison of MLLM answers between FORGE and leading competing selectors at K=32. Blue shaded bands represent annotated answer regions; dots above each row represent selected frames. Competing methods select more irrelevant frame and the MLLM answers incorrectly. 
+
+12 55                           
+
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> Accuracy (%)
+> LLaVA-OV 7B
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65 Qwen2.5-VL 7B
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65
+> 66 InternVL2 8B
+> 16 32 64
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65
+> 66
+> 67
+> 68
+> 69
+> Accuracy (%)
+> Gemma3 12B
+> 16 32 64
+> 62
+> 63
+> 64
+> 65
+> 66
+> 67
+> 68
+> 69
+> 70
+> 71 InternVL2 26B
+> 16 32 64
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65
+> 66
+> 67
+> 68 Qwen2.5-VL 32B
+> Number of Frames (K)
+> FORGE Video-MME
+> Frame Selection Method
+> Forge Forge ( =0) Forge (no query warp) 50
+> 51
+> 52
+> 53
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> Accuracy (%)
+> LLaVA-OV 7B
+> 46
+> 47
+> 48
+> 49
+> 50
+> 51
+> 52
+> 53
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65 Qwen2.5-VL 7B
+> 49
+> 50
+> 51
+> 52
+> 53
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65
+> 66
+> 67 InternVL2 8B
+> 16 32 64
+> 45
+> 46
+> 47
+> 48
+> 49
+> 50
+> 51
+> 52
+> 53
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> Accuracy (%)
+> Gemma3 12B
+> 16 32 64
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65
+> 66
+> 67
+> 68
+> 69 InternVL2 26B
+> 16 32 64
+> 50
+> 51
+> 52
+> 53
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> 65
+> 66 Qwen2.5-VL 32B
+> Number of Frames (K)
+> FORGE LongVideoBench
+> Frame Selection Method
+> Forge Forge ( =0) Forge (no query warp)
+
+Fig. 5 : Component ablation of FORGE on six MLLMs across two benchmarks. Each panel plots top-1 accuracy as a function of frame budget K ∈ { 16 , 32 , 64 } for full FORGE, FORGE ( λ=0), and FORGE ( −query warp). Full FORGE leads every partial variant in every panel on both benchmarks. 1e+00 1e+01 1e+02 1e+03 1e+04 1e+05 1e+06 1e+07 
+
+GFLOPs (log scale) 
+
+> FORGE
+> (1 FPS pool)
+> MLLM inference
+> (1 frame)
+> CLIP scoring
+> (1 FPS pool)
+> BLIP scoring
+> (1 FPS pool)
+> LLM-in-the-loop
+> (1 FPS pool)
+> 0.785
+> 3K
+> 13K
+> 53K
+> 10M
+
+Computational Cost Comparison (theoretical FLOPs) 
+
+Fig. 6: Computational cost (GFLOPs, log scale) of frame selection and inference. FLOPs are estimated on long videos (∼3,000–3,500 frames at 1 FPS, averaged over Video-MME and LongVideoBench). MLLM inference shows a single forward pass on one frame. FORGE operates entirely on pre-computed embeddings and scores, reducing selection-time compute by 6 orders of magnitude compared to BLIP-based scoring and over 7 orders of magnitude compared to LLM-in-the-loop approaches. 
+
+4.5 Efficiency 
+
+Takeaway. FORGE achieves the accuracy improvements reported in the previous subsec-tions at a fraction of the computational cost of LLM-in-the-loop methods, and at a cost compa-rable to uniform sampling. 
+
+## 5 Conclusion 
+
+Long-form video understanding with MLLMs is fundamentally an information problem. The evi-dence needed to answer a query is concentrated in a small fraction of the video duration, the remain-ing content is largely irrelevant to the query, and even within the relevant subsequence, frames are often redundant visually and semantically. In this work, we show that selecting frames with higher query-relevant information density leads to measurably better downstream accuracy across architectures, parameter scales, and benchmarks. A multimodal embedding space encodes rich visual and semantic structure, but collapsing the query’s high-dimensional structure into ascalar similarity score substitutes relevance with similarity and loses the structure needed to independently identify the frames that con-tain distinct query-relevant dimensions. FORGE 
+
+resolves scalar collapse by inducing a query-conditioned geometry in which the query’s effec-tive dimensional structure is preserved, so that maximizing the information spanned in this geom-etry captures relevant and non-redundant content jointly. The ablation in Section 4.3 confirms that the geometry is the source of the performance gain. 
+
+Limitations. 
+
+Despite consistent improvements in downstream accuracy, a gap to reach a perfect video under-standing remains. This gap derives from MLLMs’ reasoning and cross-modality misalignment. Cer-tain task categories, including counting, fine-grained object recognition, and complex spatial reasoning, remain challenging even when the model is presented with all the relevant content, as these reflect the model’s training and architecture rather than its input. Selecting the right frames is a prerequisite for the reasoning these models still find difficult, not a substitute for it. 13 Declarations 
+
+Availability of data and materials. This study analyses the publicly available Video-MME [5] and LongVideoBench [6] benchmarks, obtainable from their official repositories. No new data were generated during this study. The imple-mentation will be released publicly upon accep-tance. 
+
+Competing interests. The authors declare no competing interests. 
+
+Funding. This work is partially funded through the support from the Franklin Foundation via the John and Marilu McCarty Chair professorship and a gift from Lab126 at Amazon. 
+
+Use of generative artificial intelligence. 
+
+During the preparation of this manuscript, the authors used AI-assistant tools for editing and revising the text grammar and tone and reviewing the content. The authors reviewed and edited all suggested text and take full responsibility for the content of this publication. 
+
+## References 
+
+[1] Lin, B., Ye, Y., Zhu, B., Cui, J., Ning, M., Jin, P., Yuan, L.: Video-llava: Learn-ing united visual representation by alignment before projection. In: Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing, pp. 5971–5984 (2024) [2] Maaz, M., Rasheed, H., Khan, S., Khan, F.: Video-chatgpt: Towards detailed video understanding via large vision and language models. In: Proceedings of the 62nd Annual Meeting of the Association for Computa-tional Linguistics (Volume 1: Long Papers), pp. 12585–12602 (2024) [3] Bai, S., Chen, K., Liu, X., Wang, J., Ge, W., Song, S., Dang, K., Wang, P., Wang, S., Tang, J., et al.: Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 (2025) [4] Chen, Z., Wang, W., Tian, H., Ye, S., Gao, Z., Cui, E., Tong, W., Hu, K., Luo, J., Ma, Z., et al. : How far are we to gpt-4v? clos-ing the gap to commercial multimodal models with open-source suites. Science China Infor-mation Sciences 67 (12), 220101 (2024) [5] Fu, C., Dai, Y., Luo, Y., Li, L., Ren, S., Zhang, R., Wang, Z., Zhou, C., Shen, Y., Zhang, M., et al. : Video-mme: The first-ever comprehensive evaluation benchmark of multi-modal llms in video analysis. In: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 24108– 24118 (2025) [6] Wu, H., Li, D., Chen, B., Li, J.: Longvideobench: A benchmark for long-context interleaved video-language understanding. Advances in Neural Informa-tion Processing Systems 37 , 28828–28857 (2024) [7] Li, Z., Ishida, K., Yamazaki, S., Ji, X., Liu, J.: Kfs-bench: Comprehensive evaluation of key frame sampling in long video understand-ing. In: Proceedings of the IEEE/CVF Win-ter Conference on Applications of Computer Vision, pp. 5643–5652 (2026) [8] Shu, Y., Liu, Z., Zhang, P., Qin, M., Zhou, J., Liang, Z., Huang, T., Zhao, B.: Video-xl: Extra-long vision language model for hour-scale video understanding. In: Proceedings of the Computer Vision and Pattern Recogni-tion Conference, pp. 26160–26169 (2025) [9] Wang, Y., Song, Y., Xie, C., Liu, Y., Zheng, Z.: Videollamb: Long streaming video under-standing with recurrent memory bridges. arXiv preprint arXiv:2409.01071 (2024) [10] Jiang, J., Li, X., Liu, Z., Li, M., Chen, G., Li, Z., Huang, D.-A., Liu, G., Yu, Z., Keutzer, K., et al. : Storm: Token-efficient long video understanding for multimodal llms. In: Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision, pp. 5830–5841 (2025) [11] Liu, N.F., Lin, K., Hewitt, J., Paranjape, A., Bevilacqua, M., Petroni, F., Liang, P.: Lost in the middle: How language models use long contexts. Transactions of the Asso-ciation for Computational Linguistics 12 ,157–173 (2024) 14 [12] Du, Y., Tian, M., Ronanki, S., Rongali, S., Bodapati, S.B., Galstyan, A., Wells, A., Schwartz, R., Huerta, E.A., Peng, H.: Context length alone hurts LLM per-formance despite perfect retrieval. In: Christodoulopoulos, C., Chakraborty, T., Rose, C., Peng, V. (eds.) Findings of the Association for Computational Lin-guistics: EMNLP 2025, pp. 23281–23298. Association for Computational Linguis-tics, Suzhou, China (2025). https://doi. org/10.18653/v1/2025.findings-emnlp.1264 . https://aclanthology.org/2025.findings-emnlp.1264/ 
+
+[13] Yang, S., Chen, Y., Tian, Z., Wang, C., Li, J., Yu, B., Jia, J.: Visionzip: Longer is better but not necessary in vision language models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 19792–19802 (2025) [14] Shen, L., Gong, G., He, T., Zhang, Y., liu, Zhao, S., Ding, G.: FastVID: Dynamic density pruning for fast video large language models. In: The Thirty-ninth Annual Conference on Neural Information Processing Systems (2025). 
+
+https://openreview.net/forum?id=2xS4VtpApy 
+
+[15] Wang, X., Si, Q., Zhu, S., Wu, J., Cao, L., Nie, L.: AdaReTaKe: Adaptive redun-dancy reduction to perceive longer for video-language understanding. In: Che, W., Nabende, J., Shutova, E., Pilehvar, M.T. (eds.) Findings of the Association for Computational Linguistics: ACL 2025, pp. 5417–5432. Association for Computational Linguistics, Vienna, Austria (2025). https: //doi.org/10.18653/v1/2025.findings-acl.283 . https://aclanthology.org/2025.findings-acl.283/ 
+
+[16] Wang, X., Zhang, Y., Zohar, O., Yeung-Levy, S.: Videoagent: Long-form video understand-ing with large language model as agent. In: European Conference on Computer Vision, pp. 58–76 (2024). Springer [17] Zhang, X., Jia, Z., Guo, Z., Li, J., Li, B., Li, H., Lu, Y.: Deep video discov-ery: Agentic search with tool use for long-form video understanding. In: The Thirty-ninth Annual Conference on Neu-ral Information Processing Systems (2025). 
+
+https://openreview.net/forum?id=oQYq9L1NVT 
+
+[18] Zou, Y., Jin, S., Deng, A., Zhao, Y., Wang, J., Chen, C.: Air: Enabling adaptive, iter-ative, and reasoning-based frame selection for video question answering. arXiv preprint arXiv:2510.04428 (2025) [19] Wang, Z., Zhou, H., Wang, S., Li, J., Xiong, C., Savarese, S., Bansal, M., Ryoo, M.S., Niebles, J.C.: Active Video Perception: Iter-ative Evidence Seeking for Agentic Long Video Understanding (2025). https://arxiv. org/abs/2512.05774 [20] Tang, X., Qiu, J., Xie, L., Tian, Y., Jiao, J., Ye, Q.: Adaptive keyframe sampling for long video understanding. In: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 29118–29128 (2025) [21] Sun, H., Lu, S., Wang, H., Chen, Q.-G., Xu, Z., Luo, W., Zhang, K., Li, M.: Mdp3: A training-free approach for list-wise frame selection in video-llms. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), pp. 24090–24101 (2025) [22] Liu, S., Zhao, C., Xu, T., Ghanem, B.: Bolt: Boost large vision-language model without training for long-form video understanding. In: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 3318– 3327 (2025) [23] Li, P., Abdullaeva, I., Gambashidze, A., Kuznetsov, A., Oseledets, I.: Maxinfo: Atraining-free key-frame selection method using maximum volume for enhanced video understanding. arXiv preprint arXiv:2502.03183 (2025) [24] Zhang, S., Yang, J., Yin, J., Luo, Z., Luan, J.: Q-frame: Query-aware frame selection and multi-resolution adaptation for video-llms. 15 In: Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision (ICCV), pp. 22056–22065 (2025) [25] Weng, Y., Han, M., He, H., Chang, X., Zhuang, B.: Longvlm: Efficient long video understanding via large language models. European Conference on Computer Vision (ECCV) (2024) [26] Yu, S., Cho, J., Yadav, P., Bansal, M.: Self-chained image-language model for video localization and question answering. Advances in Neural Information Processing Systems 36 , 76749–76771 (2023) [27] Bai, S., Cai, Y., Chen, R., Chen, K., Chen, X., Cheng, Z., Deng, L., Ding, W., Gao, C., Ge, C., Ge, W., Guo, Z., Huang, Q., Huang, J., Huang, F., Hui, B., Jiang, S., Li, Z., Li, M., Li, M., Li, K., Lin, Z., Lin, J., Liu, X., Liu, J., Liu, C., Liu, Y., Liu, D., Liu, S., Lu, D., Luo, R., Lv, C., Men, R., Meng, L., Ren, X., Ren, X., Song, S., Sun, Y., Tang, J., Tu, J., Wan, J., Wang, P., Wang, Q., Wang, Y., Xie, T., Xu, Y., Xu, H., Xu, J., Yang, Z., Yang, M., Yang, J., Yang, A., Yu, B., Zhang, F., Zhang, H., Zhang, X., Zheng, B., Zhong, H., Zhou, J., Zhou, F., Zhou, J.: Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 (2025) [28] Yang, S., Xu, R., Cui, C., Wang, T., Lin, D., Pang, J.: Vflowopt: A token pruning framework for lmms with visual information flow-guided optimization. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), pp. 23924–23934 (2025) [29] Huang, X., Zhou, H., Han, K.: PruneVid: Visual token pruning for efficient video large language models. In: Che, W., Nabende, J., Shutova, E., Pilehvar, M.T. (eds.) Find-ings of the Association for Computational Linguistics: ACL 2025, pp. 19959–19973. Association for Computational Linguis-tics, Vienna, Austria (2025). https://doi. org/10.18653/v1/2025.findings-acl.1024 . https://aclanthology.org/2025.findings-acl.1024/ 
+
+[30] Zhang, Y., Fan, C.-K., Ma, J., Zheng, W., Huang, T., Cheng, K., Gudovskiy, D.A., Okuno, T., Nakata, Y., Keutzer, K., Zhang, S.: SparseVLM: Visual token sparsifica-tion for efficient vision-language model inference. In: Forty-second International Conference on Machine Learning (2025). 
+
+https://openreview.net/forum?id=80faIPZ67S 
+
+[31] Tong, J., Jin, W., Qin, P., Li, A., Zou, Y., Li, Y., Li, Y., Li, R.: Flowcut: Rethink-ing redundancy via information flow for efficient vision-language models. In: The Thirty-ninth Annual Conference on Neu-ral Information Processing Systems (2025). 
+
+https://openreview.net/forum?id=M6zQNbCaLl 
+
+[32] Rao, Y., Zhao, W., Liu, B., Lu, J., Zhou, J., Hsieh, C.-J.: Dynamicvit: Efficient vision transformers with dynamic token sparsifica-tion. Advances in neural information process-ing systems 34 , 13937–13949 (2021) [33] Wang, J., Yang, X., Li, H., Liu, L., Wu, Z., Jiang, Y.-G.: Efficient video transform-ers with spatial-temporal token selection. In: European Conference on Computer Vision, pp. 69–86 (2022). Springer [34] Fan, Y., Ma, X., Wu, R., Du, Y., Li, J., Gao, Z., Li, Q.: Videoagent: A memory-augmented multimodal agent for video under-standing. In: European Conference on Com-puter Vision, pp. 75–92 (2024). Springer [35] Yu, S., Jin, C., Wang, H., Chen, Z., Jin, S., Zuo, Z., Xu, X., Sun, Z., Zhang, B., Wu, J., et al.: Frame-voyager: Learning to query frames for video large language models. arXiv preprint arXiv:2410.03226 (2024) [36] Ye, J., Wang, Z., Sun, H., Chandrasegaran, K., Durante, Z., Eyzaguirre, C., Bisk, Y., Niebles, J.C., Adeli, E., Fei-Fei, L., et al. :Re-thinking temporal search for long-form video understanding. In: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 8579–8591 (2025) [37] Wang, Z., Yu, S., Stengel-Eskin, E., Yoon, J., Cheng, F., Bertasius, G., Bansal, M.: 16 Videotree: Adaptive tree-based video repre-sentation for llm reasoning on long videos. In: Proceedings of the Computer Vision and Pat-tern Recognition Conference, pp. 3272–3283 (2025) [38] Wu, Z., Xiong, C., Ma, C.-Y., Socher, R., Davis, L.S.: AdaFrame: Adaptive Frame Selection for Fast Video Recognition (2019). https://arxiv.org/abs/1811.12432 [39] Wu, W., He, D., Tan, X., Chen, S., Wen, S.: Multi-Agent Reinforcement Learning Based Frame Sampling for Effective Untrimmed Video Recognition (2019). https://arxiv.org/ abs/1907.13369 [40] Lei, J., Li, L., Zhou, L., Gan, Z., Berg, T.L., Bansal, M., Liu, J.: Less is more: Clipbert for video-and-language learning via sparse sampling. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 7331–7341 (2021) [41] Buch, S., Nagrani, A., Arnab, A., Schmid, C.: Flexible frame selection for efficient video reasoning. In: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 29071–29082 (2025) [42] Hu, K., Gao, F., Nie, X., Zhou, P., Tran, S., Neiman, T., Wang, L., Shah, M., Hamid, R., Yin, B., Chilimbi, T.: M-llm based video frame selection for efficient video under-standing. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR), pp. 13702–13712 (2025) [43] Son, J., Park, J., Kim, K.: Csta: Cnn-based spatiotemporal attention for video summa-rization. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 18847–18856 (2024) [44] Hsu, T.-C., Liao, Y.-S., Huang, C.-R.: Video summarization with spatiotemporal vision transformer. IEEE Transactions on Image Processing 32 , 3013–3026 (2023) https://doi. org/10.1109/TIP.2023.3275069 [45] Potapov, D., Douze, M., Harchaoui, Z., Schmid, C.: Category-specific video summa-rization. In: Fleet, D., Pajdla, T., Schiele, B., Tuytelaars, T. (eds.) Computer Vision – ECCV 2014, pp. 540–555. Springer, Cham (2014) [46] Gygli, M., Grabner, H., Van Gool, L.: Video summarization by learning submodular mix-tures of objectives. In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pp. 3090–3098 (2015) [47] Gong, B., Chao, W.-L., Grauman, K., Sha, F.: Diverse sequential subset selection for supervised video summarization. Advances in neural information processing systems 27 
+
+(2014) [48] Sharghi, A., Laurel, J.S., Gong, B.: Query-focused video summarization: Dataset, eval-uation, and a memory network based approach. In: Proceedings of the IEEE Con-ference on Computer Vision and Pattern Recognition, pp. 4788–4797 (2017) [49] Huang, J.-H., Worring, M.: Query-controllable video summarization. In: Proceedings of the 2020 International Con-ference on Multimedia Retrieval, pp. 242–250 (2020) [50] Huang, J.-H., Murn, L., Mrak, M., Wor-ring, M.: Query-based video summarization with pseudo label supervision. In: 2023 IEEE International Conference on Image Process-ing (ICIP), pp. 1430–1434 (2023). IEEE [51] Zheng, X., Wang, Z., Peng, Y.: Tifre: Text-guided video frame reduction for efficient video multi-modal large language models. arXiv preprint arXiv:2602.08861 (2026) [52] Li, J., Li, B., Li, J., Lu, Y.: Divide, then Ground: Adapting Frame Selection to Query Types for Long-Form Video Understanding (2025). https://arxiv.org/abs/2512.04000 [53] Tan, W., Song, R., Li, J., Ju, J., Luo, Z.: Think-clip-sample: Slow-fast frame selec-tion for video understanding. arXiv preprint arXiv:2601.11359 (2026) 17 [54] Song, B., Peng, J., Zhang, Y., Chen, G., Yang, F., Guo, J.: Ktv: Keyframes and key tokens selection for efficient training-free video llms. arXiv preprint arXiv:2602.03615 (2026) [55] Sheng, Y., Hao, Y., Li, C., Wang, S., He, X.: SeViCES: Unifying Semantic-Visual Evi-dence Consensus for Long Video Understand-ing (2026). https://openreview.net/forum? id=L0dORRnUhu [56] Kulesza, A., Taskar, B., et al. : Determinantal point processes for machine learning. Foun-dations and Trends ® in Machine Learning 
+
+5(2–3), 123–286 (2012) [57] Goreinov, S.A., Oseledets, I.V., Savostyanov, D.V., Tyrtyshnikov, E.E., Zamarashkin, N.L.: How to find a good submatrix. In: Matrix Methods: Theory, Algorithms and Applications, pp. 247–256. World Scientific, ??? (2010) [58] Mikhalev, A., Oseledets, I.V.: Rectangu-lar maximum-volume submatrices and their applications. Linear Algebra and its Applica-tions 538 , 187–211 (2018) [59] Nemhauser, G.L., Wolsey, L.A., Fisher, M.L.: An analysis of approximations for maximiz-ing submodular set functions—i. Mathemat-ical programming 14 (1), 265–294 (1978) [60] Cover, T.M., Thomas, J.A.: Ele-ments of Information Theory, 2nd edn. Wiley-Interscience, ??? (2006) [61] Lindeberg, T.: Feature detection with auto-matic scale selection. International Journal of Computer Vision 30 (2), 79–116 (1998) [62] Gemma Team: Gemma 3 technical report. arXiv preprint arXiv:2503.19786 (2025) [63] Li, B., Zhang, Y., Guo, D., Zhang, R., Li, F., Zhang, H., Zhang, K., Li, Y., Liu, Z., Li, C.: Llava-onevision: Easy visual task transfer. arXiv preprint arXiv:2408.03326 (2024) [64] Zhang, P., Zhang, K., Li, B., Zeng, G., Yang, J., Zhang, Y., Wang, Z., Tan, H., Li, C., Liu, Z.: Long context transfer from language to vision. arXiv preprint arXiv:2406.16852 (2024) [65] Wang, Y., Li, X., Yan, Z., He, Y., Yu, J., Zeng, X., Wang, C., Ma, C., Huang, H., Gao, J., Dou, M., Chen, K., Wang, W., Qiao, Y., Wang, Y., Wang, L.: Internvideo2.5: Empow-ering video mllms with long and rich context modeling. arXiv preprint arXiv:2501.12386 (2025) [66] Chen, Z., Wang, W., Cao, Y., Liu, Y., Gao, Z., Cui, E., Zhu, J., Ye, S., Tian, H., Liu, Z., et al.: Expanding performance boundaries of open-source multimodal models with model, data, and test-time scaling. arXiv preprint arXiv:2412.05271 (2024) 18

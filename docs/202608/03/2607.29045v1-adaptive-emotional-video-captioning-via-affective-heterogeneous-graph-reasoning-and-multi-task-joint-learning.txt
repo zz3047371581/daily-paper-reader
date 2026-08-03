@@ -1,0 +1,741 @@
+Title: Adaptive Emotional Video Captioning via Affective Heterogeneous Graph Reasoning and Multi-task Joint Learning
+
+URL Source: https://arxiv.org/pdf/2607.29045v1
+
+Published Time: Mon, 03 Aug 2026 00:28:13 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# Adaptive Emotional Video Captioning via Affective Heterogeneous Graph Reasoning and Multi-task Joint Learning 
+
+Junbo Wang ∗, Liangyu Fu ∗, Yuke Li †, Xuecheng Wu, Zhiyong Wang 
+
+Abstract —Emotional video captioning (EVC) aims to describe a video with both factual correctness and affective expressiveness. It requires a model to perceive subtle, ambiguous, and temporally varying emotional cues and translate them into natural language without weakening objective visual content. Existing methods have progressively introduced contextual attention, emotion in-terpretation, emotion priors, dynamic emotion perception and emotion-cause reasoning. Nevertheless, most of them still depend on either global emotion vectors or rigid hierarchical priors. In recent methods, the tree-structured emotion prior establishes a coarse-to-fine connection between psychological emotion cate-gories and daily emotion words, but its hard subordinate masking may irreversibly suppress correct lexical emotions once the coarse category prediction is inaccurate. It is also limited in representing mixed or overlapping emotions that frequently occur in real videos. To address the issues, we propose SAGML, an adaptive EVC framework via affective heterogeneous graph and multi-task language modeling. Instead of treating the emotion prior as a discrete tree, SAGML constructs a soft affective heterogeneous graph containing catalog-level emotion nodes and lexical-level emotion word nodes. The graph combines category-category affective proximity, category-word corpus co-occurrence, and word-word semantic similarity into a unified topology. Given video features, SAGML first estimates a catalog-level affective distribution and then propagates it over the graph to obtain a topology-driven soft lexical gate. The soft gate is injected into video-to-emotion graph attention as a continuous bias, allowing visually supported lexical emotions to remain recoverable rather than being removed by a hard mask. The resulting affective representation is fed together with visual tokens into a causal language decoder, while dual catalog and lexical heads impose explicit emotion distribution learning on the prompt hidden states. The overall model is trained with a joint objective that combines autoregressive caption generation and emotion distribution supervision. By replacing hard hierarchical pruning with continuous graph reasoning and by coupling generation with multi-level affective prediction, SAGML provides an error-resilient and multi-emotion-aware baseline for EVC. 
+
+Index Terms —Emotional video captioning, affective comput-ing, heterogeneous graph reasoning, emotion distribution learn-ing, large language model, multi-task learning. 
+
+I. I NTRODUCTION 
+
+# VIDEO captioning is a fundamental task in multimedia understanding, requiring a model to summarize visual content with fluent natural language. Classical approaches 
+
+† Corresponding author: Yuke Li. 
+
+∗ Both authors contributed equally to this work. Junbo Wang, Liangyu Fu and Yuke Li are with the School of Soft-ware, Northwestern Polytechnical University, Xi’an 710129, China (e-mail: jbwang@nwpu.edu.cn; lyfu@mail.nwpu.edu.cn; liyuke@nwpu.edu.cn). Xuecheng Wu is with the School of Computer Science and Technology, Xi’an Jiaotong University, Xi’an 710049, China (e-mail: wuxc3@stu.xjtu.edu.cn). Zhiyong Wang is with the School of Computer Science, The University of Sydney, NSW 2006, Australia (e-mail: zhiyong.wang@sydney.edu.au). Input Video 
+
+…
+
+… …
+
+Root 
+
+Catalog 
+
+Lexcial 
+
+Emotion Tree 
+
+Root 
+
+Catalog 
+
+Lexcial 
+
+Emotion Prior 
+
+(a) Previous EVC Framework 
+
+Hard Mask 
+
+Input Video 
+
+Catalog  - Catalog 
+
+Graph  𝐴 𝑐𝑐 
+
+Catalog  - Lexical 
+
+Graph  𝐴 𝑐𝑤 
+
+Lexical  - Lexical 
+
+Graph  𝐴 𝑤𝑤 
+
+Emotion Graph 
+
+(b) Our SAGML 
+
+Soft Gate Estimation 
+
+> …
+
+Full Emotion Logits 
+
+0.8 
+
+0.6 
+
+0.5 
+
+0.4 
+
+0.1 
+
+> …
+
+Fig. 1. Comparison between the (a) previous EVC framework and (b) our proposed SAGML. 
+
+established recurrent convolutional encoders and sequence-to-sequence decoders, and subsequently improved temporal abstraction through hierarchical encoding and frame-level at-tention [1]–[4]. Most classical video captioning systems focus on objective facts, such as objects, actions, scenes, and event transitions. However, user-generated videos shared on social platforms often convey affective intent through facial expres-sions, body motion, color tone, scene context, and temporal changes. A caption that only reports the factual content may therefore be semantically correct but emotionally incomplete. Emotional video captioning (EVC) addresses this limitation by generating descriptions that jointly preserve factual content arXiv:2607.29045v1 [cs.CV] 31 Jul 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+and express the intrinsic emotions conveyed by the video. EVC is challenging for three main reasons. First, emotional cues are usually implicit and ambiguous. The same visual event may evoke different affective interpretations depending on scene context, temporal evolution, and linguistic framing. Second, emotion is not isolated from factual semantics. A caption must describe what happens in the video while select-ing emotion words that are grounded in the observed content. Overemphasizing affect can produce emotional but factually drifting captions, whereas insufficient affective modeling leads to bland and neutral descriptions. Third, real videos often contain compound or evolving emotions. A birthday scene may involve joy and surprise, a farewell scene may combine sadness, warmth, and hope. A model that assumes a single dominant emotion may fail to represent such mixed affective states. Early work on emotion-aware video description introduced fact-emotion dual streams and emotion-oriented datasets, showing that emotional expression is essential for human-like video descriptions [5]. Contextual attention models further demonstrated that visual and textual contexts should be jointly attended during caption decoding [6]. More recent models explicitly learn video emotion representations. VEIN predicts an emotion distribution over an open psychological vocabulary and coordinates emotion prediction with factual contrastive learning [7]. EPAN introduces a perception-priority paradigm in which a model first learns a tree-structured emotion prior and then uses the perceived emotion to guide caption gener-ation [8]. This line of work confirms that explicit affective representation is important for EVC. Despite this progress, rigid hierarchical emotion priors still impose structural constraints that are not fully aligned with the nature of visual emotion. As shown in Fig. 1 (a), most work [8]–[11] organizes emotions into catalog-level psycho-logical categories and lexical-level daily emotion words, and applies a subordinate masking mechanism to guide coarse-to-fine emotion learning. This design is effective because it narrows the search space for lexical emotion words. However, the binary mask also creates an error cascade: once a coarse category receives a low score, its subordinate lexical words may be blocked even if the visual content supports them. Moreover, a tree encodes mostly one-to-many relations and is less suitable for multi-category words, semantically related emotion words, and co-existing emotions across categories. Furthermore, another limitation of current EVC models lies in the language decoder. Recurrent or lightweight Transformer decoders can be trained effectively on limited EVC datasets, but they may have insufficient language capacity to express nuanced affective content, especially for low-frequency lexical emotions. Large language models (LLMs) provide strong lin-guistic priors and compositional generation ability, but directly applying them to EVC can cause a new problem: the model may generate fluent generic sentences while ignoring visual affect. Thus, an EVC decoder should not only receive visual and affective prompts, but also be explicitly regularized to preserve multi-level emotion predictions. To address these issues, we propose SAGML, a self-adapting emotional video captioning framework based on af-fective heterogeneous graph reasoning and multi-task language modeling. SAGML replaces the discrete emotion tree with a continuous graph containing two types of nodes: catalog nodes for psychological emotion categories and lexical nodes for daily emotion words. The graph topology integrates three complementary relations: affective proximity between cata-log categories, corpus-level conditional association between categories and words, and semantic similarity among lexical emotion words. Based on the catalog distribution inferred from the video, SAGML propagates affective activation over the graph to produce a soft lexical gate. Unlike hard masking, the gate assigns continuous weights and preserves non-zero probability for alternative lexical paths, allowing later visual-emotion attention and language decoding to correct early uncertainty. SAGML then performs graph-guided affective encoding. Video features query lexical graph nodes, and the soft gate is injected as an attention bias. This makes graph attention both prior-aware and visually adaptive: prior-related lexical nodes are encouraged, while visually matched but initially under-weighted nodes can still be selected. The generated affective tokens are concatenated with video tokens and fed into a causal language decoder. To keep the decoder affectively grounded, SAGML attaches dual catalog and lexical classification heads to the prompt hidden states and optimizes them with an emotion distribution learning loss. The final objective jointly trains caption generation and multi-level affective prediction. The main contributions of this paper are summarized as follows.  
+
+> •
+
+We propose SAGML, a self-adapting framework for emotional video captioning that integrates affective graph reasoning with multi-task causal language modeling.  
+
+> •
+
+We replace rigid tree-structured emotion masking with a unified continuous affective heterogeneous graph and topology-driven soft gating with graph-biased video-to-emotion attention, jointly modeling category–category, category–word, and word–word relations to enable error-resilient lexical emotion selection and better represent mixed emotional states.  
+
+> •
+
+We introduce a prompt-level multi-task learning strategy for EVC, where catalog and lexical emotion distribution heads regularize the language decoder jointly with au-toregressive caption generation.  
+
+> •
+
+We fine-tuned a large language model on the EVC task for the first time, equipping it with more precise emotion understanding capabilities.  
+
+> •
+
+Experiments on EmVidCap-S, EmVidCap-L, and EmVid-Cap show consistent improvements over existing meth-ods. On the full EmVidCap dataset, SAGML surpasses the strongest comparison method by 6.7 points in Acc sw ,7.7 points in Acc c, 9.0 points in CIDEr, and 8.6 points in CFS. II. R ELATED WORK 
+
+A. Factual and Stylized Visual Captioning 
+
+Video captioning translates a temporally ordered visual signal into a natural-language description. Early neural sys-tems established the encoder–decoder formulation by coupling JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+convolutional video representations with recurrent language models. LRCN connected convolutional visual features to recurrent sequence models for end-to-end visual recognition and description [1]. S2VT then used a sequence-to-sequence architecture to encode video frames and decode words [2], while HRNE hierarchically summarized short frame subse-quences to model longer temporal transitions [3]. Temporal attention further allowed the decoder to select different video segments for different output words [4]. These studies estab-lished temporal representation learning as a central component of factual video description. Later work improved factual grounding and long-range cor-respondence in several ways. M3 introduced a shared visual– textual memory to model long-term multimodal dependencies and guide attention [12]. RecNet added a backward objective that reconstructs video features from decoder states [13]. SGN groups frames according to discriminative phrases in the partially generated caption [14], and SwinBERT performs end-to-end spatio-temporal encoding and caption generation with a learned sparse attention mask [15]. Beyond single-sentence description, dense event captioning jointly localizes and de-scribes multiple temporally situated events in a video [16]. This line of work improves the representation of objects, actions, event boundaries, and temporal dependencies, but its learning objectives do not explicitly require the generated language to convey the affect expressed by a video. Research on visual sentiment and stylized captioning pro-vides an earlier connection between visual grounding and non-factual language. SentiBank constructed a large-scale visual sentiment ontology from adjective–noun pairs and trained detectors for the resulting affective concepts [17]. Building on this form of visual sentiment representation, SentiCap combines factual and sentiment-specific recurrent streams to generate positive or negative image descriptions [18]. StyleNet factors recurrent parameters to learn controllable styles from factual image–caption pairs and unpaired stylized text [19]. Chen et al. further introduced a style-factual LSTM and adaptive learning to balance visual fidelity with a requested linguistic style [20]. These studies show that affective word-ing should be introduced without discarding visual content. However, a prescribed style or polarity is different from EVC: in EVC, the emotion must first be inferred from the video and then expressed with visually appropriate words. 
+
+B. Emotional Video Captioning 
+
+Wang et al. established the main EVC benchmark by constructing EmVidCap-S from rewritten MSVD captions, an-notating the longer EmVidCap-L subset from VideoEmotion-8, and combining them as EmVidCap [5]. Their Fact Transfer model uses separate factual and emotional streams and fuses the two word distributions during decoding. CANet replaces this fixed two-stream fusion with a unified model that at-tends to both video features and previously generated words, and introduces video–caption contrastive learning to improve contextual representations [6]. These methods demonstrate the benefit of affective supervision, although emotion is still learned mainly through caption-level mapping rather than an explicit structured representation. Subsequent work makes emotion perception more explicit. VEIN predicts a distribution over a 179-word emotion vo-cabulary, aggregates the most responsive words into an emo-tion vector, and coordinates emotional indication with factual contrastive learning [7]. EPAN organizes 34 psychological categories and 179 lexical emotion words into a two-level tree. It predicts catalog emotions first and applies a subordinate mask before lexical emotion encoding, thereby implementing coarse-to-fine emotion perception [8]. This hierarchy improves interpretability and emotion accuracy, but its binary top-
+
+K selection can suppress a useful lexical word when the preceding catalog prediction is incorrect. More recent EVC models focus on temporal variation, cross-modal grounding, and fine-grained causes. DCGN up-dates emotion representations at each decoding step through element- and subspace-level evolution, and estimates emo-tion intensity before injecting affective features into the decoder [11]. ECPA targets human-centric captions with emotion-recognition and facial-action-unit visual prompts, sentence- and word-level textual prompts, and correspond-ing cross-modal alignment objectives [21]. MM-ECPE treats emotional words and their visual causes as paired evidence: it refines visual and lexical features in two rounds, aligns the final emotion–cause representations contrastively, and conditions a pretrained decoder on the resulting pairs [10]. HEART complements category-level emotion learning with entity-, action-, and event-level semantic extraction and a temporal pyramid, and introduces EmoStruct with subject-and predicate-oriented emotion annotations [9]. Collectively, these methods reduce different sources of EVC error, including static emotion modeling, insufficient facial detail, missing causes, and incomplete temporal semantics. SAGML addresses a separate but related issue: it changes the emotion prior itself from a hard hierarchy into a weighted heterogeneous graph, so uncertainty can be propagated rather than irreversibly pruned. 
+
+C. Visual Emotion Understanding and Structured Priors 
+
+Visual emotion analysis studies affective states conveyed or elicited by visual content. For person-centric images, EMOTIC demonstrated that body appearance and surrounding scene context provide complementary evidence and repre-sented emotion with both discrete categories and continuous valence–arousal–dominance dimensions [22]. VideoEmotion-8 showed that appearance, audio, and semantic attributes like-wise provide complementary evidence for emotion recognition in user-generated videos [23]. VAANet later integrated spatial, channel, and temporal attention in an end-to-end audio-visual model [24]. Affect2MM modeled time-varying emotion with facial, scene, aesthetic, action, and script cues, together with temporal causality [25]. Large-scale web supervision has also been used to learn transferable visual emotion representations over a substantially richer emotion vocabulary [26]. These recognition models provide useful affective features, but EVC additionally requires the selected emotion to be grounded in a factual sentence. Emotion is ambiguous and often multi-label, which mo-tivates distributional and structured prediction. The Plutchik JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4
+
+model organizes primary emotions, intensity variants, and compound relations [27], and it also underlies the 34-category lexicon used by EmVidCap and later EVC models. Image emotion distribution learning has used graph convolution to model correlations among emotion labels instead of predicting each label independently [28]. Circular-structured emotion distribution learning further encodes polarity, type, and inten-sity [29]. EPAN similarly shows that catalog–lexical structure can regularize EVC [8], yet a tree represents only fixed parent-child edges. Graph neural networks provide a more flexible basis for structured affective reasoning. Graph convolutional networks propagate information through local neighborhoods to jointly encode node attributes and topology [30], while relational graph convolution assigns relation-specific transformations to heterogeneous edges [31]. Graph attention additionally learns different relevance weights for connected nodes [32]. These properties are useful for emotion vocabularies because cat-egory proximity, category–word association, and word–word similarity are heterogeneous and many-to-many. SAGML combines these relations in one topology and converts the pre-dicted catalog distribution into a continuous lexical gate. The design retains a psychological prior while allowing visually supported alternatives and cross-category lexical relations to remain available. 
+
+D. Foundation Models and Parameter-Efficient Generation 
+
+Vision-language pretraining supplies representations that are better aligned with text than conventional classification features. CLIP learns transferable image representations by contrastively matching images and natural-language descrip-tions [33]. Frozen showed that a visual encoder can map images into continuous prefix embeddings understood by a pretrained frozen language model [34]. Flamingo subsequently connected pretrained vision and language components with gated cross-attention and supported interleaved image, video, and text inputs [35]. BLIP-2 uses a lightweight querying transformer to bridge frozen visual encoders and frozen lan-guage models [36]. Together, these models establish contin-uous visual prompting as an efficient alternative to training a multimodal generator from scratch. On the language side, Qwen2.5 provides a strong autoregressive prior for compo-sitional generation [37], while LoRA adapts large language models through low-rank updates instead of full parameter tuning [38]. These advances are relevant to EVC but do not by them-selves ensure emotional grounding. A pretrained decoder may produce fluent captions while underusing subtle video affect, especially when emotional words are sparse in the task-specific corpus. SAGML therefore uses the language model in three coupled roles. First, its embedding space initializes typed catalog and lexical nodes. Second, projected visual and graph-derived affective tokens form the continuous prefix for caption generation. Third, the pooled prefix hidden state is supervised by catalog- and lexical-level distribution objectives. The decoder is thus adapted not only to predict the next token, but also to preserve the multi-level affective evidence supplied by the graph. III. P ROPOSED METHOD 
+
+A. Task Definition and Overview 
+
+Given a video X, emotional video captioning generates a sentence Y = ( y1, . . . , y T ) that describes the observed content and expresses the affect conveyed by the video. We use a two-level emotion vocabulary: C = {ci}Mc 
+
+> i=1
+
+contains catalog emotions and W = {wj }Mw 
+
+> j=1
+
+contains lexical emotion words. Following EmVidCap, Mc = 34 and Mw = 179 .As illustrated in Fig. 2, SAGML contains three train-able stages. First, a lightweight visual encoder contextualizes frame-level CLIP features. Second, a graph emotion encoder relates catalog and lexical emotions, infers a catalog distribu-tion from the video, and converts it into a continuous lexical prior for visual-to-emotion attention. Third, projected visual and emotion sequences form a continuous prefix for a Qwen-based decoder. Two emotion heads attached to the Qwen prompt states provide catalog- and lexical-level distribution supervision. All trainable components are optimized end to end with language-modeling and emotion-distribution losses; the CLIP features themselves are extracted offline. 
+
+B. Visual Encoding 
+
+We uniformly sample N frames and use a frozen CLIP ViT-B/32 encoder to extract appearance features [33]: 
+
+F = [ f1; . . . ; fN ] ∈ RN ×df . (1) The implementation uses N = 30 and df = 512 . A learned affine projection maps the features to dimension D, after which a one-layer, one-head self-attention encoder contextu-alizes the frame sequence: 
+
+V = Enc vis (F W v + bv ) ∈ RN ×D . (2) Here D = 300 ; the self-attention key and value dimensions are both 32, and the position-wise feed-forward dimension is 512. No motion stream is consumed by the current visual encoder. The resulting V is used as the query sequence in both levels of emotion perception and is also passed directly to the caption decoder. 
+
+C. Qwen-Aligned Affective Node Initialization 
+
+The graph operates in the hidden space of the selected Qwen model. Let H denote its hidden dimension, which is 3584 for the default Qwen2.5-Instruct backbone [37]. To distinguish the two node types, each emotion string s is converted into a typed phrase: 
+
+ρc(s) = “emotion category: ” ∥s, (3) 
+
+ρw(s) = “emotion word: ” ∥s, (4) where ∥ denotes string concatenation. If Tok( ρ(s)) =(u1, . . . , u L) and ELLM is the Qwen input embedding table, the node feature is 
+
+e(s) = 1
+
+L
+
+> L
+
+X
+
+> ℓ=1
+
+ELLM (uℓ) ∈ RH . (5) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5Graph Propagation 
+
+Cross -Attn  Classifier ( 𝑊 𝑐  )
+
+Soft Gate 
+
+Biased Cross -Attn 
+
+LayerNorm 
+
+MLP 
+
+MLP 
+
+Qwen2.5  (Fine -tune) 
+
+Concat 
+
+Catalog Head 
+
+Lexical Head      
+
+> Propagated Catalog Nodes ത𝐸 𝑐
+> Catalog
+> Nodes 𝐸 𝑐
+> 0
+> Catalog -Catalog
+> Graph 𝐴 𝑐𝑐
+
+Affective Heterogeneous Graph Construction        
+
+> Lexical
+> Nodes 𝐸 𝑤
+> 0
+> Data Corpus
+> Catalog -Lexical
+> Graph 𝐴 𝑐𝑤
+> Lexical -Lexical
+> Graph 𝐴 𝑤𝑤
+
+Affective Heterogeneous 
+
+Graph  𝑨 𝒈𝒓𝒂𝒑𝒉 
+
+𝐴 𝑐𝑐  𝐴 𝑐𝑤 
+
+𝐴 𝑤𝑤 𝐴 𝑐 𝑤 𝑇 
+
+Graph Emotion Encoder  
+
+> Propagated Lexical Nodes ത𝐸 𝑤
+
+Catalog Emotion Perception 
+
+Query 
+
+𝐸 𝑐 
+
+> 0
+
+Key  Value 
+
+𝐻 𝑐 
+
+Catalog Logits  𝑍 𝑐 
+
+Catalog Softmax  𝑃 𝑐   
+
+> (𝑃 𝑐 𝐴 𝑐 𝑐 )𝐴 𝑐 𝑤
+
+Soft Lexical Gate Estimation  
+
+> Propagated
+> Activation 𝑔
+
+Lexical Emotion Perception 
+
+Input Video 
+
+CLIP 
+
+Encoder  
+
+> Visual
+> Feature 𝑉
+
+Query 
+
+Key Value  
+
+> Attention
+> Output 𝐻 𝑤
+
+Output Fusion  
+
+> Emotion
+> Features 𝐻 𝑒
+
+Caption Decoder    
+
+> Visual
+> Feature 𝑉
+> Visual
+> Token 𝑇 𝑣
+> Emotion
+> Token 𝑇 𝑒
+> Pre -caption
+
+A happy  woman is cooking 
+
+cheerfully  in the kitchen. 
+
+ℒ𝐿𝑀 
+
+Emotion Prediction   
+
+> Catalog
+> Logits መ𝑍 𝑐
+> Lexical
+> Logits መ𝑍 𝑤
+
+ℒ𝐸𝐷𝐿 
+
+ℒ = ℒ𝐿𝑀 + 𝜆 ℒ𝐸𝐷𝐿 
+
+Linear 
+
+Fig. 2. Overview of SAGML. Pre-extracted CLIP features are contextualized as visual tokens V . Typed catalog and lexical nodes form an affective heterogeneous graph with catalog–catalog, catalog–lexical, and lexical–lexical relations. Catalog perception produces Pc, which is propagated through Acc 
+
+and Acw to obtain the soft lexical gate g. The gate biases visual-to-lexical attention, and the resulting Hw is fused with a visual residual to produce He.Projected visual and emotion tokens condition a LoRA-adapted Qwen decoder. Catalog and lexical heads on the pooled prompt states are trained jointly with caption generation. 
+
+Applying this operation to all catalog and lexical strings yields 
+
+E0 
+
+> c
+
+∈ RMc×H and E0 
+
+> w
+
+∈ RMw ×H , respectively. These features are computed from the same embedding table used by the caption decoder. GloVe embeddings [39] are retained only for constructing one component of the lexical adjacency; they are not used as Qwen token embeddings. 
+
+D. Affective Heterogeneous Graph Construction 
+
+SAGML represents the two emotion levels as an affective heterogeneous graph 
+
+G = ( V, E), V = Vc ∪ V w. (6) For a nonnegative matrix B, define row normalization as 
+
+RN( B)ij = Bij 
+
+max( P 
+
+> k
+
+Bik , ϵ ) . (7) 
+
+Catalog–catalog relation. The implementation imposes a smooth cyclic neighborhood over the fixed catalog index order. For indices i and j,
+
+dcyc (i, j ) = min  |i − j|, M c − | i − j|, (8) 
+
+Acc = RN 
+
+
+
+exp 
+
+
+
+− dcyc (i, j )2
+
+2σ2
+
+ 
+
+> ij
+
+!
+
+, (9) with σ = 1 .5. Thus catalog activation can be smoothed to neighboring indices rather than remaining one-hot. 
+
+Catalog–lexical relation. For each training caption, the loader extracts the unique words that occur in W and maps each word to one or more catalog categories using the provided emotion lexicon. Let ncw ij count the resulting association between ci and wj , and let nci = P 
+
+> j
+
+ncw ij . Additive smoothing gives 
+
+eAcw [i, j ] = ncw ij + αnci + αM w
+
+, Acw = RN( eAcw ), (10) where α = 0 .1. This construction retains multi-parent words and assigns a nonzero smoothed association to every catalog– lexical pair. 
+
+Lexical–lexical relation. The lexical adjacency combines Qwen similarity, GloVe similarity, and caption-level co-occurrence. For a feature matrix E, the thresholded nonnega-tive cosine matrix is 
+
+Sτ (E)[ i, j ] = 
+
+(
+
+max(cos( Ei, E j ), 0) , cos( Ei, E j ) ≥ τ, 
+
+0, otherwise ,
+
+(11) with unit diagonal. Let Gw be the 300-dimensional GloVe lexical features. For the corpus term, nww ij counts ordered pairs of unique emotion words co-occurring in a caption and nwi
+
+counts captions containing wi:
+
+Cww [i, j ] = nww ij + αnwi + αM w
+
+. (12) After setting the diagonal of Cww to one and row-normalizing it, the three sources are fused as 
+
+Aww = RN  βLSτ (E0
+
+> w
+
+) + βGSτ (Gw) + βR RN( Cww ) .
+
+(13) The implementation uses τ = 0.5 and (βL, β G, β R) =(0 .5, 0.3, 0.2) . Before the final row normalization, the diagonal is reset to one. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6
+
+The complete adjacency is 
+
+Agraph = RN 
+
+ Acc Acw 
+
+A⊤ 
+
+> cw
+
+Aww 
+
+ 
+
+. (14) One propagation step followed by a two-layer projection produces  ¯Ec
+
+¯Ew
+
+
+
+= Φ 
+
+
+
+Agraph 
+
+E0
+
+> c
+
+E0
+
+> w
+
+ 
+
+, (15) 
+
+Φ( x) = LN  W2 GELU( W1x + b1) + b2
+
+. (16) The current implementation uses ¯Ew in lexical perception. Although ¯Ec is computed by the propagation routine, catalog perception uses the initial catalog nodes E0 
+
+> c
+
+.
+
+E. Catalog Emotion Perception 
+
+The catalog branch uses each visual token as a query and the initial catalog nodes as keys and values: 
+
+Qc = V W cQ, Kc = E0 
+
+> c
+
+W cK , Uc = E0 
+
+> c
+
+W cV . (17) The attention matrix and catalog-aware visual sequence are 
+
+Ac = softmax 
+
+ QcK⊤
+
+> c
+
+√H
+
+
+
+, (18) 
+
+Hc = AcUc. (19) Mean pooling over the N visual positions gives the encoder-side catalog logits and probability distribution shown in Fig. 2: 
+
+Zc = Linear c
+
+1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Hc[n]
+
+!
+
+, (20) 
+
+Pc = softmax( Zc). (21) No top-K decision is applied. Consequently, gradients from the downstream soft gate can reach the catalog branch even though Zc is not assigned a separate encoder-side classification loss. 
+
+F. Topology-Driven Soft Lexical Gate 
+
+The catalog distribution is first smoothed over Acc and then transferred to lexical nodes through Acw :
+
+rw = ( PcAcc )Acw ∈ RMw . (22) The propagated activation is transformed by an Mw-to-Mw
+
+linear layer: 
+
+g = max  σ Linear g (rw), ϵ  , (23) where the maximum is element-wise and ϵ = 10 −6. The gate layer is initialized as the identity with zero bias. Unlike a binary subordinate mask, gj > 0 for every lexical node, so the catalog prior can attenuate a word without making it unreachable. 
+
+G. Graph-Biased Lexical Affective Attention 
+
+The lexical branch attends from visual tokens to the prop-agated lexical nodes: 
+
+Qw = V W wQ , Kw = ¯EwW wK , Uw = ¯EwW wV . (24) The logarithm of the gate is broadcast to all visual positions and added to the scaled dot-product scores: 
+
+Aw = softmax 
+
+ QwK⊤
+
+> w
+
+√H + 1N log( g)⊤
+
+
+
+, (25) 
+
+Hw = AwUw. (26) Thus g behaves as a multiplicative prior after the softmax, while the visual–lexical compatibility term remains able to compensate for a weak prior. The attention output is fused with a learned visual residual: 
+
+He = LayerNorm ( Hw + Linear r (V )) . (27) The implementation additionally computes lexical diagnostic logits by classifying the temporal mean of He. These encoder-side lexical logits are returned for analysis but are not included in the current loss. The supervised catalog and lexical heads described below operate on Qwen prompt states. 
+
+H. Qwen-Based Prompt Caption Decoder 
+
+Two independent MLPs map the visual and affective se-quences to the Qwen hidden dimension: 
+
+Tv = MLP v (V ), Te = MLP e(He), (28) where each projector is Linear–GELU–Linear–LayerNorm and 
+
+Tv , T e ∈ RN ×H . The caption tensor produced by the data loader is converted back to text and re-tokenized with the Qwen tokenizer. An EOS token is appended, and its input embeddings are denoted by Ty . During teacher-forced training, the decoder input is 
+
+T = [ Tv ; Te; Ty ]. (29) The first 2N positions form the continuous multimodal prompt. Their labels are set to −100 , so the native causal-language-model loss is evaluated only on caption tokens. Accordingly, 
+
+p(yt | y<t , X ) = Qwen  yt | [Tv ; Te], y <t 
+
+. (30) The “Pre-caption” path in Fig. 2 denotes y<t : ground truth caption prefixes are used during training, whereas previously generated tokens are used at inference. Generation starts from the Qwen BOS token and uses greedy next-token selection until EOS or the maximum length is reached. The Qwen2.5-Instruct backbone is not fully fine-tuned. LoRA [38] is applied only to the query and value pro-jections of its attention layers, with rank 8, scaling factor 16, and dropout 0.05. The remaining base-model parameters stay frozen, while the two prompt projectors, graph encoder, visual encoder, and prediction heads are trainable. Gradient checkpointing is enabled for the Qwen backbone. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+I. Prompt-Level Multi-Task Emotion Prediction 
+
+Let Hp ∈ R2N ×H denote the final-layer Qwen hidden states at the visual and emotion prompt positions. Their mean is 
+
+hvibe = 12N
+
+> 2N
+
+X
+
+> i=1
+
+Hp[i]. (31) The catalog and lexical heads in Fig. 2 produce 
+
+ˆzc = Linear dec c (hvibe ), ˆzw = Linear dec w (hvibe ). (32) Because the heads read the contextualized prompt rather than generated words, their supervision directly constrains how visual and graph-derived emotion evidence is represented inside the decoder. 
+
+J. Training Objective 
+
+The captioning term is the Qwen autoregressive loss: 
+
+LLM = −
+
+> T
+
+X
+
+> t=1
+
+log p(yt | y<t , X ). (33) Catalog and lexical labels are obtained from emotion words occurring in each training caption and their lexicon-defined catalog mappings. The loader retains up to three labels at each level. The target constructor counts valid indices and normalizes their counts to form distributions qc ∈ RMc and 
+
+qw ∈ RMw ; samples without a valid target at a level are excluded from that level’s loss. The emotion-distribution loss is 
+
+LEDL = DKL (qc ∥ softmax(ˆ zc))+ DKL (qw ∥ softmax(ˆ zw)) .
+
+(34) The implemented total loss is 
+
+L = LLM + λLEDL . (35) 
+
+K. Discussion 
+
+The main distinction between SAGML and a hard catalog-to-word tree lies in how the prior enters lexical selection. A hard mask makes the lexical candidate set a discrete consequence of the catalog decision. SAGML instead maps 
+
+Pc to the strictly positive gate g and adds log g to visual– lexical attention. The graph therefore changes the relative preference among emotion words without deleting alternatives. The prompt-level objectives then require the LoRA-adapted decoder to retain this affective evidence while learning the caption likelihood. The current Qwen-aligned implementation also reduces the representation mismatch between affective reasoning and language generation. Catalog and lexical nodes are initialized with Qwen input embeddings, visual and affective tokens are projected into the same hidden dimension, and prompt-level heads supervise the affective content encoded in the Qwen prefix. GloVe remains useful, but only as an auxiliary word-word relation prior inside the graph topology. As a result, the model keeps the interpretability of structured emotion priors while using the linguistic capacity of a large causal language model for final caption generation. IV. E XPERIMENTS 
+
+A. Datasets 
+
+We evaluate SAGML on the three standard splits introduced with EmVidCap [5]. They differ substantially in video source, caption length, and annotation protocol, and therefore test complementary aspects of emotional captioning. 
+
+EmVidCap-S is derived from MSVD [40]. Annotators rewrote factual MSVD descriptions by inserting visually com-patible emotion expressions. It contains 374 videos: 240 videos with 8,169 emotional captions for training and 134 videos with 4,611 captions for testing. Its clips and sentences are relatively short, so the split mainly evaluates fine-grained emotion-word selection under otherwise familiar factual content. 
+
+EmVidCap-L is constructed from the VideoEmotion-8 benchmark [23]. Its captions are written from scratch rather than obtained by modifying factual references. The split contains 1,141 training videos with 19,398 captions and 382 test videos with 6,527 captions. Compared with EmVidCap-S, it has longer videos, longer sentences, and more varied emotional phrasing, making temporal content selection and factual–affective coordination more difficult. 
+
+EmVidCap combines the two subsets while retaining their official splits. It contains 1,381 training videos with 27,567 captions and 516 test videos with 11,138 captions. We use this combined benchmark for all ablation and parameter studies because it exposes the model to both rewritten short captions and freely annotated long descriptions. 
+
+B. Evaluation Metrics 
+
+We report semantic, emotional, and hybrid measures. Se-mantic quality is evaluated with BLEU-1 to BLEU-4 [41], METEOR [42], ROUGE-L [43], and CIDEr [44]. BLEU measures modified n-gram precision, METEOR additionally considers flexible word matching, ROUGE-L is based on the longest common subsequence, and CIDEr weights consensus with multiple human references. Following the EmVidCap protocol [5], emotional correct-ness is measured by emotion-word accuracy Acc sw and emotion-sentence accuracy Acc c. Let Nr and Nw be the numbers of correct and incorrect generated emotion words, 
+
+Φ the set of generated captions without an emotion word, N ∗
+
+> r
+
+the number of captions containing at least one correct emotion word, Nh the number containing both correct and incorrect emotion words, and S the complete generated-caption set. The two scores are 
+
+Acc sw = Nr
+
+Nr + Nw + |Φ| , (36) 
+
+Acc c = exp 
+
+
+
+1 − N ∗
+
+> r
+
+N ∗ 
+
+> r
+
+− Nh
+
+ N ∗
+
+> r
+
+|S| . (37) We further report BFS and CFS to avoid evaluating factual and emotional quality in isolation: 
+
+BFS = β
+
+> 4
+
+X
+
+> n=1
+
+ωnBLEU n + (1 − β)Acc , (38) 
+
+CFS = β CIDEr + (1 − β)Acc , (39) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8                                                                                                                                                                                                                                                                                                             
+
+> TABLE I PERFORMANCE COMPARISON ON EMVID CAP -S, E MVID CAP -L, AND EMVID CAP .Dataset Method Acc sw Acc cB-1 B-2 B-3 B-4 METEOR ROUGE-L CIDEr BFS CFS EmVidCap-S SA-LSTM [13] 68.8 67.2 80.7 67.9 56.3 45.5 33.0 68.2 72.1 59.0 71.3 SGN [14] 73.9 73.1 77.5 62.7 51.3 41.1 30.6 63.6 71.0 56.4 71.5 FT [5] 69.4 67.1 77.2 60.3 47.4 36.3 29.0 63.4 62.5 52.5 63.7 CANet [6] 78.7 76.8 78.5 64.0 52.1 41.8 30.8 65.7 74.4 57.9 75.1 VEIN [7] 82.7 82.1 82.0 68.4 57.1 45.9 33.0 69.0 79.6 62.4 80.2 EPAN [8] 84.1 82.8 82.5 69.6 57.8 46.2 34.4 69.8 80.6 63.1 81.1 DCGN [11] 86.5 85.7 84.5 70.9 59.2 48.7 35.7 71.0 85.2 65.7 86.6 MM-ECPE [10] 88.7 87.6 86.9 72.7 60.5 49.6 38.1 74.6 88.3 66.6 88.3
+> SAGML 93.5 92.3 93.6 78.5 65.4 53.8 40.8 77.2 96.1 71.5 95.5
+> EmVidCap-L SA-LSTM [13] 48.6 47.1 71.0 51.1 34.5 22.5 19.6 40.7 30.2 38.9 33.7 CANet [6] 41.9 39.7 66.9 44.8 29.3 19.3 18.2 37.9 23.3 33.9 26.8 VEIN [7] 57.4 56.8 71.6 52.1 37.4 26.3 20.9 41.7 33.4 43.0 39.2 EPAN [8] 63.8 62.3 73.6 54.0 38.3 27.0 21.2 42.3 34.7 45.0 40.4 DCGN [11] 71.0 69.4 74.5 55.3 40.0 28.1 23.4 47.7 41.5 47.3 46.9 HEART [9] 55.8 54.2 71.5 50.9 34.2 22.7 19.7 41.2 28.8 40.3 34.0 MM-ECPE [10] 73.4 72.3 76.8 57.5 41.7 28.9 24.7 49.5 65.2 49.2 66.7
+> SAGML 80.2 79.6 82.7 62.4 46.0 31.8 26.9 52.7 71.8 53.8 73.4
+> EmVidCap SA-LSTM [13] 53.4 50.7 70.6 51.4 36.7 25.4 21.0 45.9 38.8 41.2 41.5 FT [5] 51.2 49.6 67.6 47.2 32.0 21.6 20.4 43.1 29.0 37.6 33.3 SGN [14] 50.4 48.6 68.7 48.9 34.2 24.0 20.1 44.8 35.5 39.1 38.3 CANet [6] 53.7 52.7 68.1 47.7 32.9 22.5 19.7 43.7 34.5 38.8 38.2 VEIN [7] 59.0 57.6 72.1 52.8 37.9 27.1 21.6 46.8 39.4 43.6 43.1 EPAN [8] 69.3 67.2 74.4 55.6 39.9 28.0 23.0 47.1 43.0 47.0 48.0 DCGN [11] 74.8 73.1 75.6 56.7 40.5 28.5 24.9 51.7 49.8 48.5 51.7 MM-ECPE [10] 75.6 73.8 78.1 58.5 42.3 30.2 26.4 53.8 67.9 50.4 69.3
+> SAGML 82.3 81.5 85.7 64.3 46.1 34.8 28.5 57.2 76.9 55.7 77.9
+
+where Acc = (Acc sw + Acc c)/2, β = 0.8, and 
+
+(ω1, ω 2, ω 3, ω 4) = (0 .1, 0.2, 0.3, 0.4) . All methods use the same 34-category/179-word lexicon and evaluation implemen-tation. 
+
+C. Implementation Details 
+
+For the default setting, we uniformly sample 30 frames and extract 512-dimensional CLIP ViT-B/32 features [33]. A linear projection and a one-layer, one-head self-attention encoder map them to D = 300 . The graph contains 34 catalog nodes and 179 lexical nodes. Typed emotion strings are embedded with Qwen2.5-Instruct [37]. The lexical adjacency combines Qwen similarity, 300-dimensional GloVe similarity [39], and caption-corpus co-occurrence with weights 0.5, 0.3, and 0.2,respectively, cosine edges below τ = 0 .5 are removed. Add-
+
+0.1 smoothing is used for corpus-derived category–word and word–word statistics. Visual and affective sequences are separately projected to the Qwen hidden size and concatenated as a continuous prefix. The Qwen backbone is adapted with LoRA [38] on the query and value projections, using rank 8, scaling factor 16 , and dropout 0.05 . Captions are truncated to 15 dataset words before being retokenized by the Qwen tokenizer. We train for 30 epochs with Adamax, learning rate 2 × 10 −4, weight decay 
+
+10 −5, batch size 8, and gradient-norm clipping at 5.0. The emotion-distribution coefficient is 0.2 for the first five epochs and 0.5 thereafter. At inference, captions are generated autore-gressively with greedy next-token selection. The feature study additionally uses ResNet-152 and ResNet-101+3D-ResNeXt-101 representations [45], [46]. All experiments were conducted on 8 NVIDIA Tesla V100 GPUs. 
+
+D. Compared Methods 
+
+We compare against two factual captioning baselines, SA-LSTM [13] and SGN [14], and seven EVC methods. FT uses separately trained fact and emotion streams [5]; CANet ag-gregates visual and textual context [6]; VEIN learns an open-vocabulary visual emotion distribution [7]; EPAN introduces catalog-to-lexical tree-structured emotion learning [8]; DCGN evolves the emotion representation during decoding [11]; MM-ECPE extracts paired emotions and visual causes [10]; and HEART aligns hierarchical visual semantics with emotion representations [9]. We transcribe the published results under the feature/decoder setting indicated by each source and use the three official test splits without resplitting. 
+
+E. Main Comparison With State-of-the-Art Methods 
+
+Table I reports the comparison on all three benchmarks. SAGML obtains the highest value in every reported column, but the scale and source of the gains differ across the datasets. 
+
+EmVidCap-S. Compared with the strongest listed baseline, MM-ECPE, SAGML increases Acc sw /Acc c from 88.7/87.6 to 93.5/92.3. The gains are not limited to emotion words: B-4 improves by 4.2 points, METEOR by 2.7, ROUGE-L by 2.6, and CIDEr by 7.8. CFS consequently rises from 88.3 to 95.5. Because this subset largely preserves MSVD factual content, the concurrent changes in semantic and emotion metrics indi-cate that SAGML is not merely appending frequent affective modifiers, the selected lexical emotions remain compatible with the reference event descriptions. 
+
+EmVidCap-L. This split is more difficult for every method because its clips and references are longer. SAGML reaches JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9GT:  The  man felt  wrathful  that he didn't  hit the ball  into the  hole .
+
+DCGN:  The man is  depressed  after  his performance  failed. 
+
+Ours : The man felt  wrathful  after failing to  hit the  ball .
+
+GT:  A man is  peeling  and  eating  a banana  happily .
+
+DCGN:  A sad  man is eating  bananas .
+
+Ours : The man  peeled  the banana and  ate  it  happily .
+
+GT:  The  woman is very  surprised  and  happy  because everybody is here .
+
+DCGN:  The woman  is  very happy to see her  friends .
+
+Ours : The woman  is  very  surprised  and  happy  with  her friends .
+
+# #1 
+
+# #2
+
+# #3                                                                                                         
+
+> Fig. 3. Qualitative comparison between DCGN and SAGML on EmVidCap. SAGML more accurately associates emotions with visual events, preserves action details, and captures compound emotions. Green words indicate content consistent with the ground truth, while red words denote incorrect predictions. TABLE II ABLATION STUDY OF CORE SAGML COMPONENTS ON EMVID CAP .Method Acc sw Acc cB-1 B-2 B-3 B-4 METEOR ROUGE-L CIDEr BFS CFS + Catalog Emotion Perception 74.3 72.1 81.7 59.4 42.5 31.6 25.2 52.3 62.8 51.0 64.9 + Soft Gate 78.3 76.5 84.1 62.4 43.2 32.8 27.5 55.1 70.8 53.1 72.1 + Lexical Emotion Perception 79.6 78.2 84.6 63.1 44.9 34.2 27.9 56.6 72.3 54.4 73.6 SAGML full model 82.3 81.5 85.7 64.3 46.1 34.8 28.5 57.2 76.9 55.7 77.9
+> TABLE III PERFORMANCE OF SAGML WITH DIFFERENT VISUAL FEATURES ON EMVID CAP .Feature Acc sw Acc cB-1 B-2 B-3 B-4 METEOR ROUGE-L CIDEr BFS CFS ResNet-152 81.6 80.4 82.7 62.5 44.3 31.0 25.6 55.2 65.8 53.4 68.8 ResNet-101 + 3D-ResNeXt-101 82.1 81.1 84.6 64.5 46.0 34.2 28.7 58.0 72.1 55.4 74.0 CLIP 82.3 81.5 85.7 64.3 46.1 34.8 28.5 57.2 76.9 55.7 77.9
+
+80.2 Acc sw and 79.6 Acc c, exceeding MM-ECPE by 6.8 and 7.3 points, respectively. It also improves CIDEr from 65.2 to 71.8 and CFS from 66.7 to 73.4. The improvement is consistent across B-1–B-4, METEOR, and ROUGE-L, sug-gesting that the soft graph prior remains useful when emotional expressions are less templated and must be coordinated with more factual words. 
+
+EmVidCap. On the combined split, SAGML improves the previous highest values by 6.7 points in Acc sw , 7.7 in Acc c,4.6 in B-4, 9.0 in CIDEr, and 8.6 in CFS. The combined data contain both concise rewritten captions and longer free-form annotations, performance on this setting therefore reflects ro-bustness to heterogeneous language patterns. The simultaneous increases in emotion, semantic, and hybrid measures support the intended role of the heterogeneous graph: catalog evi-dence guides lexical selection, while continuous gating leaves alternative emotion words available for visually conditioned attention and language decoding. 
+
+F. Qualitative and Visualization Analysis 
+
+Fig. 3 compares captions generated by DCGN and SAGML for three representative videos. The examples examine comple-mentary aspects of emotional video captioning: recognizing an emotion from an event outcome, preserving an action sequence while assigning the appropriate affect, and expressing multiple coexisting emotions. Green text marks content that agrees with the ground-truth caption, while red text marks an incorrect action or emotion. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10                                   
+
+> TABLE IV EFFECT OF THE LANGUAGE DECODER ON EMVID CAP .Method Acc sw Acc cB-1 B-2 B-3 B-4 METEOR ROUGE-L CIDEr BFS CFS SAGML-BLIP 80.5 78.9 82.8 60.3 40.5 31.9 26.8 54.7 71.4 52.1 73.1 SAGML-Qwen 82.3 81.5 85.7 64.3 46.1 34.8 28.5 57.2 76.9 55.7 77.9
+
+In Example #1, the video shows a golfer missing a putt, as indicated by the ball trajectory in the highlighted frames. DCGN describes the man as “depressed” and refers only generally to a failed performance. SAGML instead generates “wrathful” and connects that emotion to the visually grounded event of failing to hit the ball, closely matching both the affective and factual content of the reference. This example illustrates the importance of linking an emotion word to its specific visual cause rather than relying on a broadly plausible negative emotion. Example #2 requires both temporal action understanding and emotion recognition. The man first peels a banana and then eats it happily. DCGN captures only the eating action and incorrectly assigns the emotion “sad”. SAGML preserves the two-step action sequence with “peeled” and “ate”, while also predicting “happily”. The caption therefore maintains the factual progression of the video without introducing an emotion that conflicts with its visual tone. Example #3 contains compound affect. The reference de-scribes the woman as both “surprised” and “happy” upon seeing the people around her. DCGN identifies happiness but omits surprise, reducing the event to a single dominant emotion. SAGML retains both emotions and grounds them in the woman’s interaction with her friends. This result is consistent with the purpose of the soft heterogeneous graph: related lexical emotions can remain active simultaneously instead of being restricted to one coarse affective path. Across the three cases, SAGML produces captions whose emotional expressions remain tied to observable people, ac-tions, and event outcomes. The examples also complement the quantitative results: graph-based affective prompting helps select more appropriate and, when necessary, multiple emotion words, while the LLM decoder expresses that evidence in coherent factual sentences. 
+
+G. Ablation Study 
+
+We conduct ablations on EmVidCap to isolate the effects of catalog perception, topology-driven gating, lexical percep-tion, graph relations, and prompt-level emotion distribution learning. Unless noted otherwise, all variants use the CLIP representation and Qwen decoder. 
+
+1) Effectiveness of Main Components: Table II incremen-tally adds the main SAGML components. Catalog emotion perception alone provides a coarse affective prior but reaches only 74.3/72.1 on Acc sw /Acc c. Propagating this distribution into the topology-driven soft gate raises the two scores by 4.0 and 4.4 points and improves CIDEr by 8.0 and CFS by 7.2. This is the largest single change in the incremental comparison, showing that transferring catalog evidence to a                            
+
+> TABLE V ABLATION OF GRAPH RELATION TYPES ON EMVID CAP .Graph Variant Acc sw Acc cB-4 CIDEr BFS CFS Full heterogeneous graph 82.3 81.5 34.8 76.9 55.7 77.9
+> w/o Acc 80.5 79.4 31.4 66.5 53.2 69.2 w/o Aww 78.2 76.3 27.5 52.1 50.1 57.1
+
+non-binary lexical distribution is important for both affective choice and caption consensus. Adding lexical emotion perception further improves B-4 from 32.8 to 34.2 and raises Acc c from 76.5 to 78.2. This stage allows frame tokens to query graph-refined lexical nodes rather than relying only on the propagated prior. Finally, the full model adds prompt-level emotion distribution learning and obtains 82.3/81.5 Acc sw /Acc c, 76.9 CIDEr, and 77.9 CFS. Relative to the preceding variant, the gains are larger on emotion accuracy and hybrid scores than on B-4, which is consistent with the objective directly constraining the affective content of the decoder prefix. 
+
+2) Effect of Visual Representation: To distinguish the con-tribution of SAGML from that of the input representation, we evaluate appearance-only ResNet-152 features, fused ResNet-101 and 3D-ResNeXt-101 appearance–motion features, and vision–language aligned CLIP features. As shown in Table III, adding 3D motion features to the ResNet setting improves B-4 from 31.0 to 34.2, CIDEr from 65.8 to 72.1, and CFS from 68.8 to 74.0. Motion therefore contributes mainly to predicate and event description, while emotion accuracy changes more modestly. CLIP produces the highest Acc sw , Acc c, B-1, B-3, B-4, CIDEr, BFS, and CFS. Relative to the appearance–motion setting, its largest gains occur in CIDEr (4.8 points) and CFS (3.9 points), which is consistent with stronger visual–textual alignment. The motion-fused representation remains slightly higher on B-2, METEOR, and ROUGE-L. Thus, CLIP gives the best overall balance for SAGML, whereas explicit motion features retain an advantage on several overlap-oriented measures. 
+
+3) Effect of Graph Relations: Table V examines the two within-level relation matrices while retaining category–word edges Acw in every variant. Removing catalog–catalog prox-imity Acc lowers Acc sw /Acc c by 1.8/2.1 points and reduces CIDEr and CFS by 10.4 and 8.7, respectively. Neighboring catalog categories therefore provide useful uncertainty propa-gation beyond the initially predicted category. The effect of lexical–lexical relations Aww is larger. Without them, B-4 decreases from 34.8 to 27.5, CIDEr from 76.9 to 52.1, and CFS from 77.9 to 57.1. The drop indicates that iso-lated category–word links are insufficient for selecting varied, semantically compatible emotion expressions. Combining Acc JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11                                                     
+
+> TABLE VI ABLATION OF EMOTION DISTRIBUTION LEARNING ON EMVID CAP .Objective Acc sw Acc cB-4 CIDEr BFS CFS Caption loss only 79.6 78.2 34.2 72.3 54.4 73.6 + Catalog EDL 81.5 79.4 34.4 75.2 55.2 76.3 + Lexical EDL 82.3 81.5 34.8 76.9 55.7 77.9
+> TABLE VII EFFECT OF LEXICAL GRAPH THRESHOLD τON EMVID CAP .
+> τAcc sw Acc cB-4 CIDEr BFS CFS 0.4 81.1 79.2 32.2 69.3 53.7 71.5 0.5 82.3 81.5 34.8 76.9 55.7 77.9
+> 0.6 79.5 77.2 30.3 65.8 51.8 68.3
+
+and Aww with the shared cross-layer matrix produces the most consistent result across all six measures. 
+
+4) Effect of Emotion Distribution Learning: Table VI studies the two prompt-level emotion losses incrementally. Caption-only training already uses graph-derived affective to-kens, but it does not directly constrain the pooled prompt state. Adding catalog EDL increases Acc sw /Acc c from 79.6/78.2 to 81.5/79.4 and raises CIDEr by 2.9 points. Coarse distribution supervision therefore improves not only the predicted affect, but also the semantic use of the prefix. Adding lexical EDL on top of catalog EDL further improves Acc c by 2.1 points, CIDEr by 1.7, and CFS by 1.6. The complete dual-level objective obtains the best value in every column. Catalog supervision stabilizes broad affective orienta-tion, whereas lexical supervision more directly constrains the words that may appear in the caption. Their complementary effect is visible in the larger improvement of emotion and hybrid metrics. 
+
+H. Parameter Analysis 1) Effect of Lexical Similarity Threshold: The lexical graph 
+
+Aww retains Qwen- and GloVe-based similarity edges above threshold τ . Table VII compares τ ∈ { 0.4, 0.5, 0.6}. With 
+
+τ = 0 .4, the denser graph reaches 81.1 Acc sw but a lower CIDEr of 69.3, indicating that additional weak lexical edges introduce noise into caption generation. Increasing the thresh-old to 0.6 removes more associations and reduces all six measures, including a 4.5-point drop in B-4 and a 9.6-point drop in CFS relative to τ = 0.5. The intermediate value 
+
+τ = 0 .5 gives the best result throughout, balancing lexical connectivity against semantic selectivity. 
+
+I. Language Decoder Analysis 
+
+The affective graph determines which emotion evidence is supplied to the generator, whereas the language decoder de-termines how that evidence is integrated with factual content. We compare a BLIP-based decoder [36] with the Qwen-based decoder [37] while retaining the SAGML visual encoder, graph construction, and emotion objectives. Table IV shows a consistent advantage for SAGML-Qwen across all metrics. Relative to SAGML-BLIP, it improves Acc sw by 1.8 points and Acc c by 2.6, indicating that the stronger decoder does not dilute the affective prefix. The semantic gains are also distributed across different matching criteria: B-1/B-2/B-3/B-4 increase by 2.9/4.0/5.6/2.9 points, METEOR by 1.7, ROUGE-L by 2.5, and CIDEr by 5.5. The 5.6-point gain on B-3 and the 5.5-point gain on CIDEr are larger than the B-1 gain, suggesting that Qwen mainly improves multi-word composition and agreement with reference descriptions rather than only predicting additional isolated words. At the same time, BFS rises from 52.1 to 55.7 and CFS from 73.1 to 77.9. The joint movement of semantic, emotional, and hybrid metrics supports using Qwen as the default decoder: its linguistic prior better realizes the graph-selected affective evidence as coherent phrases, while the prompt-level catalog and lexical objectives keep generation tied to the video’s emotion. Furthermore, the competitive performance under the BLIP setting also indicates that the capabilities of SAGML are not entirely dependent on LLM. V. C ONCLUSION 
+
+In this paper, we proposed SAGML, a self-adapting emo-tional video captioning framework that integrates affective het-erogeneous graph reasoning with multi-task causal language modeling. Instead of using a rigid tree-structured emotion prior, SAGML represents catalog-level emotions and lexical-level emotion words as a unified heterogeneous graph, where category–category, category–word, and word–word relations are jointly modeled. To further connect structured affective reasoning with natural language generation, SAGML projects visual and graph-derived affective representations into the hidden space of a LoRA-adapted Qwen decoder. Prompt-level catalog and lexical emotion heads are introduced to supervise the decoder prefix, encouraging the language model to preserve multi-level emotional evidence while generating factually grounded captions. The overall framework is op-timized with a joint objective that combines autoregressive caption generation and emotion distribution learning. Experi-ments on EmVidCap-S, EmVidCap-L, and the full EmVidCap benchmark demonstrate that SAGML consistently improves semantic, emotional, and hybrid evaluation metrics over exist-ing emotional video captioning methods. REFERENCES [1] J. Donahue, L. A. Hendricks, S. Guadarrama, M. Rohrbach, S. Venu-gopalan, K. Saenko, and T. Darrell, “Long-term recurrent convolutional networks for visual recognition and description,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2015, pp. 2625–2634. [2] S. Venugopalan, M. Rohrbach, J. Donahue, R. Mooney, T. Darrell, and K. Saenko, “Sequence to sequence—video to text,” in Proceedings of the IEEE International Conference on Computer Vision , 2015, pp. 4534– 4542. [3] P. Pan, Z. Xu, Y. Yang, F. Wu, and Y. Zhuang, “Hierarchical recurrent neural encoder for video representation with application to captioning,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2016, pp. 1029–1038. [4] L. Yao, A. Torabi, K. Cho, N. Ballas, C. Pal, H. Larochelle, and A. Courville, “Describing videos by exploiting temporal structure,” in  
+
+> Proceedings of the IEEE International Conference on Computer Vision ,2015, pp. 4507–4515. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12
+
+[5] H. Wang, P. Tang, Q. Li, and M. Cheng, “Emotion expression with fact transfer for video description,” IEEE Transactions on Multimedia ,vol. 24, pp. 715–727, 2022. [6] P. Song, D. Guo, J. Cheng, and M. Wang, “Contextual attention network for emotional video captioning,” IEEE Transactions on Multimedia ,vol. 25, pp. 1858–1867, 2023. [7] P. Song, D. Guo, X. Yang, S. Tang, and M. Wang, “Emotional video captioning with vision-based emotion interpretation network,” IEEE Transactions on Image Processing , vol. 33, pp. 1122–1135, 2024. [8] P. Song, D. Guo, X. Yang, S. Tang, E. Yang, and M. Wang, “Emotion-prior awareness network for emotional video captioning,” in Proceedings of the 31st ACM International Conference on Multimedia , 2023, pp. 589–600. [9] T. Han, Y. Gong, S. Zhao, M. Tan, Z. Yu, and H. Yao, “HEART: Emotionally grounded video captioning via hierarchical emotion-aligned representation,” IEEE Transactions on Affective Computing , vol. 17, no. 2, pp. 1709–1720, 2026. [10] C. Ye, W. Chen, P. Song, X. Liu, L. Zhang, and Z. Mao, “Multi-round mutual emotion-cause pair extraction for emotion-attributed video captioning,” in Proceedings of the 33rd ACM International Conference on Multimedia , 2025, pp. 3320–3329. [11] C. Ye, W. Chen, J. Li, L. Zhang, and Z. Mao, “Dual-path collaborative generation network for emotional video captioning,” in Proceedings of the 32nd ACM International Conference on Multimedia , 2024, pp. 496– 505. [12] J. Wang, W. Wang, Y. Huang, L. Wang, and T. Tan, “M3: Multimodal memory modelling for video captioning,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2018, pp. 7512–7520. [13] B. Wang, L. Ma, W. Zhang, and W. Liu, “Reconstruction network for video captioning,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2018, pp. 7622–7631. [14] H. Ryu, S. Kang, H. Kang, and C. D. Yoo, “Semantic grouping network for video captioning,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 35, no. 3, 2021, pp. 2514–2522. [15] K. Lin, L. Li, C.-C. Lin, F. Ahmed, Z. Gan, Z. Liu, Y. Lu, and L. Wang, “SwinBERT: End-to-end transformers with sparse attention for video captioning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022, pp. 17 949–17 958. [16] R. Krishna, K. Hata, F. Ren, L. Fei-Fei, and J. C. Niebles, “Dense-captioning events in videos,” in Proceedings of the IEEE International Conference on Computer Vision , 2017, pp. 706–715. [17] D. Borth, T. Chen, R. Ji, and S.-F. Chang, “SentiBank: Large-scale ontology and classifiers for detecting sentiment and emotions in visual content,” in Proceedings of the 21st ACM International Conference on Multimedia , 2013, pp. 459–460. [18] A. Mathews, L. Xie, and X. He, “SentiCap: Generating image de-scriptions with sentiments,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 30, no. 1, 2016, pp. 3574–3580. [19] C. Gan, Z. Gan, X. He, J. Gao, and L. Deng, “StyleNet: Generating attractive visual captions with styles,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2017, pp. 3137–3146. [20] T. Chen, Z. Zhang, Q. You, C. Fang, Z. Wang, H. Jin, and J. Luo, ““factual” or “emotional”: Stylized image captioning with adaptive learning and attention,” in Proceedings of the European Conference on Computer Vision , 2018, pp. 519–535. [21] Y. Wang, Y. Liu, S. Zhou, Y. Huang, C. Tang, W. Zhou, and Z. Chen, “Emotion-oriented cross-modal prompting and alignment for human-centric emotional video captioning,” IEEE Transactions on Multimedia ,vol. 27, pp. 3766–3780, 2025. [22] R. Kosti, J. M. Alvarez, A. Recasens, and A. Lapedriza, “Context based emotion recognition using EMOTIC dataset,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 42, no. 11, pp. 2755– 2766, 2020. [23] Y.-G. Jiang, B. Xu, and X. Xue, “Predicting emotions in user-generated videos,” in Proceedings of the AAAI Conference on Artificial Intelli-gence , vol. 28, no. 1, 2014, pp. 73–79. [24] S. Zhao, Y. Ma, Y. Gu, J. Yang, T. Xing, P. Xu, R. Hu, H. Chai, and K. Keutzer, “An end-to-end visual-audio attention network for emotion recognition in user-generated videos,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 34, no. 1, 2020, pp. 303–311. [25] T. Mittal, P. Mathur, A. Bera, and D. Manocha, “Affect2MM: Affective analysis of multimedia content using emotion causality,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , 2021, pp. 5661–5671. [26] Z. Wei, J. Zhang, Z. Lin, J.-Y. Lee, N. Balasubramanian, M. Hoai, and D. Samaras, “Learning visual emotion representations from web data,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2020, pp. 13 106–13 115. [27] R. Plutchik, Emotion: A Psychoevolutionary Synthesis . New York, NY, USA: Harper & Row, 1980. [28] T. He and X. Jin, “Image emotion distribution learning with graph convolutional networks,” in Proceedings of the 2019 ACM International Conference on Multimedia Retrieval , 2019, pp. 382–390. [29] J. Yang, J. Li, L. Li, X. Wang, and X. Gao, “A circular-structured rep-resentation for visual emotion distribution learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2021, pp. 4237–4246. [30] T. N. Kipf and M. Welling, “Semi-supervised classification with graph convolutional networks,” in International Conference on Learning Rep-resentations , 2017. [31] M. Schlichtkrull, T. N. Kipf, P. Bloem, R. van den Berg, I. Titov, and M. Welling, “Modeling relational data with graph convolutional networks,” in The Semantic Web , ser. Lecture Notes in Computer Science, vol. 10843. Springer, 2018, pp. 593–607. [32] P. Veliˇ ckovi´ c, G. Cucurull, A. Casanova, A. Romero, P. Li` o, and Y. Bengio, “Graph attention networks,” in International Conference on Learning Representations , 2018. [33] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever, “Learning transferable visual models from natural language supervi-sion,” in Proceedings of the 38th International Conference on Machine Learning , ser. Proceedings of Machine Learning Research, vol. 139, 2021, pp. 8748–8763. [34] M. Tsimpoukelli, J. Menick, S. Cabi, S. M. A. Eslami, O. Vinyals, and F. Hill, “Multimodal few-shot learning with frozen language models,” in Advances in Neural Information Processing Systems , vol. 34, 2021, pp. 200–212. [35] J.-B. Alayrac, J. Donahue, P. Luc, A. Miech, I. Barr, Y. Hasson, K. Lenc, A. Mensch, K. Millican, M. Reynolds, R. Ring, E. Rutherford, S. Cabi, T. Han, Z. Gong, S. Samangooei, M. Monteiro, J. L. Menick, S. Borgeaud, A. Brock, A. Nematzadeh, S. Sharifzadeh, M. Bi´ nkowski, R. Barreira, O. Vinyals, A. Zisserman, and K. Simonyan, “Flamingo: A visual language model for few-shot learning,” in Advances in Neural Information Processing Systems , vol. 35, 2022, pp. 23 716–23 736. [36] J. Li, D. Li, S. Savarese, and S. Hoi, “BLIP-2: Bootstrapping language-image pre-training with frozen image encoders and large language mod-els,” in Proceedings of the 40th International Conference on Machine Learning , ser. Proceedings of Machine Learning Research, vol. 202, 2023, pp. 19 730–19 742. [37] Qwen, :, A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Li, D. Liu, F. Huang, H. Wei, H. Lin, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Lin, K. Dang, K. Lu, K. Bao, K. Yang, L. Yu, M. Li, M. Xue, P. Zhang, Q. Zhu, R. Men, R. Lin, T. Li, T. Tang, T. Xia, X. Ren, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Wan, Y. Liu, Z. Cui, Z. Zhang, and Z. Qiu, “Qwen2.5 technical report,” 2025. [Online]. Available: https://arxiv.org/abs/2412.15115 [38] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen, “LoRA: Low-rank adaptation of large language models,” in International Conference on Learning Representations , 2022. [39] J. Pennington, R. Socher, and C. Manning, “GloVe: Global vectors for word representation,” in Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing , 2014, pp. 1532– 1543. [40] D. Chen and W. Dolan, “Collecting highly parallel data for paraphrase evaluation,” in Proceedings of the 49th Annual Meeting of the Asso-ciation for Computational Linguistics: Human Language Technologies .Association for Computational Linguistics, 2011, pp. 190–200. [41] K. Papineni, S. Roukos, T. Ward, and W.-J. Zhu, “BLEU: A method for automatic evaluation of machine translation,” in Proceedings of the 40th Annual Meeting of the Association for Computational Linguistics .Association for Computational Linguistics, 2002, pp. 311–318. [42] S. Banerjee and A. Lavie, “METEOR: An automatic metric for MT evaluation with improved correlation with human judgments,” in Pro-ceedings of the ACL Workshop on Intrinsic and Extrinsic Evaluation Measures for Machine Translation and/or Summarization . Association for Computational Linguistics, 2005, pp. 65–72. [43] C.-Y. Lin, “ROUGE: A package for automatic evaluation of summaries,” in Text Summarization Branches Out . Association for Computational Linguistics, 2004, pp. 74–81. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 
+
+[44] R. Vedantam, C. L. Zitnick, and D. Parikh, “CIDEr: Consensus-based image description evaluation,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2015, pp. 4566–4575. [45] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2016, pp. 770–778. [46] K. Hara, H. Kataoka, and Y. Satoh, “Can spatiotemporal 3D CNNs retrace the history of 2D CNNs and ImageNet?” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2018, pp. 6546–6555.

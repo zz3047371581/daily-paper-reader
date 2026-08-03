@@ -1,0 +1,320 @@
+Title: DensFiLM: Density-Conditioned Video Saliency for Crowd Scenes
+
+URL Source: https://arxiv.org/pdf/2607.25465v1
+
+Published Time: Wed, 29 Jul 2026 00:42:54 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# DensFiLM: Density-Conditioned Video Saliency for Crowd Scenes 
+
+## Anis Ur Rahman 
+
+## CSC - IT Center for Science Ltd., Espoo, Finland 
+
+## anis.rahman@csc.fi 
+
+# Abstract 
+
+Video saliency models typically apply a single fixation strategy across crowd scenes, despite systematic changes in attention with crowd density. Sparse scenes encourage tracking individuals, whereas dense scenes shift attention toward collective motion and scene-level landmarks. We introduce DensFiLM , a density-conditioned video saliency model that inserts a lightweight Feature-wise Linear Modulation layer at the bottleneck of a Video Swin Transformer. A learned density embedding produces channel-wise scale and shift parameters, allowing the decoder to reconstruct saliency from features selected for each density regime. The module adds only ≈ 100K parameters and can use either CrowdFix density labels or the model’s own density prediction. On CrowdFix, DensFiLM achieves mean NSS 1.434 and CC 0.517 over four seeds, improving over ACLNet by 14.7% and 14.9%, respectively, while predicted-density conditioning matches oracle-label performance. Ablations show that explicit RAFT optical flow and larger temporal and social-force extensions provide no further improvement in this setting. In a centre-prior-subtraction diagnostic, density conditioning yields an NSS gain of 0.462 over the unconditioned backbone, compared with 0.124 
+
+under standard evaluation. These results show that lightweight bottleneck conditioning provides a more effective inductive bias than increasing model capacity for crowd-video saliency. Our code is available at 
+
+https://github.com/aniskhan25/crowdfix-saliency .
+
+# 1 Introduction 
+
+Video saliency prediction constructs a computational model of human visual attention over time, estimating where observers fixate while watching dynamic scenes. Such models have practical applications in perceptu-ally optimised video compression [1], region-of-interest-guided adaptive streaming, UAV-based crowd analytics, and human-robot interaction in public spaces. While the field has made rapid progress on generic video benchmarks (Hollywood-2, UCF-Sports, DHF1K), these benchmarks span heterogeneous content (sports, films, surveillance) and the models trained on them implicitly average across fixation strategies that may be mutually incompatible. Crowd videos present a particularly sharp test case: they belong to a single domain, yet they en-compass categorically different attention demands that change with crowd density. The core hypothesis is what we term the density-driven fixation shift . In sparse pedestrian scenes, dis-tinguishable people and trajectories provide plausible individual fixation targets. In the dense free-flowing 
+
+regime, overlap and occlusion reduce individual track-ability, making group motion, flow lanes, and merge re-gions more informative. In dense congested scenes, sup-pressed motion and visual similarity may increase the importance of scene-level landmarks and crowd bound-aries. These regimes therefore emphasise different visual features. A single density-agnostic model must learn all of them from a limited dataset without an explicit signal indicating which regime is present. The CrowdFix benchmark [2] provides a controlled setting for studying this phenomenon: 434 crowd clips are annotated with per-frame fixation maps from 26 eye-tracked observers and partitioned into Sparse Pedestrian (SP), Dense Free-flowing (DF), and Dense Congested (DC) categories. The original CrowdFix study evalu-ated SAM, DeepVS, and ACLNet, with ACLNet [3] ob-taining the strongest reported result (AUC-J 0.817) [2]. To our knowledge, later video saliency methods have not reported results on CrowdFix. Moreover, ACLNet is a generic attentive CNN-LSTM model and uses the same parameters for every crowd category, leaving the dataset’s density annotations unused. We argue that density should instead be introduced at the encoder bot-tleneck, where the feature representation is maximally arXiv:2607.25465v1 [cs.CV] 28 Jul 2026 compressed and semantically abstract. Modulating the bottleneck controls which categorical features including individual body silhouettes, mesoscopic flow trajectories, or scene-landmark contrasts are amplified or suppressed before decoding begins, thus shaping every subsequent spatial reconstruction step. Feature-wise Linear Modulation [4] provides a suit-able mechanism: an element-wise affine transformation 
+
+˜f = f (1 + γ) + β, parameterised by a lightweight projec-tion of a conditioning embedding. Two properties make FiLM particularly suitable here. First, its residual ini-tialisation ( γ ← 0, β ← 0) ensures that at the start of training the transformation is an identity, so Kinetics-400-pretrained bottleneck representations are not dis-rupted when FiLM is inserted. Second, per-channel affine modulation has O(2 C) parameter cost for the con-ditioning projection, two orders of magnitude cheaper than spatial cross-attention ( O(C2)), and does not re-quire spatial alignment between the conditioning signal and the feature map, which is appropriate because den-sity is a global scene property, not a spatially localised one. To delineate the benefit of targeted conditioning against generic capacity scaling, we evaluate three progressively complex extensions of the FiLM base-line: (i) augmenting the model with dense optical flow (RAFT [5]) as a parallel motion encoder, fused at the bottleneck via cross-attention; (ii) a three-branch de-coder that adds a parallel UpBlock3d temporal path-way with a per-category learned social force prior; and (iii) the combination of both. All three variants fail to improve over DensFiLM , and the three-branch archi-tecture, which adds the most parameters, achieves NSS 1.313, returning to the unconditioned VideoSwin base-line value to three decimal places. This result is consis-tent with a bias-variance tradeoff in which the additional parameters introduce enough estimation variance to off-set the benefit of the architectural priors. With 3,189 training clips, the tested higher-capacity extensions are less effective than a minimal, targeted inductive bias. Our contributions are: 1. Density-conditioned bottleneck modulation. 
+
+We introduce DensFiLM , which conditions seman-tically abstract Video Swin features on crowd den-sity using a lightweight FiLM layer. A one-hot abla-tion shows that bottleneck injection provides most of the improvement, while feature-wise scaling of-fers additional class-specific recalibration at a cost of only ≈ 100K parameters. 2. Best reported CrowdFix results and practi-cal inference. DensFiLM achieves AUC-J 0.820, NSS 1.434, and CC 0.517 over four seeds on Crowd-Fix. Conditioning on the model’s own density pre-dictions matches oracle-label performance within 
+
+0.001 NSS, removing the need for manual density labels at inference. 3. Centre-prior and capacity-aware analysis. 
+
+Subtracting the mean training fixation density in-creases the measured conditioning gain from 0.124 
+
+to 0.462 NSS. Ablations show that explicit RAFT optical flow is redundant and that larger temporal and social-force variants fail to improve, indicating that the available CrowdFix training data do not support the additional capacity tested here. 
+
+# 2 Related Work 
+
+## 2.1 Video Saliency Prediction 
+
+Saliency modelling originated with biologically moti-vated centre-surround feature maps combining multi-scale luminance, colour, and motion contrasts [6]. Deep learning approaches replaced these hand-crafted features with learned representations. SAM [7] augmented spa-tial saliency with a multi-level attentive LSTM that in-tegrates CNN features across resolution scales; applied to video, it generates per-frame maps without explicit inter-frame temporal modelling. DeepVS [8] introduced a two-stream architecture combining appearance CNN features with an optical flow stream, fused by a tem-poral LSTM for short-range motion integration; while effective for activities with salient individual motion, it lacks the capacity for long-range temporal structure and operates with a VGG-level backbone that limits repre-sentational power. TASED-Net [9] replaced recurrent integration entirely with a fully 3D S3D [10] encoder pretrained on Kinetics-400 [11], enabling rich temporal attention at the feature level. TMFI-Net [12] uses a Video Swin backbone, a semantic-guided encoder, and a hierarchical decoder to integrate multi-scale spatiotem-poral features. SalFoM [13] demonstrated that large-scale video foundation model pretraining substantially improves saliency generalisation when task-specifically adapted. GASP [14] incorporates social cues, includ-ing gaze direction and affect, through gated late-fusion mechanisms. None of these methods use crowd density as a con-ditioning signal, and their original publications do not report CrowdFix results. Our published baseline com-parison therefore uses SAM, DeepVS, and ACLNet from the original CrowdFix study [2]; we additionally train TASED-Net on the same split to provide a stronger mod-ern baseline. Our work uses the Video Swin Transformer [15], whose hierarchical shifted 3D window attention provides multi-scale spatiotemporal representations. 
+
+## 2.2 Crowd-Specific Video Saliency 
+
+The CrowdFix study [2] established a benchmark by evaluating three existing saliency models. ACLNet [3], the strongest of these baselines, combines attention-enhanced convolutional features with recurrent temporal 2modelling, but it was designed for generic video saliency and does not use CrowdFix density categories. Conse-quently, all three categories are processed by the same representation and decoder. In contrast, DensFiLM conditions the encoder bot-tleneck using a coarse 3-class density label provided by the dataset annotation. At inference, this label can be replaced by the model’s auxiliary density prediction, re-quiring no external density-estimation network. This de-sign targets the dataset’s central structure directly: the density category controls the abstract feature channels before spatial decoding begins. 
+
+## 2.3 Feature-wise Linear Modulation 
+
+FiLM [4] was introduced in the context of visual question answering, where it was shown that language-derived affine parameters could steer a ResNet’s internal fea-ture representations toward question-relevant visual at-tributes, outperforming both feature concatenation and attention-based conditioning. The element-wise affine form ˜f = (1 + γ(c)) ⊙ f + β(c) allows selective amplifica-tion of channels that are diagnostic for the current con-ditioning context while suppressing those that are not, without altering the spatial structure of the feature map. A key practical advantage is its residual initialisation: with γ ← 0 and β ← 0, FiLM begins as an identity trans-formation, enabling stable integration into a pretrained architecture without disrupting learned representations at the start of fine-tuning. Our application of FiLM to crowd density conditioning in video saliency is, to our knowledge, the first in this domain. 
+
+## 2.4 Crowd Density Estimation and Dynamics 
+
+Crowd density estimation [16] typically predicts local pedestrian density as a Gaussian-blurred sum of anno-tated head positions, used for crowd counting and man-agement. The Social Force Model [17] describes pedes-trian dynamics as emergent behaviour arising from pair-wise repulsive/attractive force fields between individuals, goals, and boundaries, predicting lane formation, avoid-ance patterns, and stop-and-go waves at the collective level. These models motivate our three-branch ablation variant (Section 5.4), which implements a learnable spa-tial social force prior parameterised per density category. This extension did not improve saliency performance in our experiments, suggesting that its additional structure is not beneficial at the available training scale. 
+
+# 3 CrowdFix Dataset 
+
+CrowdFix [2] contains 434 short clips derived from 89 source videos at 1280 ×720 resolution and 30 fps, covering real-world crowd environments including gymnasiums, transit concourses, public squares, and subway plat-forms. Eye-tracking data were collected from 32 partici-pants using a calibrated remote eye tracker, with 26 par-ticipants retained after data-quality filtering. Ground-truth saliency maps are constructed by convolving the binary fixation maps with a Gaussian kernel correspond-ing to 1◦ of visual angle ( σ = 38 px); the binary maps are retained for fixation-based metrics. The dataset is partitioned into three density cate-gories: 
+
+• SP (Sparse Pedestrian): 116 clips with clearly distinguishable individual pedestrians ex-hibiting unoccluded motion trajectories (gymnasi-ums, pedestrian crossings, open plazas). 
+
+• DF (Dense Free-flowing): 163 clips with high pedestrian density but unrestricted directional flow (transit concourses, open-air markets, stadium plazas at capacity). 
+
+• DC (Dense Congested): 155 clips with extreme density and restricted individual motion (subway platforms, narrow passageways, protest gatherings). We adopt a 70/15/15 train/validation/test split strat-ified by category. Eight-frame windows are extracted with stride 4 and resized to 224 ×384 pixels, yielding 3,189 training windows, 667 validation windows, and 5,356 evaluated frames in the test split. This training set is substantially smaller than generic video saliency bench-marks (DHF1K: 1,000 full videos; Hollywood-2: 1,707 clips), making model regularisation a dominant design consideration rather than a secondary concern. 
+
+# 4 DensFiLM 
+
+Figure 1 provides a complete architectural overview of 
+
+DensFiLM . The design philosophy is minimal inter-ventionism: a strong pretrained spatiotemporal encoder (Swin3D-S on Kinetics-400) is preserved with targeted conditional modulation at the single architectural loca-tion where it is most effective. 
+
+## 4.1 Problem Formulation 
+
+Let X ∈ RB×3×T ×H×W denote a batch of crowd video clips and d ∈ { 0, 1, 2} the coarse crowd density label (SP = 0 , DF = 1 , DC = 2 ). The goal is to predict a target-frame spatial saliency map ˆs ∈ RB×H×W , with values in [0 , 1] , that approximates the ground-truth fix-ation density s∗.
+
+## 4.2 Video Swin Encoder 
+
+We adopt Video Swin Transformer Small (Swin3D-S) [15] pretrained on Kinetics-400 [11] as the spa-tiotemporal encoder. The Swin3D-S architecture applies 3Figure 1: Overview of DensFiLM . An 8-frame crowd video clip is processed by a Video Swin-S encoder, producing a spatiotemporal feature volume F ∈ RB×4×7×12 ×768 . Temporal mean pooling and Dropout2d ( p = 0 .5) produce a 2D bottleneck f ∈ RB×768 ×7×12 . A FiLM layer conditioned on the 3-class density label embedding applies per-channel scale-shift modulation (Eq. 4), reshaping which abstract features are emphasised before the five-stage 2D decoder reconstructs the saliency map at full resolution. An auxiliary density classification head enforces discriminative bottleneck structure. shifted 3D window self-attention across four hierarchical stages at progressively coarser spatial and temporal res-olutions, with patch-merging operations reducing reso-lution between stages. This hierarchical temporal atten-tion is crucial for our design: by the final encoder stage, the bottleneck features encode multi-scale temporal dy-namics ranging from low-level motion contrast (Stage 1) to high-level action and scene semantics (Stage 4). The encoder maps a clip at (T = 8 , H = 224 , W = 384) to: 
+
+F = Swin3D -S( X) ∈ RB×T ′×H′×W ′×C (1) where T ′ = 4 , H′ = 7 , W ′ = 12 , C = 768 .The choice of Swin3D-S over simpler alternatives is deliberate. Its temporally-shifted window attention in-tegrates frame-to-frame correspondence at multiple rep-resentational levels, encoding implicit motion trajecto-ries at the level of semantic tokens rather than raw pixel velocities. The RAFT ablation in Section 5.4 tests whether explicit optical flow adds information beyond these learned temporal features. 
+
+## 4.3 Bottleneck Compression 
+
+The spatiotemporal volume is compressed to a 2D spatial feature map by temporal mean pooling over the T ′ = 4 
+
+temporal tokens: 
+
+f = 1
+
+T ′ 
+
+> T′
+
+X
+
+> t=1
+
+F:,t, :,:,: ∈ RB×C×H′×W ′
+
+(2) Temporal mean pooling compresses the encoder out-put into a single spatial feature map while retaining tem-porally aggregated information in the channel represen-tation. This design deliberately trades explicit temporal resolution in the decoder for a compact bottleneck and is evaluated against the 3D decoder ablation in Section 5.4. Spatial Dropout [18] with p = 0.5 is applied to the bottleneck before FiLM conditioning. Critically, Dropout2d drops entire feature channels (all spatial po-sitions within a channel simultaneously), as opposed to element-wise dropout that corrupts individual activa-tions. This channel-structured dropout randomly sup-presses complete feature maps during training, encour-aging the decoder not to rely on a small subset of bot-tleneck channels. 
+
+## 4.4 Density-Conditioned Bottleneck via FiLM 
+
+A learnable density embedding e = Emb( d) ∈ R64 maps the scalar density label to a 64-dimensional representa-tion, which is projected to FiLM scale-shift parameters: 
+
+[γ; β] = Linear 64 →2C (e), γ, β ∈ RC (3) The modulated bottleneck is formed as: 
+
+˜f = f · (1 + γ) + β (4) 4where γ and β are broadcast over the spatial dimen-sions (H′, W ′). The FiLM projection weights and bi-ases are zero-initialised, so the residual form (1 + γ) be-gins as the identity transformation ( γ = 0 , β = 0 ). The frozen-backbone phase therefore starts from the original Kinetics-400 representations. As training progresses, γ
+
+and β diverge from zero to encode density-specific chan-nel weighting. We choose the bottleneck as the injection point for three reasons. First, it is the most semantically ab-stract representation in the network: individual pixels have been aggregated into semantic tokens encoding mo-tion trajectories, group structures, and scene categories. Second, FiLM modulation here propagates through all five decoder stages, so every spatial scale of the recon-structed saliency map is shaped by the density context. Third, early-stage conditioning (at the input or shallow features) would require density-conditioned low-level fea-ture extraction, while the relevant distinction between density categories is semantic, not low-level. The ≈100K parameters of the FiLM module comprise a 3 × 64 embedding matrix, a 64 × 1536 linear projec-tion, and their biases, representing < 0.2% of Swin3D-S’s 
+
+≈50M parameters. We note that with K = 3 density classes, the em-bedding table degenerates to three fixed (γ, β ) param-eter vectors: class lookup rather than interpolative modulation. The 64-dim bottleneck does not buy the continuous interpolation it would provide in a many-class or continuous conditioning setting. Section 5.6 shows empirically, however, that the three learned pa-rameter vectors occupy nearly orthogonal directions (max pairwise cos (γi, γ j ) = −0.03 ), indicating class-specific recalibration rather than a shared offset. Sec-tion 5.4 (Table 2) further includes a one-hot bias base-line that removes the embedding geometry entirely; the FiLM model’s advantage over this baseline quantifies the contribution of the learned embedding structure. An auxiliary density classification head consists of global average pooling of f followed by Linear 768 →3, pro-ducing logits for a 3-class density prediction ˆd. This head serves a dual purpose: it encourages the bottleneck fea-ture distribution to remain discriminative across density categories, and it supplies the predicted label used by the non-oracle inference mode. 
+
+## 4.5 Saliency Decoder 
+
+The decoder reconstructs the saliency map from ˜f
+
+through five successive UpBlock2d modules, each per-forming bilinear 2× upsampling followed by a 3×3 Conv-BN-ReLU: 
+
+UpBlock2d( f ) = Conv 3×3
+
+ BN  ReLU( ↑2 f ) (5) The channel progression 768 → 256 → 128 → 64 → 32 →
+
+16 achieves a cumulative 32 × spatial expansion from 
+
+7×12 to 224 ×384 , exactly matching the input resolution. The rapid channel reduction at Stage 1 ( 768 → 256 )compresses the high-dimensional bottleneck representa-tion into a more distributed spatial format early in de-coding, concentrating the information bottleneck at the stage where density conditioning has already shaped which channels are salient. Each subsequent stage refines spatial detail at progressively finer scales. A final 1×1
+
+convolution followed by sigmoid produces the saliency map: 
+
+ˆs = σ
+
+
+
+Conv 1×1
+
+
+
+f (5) dec 
+
+ 
+
+(6) 
+
+## 4.6 Training Objectives 
+
+The primary saliency loss combines KL divergence and Pearson correlation: 
+
+Lsal = LKL (ˆ s, s∗) − λCC CC(ˆ s, s∗), λCC = 0 .2 (7) The KL term measures distributional divergence between the normalised prediction and ground-truth saliency maps. The −CC term provides a complemen-tary objective that rewards global spatial correspon-dence. The total loss incorporates the auxiliary density clas-sification cross-entropy: 
+
+L = Lsal + λcls Lcls , λcls = 0 .1 (8) The auxiliary weight λcls = 0 .1 is small enough that the density classifier is a subordinate regulariser rather than a competing primary objective, but large enough to maintain discriminative structure in the bottleneck throughout training. 
+
+## 4.7 Differential Training Protocol 
+
+The Video Swin backbone is frozen for the first 20 epochs while the decoder and FiLM module receive full gradi-ents, then unfrozen with a 10 × reduced learning rate: 
+
+ηbackbone = 0 .1 × ηdecoder (9) This two-phase protocol serves a specific purpose. During the frozen phase, the decoder learns a useful mapping from Kinetics-400 Swin3D-S features to Crowd-Fix saliency patterns, and the FiLM parameters begin to diverge from zero to encode density-discriminative channel weighting, all without disturbing the pretrained encoder. This warmup reduces the risk that early de-coder gradients destabilise the pretrained temporal rep-resentations. The subsequent fine-tuning phase with 
+
+ηbackbone = 10 −5 allows the encoder to adapt at the mar-gins toward CrowdFix-specific motion patterns without catastrophic forgetting of the temporal representations that make the backbone effective. 55 Experiments 
+
+## 5.1 Implementation Details 
+
+All models are implemented in PyTorch [18] and trained with Distributed Data Parallel across 8 AMD MI250X GCDs on the LUMI HPC cluster. Training uses Adam [19] with η = 10 −4, weight decay 10 −4, and batch size 2 per GCD (effective batch size 16). Training runs for at most 150 epochs with early stopping on validation NSS (patience = 20). All ablation variants use identical optimisation hyperparameters. Clips of length T = 8 at stride 4 are input at 224 ×384 resolution with horizontal flip augmentation during training. Architectural choices (backbone, dropout rate, loss weights) were finalised on validation NSS before test evaluation; all ablation vari-ants are compared on the held-out test set, with no fur-ther selection after that point. 
+
+DensFiLM supports two evaluation modes: ora-cle , in which the ground-truth CrowdFix category label (SP/DF/DC) is provided at inference; and predicted ,in which the model uses its own auxiliary density head’s argmax prediction as the label. Both modes are reported in Table 1. 
+
+## 5.2 Evaluation Metrics 
+
+We report six standard saliency metrics [20]: AUC-Judd (AUC-J, ↑) measures the area under the ROC curve treating saliency prediction as a fixation-vs-non-fixation classifier, assessing ranked ordering. AUC-Borji (AUC-B, ↑) uses repeated sampling of non-fixated pixels to estimate the ROC curve. NSS ( ↑) measures the mean normalised saliency value at actual fixation locations, as-sessing calibrated magnitude at ground-truth fixations. CC ( ↑) is the Pearson correlation between predicted and ground-truth saliency, measuring global spatial co-variation. KL divergence ( ↓) measures distributional di-vergence between the predicted saliency map and the ground truth treated as probability distributions. SIM (↑) measures the histogram intersection (Bhattacharyya coefficient) between normalised prediction and ground truth. These metrics are complementary: AUC-J as-sesses ranking, NSS assesses precision at fixation loca-tions, CC and SIM assess spatial structure, and KL as-sesses distribution calibration. 
+
+## 5.3 Comparison with State of the Art 
+
+Table 1 reports overall test-set performance for all meth-ods. TASED-Net trained from scratch on CrowdFix al-ready surpasses ACLNet on NSS (1.293 vs. 1.250) and CC (0.475 vs. 0.450), confirming that modern tempo-ral modelling alone improves over the strongest base-line from the original CrowdFix study. Kinetics-400-pretrained VideoSwin further improves NSS to 1.313, and density FiLM conditioning then adds the addi-tional +0.124 NSS step. The proposed model sur-passes ACLNet across all reported metrics: ∆AUC-J = +0.003, ∆NSS = +0.184 (+14.7%), ∆CC = +0.067 (+14.9%). Several aspects of this comparison warrant detailed analysis. 
+
+Asymmetric NSS vs. AUC-J gains. The most in-formative comparison is the relative magnitude of NSS and AUC-J improvements. FiLM conditioning over the VideoSwin baseline improves NSS by +9 .2% but AUC-J by only +1 .7% . This asymmetry reflects the fun-damental difference between these metrics: AUC-J is a ranking metric assessing whether fixation pixels re-ceive higher predicted saliency than non-fixation pix-els. The VideoSwin backbone’s temporally-aware fea-tures already rank these pixels reasonably well. NSS, by contrast, measures the normalised predicted saliency value precisely at the fixation locations, quantifying how sharply and accurately the model fires at the exact spa-tial positions observers fixated. The large NSS gain with modest AUC-J gain indicates that FiLM conditioning primarily improves the calibrated precision of saliency responses at fixation locations, not the gross pixel rank-ing. Mechanistically, this is consistent with the FiLM modulation selectively reweighting channels associated with the type of visual feature that is actually fixated in each density category: individual silhouettes in SP, flow structures in DF, and scene landmarks in DC. This may produce sharper, more precisely placed peaks rather than simply reordering which pixels score highest. The 
+
+−5.8% KL reduction (1.133 → 1.068) and +8 .6% CC im-provement corroborate this interpretation: both metrics are sensitive to the shape and spatial structure of the saliency distribution, not merely its ranking. 
+
+VideoSwin backbone advantage. Comparing our VideoSwin baseline (AUC-J 0.806, NSS 1.313) against ACLNet (0.817, 1.250) reveals an interesting crossover: ACLNet achieves higher AUC-J ranking than our un-conditioned baseline, suggesting that its attention and recurrent temporal modelling provide effective spatial ranking. However, its NSS (1.250) is lower than our VideoSwin baseline (1.313), meaning that despite bet-ter ranking, ACLNet’s predicted saliency values are less precisely calibrated at actual fixation locations. This reflects the representational advantage of Kinetics-400-pretrained Swin3D-S for temporal motion encoding: the stronger backbone captures temporally-resolved motion patterns that directly predict where observers fixate, rather than only which areas are more salient than oth-ers in a coarse sense. The addition of FiLM conditioning then provides the precision gains on top of this strong backbone foundation. 
+
+Centre-prior subtraction diagnostic. Standard saliency metrics conflate crowd-content-responsive pre-dictions with centre-prior alignment: if a model learns to predict a fixed central blob (matching the dataset’s overall fixation tendency), it will score well on NSS and 6Table 1: Comparison with prior work on the CrowdFix test set (5,356 evaluated frames). Published baseline results from [2]; SAM/DeepVS NSS and CC from the same benchmark log. “-”: metric not reported or not applicable. Bold :primary multi-seed result. Oracle label row reports mean ± std across 4 random seeds (seeds 0, 1, 2, and 42). †: pred. label row is a single-seed oracle-parity check (seed 42). §: Centre-prior baseline predicts the mean training fixation density for every test sample (no learned model). ‡: Prior-subtracted = mean training fixation density subtracted from model predictions before metric computation; KL/SIM omitted as they require non-negative distributions. 
+
+Model AUC-J ↑ AUC-B ↑ NSS ↑ CC ↑ KL ↓ SIM ↑
+
+SAM [7] 0.777 - 0.894 0.325 - -DeepVS [8] 0.788 - 0.985 0.401 - -ACLNet [3] 0.817 - 1.250 0.450 - -TASED-Net (ours, trained here) 0.810 0.814 1.293 0.475 1.121 0.422 VideoSwin (no FiLM) 0.806 0.810 1.313 0.476 1.133 0.424 
+
+DensFiLM (ours, oracle label) 0.820 ± 0.001 0.825 ± 0.001 1.434 ± 0.007 0.517 ± 0.002 1.068 ± 0.004 0.449 ± 0.003 
+
+DensFiLM (pred. label) † 0.821 0.825 1.438 0.518 1.067 0.451 
+
+Centre-prior subtraction diagnostic (seed 42) 
+
+Centre-prior baseline § 0.831 0.835 1.557 0.556 0.999 0.464 VideoSwin (prior-subtracted ‡) 0.669 0.671 0.726 0.270 - -
+
+DensFiLM (ours, prior-subtracted ‡) 0.765 0.769 1.188 0.431 - -
+
+AUC-J regardless of whether it understands crowd struc-ture. As a diagnostic of sensitivity to this shared prior, we subtract the mean training-set fixation density from all model predictions before computing metrics (Table 1, lower panel). This is not a standard benchmark protocol and can produce negative values, so we omit KL and SIM and interpret the results only as a relative comparison between models. The centre-prior baseline predicts the mean train-ing fixation density for every test sample and achieves NSS 1.557, exceeding both VideoSwin (1.313) and Dens-FiLM (1.437) in standard evaluation. This strong base-line shows that centre-prior alignment contributes sub-stantially to standard CrowdFix scores. After prior subtraction, VideoSwin’s NSS decreases from 1.313 to 0.726 (45%), whereas DensFiLM de-creases from 1.437 to 1.188 (17%). This difference is con-sistent with density conditioning reducing sensitivity to the shared spatial prior. The resulting prior-subtracted conditioning gain is ∆NSS = +0 .462 (1.188 − 0.726 ), which is 3.7× the standard gain of +0 .124 .This diagnostic suggests that density conditioning im-proves crowd-responsive prediction rather than merely sharpening the shared centre prior. 
+
+## 5.4 Ablation Study 
+
+Table 2 evaluates the contribution of each component. All variants share the same VideoSwin backbone, 5-stage 2D decoder, and hyperparameters; they differ only in what is added beyond the baseline. 
+
+Density FiLM provides the main improvement. 
+
+FiLM bottleneck conditioning improves NSS by +0 .124 
+
+and CC by +0 .041 over the plain VideoSwin baseline, with no other architectural changes. The gain over the unconditioned VideoSwin backbone is attributable to a single 64 ×1536 linear projection and a 3×64 embedding Table 2: Ablation study on the CrowdFix test set (sin-gle seed, seed 42). ∆NSS: gain over VideoSwin base-line (standard evaluation). ∆NSS prior : gain over prior-subtracted VideoSwin (NSS 0.726); “-” where prior sub-traction was not run. The “+Density FiLM” row re-ports seed 42 values; Table 1 reports mean ± std over 4 seeds. The second panel (Soft FiLM; Multiscale FiLM; Continuous) reports Phase 2 variants that explore con-ditioning without GT labels at inference, multi-scale in-jection, and continuous VGG16 features, respectively. The bottom panel (Phase 3) reports cross-dataset trans-fer: VideoSwin pretrained on DHF1K then fine-tuned as DensFiLM on CrowdFix.                                                     
+
+> Variant AUC-J NSS CC ∆NSS ∆NSS prior
+> VideoSwin (baseline) 0.806 1.313 0.476 --+ Density FiLM ( ours )0.820 1.437 0.517 +0.124 +0.462 + One-hot density code (no FiLM) 0.819 1.424 0.514 +0.111 +0.345 + Optical flow (RAFT) 0.820 1.437 0.517 +0.124 -+ 3D decoder + social prior 0.808 1.313 0.477 ±0.000 -+ Soft FiLM (predicted density) 0.820 1.424 0.514 +0.111 +0.446 + Multiscale FiLM (strides 32/16/8/4) 0.819 1.412 0.512 +0.099 +0.405 + Continuous (VGG16 features, no GT label) 0.821 1.441 0.520 +0.128 +0.416
+> Phase 3: cross-dataset pretraining
+> DHF1K pretrain →CrowdFix finetune 0.821 1.436 0.520 +0.123 -
+
+matrix. The result shows that the density label supplies useful information beyond the unconditioned video fea-tures. 
+
+One-hot conditioning ablation. To distinguish the contribution of the FiLM mechanism from the benefit of having any density signal, we train a variant that injects a 3-class one-hot vector via a direct 3 × 768 linear bias added to the bottleneck, with no learned embedding and no multiplicative γ pathway. This variant, +One-hot density code , uses the same backbone, decoder, auxiliary classification head, and hyperparameters as DensFiLM 
+
+but replaces the 64 -dim embedding and FiLM projection with the 3-dim one-hot bias (2,304 parameters vs. 100K for FiLM). 7The one-hot model achieves NSS 1.424, AUC-J 0.819, CC 0.514 (Table 2), versus DensFiLM ’s NSS 1.437, AUC-J 0.820, CC 0.517 (seed 42). Two findings follow from standard evaluation. First, the conditioning sig-nal is the primary driver: the one-hot model captures 
+
+∆NSS = +0 .111 of FiLM’s +0 .124 total gain (89%). Sec-ond, the FiLM mechanism adds +0 .013 NSS. This dif-ference is small relative to the observed seed variability and should therefore be interpreted cautiously. The centre-prior-subtracted diagnostic further sep-arates the variants (Table 2, ∆NSS prior column). The one-hot model’s prior-subtracted NSS is 1.071 (∆NSS prior = +0 .345 over VideoSwin 0.726), while 
+
+DensFiLM reaches 1.188 ( ∆NSS prior = +0 .462 ). The FiLM advantage over one-hot grows from +0 .013 under standard evaluation to +0 .117 after prior subtraction. An additive one-hot bias shifts all bottleneck channels uniformly in a class-specific direction; FiLM’s multiplica-tive γ pathway independently scales each channel, allow-ing it to amplify channels that encode crowd-specific fea-tures while suppressing channels that encode the centre prior. This pattern is consistent with feature-wise scal-ing being less dependent on the shared centre prior than an additive class bias. 
+
+Soft FiLM: self-derived conditioning at infer-ence. Rather than conditioning on GT density la-bels, the Soft FiLM variant derives its conditioning signal from the model’s own density head via ˜e =
+
+softmax (ˆ zdet )Wemb , where ˆzdet are stop-gradient logits and Wemb is the embedding weight matrix. This en-ables continuous interpolation between the three density embeddings and removes the GT label requirement at inference. Soft FiLM achieves NSS 1.424, AUC-J 0.820, CC 0.514 ( ∆NSS prior = +0 .446 ), only 0.016 NSS below the oracle-label DensFiLM (+0 .462 after prior subtrac-tion). The density head is trained with category super-vision, but no category label is needed at inference. This makes Soft FiLM a practical option when CrowdFix la-bels are unavailable at deployment. 
+
+Multiscale FiLM does not improve over bottle-neck conditioning. Extending density conditioning to all four decoder stages (strides 32, 16, 8, 4) with in-dependent per-scale FiLM projections (zero-initialised to preserve training stability) yields NSS 1.412, AUC-J 0.819 ( ∆NSS prior = +0 .405 ), weaker than both single-bottleneck variants. Among the tested locations, the bottleneck therefore provides the strongest result with-out additional per-scale parameters. 
+
+Continuous VGG16 conditioning: highest stan-dard NSS. Replacing the discrete 3-class embedding with a continuous density descriptor derived from the frozen VGG16 frontend of CSRNet [21] (conv1-conv4_3, ImageNet-pretrained) followed by dilated convolutional backend layers yields NSS 1.441, AUC-J 0.821, CC 0.520 (∆NSS prior = +0 .416 ), the highest standard NSS of all variants, but below the discrete FiLM model’s prior-subtracted gain ( +0 .462 ). One possible explanation is that VGG16 features capture scene-level properties that align with the shared spatial prior, while the explicitly supervised discrete embedding provides cleaner density-category separation. The differing standard and prior-subtracted results suggest that the two conditioning sig-nals may be complementary. 
+
+DHF1K pretraining neither helps nor hurts. 
+
+Phase 3 asks whether pretraining the VideoSwin encoder on a general-purpose video saliency dataset (DHF1K; 600 training videos) before fine-tuning as DensFiLM on CrowdFix provides any benefit. The DHF1K-pretrained variant achieves AUC-J 0.821, NSS 1.436, CC 0.520, ef-fectively identical to direct CrowdFix training from Kinetics-400 initialisation (NSS 1.437, ∆NSS ≤ 0.001). The Kinetics-400-pretrained Swin3D-S encoder already captures temporally coherent spatiotemporal features at a much larger scale than DHF1K. In this setup, the ad-ditional DHF1K pretraining produces no measurable im-provement on CrowdFix, whereas the FiLM layers train successfully from random initialisation. 
+
+RAFT optical flow does not improve DensFiLM. 
+
+Appending RAFT [5] dense optical flow as a second in-put stream, fused with the Swin3D bottleneck via cross-attention, yields metrics identical to DensFiLM across all three metrics (AUC-J 0.820, NSS 1.437, CC 0.517; both seed 42). Thus, explicit flow provides no measur-able benefit in this configuration. This result suggests that the Video Swin features already capture the motion information needed for the task, or that the available training data are insufficient to exploit the additional stream. 
+
+The combined higher-capacity variant returns to baseline. The three-branch architecture combines a parallel UpBlock3d temporal decoder branch, a per-category spatial social force prior, and a learned gate that fuses the FiLM and 3D branches. It achieves AUC-J 0.808, NSS 1.313, CC 0.477. The three-branch NSS of 
+
+≈1.313 is the most striking result in the ablation: it is ef-fectively identical to the VideoSwin baseline ( ∆NSS ≈ 0), meaning the additional architecture not only fails to im-prove over the FiLM model but also cancels the FiLM gain entirely. This outcome is consistent with a bias-variance tradeoff at the available training scale, although the experiment does not isolate the contribution of each added component. The result shows only that this com-bined higher-capacity design is not supported by the available CrowdFix training data. 
+
+## 5.5 Per-Density-Category Performance 
+
+Table 3 breaks down DensFiLM performance by density category, providing insight into how density conditioning benefits each regime. DC achieves the highest NSS (1.449), although the differences between categories are small. One possible interpretation is that the density label is particularly useful when individual motion cues are weak or ambigu-8Table 3: Per-density-category test performance of Dens-FiLM (seed 42). Overall row corresponds to the seed 42 run; Table 1 reports multi-seed mean ± std. n = number of evaluated test frames.                  
+
+> Category (n)AUC-J ↑NSS ↑CC ↑
+> SP - Sparse Pedestrian (1443) 0.821 1.439 0.523 DF - Dense Free-flowing (1924) 0.818 1.422 0.514 DC - Dense Congested (1989) 0.822 1.449 0.517
+> Overall (5356) 0.820 1.437 0.517
+
+ous. The parameter analysis below is consistent with category-specific channel reweighting, but it does not identify the visual semantics of individual channels. SP achieves the highest CC (0.523). This may re-flect the more localised fixation distributions observed in sparse scenes, where individual people often provide distinct targets. The SP category spans a wide range of group sizes, from single pedestrians to groups of 10-20 persons in open plazas. Fixation strategy is expected to vary within SP accordingly: individual trajectory tracking for lone figures, social gaze-following for small groups, and broad scene scanning for larger gatherings. Yet the per-category NSS above does not resolve this variation. Future work could disaggregate SP performance by ap-proximate group size. DF achieves the lowest scores across all metrics, con-sistent with the inherent difficulty of the free-flowing regime: ground-truth fixations are broadly distributed over multiple equivalently-attractive individuals, yield-ing a diffuse GT saliency map with no dominant peak. Predicting diffuse distributions with high NSS may be harder because normalised saliency is distributed across more plausible locations. This suggests that DF may re-quire finer temporal modelling of specific flow-trajectory emergence points to achieve the per-fixation precision that NSS rewards. 
+
+## 5.6 FiLM Parameter Analysis 
+
+A potential concern is that with only K = 3 density classes, the 3×64 embedding table degenerates to three fixed (γ, β ) vectors, behaving as a class-conditional bias lookup rather than dynamic feature modulation. We verify whether the learned parameters encode genuinely distinct structure by extracting the three concatenated 
+
+[γ; β] ∈ R1536 vectors from the trained checkpoint and computing pairwise cosine similarity between the γ com-ponents. The γ vectors are nearly orthogonal, with pairwise co-sine similarities of −0.03 (SP vs. DF), −0.10 (SP vs. DC), and −0.06 (DF vs. DC). These values show that the three classes learn distinct scaling directions rather than a common offset. The weakly negative similari-ties indicate slight opposing alignment, not strong anti-correlation. A channel-level inspection shows the asymmetry: the single most discriminative channel (Ch 437) exhibits 
+
+γSP = +1 .09 vs. γDC = −1.88 (range 2.97), while chan-nel 291 shows the complementary pattern ( γSP = −2.54 ,
+
+γDC = +0 .14 ). The L2 norms of the full (γ, β ) vectors are comparable across classes (SP 25.3, DF 25.9, DC 24.9), showing similar modulation magnitudes with distinct di-rections. 
+
+## 5.7 Qualitative Analysis 
+
+Figure 2 presents a stratified sample of model behaviour across each density category: one best-case frame (top NSS in the test split), one average-case frame (NSS near the per-category median of ≈1.43), and one challeng-ing frame (negative NSS, indicating saliency placed away from observer fixations). All nine frames are from dis-tinct videos. Each image combines the original frame, the predicted saliency overlay (INFERNO colormap with saliency-proportional alpha), and per-observer fixation rings (white ring with black halo at 2-degree visual-angle radius; white centre dot). 
+
+Best-case frames (left column, NSS ≈ 3.8-4.3). 
+
+In the selected best-case examples, the predictions align with the dominant fixation patterns: spot atten-tion on proximal individuals (SP video 212, frame 43, NSS = 3.83); diffuse coverage over the pedestrian flow (DF video 152, frame 36, NSS = 3.92); and precise co-localisation with a high-contrast scene landmark rather than crowd mass (DC video 335, frame 50, NSS = 4.34). These frames share strong centre alignment between fix-ation clusters and predicted peaks, so their high scores likely reflect both content localisation and dataset centre bias. 
+
+Average-case frames (middle column, NSS ≈
+
+1.4). Performance near the per-category mean reveals a broader, less precise saliency distribution. Predicted peaks partially overlap the fixation cluster but with more spatial spread, consistent with the model averaging over plausible fixation locations rather than committing to the correct target. The fixation rings are still largely en-closed by the saliency blob, consistent with above-chance localisation at the cost of precision. 
+
+Challenging frames (right column, NSS < 0). Neg-ative NSS indicates that predicted saliency is low at ob-server fixation locations. In all three selected cases the model predicts a central peak while the observer fixa-tions are displaced to the periphery: an off-centre indi-vidual (SP video 260, frame 81), a lateral flow structure (DF video 093, frame 17), or an off-centre landmark (DC video 180, frame 38). These examples illustrate residual centre bias, but do not by themselves establish its source. 9Best case Average case Challenging case SP                   
+
+> Sparse Ped.
+> v212 f43 NSS = 3.83 v163 f42 NSS = 1.44 v260 f81 NSS = −0.20
+> DF
+> Dense Free-flow
+> v152 f36 NSS = 3.92 v064 f80 NSS = 1.43 v093 f17 NSS = −0.43
+> DC
+> Dense Congested
+> v335 f50 NSS = 4.34 v160 f14 NSS = 1.47 v180 f38 NSS = −0.40
+
+Figure 2: Qualitative results stratified by performance tier (nine unique videos). Each image overlays the predicted saliency (INFERNO colormap, saliency-proportional alpha) and per-observer fixation rings (2-degree visual-angle radius; white ring with black halo; white centre dot). Best-case (left): predicted saliency peaks co-localise tightly with observer fixations: spot-attention on individuals (SP), diffuse flow coverage (DF), and landmark-level precision (DC). Average-case (centre): predictions partially overlap fixation clusters with broader spatial spread, consistent with above-chance localisation at median performance. Challenging (right): negative NSS indicates misplaced saliency: the model predicts a central peak while fixations are off-centre (an eccentric individual in SP, a lateral flow structure in DF, an off-centre landmark in DC), exposing residual centre bias in the model predictions. 10 6 Discussion 
+
+## 6.1 Interpretation and Implications 
+
+The results support two main interpretations. First, the location of density conditioning appears more important than adding generic model capacity. The one-hot ab-lation recovers most of the improvement by injecting density at the semantic bottleneck, while FiLM provides a smaller additional gain through channel-wise scaling. This suggests that crowd density is most useful as a com-pact signal for selecting among abstract visual features before spatial decoding. Second, the centre-prior-subtraction diagnostic in-creases the measured conditioning gain from 0.124 to 
+
+0.462 NSS. Although this diagnostic is not a standard benchmark metric, the relative change suggests that the FiLM model is less dependent on the shared spatial prior than the unconditioned backbone. The capacity abla-tions qualify this conclusion: explicit RAFT flow and the tested temporal and social-force extension provide no improvement in the present configuration. These ex-periments do not establish that such components are generally ineffective, only that the available CrowdFix training data do not support the tested implementations. 
+
+## 6.2 Limitations and Future Work 
+
+Three limitations bound the scope of this work. First, 
+
+density taxonomy : at inference the model can use ei-ther the ground-truth CrowdFix category label or its own auxiliary density head prediction. Empirically, the predicted-label variant achieves NSS 1.438 vs. oracle NSS 1.437 on seed 42 ( ∆ = 0 .001 ; see Table 1), so ora-cle access is not required in this evaluation. However, the SP/DF/DC taxonomy is CrowdFix-specific; gener-alising to an unlabelled corpus would require either a compatible density classifier or unsupervised cluster as-signment. Second, single-dataset scope : all results are on CrowdFix. Cross-dataset transfer via DHF1K pre-training yields no measurable gain (Section 5.4); whether the conditioning mechanism generalises to other datasets and labelling schemes remains untested. Third, centre bias and diagnostic evaluation : the CrowdFix fix-ation maps and model predictions both exhibit a cen-tre tendency (negative-NSS examples in Figure 2 are all off-centre misses). Standard metrics therefore conflate crowd-content-responsive predictions with centre-prior alignment. Our prior-subtraction analysis is a diagnos-tic rather than a standard benchmark protocol and can produce negative prediction values. It should therefore be interpreted as a relative sensitivity analysis, not as a replacement evaluation metric. Future work should test the approach on additional datasets and density taxonomies, investigate larger un-labelled crowd-video pretraining corpora, and examine whether continuous scene descriptors complement dis-crete density conditioning. 
+
+# 7 Conclusion 
+
+We introduced DensFiLM , a Video Swin Transformer with lightweight density-conditioned FiLM modulation at the encoder bottleneck. The ≈100K-parameter mod-ule improves NSS by 9.2% and CC by 8.6% over the unconditioned backbone, yielding the best reported CrowdFix results we are aware of (AUC-J 0.820 ± 0.001 ,NSS 1.434 ±0.007 , CC 0.517 ±0.002 over four seeds). The model’s own density prediction matches oracle-label per-formance at inference. Overall, the results show that tar-geted bottleneck conditioning is a more effective use of limited CrowdFix training data than the higher-capacity alternatives tested here. 
+
+# Acknowledgements 
+
+The author acknowledges CSC - IT Center for Science, Finland, for computational resources on the LUMI HPC cluster under project 462000131. 
+
+# References 
+
+[1] Hadi Hadizadeh and Ivan V. Bajić. Saliency-aware video compression. IEEE Transactions on Image Processing , 23(1):19–33, 2014. doi: 10.1109/TIP. 2013.2282897. [2] Memoona Tahira, Sobas Mehboob, Anis Ur Rah-man, and Omar Arif. CrowdFix: An eyetracking dataset of real life crowd videos. IEEE Access , 7: 179002–179009, 2019. doi: 10.1109/ACCESS.2019. 2956840. [3] Wenguan Wang, Jianbing Shen, Fang Guo, Ming-Ming Cheng, and Ali Borji. Revisiting video saliency: A large-scale benchmark and a new model. In Proceedings of the IEEE Conference on Com-puter Vision and Pattern Recognition (CVPR) ,pages 4894–4903, 2018. [4] Ethan Perez, Florian Strub, Harm de Vries, Vin-cent Dumoulin, and Aaron Courville. FiLM: Vi-sual reasoning with a general conditioning layer. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 32, 2018. [5] Zachary Teed and Jia Deng. RAFT: Recurrent all-pairs field transforms for optical flow. In Proceed-ings of the European Conference on Computer Vi-sion (ECCV) , pages 402–419, 2020. [6] Laurent Itti, Christof Koch, and Ernst Niebur. Amodel of saliency-based visual attention for rapid scene analysis. IEEE Transactions on Pattern Anal-ysis and Machine Intelligence , 20(11):1254–1259, 1998. 11 [7] Marcella Cornia, Lorenzo Baraldi, Giuseppe Serra, and Rita Cucchiara. Predicting human eye fixa-tions via an LSTM-based saliency attentive model. 
+
+IEEE Transactions on Image Processing , 27(10): 5142–5154, 2018. [8] Lai Jiang, Mai Xu, Tie Liu, Minglang Qiao, and Zulin Wang. DeepVS: A deep learning based video saliency prediction approach. In Proceedings of the European Conference on Computer Vision (ECCV) ,pages 602–617, 2018. [9] Kyle Min and Jason J Corso. TASED-Net: Temporally-aggregating spatial encoder-decoder network for video saliency detection. In Proceed-ings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 2394–2403, 2019. [10] Saining Xie, Chen Sun, Jonathan Huang, Zhuowen Tu, and Kevin Murphy. Rethinking spatiotemporal feature learning: Speed-accuracy trade-offs in video classification. In Proceedings of the European Con-ference on Computer Vision (ECCV) , pages 305– 321, 2018. [11] João Carreira and Andrew Zisserman. Quo vadis, action recognition? A new model and the kinetics dataset. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) ,pages 6299–6308, 2017. [12] Xiaofei Zhou, Songhe Wu, Ran Shi, Bolun Zheng, Shuai Wang, Haibing Yin, Jiyong Zhang, and Chenggang Yan. Transformer-based multi-scale fea-ture integration network for video saliency predic-tion. IEEE Transactions on Circuits and Systems for Video Technology , 33(12):7696–7707, 2023. [13] Morteza Moradi, Mohammad Moradi, Francesco Rundo, Concetto Spampinato, Ali Borji, and Si-mone Palazzo. SalFoM: Dynamic saliency predic-tion with video foundation models. In Proceedings of the International Conference on Pattern Recog-nition (ICPR) , pages 33–48. Springer, 2024. [14] Fares Abawi, Tom Weber, and Stefan Wermter. GASP: Gated attention for saliency prediction. In Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence (IJCAI) , pages 584–591, 2021. doi: 10.24963/ijcai.2021/81. [15] Ze Liu, Jia Ning, Yue Cao, Yixuan Wei, Zheng Zhang, Stephen Lin, and Han Hu. Video swin trans-former. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) , pages 3202–3211, 2022. [16] Yingying Zhang, Desen Zhou, Siqin Chen, Shenghua Gao, and Yi Ma. Single-image crowd counting via multi-column convolutional neural net-work. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) ,pages 589–597, 2016. [17] Dirk Helbing and Péter Molnár. Social force model for pedestrian dynamics. Physical Review E , 51(5): 4282–4286, 1995. [18] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, high-performance deep learning library. In Advances in Neural Information Processing Systems (NeurIPS) ,volume 32, 2019. [19] Diederik P Kingma and Jimmy Ba. Adam: Amethod for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. [20] Zoya Bylinskii, Tilke Judd, Aude Oliva, Antonio Torralba, and Frédo Durand. What do different evaluation metrics tell us about saliency models? 
+
+IEEE Transactions on Pattern Analysis and Ma-chine Intelligence , 41(3):740–757, 2019. [21] Yuhong Li, Xiaofan Zhang, and Deming Chen. CSRNet: Dilated convolutional neural networks for understanding the highly congested scenes. In Pro-ceedings of the IEEE Conference on Computer Vi-sion and Pattern Recognition (CVPR) , 2018. 12
