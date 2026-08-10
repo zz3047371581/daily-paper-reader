@@ -1,0 +1,913 @@
+Title: TBSG-Net: Temporal Bipartite Scene Graph Network for Fine-Grained Video Moment Retrieval
+
+URL Source: https://arxiv.org/pdf/2608.02056v1
+
+Published Time: Tue, 04 Aug 2026 02:14:43 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+> 1
+
+# TBSG-Net: Temporal Bipartite Scene Graph Network for Fine-Grained Video Moment Retrieval 
+
+Ji Huang, Yongsheng Dai, Tianyu Ren, Barry Devereux, Hui Wang, Senior Member, IEEE 
+
+Abstract —Recent advances in proposal-free Video Moment Retrieval (VMR) have highlighted the effectiveness of Static Scene Graphs (SSGs). By modeling objects and their relations at the frame level, SSGs enrich retrieval-oriented video representations. However, integrating SSGs into VMR remains constrained by two inherent limitations: (1) Lack of Temporal Dynamics. SSGs fail to model how objects and their relationships evolve over time, leading to the loss of essential temporal dependencies in video representation; and (2) Lack of Explicit Temporal Span Encoding. SSGs do not explicitly encode the duration of relationships, making precise localization challenging. To address these limitations, we propose Temporal Bipartite Scene Graph Network (TBSG-Net)—to the best of our knowledge, the first 
+
+Dynamic Scene Graph (DSG) based proposal-free VMR model. Specifically, TBSG-Net leverages DSGs to extract event-centric graph representations of the input video, enabling the modeling of object interactions over time and thus addressing limitation (1). These DSGs are then processed by a novel Dynamic Scene Graph Embedding (DSG-E ) module to capture both Temporal Span and spatio-temporal information. First, DSG-E utilizes a TBSG Constructor to transform DSGs into TBSGs, explicitly encoding objects, relationships, and time spans to tackle limitation (2). Sec-ond, the resultant TBSGs are passed into a hybrid TBSG Encoder that integrates a Transformer variant for global event modeling and a Graph Convolutional Network for detailed relational reasoning, ultimately producing a more comprehensive spatio-temporal representation. Extensive experiments demonstrate sub-stantial improvements over all baselines. TBSG-Net achieves relative gains of 4.30%, 11.16%, and 42.32% in R@1 at IoU=0.7 on Charades-STA, Charades-STA-Len, and Charades-STA-Mom respectively, and demonstrates cross-dataset generalisability via zero-shot transfer to ActivityNet Captions. TBSG-Net sets a new state-of-the-art, particularly excelling in retrieving fine-grained moments with intricate temporal dependencies. Code is available: https://github.com/HuangJi1019/TBSG-Net.git 
+
+Index Terms —Video Moment Retrieval, Dynamic Scene Graph, Bipartite Graph, Transformer, GCN. 
+
+I. I NTRODUCTION 
+
+# VIDEO Moment Retrieval (VMR) aims to identify specific temporal segments within an untrimmed video based on a natural language query [1]. Unlike static image retrieval, VMR demands understanding of temporal dynamics, scene 
+
+This work is supported by the Multimodal Video Search by Examples (MVSE) project funded by UK EPSRC (EP/V002740/2). ( Corresponding author: Hui Wang )Ji Huang (supported by China Scholarship Council), Yongsheng Dai, Tianyu Ren, and Barry Devereux are with the School of Electronics, Electrical Engi-neering and Computer Science, Queen’s University Belfast, Belfast, Northern Ireland (e-mail: jhuang28@qub.ac.uk; ydai09@qub.ac.uk; tren01@qub.ac.uk; B.Devereux@qub.ac.uk). Ji Huang and Yongsheng Dai contributed equally to this work. Hui Wang is the director of Discovery AI Lab the NI Landscape Partnership in AI for Bioscience at the School of Electronics, Electrical Engineering and Computer Science, Queen’s University Belfast, Belfast, Northern Ireland (e-mail:h.wang@qub.ac.uk) Person Cup Flower Bottle Person Cup Flower Bottle Cup Flower Bottle Next to Holding Drinking from Touching Holding Holding Next to Next to Holding Person Cup Flower Bottle Person Cup Flower Bottle Person Cup Flower Bottle Next to Holding Drinking from Touching Holding Holding Next to Next to Holding 
+
+> Temporal Spatial
+
+tt-1 t+1 
+
+> Person
+
+Fig. 1. DSG Generation Process: (1) The Spatial Module analyzes objects and their spatial relationships across video frames, identifying relationships such as attention, spatial, and contact interactions. (2) The Temporal Module tracks and updates changes in both object and their relationships over time. For clarity, this example highlights the evolution of one relationship with green dashed lines, without depicting changes of the objects and other relationships. 
+
+transitions, and object interactions. This temporal dimension makes VMR applicable to various domains, including sketch and shape domain [2] and entertainment [3]. However, it also introduces significant challenges in accurately detecting query-relevant content and precisely localizing the corresponding segments [4]. Recent VMR methods adopt the proposal-free paradigm [4], [5], directly predicting start and end timestamps of target moments. This approach reduces reliance on hand-crafted proposals and improves efficiency compared to traditional proposal-based methods [1], [6]. Building on proposal-free VMR, recent work [7] introduces Static Scene Graphs (SSGs) to enrich video representations by modeling object-level se-mantic relationships, achieving state-of-the-art performance. Although integrating SSGs into proposal-free VMR en-hances object-level representations, this approach has two inherent limitations: (1) Lack of Temporal Dynamics. Since SSGs are constructed at the frame level, they fail to model how objects and their relationships evolve over time. For example, as shown in Fig. 1, a person holding a cup and later drinking from it constitutes a continuous action. However, SSGs treat arXiv:2608.02056v1 [cs.CV] 3 Aug 2026 2
+
+these frames as independent images, losing crucial temporal dependencies; (2) Lack of Explicit Temporal Span Encoding .SSGs do not explicitly encode the duration of relationships, making it difficult to determine when an interaction begins and how long it lasts. Without these two fundamental capabilities, VMR models struggle to accurately retrieve complex, multi-step events that require fine-grained temporal reasoning. To address the aforementioned challenges, we propose the 
+
+Temporal Bipartite Scene Graph Network (TBSG-Net) (as shown in Fig. 2), a novel proposal-free VMR model built on 
+
+Dynamic Scene Graphs (DSGs ) and enhanced with a DSG Embedding (DSG-E ) module. TBSG-Net fundamentally dif-fers from SSG-based proposal-free methods by integrating DSGs into VMR. These DSGs capture how objects and their relationships evolve, addressing the challenge of (1) Temporal Dynamics . Furthermore, unlike SSGs which process frames independently, DSGs provide a structured representation of event state transitions (e.g., ⟨person, approaches, cup ⟩ → ⟨person, drinks f rom, cup ⟩), providing the foundation for explicit temporal span encoding. To explicitly construct the representation of the Temporal Span and spatio-temporal information from DSGs, TBSG-Net further processes DSGs through a novel DSG-E module, which consists of a TBSG Constructor and a hybrid TBSG Encoder. First, the TBSG Constructor transforms DSGs into TBSGs, which comprise object and relationship nodes with temporal span attributes (as shown in Fig. 3). This transformation explicitly structures temporal span information, laying the foundation for fine-grained temporal reasoning. Second, the resultant TBSGs are processed by the hybrid TBSG Encoder to capture both global and local spatio-temporal relationships. The proposed encoder integrates a Transformer variant, en-hanced with a duration-aware temporal weighting mechanism and a mask matrix, to model global event dependencies. Additionally, a Graph Convolutional Network (GCN) aggre-gates local object-object and object-relation interactions. This combination ensures global event information and fine-grained relationships are effectively encoded, thereby enhancing re-trieval performance for complex, multi-step video moments. In summary, our contributions are as follows:  
+
+> •
+
+To the best of our knowledge, this is the first work to introduce DSGs into VMR. DSGs provide a graph-structured event representation by modeling objects, their relationships, and the Temporal Dynamics of both, form-ing the foundation for Temporal Span Encoding.  
+
+> •
+
+To explicitly encode the Temporal Span and enhance the spatio-temporal representation of DSGs, we pro-pose DSG-E , a novel embedding module comprising the TBSG Constructor and the hybrid TBSG Encoder. The TBSG Constructor converts DSGs into TBSGs, explicitly encoding Temporal Span information. The hybrid TBSG Encoder integrates a Transformer variant for global event modeling and a GCN for fine-grained relational model-ing. The resulting embeddings provide a comprehensive spatio-temporal representation, effectively capturing both global event structures and local object interactions.  
+
+> •
+
+We conduct extensive experiments on Charades-STA and its two anti-bias variants, and perform zero-shot transfer to ActivityNet Captions, demonstrating SOTA perfor-mance and cross-dataset generalisability. II. R ELATED WORK 
+
+A. Video Moment Retrieval 
+
+VMR is the task of identifying specific temporal segments within an untrimmed video that semantically align with a given natural language query. Early proposal-based approaches generate candidate segments via sliding windows [6], anchor boxes [8], or learned proposal mechanisms, then rank them by semantic relevance to the query [1]. However, dense candidate sampling introduces substantial computational re-dundancy, particularly for long videos or complex queries. To address this, proposal-free methods directly predict the start and end timestamps of the target moment. Moment-Diff [4] employs a diffusion-based denoiser to iteratively refine temporal segments, while UniMD [9] unifies moment retrieval and temporal action detection within a proposal-free encoder–decoder framework. Beyond VMR-specific methods, recent cross-modal retrieval works offer complementary in-sights: ESSE [10] models semantic uncertainty via sector-based geometric representations, and SDCMR [11] disentan-gles semantic-shared from modality-dependent representations for purer cross-modal embeddings. 
+
+B. Scene Graph Generation 
+
+Scene graphs represent objects (nodes) and their relation-ships (edges) as ⟨subject, predicate, object ⟩ triples. Intro-duced by Johnson et al. [12] for image retrieval, they have since been applied to image captioning [13] and retrieval [14]. 
+
+Static Scene Graph. Static scene graphs are designed for single-frame analysis, capturing spatial relationships. SGTR [15] introduces a transformer-based approach, formu-lating scene graph generation as a bipartite graph construction problem, leading to more accurate visual relationship mod-elling. Building on these advances in static SGG, QuatRE enriches relation representations by embedding relation triplets in quaternion space via Hamilton product, while CoRE [16] incorporates Hermitian inner product to learn relation em-beddings in complex space. Both demonstrate that expressive mathematical spaces significantly improve relation modelling in static SGG. Our TBSG-Net extends this principle to the temporal domain by introducing duration-aware weights Tij ,bridging the gap between static relation embedding and dy-namic VMR. 
+
+Dynamic Scene Graph. DSGs model the evolution of ob-jects and their relationships over time. STTran [17] employs Transformers to capture spatial context within frames and decode temporal relationships, modeling object interactions over time, and has shown effectiveness in video question answering [18] and video summarization [19]. However, their potential in VMR remains largely underexplored. While PaTF [7] leverages static scene graphs to enhance VMR, it fails to capture temporal dynamics in videos and does not explicitly encode temporal spans, leading to suboptimal performance. To 3Result 
+
+> A person takes a drink from the cup.
+
+Query  
+
+> Coarse-grained Feature Fine-grained Feature
+> Video
+> Time t+1 tt+2
+> Textual Feature
+
+Dynamic Scene Graph Embedding    
+
+> Adjacency Matrix A
+> Layer Norm Object Feature Xo
+> Time Span T
+
+ts
+
+te      
+
+> Weighted Concatenation
+> …Relation Feature XR
+> Q
+> Temporal Bipartite Scene Graph Encoder
+> 𝑥 !𝑥 "
+> 𝑥 #𝑥 $
+> 𝑥 %
+> 𝑥 #&𝑥 $&
+> 𝑥 %&
+> 𝑥 !&𝑥 "&
+> Temporal Bipartite Scene Graph Constructor
+> TBSG
+> 𝑉 !
+> 𝑉 "
+> 𝑉 #
+> 𝐺 !"#
+> 𝑉 #$%&'
+> Fig. 2. The TBSG-Net architecture follows an encoder-decoder paradigm. A Text Encoder first captures the semantic context of the input queries, while the Visual Encoder consists of an Image Encoder for coarse-grained features and Dynamic Scene Graph Embedding (DSG-E) for fine-grained features. The DSG-E module comprises a Temporal Bipartite Scene Graph Constructor (TBSG Constructor) and a hybrid TBSG Encoder. Finally, the Decoder predicts the start and end times of the target video segment, ensuring alignment with the input query.
+
+address these limitations, we propose a DSG-based proposal-free VMR model that enables fine-grained event representation and precise temporal localization. 
+
+Comparison with Graph-based VMR Methods. Several prior VMR approaches incorporate graph structures, but dif-fer fundamentally from our DSG-based temporal modeling. MMRG [20] builds a proposal-based static relational graph that aggregates object and predicate features per segment, yielding time-invariant graphs that capture neither frame-wise interaction changes nor relational temporal spans. MHGR [21] constructs a modality-level heterogeneous graph over video, audio, and text for multimodal fusion, without explicit subject– predicate–object relational structure. In contrast, our DSGs encode object–relation evolution over time and are converted into TBSGs with explicit relational spans, enabling fine-grained relational–temporal reasoning unsupported by static proposal-level or modality-level graph formulations. III. M ETHOD 
+
+A. Problem Formulation 
+
+Given an untrimmed video V = [ fi]Nv −1 
+
+> i=0
+
+comprising Nv
+
+video frames, and a textual query Q = [ qi]Nq −1 
+
+> i=0
+
+containing Nq
+
+words, the task of VMR aims to localize a specific temporal segment x = ( ts, t e) within an untrimmed V that corresponds to the semantic content of Q. Here, ts and te denote the start and end times of the target moment. Formally, the retrieval function can be defined as: 
+
+x = F (Q, V ). (1) During training, our objective is to minimize the discrepancy between x and the ground-truth boundaries. 
+
+B. Overview 
+
+As illustrated in Fig. 2, TBSG-Net follows a proposal-free encoder-decoder paradigm. The encoder extracts representa-tions from both the textual and visual modalities, and the decoder predicts the temporal boundaries of the relevant video segment via classification and regression heads. For text encoding, the input query is encoded into dense semantic embeddings using the CLIP text encoder. For visual encoding, our framework employs a two-level representation strategy: (1) Coarse-grained frame-level features: These features capture the global context of individual frames and are extracted using pre-trained VGG [22], CLIP [23], I3D [24], or a dual-stream SF+CLIP backbone combining SlowFast [25] motion with CLIP features. (2) Fine-grained event-based clip-level representations: These representations focus on representing specific events within the video, derived from the DSG Generation process (Section III-D) and further encoded by the DSG Embedding module (Section III-E). The two are then combined via weighted concatenation to form the final visual representation. 
+
+C. Textual and Visual Encoder 1) Text Encoder: The text encoder Et, derived from CLIP, encodes textual queries into dense semantic embeddings. 4
+
+Given a query Q = [ qi]Nq −1 
+
+> i=0
+
+, Et produces token-level em-beddings in RNq ×D . Additionally, a sentence-level feature 
+
+Vt ∈ RD is extracted from the End of Sentence ([EOS]) token, summarizing the holistic semantic content of the query. 
+
+2) Video Encoder: Our video encoder extracts the two levels of visual representations described in Section III-B. Specifically, a pre-trained backbone Fb is employed to ex-tract coarse-grained features from the raw video sequence 
+
+V = [ fi]Nv −1 
+
+> i=0
+
+:          
+
+> Vb=Fb([ fi]Nv−1
+> i=0 ),b∈ { VGG ,CLIP ,I3D ,SF+CLIP },(2)
+
+where VVGG captures static appearance features from individ-ual video frames, VCLIP obtains semantically rich representa-tions that are inherently aligned with textual semantics, VI3D 
+
+models short-term motion dynamics in videos, and VSF+CLIP 
+
+combines SlowFast motion features with CLIP features for richer temporal representation. In parallel to these coarse-grained features, we construct dynamic scene graphs GDSG for fine-grained clip-level rep-resentations. This DSG generation module comprehensively models the evolution of objects and their relationships over time (Section III-D). The resulting dynamic scene graphs are then encoded by the Dynamic Scene Graph Embedding (DSG-E) module (Section III-E) to produce the fine-grained spatio-temporal representation:        
+
+> Vf=FDSG-E (GDSG (V)) = FDSG-E (GDSG ([ fi]Nv−1
+> i=0 )) .(3)
+
+The final video representation Vfinal is obtained through a weighted concatenation of the fine-grained feature Vf and the chosen coarse-grained feature 
+
+Vg ∈ { VVGG , V I3D , V CLIP , V SF+CLIP }:         
+
+> Vfinal = [ Wf·Vf;Wg·Vg],(4)
+
+where [; ] denotes the concatenation operation along the feature dimension, and Wf and Wg are learnable parameters. 
+
+D. Dynamic Scene Graph Generation 
+
+Given an untrimmed video V = [ fi]Nv −1 
+
+> i=0
+
+comprising Nv
+
+frames, we construct DSGs GDSG using the STTran [17] model, as illustrated in Fig. 1. STTran is designed to model the evolution of objects and their relationships over time and serves as an off-the-shelf relational detector for dynamic scene graph generation. Although STTran is adopted in our implementation as an upstream relational detector, our framework does not rely on dataset-specific heuristics or handcrafted priors. When transferring TBSG-Net to a new dataset, the same pipeline can be applied by training the relational detector using the dataset’s available object and relation annotations during of-fline preprocessing, without modifying the overall architecture. The STTran model contains two main stages: (1) The spatial module is built upon a Faster R-CNN object detector. Specifically, it detects object features Vv,t =
+
+{v0 
+
+> t
+
+, . . . , v N (t)−1 
+
+> t
+
+}, bounding boxes Vb,t = {b0 
+
+> t
+
+, . . . , b N (t)−1 
+
+> t
+
+},and object classes Vc,t = {c0 
+
+> t
+
+, . . . , c N (t)−1 
+
+> t
+
+}, where N (t)
+
+represents the number of detected objects in frame t. Aspatial transformer with positional encoding analyzes intra-frame object relationships and outputs both relational class labels and relation feature embeddings, denoted as Rr,t =
+
+{r0 
+
+> t
+
+, . . . , r K(t)−1 
+
+> t
+
+} and Rv,t = {u0 
+
+> t
+
+, . . . , u K(t)−1 
+
+> t
+
+} respectively, where K(t) denotes the number of identified relationships in frame t.(2) The temporal module then operates on the output of the spatial module, modeling how detected objects and their relationships evolve across frames. By capturing the temporal dependencies within objects and their relationships, it ensures that GDSG = ( Vc,t , R r,t ) effectively encodes spatial-temporal relationships present in the video. The corresponding visual features (Vv,t , V b,t , R v,t ) are retained alongside the graph structure for subsequent node feature construction in the TBSG (Section III-E). The resulting GDSG is then passed to the DSG Embedding module for temporal bipartite scene graph construction and encoding. 
+
+E. Dynamic Scene Graph Embedding 1) Temporal Bipartite Scene Graph Constructor: The TBSG represents a video clip as a bipartite graph with two disjoint node sets: object nodes O and relation nodes R. Edges exist exclusively between O and R, encoding the subject-predicate-object structure of each detected interaction. This bipartite formulation enables the TBSG Encoder to reason separately over object-level appearance and relation-level se-mantics before producing a unified clip representation. To explicitly model the temporal spans of objects and their relationships, we transform the Dynamic Scene Graph 
+
+GDSG = ( Vc,T ′ , R r,T ′ ) along with its associated visual features 
+
+(Vv,T ′ , V b,T ′ , R v,T ′ ) into a Temporal Bipartite Scene Graph for a video clip CT ′ spanning T ′ frames, as illustrated in Fig. 3. First, we compute the union sets of unique objects and relationships that appear within these T ′ frames. Let 
+
+Vc, 1: T ′ = ST ′ 
+
+> t=1
+
+Vc,t , Rr, 1: T ′ = ST ′ 
+
+> t=1
+
+Rr,t ; here, Vc, 1: T ′
+
+(denoted as set O) contains all unique objects, and Rr, 1: T ′
+
+(denoted as set R) contains all unique relationships observed in the clip. In the Charades-STA benchmark and its variants, the entity Person is the only subject class, and we treat it as an object in subsequent discussions. To model how interactions evolve over time, we connect objects and relationships across frames and associate each relationship with a timestamp. Formally, the e-th connection instance is defined as:          
+
+> E(e)= ( o(e), r (e), t (e)),e= 1 , . . . , |E| ,o(e)∈O, r (e)∈R,
+> (5)
+
+where t(e) denotes the timestamp of the e-th connection instance. Here e indexes the edge instances rather than nodes within O or R; the object and relation node indices are written as i ∈ { 1, . . . , |O|} and j ∈ { 1, . . . , |R|} respectively, where 
+
+|O| and |R| are independently determined by the clip content and are in general unequal. The set {E(e)} serves as the common source for both the temporal structure and the graph topology of the TBSG: the timestamps t(e) are aggregated into temporal spans as described in the remainder of this section, while the index pairs (o(e), r (e)) determine the connectivity structure of Aor (Eq. 9). We define the set of all temporal spans within a clip as:           
+
+> T={[ts, t e]|0≤ts, t e≤Tmax , t s< t e},(6)
+
+where Tmax denotes the dataset-wide maximum video dura-tion. If a relationship persists across consecutive frames, its timestamps are merged into a single continuous span [ts, t e],5Table Chair Bag Person in front of leaning on sitting on behind not contacting holding           
+
+> Objects (O) Relationships (R)
+> [12.7, 27.8] [2.9,7.2] [15.3,26.7] [9.7, 12.7] [14.5, 15.7] [2.9, 11.2] [28.0, 29.3] [28.3, 30.0] [12.7, 15.7] [20.5, 26.3] [27.5, 27.9]
+> Time Span ( T )
+> Fig. 3. Demonstration of TBSGs. Nodes are divided into objects and relationships, with each relationship node having a time span attribute (in seconds). Dashed lines denote subjects to relationships, solid lines connect relationships to objects. Each time span marks the duration of every triplet
+> ⟨subject, relationship, object ⟩.
+
+which is recorded as one entry in T , representing the interac-tion more compactly for event-level analysis. For each object-relation pair (i, j ), the scalar temporal span Tij is derived by aggregating the relevant entries of T . Specifically, for cases where the same pair appears in multiple disjoint intervals within a clip, each contiguous segment is first recorded as an independent span in T , and the final Tij is computed as 
+
+Tij = P
+
+> k
+
+(tke − tks ), where [tks , t ke ] denotes the k-th contiguous interval in which the pair is active within the clip. We denote the node feature of the TBSG as Xo for objects in O and Xr for relationships in R. The initial object node feature Xo combines object category, visual feature, and spatio-temporal localization information. Specifically, Vc,t ,
+
+Vv,t , and Vb,t denote the object class label, visual feature, and bounding box feature at time step t, respectively, all extracted by the STTran model [17]. Here ϕ(·) denotes the CLIP text encoder applied to categorical label names (e.g., “cup”, “person”), converting discrete class labels into continuous semantic embeddings that are aligned with the visual feature space, φ(·) denotes a linear projection, and Vu is the union box feature computed via RoIAlign. For notational simplicity, we omit the time subscript t when the context is clear. The object node feature is defined as: 
+
+Xo = ⟨Wcϕ(Vc), W v Vv , W bφ(Vu ⊕ Fbox (Vb)) ⟩, (7) 
+
+where ⟨· , ·, ·⟩ denotes concatenation followed by a linear pro-jection, ⊕ represents element-wise addition, Fbox transforms bounding boxes into feature representations, and Wc, Wv , Wb
+
+are learnable projection matrices. Similarly, the relationship node feature is defined as: 
+
+Xr = ⟨Wr ϕ(Rr ), W ′ 
+
+> r
+
+Rv ⟩, (8) 
+
+where Rr denotes the relation type label (e.g., “holding”), 
+
+Rv denotes the corresponding visual relation feature extracted by the STTran [17], and Wr , W ′ 
+
+> r
+
+are learnable projection matrices. Specifically, Rv is computed using distinct projection matrices Ws and Wo applied respectively to the subject and object RoI features (Eq. 3 in [17]), such that Xr inherently encodes asymmetric role information for each detected inter-action. Finally, we define the TBSG for the clip as: 
+
+GC = {Xo, X r , Tij , A or }, (9) 
+
+where Aor is the adjacency matrix that records valid object-relationship connections. Specifically, Aor [i, j ] = 1 if object 
+
+i participates in relation j (as either subject or object) in any frame of the clip, and Aor [i, j ] = 0 otherwise. Here 
+
+Tij denotes the scalar temporal span for the specific pair 
+
+(i, j ), computed as Tij = P
+
+> k
+
+(tke − tks ) above. Note that Aor 
+
+encodes only structural connectivity; semantic directionality is preserved separately in Xr as described above. In practice, transient detection errors are naturally sup-pressed during temporal aggregation, as interactions persisting across multiple frames are preferentially retained over isolated one-frame predictions. 
+
+2) Temporal Bipartite Scene Graph Encoder: 
+
+Transformer variant module. To capture temporal dynamics within the bipartite graph, we introduce a duration-aware tem-poral weighting term Tij = exp 
+
+
+
+λ · Tij 
+
+> Tmax
+
+
+
+, where Tij is the scalar temporal span for pair (i, j ) defined in Section III-E1, 
+
+Tmax is the maximum video duration (Eq. 6), and λ is a learnable scalar parameter initialised at 0.1 and optimised end-to-end, controlling the sensitivity to interaction duration. This term ensures that the model places greater emphasis on longer interactions while progressively reducing the impact of shorter relationships. We formulate the attention in our Transformer as follows: 
+
+Attention O→R = softmax 
+
+ HoHTr
+
+√dk
+
++ M + T
+
+
+
+Hr , (10) 
+
+where dk represents the dimension of the key, Ho and Hr
+
+are the transformed feature representations of object set O
+
+and relationship set R respectively, and T ∈ R|O|×| R| is the duration-aware weight matrix with entries Tij defined above. 
+
+Ho and Hr are computed as: 
+
+Ho = Xo ˆWo, Hr = Xr ˆWr , (11) 
+
+where ˆWo and ˆWr are learnable matrices that project the features Xo and Xr into a common embedding space. To ensure that attention is computed only for existing edges in the bipartite graph, a mask matrix M is applied: 
+
+Mij =
+
+(
+
+0 if Aor [i, j ] = 1 
+
+−∞ otherwise . (12) 
+
+This attention mask strictly enforces selective attention, allowing the Transformer to focus solely on valid existing connections in the bipartite graph. To stabilise training, a residual connection and layer normalisation are applied to the output of the attention module before passing features to the GCN. The resulting features are denoted as HAttn and serve as the input to the subsequent GCN module. 
+
+Graph Convolutional Networks Module. To capture local neighborhood structures, we apply GCN, which iteratively aggregates and propagates features across connected nodes. Specifically, each edge weight Aor [i, j ] is scaled by Tij to form A′ 
+
+> or
+
+[i, j ] = Aor [i, j ] · Tij , and ˜A′ 
+
+> or
+
+is its symmetrically 6GCN × M  
+
+> Transformer ×N
+
+(a) Transformer × N   
+
+> GCN ×M
+
+(b) GCN × M Transformer × N (c)  
+
+> Fig. 4. Three configurations of relative positioning in the Transformer-GCN.
+
+normalised form, with degree matrix ˜Dii = P 
+
+> j
+
+˜A′ 
+
+> or,ij
+
+. The GCN update at layer l then becomes:           
+
+> H(l+1) =σ
+> ˜D−12˜A′
+> or ˜D−12H(l)W(l)
+> ,(13)
+
+H(l) is the node feature matrix at GCN layer l, initialised as H(0) = HAttn , where HAttn denotes the output of the preceding Transformer submodule within the TBSG Encoder, after residual connection and layer normalisation. Each layer has a learnable weight W (l) and a nonlinear activation σ.
+
+Architecture variants. We explore three types of relative position of Transformer-GCN architecture (Fig. 4). These vari-ants differ in how features are passed and combined between Transformer-based attention and GCN-based neighborhood aggregation. Quantitative comparisons, shown in Table IX, confirm that placing these modules in different orders can significantly affect performance. The TBSG Encoder improves robustness by leveraging relational and global contextual reasoning. GCN propagation allows nodes with noisy features to be refined by structurally consistent neighbors, while the Transformer integrates long-range relational–temporal dependencies that reduce the in-fluence of isolated errors. Together, TBSG Constructor and TBSG Encoder reasoning ensure that the final representation focuses on stable relational–temporal structure rather than frame-level noise. Importantly, this robustness is achieved through general architectural design rather than dataset-specific tuning. The TBSG Constructor and TBSG Encoder operate based on graph topology and temporal structure, without relying on dataset-specific heuristics or handcrafted semantic priors. This design enables direct application to any dataset once object–relation or scene-graph inputs become available. 
+
+3) Training Objectives: To effectively train TBSG-Net for video moment retrieval, we adopt a composite loss function that guides the learning of both temporal relevance and precise boundary prediction. Following the approach of UniMD [9], our training objective comprises a classification loss Lcls and a regression loss Lreg , which are applied to each predicted temporal segment. The overall loss is formulated as follows:         
+
+> L=X
+> t
+> X
+> i
+> 
+> λcls Lcls (pt,i , y t,i ) + δt,i λreg Lreg (bt,i , g t,i )
+> 
+> ,(14)
+
+where t indexes the predicted temporal segments, i iterates over the different scales of these predictions, λcls and λreg are weighting coefficients that balance the relative importance of the classification and regression objectives, and δt,i is a binary indicator function such that δt,i = 1 if the i-th prediction at temporal prediction point t is considered a positive sample (i.e., it overlaps sufficiently with a ground-truth moment), and 
+
+δt,i = 0 otherwise. 
+
+Classification Loss Lcls : We employ a binary classification loss to predict the semantic relevance of each temporal seg-ment to the given textual query. Specifically, for each segment 
+
+t and scale i, pt,i represents the predicted probability of the segment being relevant to the query, and yt,i ∈ {0, 1} is the corresponding ground-truth label (1 for relevant, 0 for irrelevant). The binary cross-entropy loss is used here:        
+
+> Lcls (p, y ) = −(ylog( p) + (1 −y) log(1 −p)) .(15)
+
+Regression Loss Lreg : To refine the temporal boundaries of the relevant moments, we use a regression loss that measures the discrepancy between the predicted boundaries 
+
+bt,i = ( tpred  
+
+> s
+
+, t pred  
+
+> e
+
+) and the ground-truth boundaries gt,i =(tgt  
+
+> s
+
+, t gt  
+
+> e
+
+). Following UniMD and common practices in temporal localization, we employ IoU loss:     
+
+> Lreg (b, g ) = 1 −IoU (b, g ),(16)
+
+where IoU (b, g ) = length (b ∩ g)/length (b ∪ g).IV. E XPERIMENTS 
+
+A. Datasets and Evaluation Metrics 
+
+Charades-STA Dataset. The Charades-STA dataset (left part of Table I) extends the Charades dataset [1] by providing temporal annotations for queries. Uniquely, Charades-STA includes rich scene graph annotations across 234,253 frames, covering 35 distinct object classes and 25 relationship cate-gories, which are further grouped into three types: attention, spatial, and contact relationships. We adopt Charades-STA as our primary benchmark because it is currently the only widely used VMR dataset that supports reliable construction of scene-graph–based relational inputs. Other popular bench-marks such as QVHighlights and TACoS do not provide compatible object–relation annotations, which prevents a fair and meaningful evaluation of DSG-based relational modeling. Although ActivityNet Captions likewise lacks native object– relation annotations, we construct pseudo-label DSGs using the pre-trained STTran [17] model for zero-shot transfer eval-uation (Section IV-D). This evaluation protocol is consistent with prior scene-graph–based VMR work [7], which also reports results on a single dataset due to the limited availability of benchmarks supporting structured relational inputs. 
+
+Charades-STA-Len Dataset. As introduced in [4], the Charades-STA-Len variant modifies the moment duration dis-tribution of the target moments within the Charades-STA dataset. As shown in the middle part of Table I, the training split is biased toward shorter temporal moments (duration 
+
+w0 ≤ 10 seconds), while the test split predominantly contains longer moments (duration w0 > 10 seconds). This controlled distribution shift enables a rigorous evaluation of the model’s ability to generalize retrieval performance across varying mo-ment duration. 
+
+Charades-STA-Mom Dataset. Also proposed in [4], the Charades-STA-Mom variant targets the location of moments within Charades-STA. Moments are split at their center time (c0), as shown in the right part of Table I, resulting in a training set of earlier moments (before 15 seconds) and a test set of later moments (after 15 seconds). This design creates a 7
+
+TABLE I DETAILED INFORMATION OF THE CHARADES -STA, C HARADES -STA-L EN , AND CHARADES -STA-M OM DATASETS . H ERE , w0 IS THE DURATION OF THE TARGET MOMENT AND c0 IS ITS CENTER TIME . T HE EXPRESSIONS c0 + w0  
+
+> 2AND
+
+c0 − w0 
+
+> 2DENOTE THE END TIME AND START TIME
+
+, RESPECTIVELY .Dataset Charades-STA Charades-STA-Len Charades-STA-Mom Total w0 ≤ 10 s w0 > 10 s Total c0 + w0 
+
+> 2
+
+≤ 15 s c0 − w0 
+
+> 2
+
+> 15 s Total Training 12408 9307 2326 11633 5330 1332 6662 Test 3720 197 788 985 259 1038 1297 TABLE II PERFORMANCE COMPARISON BETWEEN TBSG-N ET AND SOTA MODELS ON CHARADES -STA. R ESULTS ARE REPORTED FOR R@ k, I OU= μ
+
+(k ∈ { 1, 5}, μ ∈ { 0.3, 0.5, 0.7}), GROUPED BY VISUAL BACKBONE : VGG, CLIP, I3D, AND SF+CLIP, WHERE SF+CLIP DENOTES A DUAL -STREAM BACKBONE COMBINING SLOW FAST AND CLIP FEATURES . T HE BEST AND SECOND -BEST RESULTS ARE HIGHLIGHTED IN BOLD AND UNDERLINED ,
+
+> RESPECTIVELY
+
+. T HE ARROWS ↑/↓ INDICATE THE RELATIVE IMPROVEMENT /GAP COMPARED TO THE BEST EXTERNAL BASELINE IN EACH COLUMN . F OR THE VGG GROUP , BOTH TBSG-N ET VARIANTS (G LO VE AND CLIP TEXT ENCODERS ) ARE REPORTED TO DEMONSTRATE THE CONTRIBUTION OF THE TEXT ENCODER .Method Venue Backbone Text Encoder R@1, IoU= μ R@5, IoU= μμ = 0.3 μ = 0.5 μ = 0.7 μ = 0.3 μ = 0.5 μ = 0.7 DEBUG [26] EMNLP-IJCNLP 2019 VGG Glove 54.95 37.39 17.69 - - -MAN [27] CVPR 2019 VGG Glove - 41.24 20.54 - 83.21 51.85 DORi [28] WACV 2021 VGG Glove 61.83 43.47 26.37 - - -CBLN [29] CVPR 2021 VGG Glove - 43.67 24.44 - 88.39 56.49 SV-VMR [30] ICME 2021 VGG Glove - 43.60 24.78 - 83.58 50.22 MMN [31] AAAI 2022 VGG DistilBERT - 47.31 27.28 - 83.74 58.41 UMT [32] CVPR 2022 VGG Glove - 48.31 29.25 - 88.79 56.08 CDN [33] TMM 2022 VGG Glove - 45.24 26.99 - 81.18 57.47 QD-DETR [34] CVPR 2023 VGG Glove - 52.77 31.31 - - -MomentDiff [4] NeurIPS 2023 VGG Glove - 51.94 28.25 - - -TBSG-Net ( Ours ) - VGG GloVe 63.21 
+
+> (↑2.23%)
+
+53.03 
+
+> (↑0.49%)
+
+31.81 
+
+> (↑1.60%)
+
+96.30 88.27 
+
+> (↓0.59%)
+
+59.46 
+
+> (↑1.80%)
+
+TBSG-Net ( Ours ) - VGG CLIP 66.53 
+
+> (↑7.60%)
+
+53.23 
+
+> (↑0.87%)
+
+32.24 
+
+> (↑2.97%)
+
+98.54 90.84 
+
+> (↑2.31%)
+
+61.16 
+
+> (↑4.71%)
+
+Moment-DETR [5] NIPS 2021 CLIP CLIP - 55.65 34.17 - - -UnLoc-L [35] ICCV 2023 CLIP CLIP - 60.80 38.40 - 88.20 61.10 VDI [36] CVPR 2023 CLIP CLIP - 52.32 31.37 - 87.03 62.30 PaTF [7] ICMR 2024 CLIP CLIP - 63.60 40.80 - 90.70 65.30 TBSG-Net ( Ours ) - CLIP CLIP 74.83 63.77 
+
+> (↑0.27%)
+
+42.31 
+
+> (↑3.70%)
+
+98.85 92.75 
+
+> (↑2.26%)
+
+66.02 
+
+> (↑1.10%)
+
+BM-DETR [37] WACV 2025 SF+CLIP CLIP - 59.48 38.33 - - -OB-VMR [38] AAAI 2026 SF+CLIP CLIP 75.50 65.10 46.10 - - -TBSG-Net ( Ours ) - SF+CLIP CLIP 77.90 
+
+> (↑3.18%)
+
+67.83 
+
+> (↑4.20%)
+
+46.52 
+
+> (↑0.91%)
+
+99.10 95.42 68.91 
+
+CBLN [29] CVPR 2021 I3D Glove - 61.13 38.22 - 90.33 61.69 LPNet [39] arXiv 2021 I3D Glove 66.59 54.33 34.03 - - -SV-VMR [30] ICME 2021 I3D Glove - 55.55 32.75 - 89.01 56.18 FVMR [40] ICCV 2021 I3D Glove - 55.01 33.74 - 89.17 57.24 UniMD [9] ECCV 2024 I3D CLIP - 60.19 41.02 - 91.61 65.86 PaTF [7] ICMR 2024 I3D CLIP - 64.00 43.00 - 90.90 66.50 TBSG-Net ( Ours ) - I3D CLIP 76.60 
+
+> (↑15.03%)
+
+65.46 
+
+> (↑2.28%)
+
+44.85 
+
+> (↑4.30%)
+
+98.92 94.10 
+
+> (↑2.72%)
+
+67.05 
+
+> (↑0.83%)
+
+particularly challenging scenario for temporal generalization, requiring models to accurately and robustly locate moments regardless of their position within the video timeline. 
+
+Evaluation Metrics. We assess retrieval performance using R@ k at IoU thresholds of μ. This metric measures the fraction of ground-truth moments correctly retrieved within the top-k
+
+predictions (IoU ≥ μ). We report results for k ∈ { 1, 5} and IoU thresholds μ ∈ { 0.3, 0.5, 0.7}.
+
+B. Implementation Details 
+
+Our model is implemented by extending the UniMD [9] encoder–decoder framework for proposal-free VMR. Specifi-cally, we retain UniMD’s query-dependent classification and regression heads, while augmenting the encoder with struc-tured relational representations derived from DSGs and the proposed TBSGs. 
+
+Encoder. For each video, we extract coarse-grained frame-level features using pre-trained VGG, CLIP, I3D, or Slow-Fast+CLIP backbones, and textual queries are encoded using the CLIP text encoder in all settings, except in the VGG group where a GloVe-based variant is additionally evaluated to 8
+
+enable controlled text-encoder comparisons. In parallel, fine-grained event-based clip-level DSGs are constructed offline as a preprocessing step using the STTran [17] model. These DSGs are temporally aggregated into clip-level TBSGs, which explicitly encode object–relation connectivity and temporal spans. The resulting TBSGs are processed by the TBSG Encoder module, consisting of a Transformer for global tem-poral modeling and a GCN for local relational reasoning. The encoded graph features are fused with coarse-grained frame-level features via weighted concatenation before being passed to the decoder. 
+
+Decoder and Inference. Following UniMD, the decoder takes 
+
+Vfinal and the textual feature Vt as input, performs multimodal fusion, and predicts the target moment boundaries (ts, t e) in a proposal-free manner. The classification head evaluates query-dependent temporal relevance, while the regression head maps the query embedding to a convolutional kernel that interacts with encoded video features to predict the boundary offsets. 
+
+Training Details. The model is trained using the AdamW optimizer with a learning rate of 1 × 10 −4, for 100 epochs with batch size 4. The classification and regression losses are equally weighted ( λcls = λreg = 1 .0). All experiments are implemented in PyTorch 2.4.0 with CUDA 12.1 and cuDNN 9.0.10 on a single NVIDIA RTX A5000 GPU (24 GB). 
+
+C. Comparison with SOTA Methods 
+
+To thoroughly evaluate TBSG-Net, we compare its retrieval performance against 19 unique competitive baselines evaluated across four backbone settings on Charades-STA. For all base-lines, we use the official text encoder provided by each method to ensure reproducibility and avoid re-implementation bias. Earlier VMR models [4], [26], [27], [29], [30] were designed around GloVe-based RNN encoders, and substituting CLIP-text would require non-trivial architectural modifications (e.g., changes to their cross-modal matching modules), making con-trolled comparison difficult. Following the evaluation protocol commonly adopted in recent CLIP-based VMR works [5], [7], [9], [35], [36], we compare our CLIP-based model against (1) older baselines using their official GloVe settings and (2) modern CLIP-based methods under the same multimodal embedding space. To further enable a text-encoder-controlled comparison in the VGG group, we additionally report a GloVe variant of TBSG-Net (TBSG-Net, VGG+GloVe). This ensures consistency with established practice in the VMR literature. Table II shows detailed results. TBSG-Net consistently achieves SOTA results across all backbone settings. In the VGG group, TBSG-Net with GloVe text encoder already surpasses all GloVe-based baselines across all metrics, and the CLIP variant further improves upon this, confirming that both the DSG contribution and the stronger text encoder jointly drive performance gains. In the CLIP and I3D groups, TBSG-Net outperforms the previous best method PaTF [7] by consistent margins across all IoU thresholds, demonstrating the effectiveness of DSG-based relational reasoning over frame-level and coarse clip-level baselines. 
+
+Comparison with Dual-Stream Methods (SF+CLIP). To further assess TBSG-Net under a stronger backbone setting, we evaluate an SF+CLIP dual-stream variant and compare against BM-DETR [37] and OB-VMR [38], both of which also employ SF+CLIP backbones. As shown in Table II, TBSG-Net with SF+CLIP outperforms both methods across all R@1 and R@5 metrics. Notably, even the single-stream I3D variant of TBSG-Net surpasses both BM-DETR and OB-VMR on R@1 IoU=0.3 and IoU=0.5, demonstrating that DSG-based relational reasoning provides consistent improvements that partially compensate for the absence of dedicated motion features. These results confirm that DSG-enhanced features provide a universal, backbone-agnostic mechanism for precise and robust VMR. Beyond backbone generalisability, we further examine whether TBSG-Net is robust to temporal distribution shifts. VMR models often suffer from temporal bias, with perfor-mance degrading when moment duration or positions shift [4]. We evaluate TBSG-Net’s robustness under such distribution shifts using the anti-bias benchmarks Charades-STA-Len and Charades-STA-Mom, which introduce controlled shifts in mo-ment duration and position, respectively. As shown in Ta-ble III, TBSG-Net achieves the highest scores and outperforms the strongest baseline, MomentDiff [4], by large margins across all IoU thresholds. These gains are particularly pro-nounced at the strictest IoU threshold ( μ = 0 .7), demonstrating TBSG-Net’s ability to maintain precise boundary localization even when test moments lie outside the training distribution. Ablation results in Section IV-E confirm that this robustness stems from the DSG generation and DSG-E modules, which model temporal relational structure at the clip level rather than relying on frame-level features. 
+
+D. Zero-Shot Generalization to ActivityNet Captions 
+
+To evaluate the cross-dataset generalisation of TBSG-Net, we conduct a zero-shot transfer experiment on ActivityNet Captions [41]. All models are trained exclusively on Charades-STA and evaluated on the ActivityNet Captions validation set without any fine-tuning or domain adaptation. Following the same offline preprocessing pipeline used for Charades-STA, we apply the pre-trained STTran to ActivityNet Captions videos to construct pseudo-label DSGs. As shown in Table V, TBSG-Net consistently outperforms all baselines under this zero-shot setting. The performance gap between TBSG-Net and UniMD is smaller than in the in-domain setting, consistent with the reduced vocabulary overlap between Action Genome and ActivityNet scene content, which leads to sparser DSG inputs, yet the dual-stream design (Eq. 4) ensures competitive performance by falling back to the coarse-grained stream 
+
+Vg when DSG quality degrades. Nevertheless, the relational– temporal representations learned on Charades-STA transfer effectively, confirming the cross-dataset generalisability of the proposed framework. 
+
+E. Ablation study 1) Contributions of DSGs and DSG-E: We introduce the DSGs module to capture fine-grained event information at the clip level, complemented by the DSG-E module, which 9
+
+TABLE III PERFORMANCE COMPARISONS BETWEEN TBSG-N ET AND SOTA MODELS ON THE ANTI -BIAS DATASETS CHARADES -STA-L EN AND 
+
+CHARADES -STA-M OM , EVALUATED ACROSS MOMENT DURATION AND POSITION . A LL EXPERIMENTS USE VGG AS FEATURE BACKBONE .Method Charades-STA-Len Charades-STA-Mom R@1, IoU= μ R@1, IoU= μμ = 0 .3 μ = 0 .5 μ = 0 .7 μ = 0 .3 μ = 0 .5 μ = 0 .7
+
+2D-TAN [6] 39.68 28.68 17.72 27.81 20.44 10.84 MomentDETR [5] 42.73 34.39 16.12 29.94 21.16 11.56 MMN [31] 43.58 34.31 19.94 33.58 27.20 14.12 MomentDiff [4] 51.25 38.32 23.38 48.39 33.59 15.71 TBSG-Net ( Ours ) 57.50 (↑ 10 .05% ) 43.98 (↑ 14 .77% ) 25.99 (↑ 11 .16% ) 50.65 (↑ 4.67% ) 42.67 (↑ 27 .03% ) 22.36 (↑ 42 .32% )TABLE IV ABLATION STUDY OF MODEL COMPONENTS ON CHARADES -STA USING I3D FEATURES . DSG S DENOTES THE DYNAMIC SCENE GRAPH GENERATION MODULE (S ECTION III-D); DSG-E DENOTES THE DYNAMIC SCENE GRAPH EMBEDDING MODULE , COMPRISING TRANSFORMER AND GCN 
+
+> SUBMODULES
+
+. (S ECTION III-E2). T HE ARROW ↓ INDICATES PERFORMANCE DEGRADATION RELATIVE TO THE FULL MODEL (FINAL ROW ). (N OTE :WHEN BOTH TRANSFORMER AND GCN ARE ✗, DSG-E IS ENTIRELY REMOVED (NO TBSG C ONSTRUCTOR OR ENCODER ). W HEN EITHER IS ✓, THE FULL DSG-E MODULE IS PRESENT WITH THE SPECIFIED TBSG E NCODER CONFIGURATION .) Model Components R@1, IoU= μ R@5, IoU= μ
+
+DSGs DSG-E μ = 0 .5 μ = 0 .7 μ = 0 .5 μ = 0 .7
+
+Transformer GCN 
+
+✗ ✗ ✗ 54.21 ( ↓ 17.19%) 35.10 ( ↓ 21.74%) 86.19 ( ↓ 8.41%) 56.39 ( ↓ 15.90%) 
+
+✓ ✗ ✗ 56.93 ( ↓ 13.03%) 39.21 ( ↓ 12.58%) 88.19 ( ↓ 6.28%) 57.20 ( ↓ 14.69%) 
+
+✓ ✗ ✓ 58.02 ( ↓ 11.37%) 40.10 ( ↓ 10.59%) 89.92 ( ↓ 4.44%) 60.09 ( ↓ 10.38%) 
+
+✓ ✓ ✗ 62.32 ( ↓ 4.80%) 41.04 ( ↓ 8.50%) 92.44 ( ↓ 1.76%) 63.56 ( ↓ 5.21%) 
+
+✓ ✓ ✓ 65.46 44.85 94.10 67.05 
+
+TABLE V ZERO -SHOT TRANSFER RESULTS ON ACTIVITY NET CAPTIONS VALIDATION SET . A LL MODELS ARE TRAINED ON CHARADES -STA ONLY ,
+
+> WITH NO FINE
+
+-TUNING ON ACTIVITY NET CAPTIONS .Method R@1, IoU= μ R@5, IoU= μμ=0.5 μ=0.7 μ=0.5 μ=0.7 2D-TAN [6] 11.81 4.24 38.21 20.64 MomentDiff [4] 15.43 5.29 42.75 23.42 UniMD [9] 17.82 7.57 48.13 26.72 TBSG-Net 20.62 8.84 49.41 27.25 
+
+comprises (1) a TBSG Constructor that aggregates frame-level DSGs into clip-level temporal bipartite scene graphs, fol-lowed by (2) a TBSG Encoder that integrates a Transformer submodule for modeling global temporal dependencies and a GCN submodule for local structural reasoning. To evaluate each component’s contribution, we conduct ablation studies on Charades-STA, with the main results in Table IV.  
+
+> •
+
+Without DSGs & DSG-E . Removing both modules re-sults in the largest drop across all metrics, highlighting the importance of fine-grained event representation (DSGs) and effective spatio-temporal modeling (DSG-E).  
+
+> •
+
+Without DSG-E . Removing the entire DSG-E module (including both TBSG Constructor and TBSG Encoder) causes the second-largest performance decline, indicating that the construction and encoding of temporal bipartite scene graphs are essential for leveraging DSG represen-tations effectively.  
+
+> •
+
+Without Transformer in TBSG Encoder . Removing only the Transformer submodule while retaining the GCN significantly reduces R@1, highlighting the Trans-former’s key role in modeling long-range temporal de-pendencies across the bipartite graph structure.  
+
+> •
+
+Without GCN in TBSG Encoder . Removing only the GCN submodule while retaining the Transformer leads to a substantial decrease, indicating that while the Trans-former captures global temporal relationships, the GCN is critical for refining local relational structure and feature aggregation. The ablation studies on Charades-STA-Len (Table VI) and Charades-STA-Mom (Table VII) exhibit the same pattern as those on the original Charades-STA split. The consistent gains across all three splits demonstrate that TBSG-Net does not overfit to dataset-specific temporal statistics, but instead cap-tures generalizable relational–temporal structure. Removing any component, whether DSGs, the entire DSG-E module, or individual submodules within it, consistently reduces perfor-mance and demonstrates the importance of each module for robust retrieval under changes in temporal distributions. The largest performance drop occurs when both DSGs and DSG-E are removed, highlighting their critical role in modeling varying moment durations and positions. The decreases caused by removing the Transformer and GCN confirm that both global self-attention and local graph convolution are necessary components of the TBSG-Net’s minimal viable configuration, and are essential for mitigating length and position biases in VMR. 
+
+2) Impact of Visual Features: To understand how different levels of visual representation contribute to TBSG-Net, we evaluate four visual encoders: VGG, CLIP, I3D, and SF+CLIP. These encoders provide complementary perspectives on the 10 
+
+TABLE VI ABLATION STUDY OF MODEL COMPONENTS ON THE CHARADES -STA-L EN DATASET USING I3D FEATURES .Model Components R@1, IoU= μ R@5, IoU= μ
+
+DSGs DSG-E μ = 0 .5 μ = 0 .7 μ = 0 .5 μ = 0 .7
+
+Transformer GCN 
+
+✗ ✗ ✗ 39.17 ( ↓ 25.77%) 21.69 ( ↓ 42.28%) 88.36 ( ↓ 4.30%) 45.21 ( ↓ 23.06%) 
+
+✓ ✗ ✗ 41.75 ( ↓ 20.88%) 23.36 ( ↓ 37.84%) 86.94 ( ↓ 5.84%) 51.18 ( ↓ 12.90%) 
+
+✓ ✗ ✓ 43.54 ( ↓ 17.49%) 24.92 ( ↓ 33.69%) 87.82 ( ↓ 4.88%) 50.91 ( ↓ 13.36%) 
+
+✓ ✓ ✗ 46.32 ( ↓ 12.22%) 28.38 ( ↓ 24.48%) 88.65 ( ↓ 3.99%) 52.35 ( ↓ 10.91%) 
+
+✓ ✓ ✓ 52.77 37.58 92.33 58.76 
+
+TABLE VII ABLATION STUDY OF MODEL COMPONENTS ON THE CHARADES -STA-M OM DATASET USING I3D FEATURES .Model Components R@1, IoU= μ R@5, IoU= μ
+
+DSGs DSG-E μ = 0 .5 μ = 0 .7 μ = 0 .5 μ = 0 .7
+
+Transformer GCN 
+
+✗ ✗ ✗ 36.05 ( ↓ 32.30%) 17.62 ( ↓ 32.93%) 84.87 ( ↓ 5.40%) 43.44 ( ↓ 16.77%) 
+
+✓ ✗ ✗ 40.97 ( ↓ 23.06%) 21.72 ( ↓ 17.32%) 86.08 ( ↓ 4.05%) 45.60 ( ↓ 12.63%) 
+
+✓ ✗ ✓ 41.43 ( ↓ 22.20%) 22.32 ( ↓ 15.04%) 87.90 ( ↓ 2.02%) 46.10 ( ↓ 11.67%) 
+
+✓ ✓ ✗ 43.10 ( ↓ 19.06%) 23.18 ( ↓ 11.76%) 87.24 ( ↓ 2.70%) 47.38 ( ↓ 9.22%) 
+
+✓ ✓ ✓ 53.25 26.27 89.71 52.19 
+
+TABLE VIII ABLATION STUDY ON CHARADES -STA FOR DIFFERENT COMBINATIONS OF VGG, I3D, CLIP, SF+CLIP, AND DSG MODULES . P ERCENTAGE DECREASES ARE SHOWN RELATIVE TO THE FULL SF+CLIP+DSG SMODEL .Model Components R@1, IoU= μ
+
+Visual Feature DSGs μ = 0 .5 μ = 0 .7
+
+VGG I3D CLIP SF+CLIP 
+
+✓ ✗ ✗ ✗ ✗ 49.80 (↓26.58%) 30.10 (↓35.30%) 
+
+✓ ✗ ✗ ✗ ✓ 53.23 (↓21.52%) 32.24 (↓30.70%) 
+
+✗ ✗ ✓ ✗ ✗ 61.52 (↓9.30%) 40.12 (↓13.76%) 
+
+✗ ✗ ✓ ✗ ✓ 63.77 (↓5.99%) 42.31 (↓9.05%) 
+
+✗ ✓ ✗ ✗ ✗ 64.20 (↓5.35%) 43.00 (↓7.57%) 
+
+✗ ✓ ✗ ✗ ✓ 65.46 (↓3.49%) 44.85 (↓3.59%) 
+
+✗ ✗ ✗ ✓ ✗ 66.31 (↓2.24%) 43.29 (↓6.94%) 
+
+✗ ✗ ✗ ✓ ✓ 67.83 46.52 
+
+video: VGG captures frame-level appearance cues, CLIP offers strong semantic alignment through its image–text pretraining, I3D explicitly models motion dynamics through 3D convolu-tion, and SF+CLIP combines SlowFast motion features with CLIP features for richer temporal representation. Table VIII summarizes the results. As expected, VGG-based variants yield the weakest performance due to VGG’s lack of temporal modeling, but they provide a useful lower bound showing that TBSG-Net can still extract gains from DSGs even with appearance-only features. CLIP-based variants achieve higher accuracy by incorporating stronger semantic repre-sentations, which improve object and relation understanding. I3D-based variants further improve performance by introduc-ing motion-sensitive temporal cues. SF+CLIP-based variants achieve the strongest results by combining motion dynamics with semantically rich CLIP features, demonstrating that richer temporal visual features further amplify the benefits of DSG-
+
+TABLE IX EFFECT OF DIFFERENT RELATIVE PLACEMENTS OF TRANSFORMER AND 
+
+GCN IN CHARADES -STA: ( A) GCN BEFORE TRANSFORMER , ( B)TRANSFORMER BEFORE GCN, AND (C) O PERATING IN PARALLEL .Model Variants R@1, IoU= μ R@5, IoU= μμ = 0.5 μ = 0.7 μ = 0.5 μ = 0.7 (a) 61.08 39.52 91.83 64.08 (b) 65.46 44.85 94.10 67.05 
+
+(c) 59.32 38.34 90.02 63.12 
+
+based relational reasoning. Across all four backbones, integrating the DSGs module consistently improves performance, demonstrating the comple-mentary role of fine-grained relational structure in enhancing visual features. Among all configurations, SF+CLIP+DSGs achieves the strongest results, confirming the effectiveness of coupling rich temporal visual dynamics with structured event-level reasoning for accurate and robust video moment retrieval. We do not ablate the text encoder as replacing CLIP-text with a non-contrastive encoder (e.g., GloVe) would al-ter the cross-modal alignment objective itself, introducing a confounding variable rather than isolating the architectural contribution of TBSG-Net. 
+
+3) Impact of relative position of Transformer-GCN archi-tecture: We conduct an ablation study to examine how the stacking order (Fig. 4) of Transformer and GCN influences retrieval performance. The results in Table IX reveal: Model (a) (GCN before Transformer) yields reasonable performance, indicating that aggregating local graph features before global attention is effective. Model (b) (Transformer before GCN) yields the best results, suggesting that capturing global de-pendencies first enhances feature representation, allowing the GCN to refine local interactions more effectively. Model (c) (Parallel Transformer-GCN) performs worst. This decline 11 
+
+TABLE X ABLATION STUDY ON CHARADES -STA EVALUATING DIFFERENT TIME -SPAN ENCODING METHODS IN THE TBSG C ONSTRUCTOR : (1) NO EXPLICIT ENCODING , (2) BINARY TIME -SPAN INDICATOR , (3) 
+
+> RANDOMIZED TIME SPANS
+
+, AND (4) THE DURATION -AWARE TEMPORAL WEIGHTING MODEL .Variant R@1 R@5 0.3 0.5 0.7 0.3 0.5 0.7 
+
+(1) 72.60 61.50 38.05 93.80 88.40 56.00 
+
+(2) 74.10 62.80 40.12 95.10 89.70 58.30 
+
+(3) 70.30 59.20 35.50 92.10 86.50 53.40 
+
+(4) 76.60 65.46 44.85 98.92 94.10 67.05 
+
+likely results from weakened feature interactions due to the lack of a sequential flow between global and local processing. 
+
+4) Impact of the Duration-Aware Temporal Weighting Term 
+
+T: The TBSG explicitly incorporates duration information for each object–relation interaction through the duration-aware weighting term Tij = exp 
+
+
+
+λ · Tij 
+
+> Tmax
+
+
+
+, where Tij denotes the temporal span of the relationship and λ is a learnable scaling factor initialised at 0.1. This term modulates the attention weights based on the persistence of each interaction, enabling the model to distinguish between transient and stable relational patterns. To assess its contribution, we evaluate four alternative time-span encoding strategies. 
+
+(1) No Time Span Encoding: The duration of each relation is removed, and only its occurrence interval is retained. With-out explicit modeling of interaction persistence, the temporal signal becomes coarse and unable to distinguish between momentary and sustained events. 
+
+(2) Binary Time Span Indicator: We replace the con-tinuous duration with a binary flag indicating whether arelation appears within the clip. This representation ignores the magnitude of the duration and provides minimal temporal information. 
+
+(3) Randomized Time Spans: To examine the importance of accurate temporal information, we retain the relational structure but replace true durations with randomized values. This disrupts the temporal coherence of the TBSG and directly tests the model’s reliance on meaningful duration information. 
+
+(4) Duration-Aware Weighting (Full Model): The full TBSG-Net employs the exponential weighting formulation 
+
+Tij defined above, which smoothly emphasizes long-duration, stable interactions while placing relatively less weight on transient or short-lived relations. This provides a continuous, structure-aware temporal weighting mechanism aligned with fine-grained moment localization. Table X shows that the full model consistently delivers the best results. Removing duration information entirely (Variant (1)) leads to the most substantial performance degradation, while the Binary Indicator (Variant (2)) and Randomized Duration (Variant (3)) variants also exhibit noticeable drops. These findings demonstrate that accurate and continuous time-span encoding is essential for capturing the temporal evolution of relational structure within dynamic scene graphs and for enabling precise moment localization. 2 4 8 16 Frame Count per Scene Graph 020 40 60 R@1 Scores (%) 
+
+> IoU=0.5 Trend IoU=0.7 Trend IoU=0.5 IoU=0.7
+
+Fig. 5. Impact of the number of frames per dynamic scene graph on R@1 at IoU thresholds of 0.5 and 0.7 on Charades-STA. 10 15 20 25 30 
+
+> The number of objects o
+> 61 62 63 64 65 66
+> R@1, IoU=0.5 Scores (%)
+> R@1,IoU=0.5 41 42 43 44 45
+> R@1, IoU=0.7 Scores (%) Impact of the number of objects o
+> R@1,IoU=0.7
+
+(a) Impact of the number of objects o 20 25 30 35 40 
+
+> The number of relationships r
+> 56 58 60 62 64 66
+> R@1, IoU=0.5 Scores (%)
+> R@1, IoU=0.5 34 36 38 40 42 44
+> R@1, IoU=0.7 Scores (%) Impact of the number of relationships r
+> R@1, IoU=0.7
+
+(b) Impact of the number of relationships r 
+
+Fig. 6. Effect of the maximum number of objects o and relationships r per DSG on retrieval performance (R@1 at IoU 0.5 and 0.7) on Charades-STA. 
+
+(a) R@1, IoU=0.5 (b) R@1, IoU=0.7 
+
+Fig. 7. Effect of Transformer and GCN layer counts on Charades-STA. The x-axis represents the number of GCN layers, the y-axis represents the number of Transformer layers, and the z-axis indicates the R@1 score. The orange star 
+
+⋆ marks the configuration achieving the highest R@1 at IoU ∈ { 0.5, 0.7}.
+
+F. Parameter study 1) Impact of frame count per DSG: DSGs generation module encodes objects and their relationships across multiple frames. To assess the impact of the frame count per DSG, we evaluate the performance of the model under varying frame numbers F from 2 to 16, as shown in Fig. 5. Results show that performance improves up to 4 frames but declines thereafter, likely due to redundant or noisy spatio-temporal information hindering representation learning. 
+
+2) Impact of the Number of Objects and Relationships: 
+
+Our model defines two key hyperparameters o (max objects per DSG) and r (max relationships per DSG). We vary these parameters and evaluate the retrieval performance, as shown in Fig. 6 (a) and (b), performance improves as o and r increase, then plateaus around o = 25 and r = 30 . Beyond these, adding more objects or relations yields negligible gains, suggesting the model captures the most salient scene information within these bounds, and more may add noise or redundancy. 
+
+3) Impact of the number of Transformer and GCN: Fig. 7 shows how varying Transformer and GCN layers affects 12 
+
+TABLE XI IMPACT OF UPSTREAM CONFIDENCE THRESHOLDS ON TBSG-N ET 
+
+PERFORMANCE . T HE DEFAULT SETTING IS POBJ =0 .70 AND PREL =0 .70 .
+
+Perturbation Variable (Threshold) R@1, IoU=0.5 R@1, IoU=0.7 A. Object Detection Confidence Sensitivity ( Pobj )
+
+Pobj ≥ 0.60 65.10 ( ↓0.55%) 44.50 ( ↓0.78%) 
+
+Pobj ≥ 0.65 65.49 (↑0.04%) 45.10 (↑0.56%) 
+
+Pobj ≥ 0.70 65.46 44.85 
+
+Pobj ≥ 0.75 64.20 ( ↓1.93%) 43.60 ( ↓2.79%) 
+
+Pobj ≥ 0.80 63.00 ( ↓3.76%) 42.10 ( ↓6.13%) 
+
+B. Relation Prediction Confidence Sensitivity ( Prel )
+
+Prel ≥ 0.60 65.00 ( ↓0.70%) 44.40 ( ↓1.00%) 
+
+Prel ≥ 0.65 65.10 ( ↓0.55%) 44.60 ( ↓0.56%) 
+
+Prel ≥ 0.70 65.46 44.85 
+
+Prel ≥ 0.75 64.60 ( ↓1.31%) 44.10 ( ↓1.67%) 
+
+Prel ≥ 0.80 63.90 ( ↓2.38%) 43.50 ( ↓3.01%) TABLE XII SENSITIVITY ANALYSIS OF THE LOSS WEIGHTS λcls AND λreg ON 
+
+CHARADES -STA. A LL METRICS VARY MINIMALLY ACROSS SETTINGS , 
+
+> INDICATING THAT
+
+TBSG-N ET IS ROBUST TO THE CHOICE OF LOSS WEIGHTS .                                                         
+
+> λcls λreg R@1, IoU= μR@5, IoU= μμ=0.3 μ=0.5 μ=0.7 μ=0.3 μ=0.5 μ=0.7 1.0 1.0 76.60 65.46 44.85 98.92 94.10 67.05 0.5 1.0 76.28 (-0.32) 65.11 (-0.35) 44.62 (-0.23) 98.74 (-0.18) 93.85 (-0.25) 66.88 (-0.17) 1.5 1.0 76.55 (-0.05) 65.39 (-0.07) 44.78 (-0.07) 98.86 (-0.06) 94.03 (-0.07) 67.00 (-0.05) 2.0 1.0 76.41 (-0.19) 65.23 (-0.23) 44.71 (-0.14) 98.80 (-0.12) 93.97 (-0.13) 66.95 (-0.10) 1.0 0.5 76.22 (-0.38) 65.02 (-0.44) 44.59 (-0.26) 98.70 (-0.22) 93.81 (-0.29) 66.84 (-0.21) 1.0 1.5 76.51 (-0.09) 65.31 (-0.15) 44.80 (-0.05) 98.88 (-0.04) 94.00 (-0.10) 67.01 (-0.04) 1.0 2.0 76.44 (-0.16) 65.34 (-0.12) 44.73 (-0.12) 98.83 (-0.09) 94.01 (-0.09) 66.98 (-0.07)
+
+R@1 on Charades-STA. Key insights: (1) Increasing GCN depth (1 →3) boosts R@1 by better aggregating object–relation structures. (2) Transformer depth shows diminishing returns beyond 2 layers, suggesting deeper self-attention may intro-duce overfitting. Overall, 3 GCN + 2 Transformer layers are optimal for robust moment retrieval. 
+
+4) Sensitivity to Upstream Noise: To evaluate the robust-ness of TBSG-Net under imperfect upstream predictions, we conduct a sensitivity analysis by perturbing the confidence thresholds of the object detector ( Pobj ) and the relation pre-dictor ( Prel ) at inference time. Increasing these thresholds progressively removes low-confidence predictions, resulting in sparser DSGs and allowing us to assess how sensitive TBSG-Net is to reduced and incomplete upstream evidence. Table XI summarizes results, yielding three observations: 
+
+(1) Graceful degradation under stronger filtering. When 
+
+Pobj increases from 0.70 (default) to 0.80, R@1 drops by at most 3.76% and 6.13% at IoU=0.5 and IoU=0.7 respectively. Similar patterns are observed for relation thresholds. These re-sults indicate that TBSG-Net is not brittle to systematic degra-dation of upstream detections; instead, its relational–temporal representation degrades smoothly rather than collapsing under upstream noise. 
+
+(2) Stable performance across a wide operating range. 
+
+We observe the best performance at Pobj = 0 .65 and Prel =0.70 , which slightly outperforms the default configuration (Pobj = 0 .70 , Prel = 0 .70 ) by only +0.04%–0.56% on R@1. These marginal improvements demonstrate that TBSG-Net does not require careful threshold tuning and maintains stable performance across a broad range of confidence thresholds. 
+
+(3) Effectiveness of temporal aggregation. The stable 
+
+TABLE XIII PERFORMANCE OF TBSG-N ET UNDER RELATION NODE CORRUPTION AT INFERENCE TIME ON CHARADES -STA WITH I3D BACKBONE . A  
+
+> PROPORTION
+
+ρ OF RELATION NODE FEATURES Xr ARE REPLACED WITH RANDOMLY SAMPLED FEATURES FROM OTHER RELATION CLASSES . T HE LAST ROW (N O DSG) REPORTS THE CONFIGURATION WITHOUT ANY DSG  
+
+> MODULES FROM
+
+TABLE IV AS THE THEORETICAL LOWER BOUND .
+
+Corruption ρ R@1, IoU= μ R@5, IoU= μμ=0.5 μ=0.7 μ=0.5 μ=0.7 0% (clean) 65.46 44.85 94.10 67.05 20% 63.88 43.49 93.38 65.87 50% 59.12 40.32 91.14 62.34 80% 52.97 34.28 84.72 54.02 No DSG 54.21 35.10 86.19 56.39 
+
+performance across threshold variations empirically confirms that our temporal aggregation mechanism successfully filters frame-level noise. The TBSG Constructor’s retention of only temporally consistent patterns (as described in Section III-E) is validated by the minimal performance degradation observed under sparse upstream evidence. These findings confirm that TBSG-Net is resilient to both upstream detection and relation-prediction noise, validating the reliability of our multi-stage pipeline. The above analysis focuses on sparse upstream outputs; to further evaluate robustness against incorrect (rather than merely sparse) predictions, we conduct a complementary re-lation node corruption experiment below. At inference time, a proportion ρ of relation node features 
+
+Xr are randomly replaced with features sampled from other relation classes, directly simulating systematic misclassifica-tion by the upstream detector. The no-DSG configuration in Table IV serves as the theoretical performance lower bound, representing complete upstream detector failure where the DSG stream contributes nothing to retrieval. Results are reported in Table XIII. As shown in Table XIII, performance degrades gracefully up to ρ = 50% , remaining above the no-DSG lower bound (R@1 IoU=0.5: 59.12 vs. 54.21). At ρ = 50% , performance still exceeds the no-DSG-E configuration (R@1 IoU=0.5: 56.93), since the remaining 50% of correct relation nodes continue to provide valid relational signals. At ρ = 80% , performance falls marginally below the no-DSG lower bound, as heavily corrupted relational cues actively mislead the attention mech-anism. Such extreme misclassification rates are unlikely under normal operating conditions, as corroborated by the stable performance in Table XI. 
+
+5) Impact of the loss weights λcls and λreg : To verify whether TBSG-Net is sensitive to the choice of loss weights, we evaluate the influence of λcls (classification loss) and λreg 
+
+(regression loss) by varying each weight within the range 
+
+{0.5, 1.0, 1.5, 2.0} while keeping all other settings unchanged. As shown in Table XII, the performance across all metrics exhibits minimal variation, with the largest fluctuation being only 0.44%. The default setting (λcls , λ reg ) = (1 .0, 1.0) yields consistently strong results, and all tested configurations remain 13                                            
+
+> TABLE XIV TBSG S IZE STATISTICS ON THE VALIDATION SET : A VERAGE (AND
+> MAXIMUM ) U NIQUE OBJECT CLASSES (o)AND UNIQUE RELATION
+> GROUPS (r)AS A FUNCTION OF INPUT FRAME COUNT (F).
+> Frames per DSG( F)Avg. Unique Classes ( o)Max. Unique Classes ( o)Avg. Unique Groups ( r)Max. Unique Groups ( r)
+> F= 2 3.55 94.14 14
+> F= 4 8.07 22 5.67 27
+> F= 8 8.70 24 8.16 29
+> F= 16 9.59 24 12.90 32
+
+within a narrow performance band. These observations confirm that TBSG-Net exhibits sta-ble performance across different loss weight configurations, indicating that its effectiveness stems primarily from the relational–temporal modeling design rather than from careful tuning of loss-weight coefficients. 
+
+G. Efficiency and Scalability Analysis 
+
+To provide further insights into the computational properties of TBSG-Net, we analyze wall-clock training time, online inference latency breakdown, GPU memory footprint, and the size of the constructed TBSGs. 
+
+Training and inference time. We instrumented the training loop using torch.cuda.synchronize() and measured that each training epoch requires 9.21 minutes on a single NVIDIA RTX A5000 GPU (batch size 4). 
+
+Online inference latency breakdown. Object detection, relation extraction, and DSG generation are performed offline and excluded from reported latency. The average online in-ference latency is 232.7 ms per video (batch size 1): TBSG construction and graph encoding account for 180.3 ms, and the proposal-free localization stage requires 52.4 ms. 
+
+GPU memory footprint. Peak training memory is 4.85 GB (forward) and 3.00 GB (backward), remaining stable across epochs. Inference requires approximately 2.14 GB. 
+
+Graph size statistics. Table XIV summarizes TBSG sizes across the test set after temporal aggregation. As the temporal window grows from 2 to 16 frames, relation groups increase smoothly (4.14 to 12.90 on average) while object classes grow moderately (3.55 to 9.59) and remain bounded (maximum 24). The observed maxima ( o ≤ 24 , r ≤ 32 ) align with the hyper-parameter analysis (Section IV-F), where performance plateaus at o = 25 and r = 30 , confirming that naturally occurring graph sizes fall within TBSG-Net’s optimal operating range. 
+
+H. Case Study 
+
+Fig. 8 presents two qualitative comparisons between TBSG-Net and UniMD on Charades-STA. In the first example, the query is A person takes a drink from a cup . UniMD inaccurately retrieves moments that in-clude trying to pick up the cup and putting down the cup after drinking . In contrast, our model with DSGs accurately identifies the relationship between the person and the cup ,correctly excluding moments where the person is not touching the cup or has finished drinking, ensuring a precise match to the query. In the second example, the query is A person tries to put a lightbulb in a fixture . UniMD retrieves a broader temporal GT Baseline         
+
+> 17.50s 25.30s
+> 17.39s 25.02s 25.63s 14.19s
+> Ours
+> Query: A person takes a drink from a cup.
+> Query: A person tries to put a lightbulb in a fixture.
+> 20.70s 25.60s 22.91s 27.34s 20.55s 25.61s
+> GT Baseline Ours
+> Fig. 8. Two Top-1 qualitative comparisons from Charades-STA. The three colored boxes indicate moment boundaries: green for ground truth (GT), orange for UniMD (baseline), and yellow for our model.
+
+segment that extends beyond the point where the person appears finished with the attempt, and its localization of the target action’s start time shows a delay. In contrast, our model accurately localizes the moment where the person’s interaction with the lightbulb/fixture is most relevant to the query. V. C ONCLUSION AND FUTURE WORK 
+
+We have presented TBSG-Net, a novel DSG-based, proposal-free VMR framework. TBSG-Net leverages DSGs to extract graph-structured representations at the clip level, enabling the modeling of object interactions over time and cap-turing temporal dynamics. Specifically, the TBSG Constructor aggregates frame-level DSGs into clip-level temporal bipartite scene graphs with explicit temporal span encoding, and the TBSG Encoder integrates a Transformer for global temporal modeling with a GCN for local relational reasoning. Exten-sive experiments on Charades-STA, its two anti-bias variants, and cross-dataset zero-shot transfer to ActivityNet Captions demonstrate that TBSG-Net outperforms SOTA methods, par-ticularly in handling complex, multi-step events with intricate temporal dependencies. Several promising directions remain for future work. At the data level, we plan to extend TBSG-Net to a broader range of datasets through pseudo-labelling or semi-supervised annotation pipelines, reducing the current dependency on Ac-tion Genome vocabulary coverage. At the architectural level, we aim to introduce an explicit directed adjacency formu-lation separating Asub  
+
+> or
+
+and Aobj  
+
+> or
+
+into subject-role and object-role matrices to strengthen asymmetric relational reasoning on multi-agent datasets. Furthermore, extending the duration scaling factor λ from a single shared scalar to a relation-type-specific or head-specific parameter within the multi-head attention framework would allow finer-grained adaptation to datasets with diverse event densities or dramatically differ-ent temporal scale distributions. Finally, we aim to enhance scene graph representations by incorporating additional object attributes, such as color and state, to capture richer contextual information and improve retrieval precision. 14 
+
+REFERENCES [1] J. Gao, C. Sun, Z. Yang, and R. Nevatia, “Tall: Temporal activity lo-calization via language query,” in Proceedings of the IEEE international conference on computer vision, 2017, pp. 5267–5275. [2] S. Yuan, C. Wen, Y.-S. Liu, and Y. Fang, “Retrieval-specific view learn-ing for sketch-to-shape retrieval,” IEEE Transactions on Multimedia, 2023. [3] K. Yang, X. Zhou, X. Tang, R. Diao, H. Liu, J. He, and Z. Fan, “Beatdance: A beat-based model-agnostic contrastive learning frame-work for music-dance retrieval,” in Proceedings of the 2024 International Conference on Multimedia Retrieval, 2024, pp. 11–19. [4] P. Li, C.-W. Xie, H. Xie, L. Zhao, L. Zhang, Y. Zheng, D. Zhao, and Y. Zhang, “Momentdiff: Generative video moment retrieval from random to real,” Advances in neural information processing systems, vol. 36, 2024. [5] J. Lei, T. L. Berg, and M. Bansal, “Detecting moments and highlights in videos via natural language queries,” Advances in Neural Information Processing Systems, vol. 34, pp. 11 846–11 858, 2021. [6] S. Zhang, H. Peng, J. Fu, and J. Luo, “Learning 2d temporal adjacent networks for moment localization with natural language,” in Proceedings of the AAAI Conference on Artificial Intelligence, vol. 34, no. 07, 2020, pp. 12 870–12 877. [7] T.-N. Nguyen, Z. Li, Y. Satoshi, J. Liu, and C. Gurrin, “A parallel transformer framework for video moment retrieval,” in Proceedings of the 2024 International Conference on Multimedia Retrieval, 2024, pp. 460–468. [8] A. Gordeev, V. Dokholyan, I. Tolstykh, and M. Kuprashevich, “Saliency-guided detr for moment retrieval and highlight detection,” arXiv preprint arXiv:2410.01615, 2024. [9] Y. Zeng, Y. Zhong, C. Feng, and L. Ma, “Unimd: Towards unifying mo-ment retrieval and temporal action detection,” in European Conference on Computer Vision. Springer, 2025, pp. 286–304. [10] Z. Wang, Z. Gao, M. Han, Y. Yang, and H. T. Shen, “Estimating the semantics via sector embedding for image-text retrieval,” IEEE Transactions on Multimedia, vol. 26, pp. 10 342–10 353, 2024. [11] Z. Wang, X. Xu, J. Wei, N. Xie, Y. Yang, and H. T. Shen, “Semantics disentangling for cross-modal retrieval,” IEEE Transactions on image processing, vol. 33, pp. 2226–2237, 2024. [12] J. Johnson, R. Krishna, M. Stark, L.-J. Li, D. Shamma, M. Bernstein, and L. Fei-Fei, “Image retrieval using scene graphs,” in Proceedings of the IEEE conference on computer vision and pattern recognition, 2015, pp. 3668–3678. [13] C. Zhang, C. Huang, Y. Li, X. Zhang, Y. Ye, and C. Zhang, “Look twice as much as you say: Scene graph contrastive learning for self-supervised image caption generation,” in Proceedings of the 31st ACM International Conference on Information & Knowledge Management, 2022, pp. 2519–2528. [14] S. Yoon, W. Y. Kang, S. Jeon, S. Lee, C. Han, J. Park, and E.-S. Kim, “Image-to-image retrieval by learning similarity between scene graphs,” in Proceedings of the AAAI Conference on Artificial Intelligence, vol. 35, no. 12, 2021, pp. 10 718–10 726. [15] R. Li, S. Zhang, and X. He, “Sgtr: End-to-end scene graph generation with transformer,” in proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2022, pp. 19 486–19 496. [16] Z. Wang, X. Xu, Y. Zhang, Y. Yang, and H. T. Shen, “Complex relation embedding for scene graph generation,” IEEE Transactions on Neural Networks and Learning Systems, vol. 35, no. 6, pp. 8321–8335, 2022. [17] Y. Cong, W. Liao, H. Ackermann, B. Rosenhahn, and M. Y. Yang, “Spatial-temporal transformer for dynamic scene graph generation,” in Proceedings of the IEEE/CVF international conference on computer vision, 2021, pp. 16 372–16 382. [18] F. Cao, S. Luo, F. Nunez, Z. Wen, J. Poon, and S. C. Han, “Scenegate: Scene-graph based co-attention networks for text visual question an-swering,” Robotics, vol. 12, no. 4, p. 114, 2023. [19] W. Zhu, Y. Han, J. Lu, and J. Zhou, “Relational reasoning over spatial-temporal graphs for video summarization,” IEEE Transactions on Image Processing, vol. 31, pp. 3017–3031, 2022. [20] Y. Zeng, D. Cao, X. Wei, M. Liu, Z. Zhao, and Z. Qin, “Multi-modal relational graph for cross-modal video moment retrieval,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2021, pp. 2215–2224. [21] R. Wang, J. Feng, F. Zhang, X. Luo, and Y. Luo, “Modality-aware heterogeneous graph for joint video moment retrieval and highlight detection,” IEEE Transactions on Circuits and Systems for Video Technology, vol. 34, no. 9, pp. 8896–8911, 2024. [22] K. Simonyan and A. Zisserman, “Very deep convolutional networks for large-scale image recognition,” arXiv preprint arXiv:1409.1556, 2014. [23] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al., “Learning transferable visual models from natural language supervision,” in International conference on machine learning. PMLR, 2021, pp. 8748–8763. [24] J. Carreira and A. Zisserman, “Quo vadis, action recognition? a new model and the kinetics dataset,” in proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, 2017, pp. 6299–6308. [25] C. Feichtenhofer, H. Fan, J. Malik, and K. He, “Slowfast networks for video recognition,” in Proceedings of the IEEE/CVF international conference on computer vision, 2019, pp. 6202–6211. [26] C. Lu, L. Chen, C. Tan, X. Li, and J. Xiao, “Debug: A dense bottom-up grounding approach for natural language video localization,” in Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP), 2019, pp. 5144–5153. [27] D. Zhang, X. Dai, X. Wang, Y.-F. Wang, and L. S. Davis, “Man: Moment alignment network for natural language moment retrieval via iterative graph adjustment,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2019, pp. 1247–1257. [28] C. Rodriguez-Opazo, E. Marrese-Taylor, B. Fernando, H. Li, and S. Gould, “Dori: Discovering object relationships for moment localiza-tion of a natural language query in a video,” in Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision, 2021, pp. 1079–1088. [29] D. Liu, X. Qu, J. Dong, P. Zhou, Y. Cheng, W. Wei, Z. Xu, and Y. Xie, “Context-aware biaffine localizing network for temporal sentence grounding,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2021, pp. 11 235–11 244. [30] Z. Wu, J. Gao, S. Huang, and C. Xu, “Diving into the relations: Lever-aging semantic and visual structures for video moment retrieval,” in 2021 IEEE International Conference on Multimedia and Expo (ICME). IEEE, 2021, pp. 1–6. [31] Z. Wang, L. Wang, T. Wu, T. Li, and G. Wu, “Negative sample matters: A renaissance of metric learning for temporal grounding,” in Proceedings of the AAAI Conference on Artificial Intelligence, vol. 36, no. 3, 2022, pp. 2613–2623. [32] Y. Liu, S. Li, Y. Wu, C.-W. Chen, Y. Shan, and X. Qie, “Umt: Unified multi-modal transformers for joint video moment retrieval and highlight detection,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2022, pp. 3042–3051. [33] G. Wang, X. Xu, F. Shen, H. Lu, Y. Ji, and H. T. Shen, “Cross-modal dynamic networks for video moment retrieval with text query,” IEEE Transactions on Multimedia, vol. 24, pp. 1221–1232, 2022. [34] W. Moon, S. Hyun, S. Park, D. Park, and J.-P. Heo, “Query-dependent video representation for moment retrieval and highlight detection,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2023, pp. 23 023–23 033. [35] S. Yan, X. Xiong, A. Nagrani, A. Arnab, Z. Wang, W. Ge, D. Ross, and C. Schmid, “Unloc: A unified framework for video localization tasks,” in Proceedings of the IEEE/CVF International Conference on Computer Vision, 2023, pp. 13 623–13 633. [36] D. Luo, J. Huang, S. Gong, H. Jin, and Y. Liu, “Towards generalisable video moment retrieval: Visual-dynamic injection to image-text pre-training,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2023, pp. 23 045–23 055. [37] M. Jung, Y. Jang, S. Choi, J. Kim, J.-H. Kim, and B.-T. Zhang, “Background-aware moment detection for video moment retrieval,” in 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV). IEEE, 2025, pp. 8586–8596. [38] Z. Li, Y. Wong, S. Yamazaki, J. Liu, and M. Kankanhalli, “Object-centric framework for video moment retrieval,” in Proceedings of the AAAI Conference on Artificial Intelligence, vol. 40, no. 8, 2026, pp. 6771–6779. [39] S. Xiao, L. Chen, J. Shao, Y. Zhuang, and J. Xiao, “Natural language video localization with learnable moment proposals,” arXiv preprint arXiv:2109.10678, 2021. [40] J. Gao and C. Xu, “Fast video moment retrieval,” in Proceedings of the IEEE/CVF International Conference on Computer Vision, 2021, pp. 1523–1532. [41] R. Krishna, K. Hata, F. Ren, L. Fei-Fei, and J. Carlos Niebles, “Dense-captioning events in videos,” in Proceedings of the IEEE international conference on computer vision, 2017, pp. 706–715.

@@ -1,0 +1,1566 @@
+Title: The Low Frequency Trap: Video Language Models Fail at Simple Event Bookkeeping
+
+URL Source: https://arxiv.org/pdf/2608.06361v1
+
+Published Time: Fri, 07 Aug 2026 01:19:45 GMT
+
+Number of Pages: 38
+
+Markdown Content:
+## The Low-Frequency Trap: Video–Language Models Fail at Simple Event Bookkeeping 
+
+Sarvesh Baskar 1∗, Zikui Cai 1∗, Shayan Shabihi 1∗, Anirudh Satheesh 1, Muhammad R. Islam 1,Udari Madhushani Sehwag 2, Tom Goldstein 1, Furong Huang 1
+
+> 1
+
+University of Maryland, College Park, USA 2Scale AI, USA 
+
+§ Code: The-Low-Frequency-Trap õ Dataset: Sarvesh-369/Low-Frequency-Trap 
+
+ Project Page: low-frequency-trap.github.io 
+
+Abstract 
+
+Real-world video benchmarks provide broad coverage, but their fixed clips entangle event count, rate, duration, and visual complexity, making failure modes hard to isolate. While existing programmatic benchmarks offer better control, they primarily score only the final answer rather than auditing reported events against executable ground truth. To bridge this gap, we introduce trace-grounded parametric profiling for event counting in three controlled video tasks, bouncing-ball wall contacts, visual blinks, and categorical state transitions. Across 2,190 videos, we vary event count N and frequency F while holding rendering fixed. Each video includes an executable event trace for capability-surface estimation and timestamp-level evaluation. Our results reveal a staged temporal failure. At an 80% reliability threshold, Gemini 3.6 Flash reliably counts persistent state transitions up to 12 events at 0.5 and 1.0 Hz, yet demonstrates no reliable positive-count region for transient blinking events. Thus, event representation (persistent or transient) dictates whether a model initially accesses the evidence – a limitation that compounds as count and frequency increase. In the high-count, high-frequency regime, only 0.2% of final counts are correct and the model recovers just 18.1% of true events. To test if visual access is the primary bottleneck, we increase sampling rate. Although this boosts Bounce Ball accuracy from 19.6% to 29.3%, the reported sequence agrees with the ground truth only 3.7% of the time. Extra frames can therefore inflate final scores without producing faithful event recovery. Different prompting strategies yield similarly limited gains, and evaluations on real-world videos show the same concentration of success at low event counts. Ultimately, trace-grounded profiling shifts video evaluation from aggregate accuracy metrics to a detailed diagnostic of where temporal reasoning fails and whether the reported evidence actually supports the final answer. 
+
+1 Introduction 
+
+Video-language models have advanced rapidly, demonstrat-ing strong performance across standard video benchmarks (Fu et al. 2025; Liu et al. 2024; Chandrasegaran et al. 2024; Mangalam, Akshulakov, and Malik 2023; Li et al. 2024b). These benchmarks provide useful breadth and ranking leader-boards, but they rarely identify why a model fails. Natural clips jointly vary visual clutter, camera motion, event density, 
+
+> ∗
+
+Equal Contribution. 
+
+duration, and semantics, so an error cannot be attributed to a specific temporal demand. The programmatically synthesized benchmarks considered here offer more control (Lu et al. 2025; Li et al. 2024a), but primarily score only a final answer. They therefore do not reveal whether a model missed events, confused their timing, lost track of a sequence, or made an error only when aggregating it. We address this gap with trace-grounded parametric profil-ing for visual event counting (Figure 1). We construct simple controlled video tasks based on bouncing-ball wall contacts, visual blinks, and categorical state transitions. We vary event count N because it determines the number of observations a model must retain and aggregate, and event frequency F
+
+because it determines how closely successive events are sepa-rated in time. These two parameters capture complementary temporal demands while remaining independently control-lable. We hold rendering, semantics, and task rules fixed so that the resulting boundary can be attributed to temporal demand rather than changes in visual content. Other factors that shape real-world video understanding, including clutter, camera motion, occlusion, semantic complexity, and temporal parameters such as event duration, irregularity, and inter-event variability, are outside the scope of this controlled study. The natural-video transfer evaluation does not isolate these fac-tors, it tests only whether the failure patterns identified under controlled variations of N and F persist in more realistic videos. Every video is paired with an executable ground-truth trace containing event times, state changes, and cumulative counts. This design maps reliable operating regions over the 
+
+N × F space and tests model-reported events against the sequence that actually occurred. The results are consistent with a staged and representation-dependent temporal failure. Under an 80% reliability target, Gemini 3.6 Flash counts persistent state transitions through 
+
+N = 12 at 0.5 and 1.0 Hz, whereas blinking has no reli-able positive-count region. In the high-count, high-frequency region, only 0.2% of final counts are correct and Gemini re-covers just 18 .1% of the true events. Increasing frame density raises Bounce Ball accuracy from 19 .6% to 29 .3% , yet the reported sequence agrees with the ground truth only 3.7% 
+
+of the time. Thus, additional visual evidence can improve the final answer without producing faithful event recovery. Prompting yields similarly limited gains, and natural repeated-arXiv:2608.06361v1 [cs.AI] 6 Aug 2026 Figure 1: Overview of trace-grounded parametric profiling. Unlike standard benchmark evaluation based on a single aggregate accuracy score, our framework generates controlled videos with executable event traces. event videos show the same concentration of success at low event counts. Together, these findings are consistent with a staged failure involving event access followed by sequence retention and aggregation. Our paper makes four primary contributions. 
+
+• We introduce a controlled evaluation framework that re-places a single aggregate score with capability surfaces over event count and frequency. 
+
+• We provide a trace-grounded benchmark that audits model-reported events against executable ground truth. 
+
+• We conduct targeted interventions using denser sampling, event-centered keyframes, and prompt variants to diagnose whether errors arise from limited visual evidence, event localization, or reasoning over the recovered sequence. 
+
+• We show why final-answer accuracy alone can mischarac-terize temporal reasoning and provide evidence that the controlled failure pattern extends to natural repeated-event videos. 
+
+2 Related Work 
+
+Video-language evaluation. Recent video-language mod-els combine strong visual encoders with long-context reason-ing, including Qwen, InternVL, and Molmo families (Bai et al. 2025; Wang et al. 2025; Clark et al. 2026). Existing benchmarks assess broad temporal understanding on fixed, heterogeneous clips, including Video-MME, TempCompass, HourVideo, EgoSchema, MVBench, LongVideoBench, Me-mentos, VideoNIAH, VideoCogQA, Video-MMLU, Video-Vista, CinePile, Video-MMMU, and V-STaR (Fu et al. 2025; Liu et al. 2024; Chandrasegaran et al. 2024; Mangalam, Ak-shulakov, and Malik 2023; Li et al. 2024b; Wu et al. 2024; Wang et al. 2024; Lu et al. 2025; Li et al. 2024a; Song et al. 2025; Li et al. 2024c; Rawal et al. 2024; Hu et al. 2025; Cheng et al. 2026). VideoReasonBench additionally tests multi-step reasoning over videos with partially observed state changes (Liu et al. 2025). Studies of visual shortcuts, tempo-ral perturbations, and benchmark confounds likewise show that final-answer scores can conceal weak temporal access or brittle reasoning (Fu et al. 2024; Tong et al. 2024; Cores et al. 2025; Feng et al. 2025; Yue et al. 2024; Lu et al. 2024; Chen et al. 2024; Hao et al. 2025). Our framework complements this literature by holding rendering and semantics fixed while sweeping explicit event-load and event-rate demands. 
+
+Controlled diagnostic evaluation. Controlled visual bench-marks, from CLEVR to recent physical-reasoning probes, isolate factors that are entangled in natural data (Johnson et al. 2017; Chow et al. 2025; Xiang et al. 2025; Qiu et al. 2025). Complementary analyses such as RCI ask whether a benchmark genuinely requires global visual reasoning (Agar-wal et al. 2025). We use the same diagnostic principle for video. Programmatic generation gives exact event boundaries and permits matched interventions, while the natural-video study tests whether the resulting diagnosis transfers beyond the controlled setting. 
+
+Grounded video evaluation. MORSE-500 demonstrates the value of fully scripted, controllable videos for stress-testing multimodal reasoning (Cai et al. 2025). TransRAC studies repetitive-action counting from natural video (Hu et al. 2022), but does not evaluate model-reported temporal traces. The closest related trace evaluation we found is Visual Reasoning Tracer, which evaluates object-level intermediate reasoning traces in images (Yuan et al. 2025). Our setting dif-fers because the renderer produces a temporal event schedule. We align a model-reported event sequence with that sched-ule to distinguish unsupported correct counts from faithful event recovery. Appendix E provides a detailed comparison with controlled video benchmarks and intermediate-trace evaluations. 
+
+3 Controlled Profiling and Trace Evaluation 
+
+Real-world video benchmarks entangle event count, event rate, duration, visual complexity, and semantic content, making it difficult to isolate the source of a model failure. We address this limitation with programmatically generated videos whose event structure is known exactly. Each video is paired with an executable trace produced by the same event schedule used for rendering. Appendix A provides the complete task specifications and supplied-frame examples. 
+
+Model evaluation setup. We select Gemini 3.6 Flash as the primary deployed video-language model because it is a frontier model that supports native video input. We use Qwen3-VL-235B, a large open-weight model from a distinct family, as a supplementary cross-system check. This tests qualitative robustness, not universality across VLMs. Each model uses its native video interface and the same zero-shot template instantiated for each domain, without per-cell tuning. Input configurations provide Gemini with 1 FPS and Qwen with 2 FPS; these are supplied sampling rates, not undocumented internal processing. We retain default provider decoding and preprocessing. Full prompts are provided in Appendix C. Detailed model configurations and cross-model boundary summaries appear in Appendix B.3. 
+
+3.1 Controlled Temporal Task Space 
+
+Each video is defined by a domain d, event count N , event frequency F , and random seed s. Figure 2 defines an event as a wall contact in Bounce_ball , an on-pulse in Blinking ,or a categorical transition in State_machine . The seed varies color, geometry, trajectory, initial state, orientation, and start delay while preserving the event schedule. We evaluate 
+
+N = {0, 1, 2, 3, 4, 5, 6, 8, 10 , 12 }
+
+and 
+
+F = {0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0} Hz Every clip is 24 seconds long. The active sequence spans approximately N/F , the remaining static frames occur before or after it, with allocation randomized by s. Thus, N changes event load and active retention span, not total duration. To balance grid coverage and visual variation, we generate S =10 videos per (N, F ). Let ˆyd,N,F,s be the prediction of model 
+
+Mθ . The observed cell accuracy is 
+
+bPdθ (N, F ) = 1
+
+S
+
+> S
+
+X
+
+> s=1
+
+I [ˆ yd,N,F,s = N ] (1) where I[·] equals one when the prediction is correct and zero otherwise. The full evaluation contains (1+9 ×8) ×10 = 730 
+
+videos per domain and 2190 videos across all three domains. For N = 0 , frequency is inapplicable, so we render ten no-event controls at nominal F = 1 .0 Hz, they are excluded from trace ratios. The profile therefore measures event load and active retention span, rather than isolated arithmetic counting. 
+
+3.2 Executable Traces and Metrics 
+
+For a video containing N events, the renderer produces 
+
+T ∗ =  ti, e i, s − 
+
+> i
+
+, s + 
+
+> i
+
+, c i
+
+Ni=1 , c i = ci−1 + 1 , c 0 = 0 , (2) where ti is the event timestamp, ei is the event type, s−
+
+> i
+
+and s+ 
+
+> i
+
+are the states before and after the event, and ci is the cumulative count. The trace is generated before inference and is not supplied to the model in the baseline condition. When trace reporting is requested, the model returns M
+
+timestamped events and a final count ˆy, which we parse before scoring. Events are aligned one-to-one within the rate-relative window δ(F ) = 1 /(2 F ), half the inter-event period. It ranges from 1.0 s at 0.5 Hz to 0.125 s at 4.0 Hz, so adjacent windows do not overlap. Let K be the aligned pairs. Prompting, matching, and fixed-window sensitivity results are in Appendix C.15. For one video, N is the true number of events, M is the number reported by the model, K is the number of aligned event pairs, and ˆy is the reported final count. I[·] equals one when its condition holds and zero otherwise. The main evaluation metrics are 
+
+Acc = I[ˆ y = N ], P = KM , R = KN ,
+
+F1 = 2PR P + R , VOR = MN (3) Here Acc is final-answer exact match, P is precision, R is recall, and F1 is their harmonic mean. Precision measures supported reported events and recall measures recovered true events. The Visual Observation Ratio (VOR) measures count bias. Over eligible positive-event videos E, the Accidental Correctness Rate (ACR) and Reasoning Failure Rate (RFR) are 
+
+ACR = 1
+
+|E| 
+
+X
+
+> v∈E
+
+I[ˆ yv = Nv ] I[F 1,v < 0.80] ,
+
+RFR = 1
+
+|E| 
+
+X
+
+> v∈E
+
+I[ˆ yv̸ = Nv ] I[F 1,v ≥ 0.80] (4) Here E is the set of eligible positive-event videos, v indexes one video, Nv is its true event count, ˆyv is its reported final count, and F1,v is the trace score for that video. Thus ACR identifies correct counts unsupported by a sufficiently faithful trace, whereas RFR identifies incorrect counts despite a sufficiently faithful trace. When M = 0 , precision and F1 are zero. We average trace scores over eligible videos; VOR < 1 indicates under-reporting and VOR > 1 over-reporting. Bounce Ball                      
+
+> Question: How many times did the ball contact the walls?
+> t = 5.50s t = 6.49s Event #1
+> t = 7.00s t = 7.49s Event #2
+> t = 8.00s t = 8.50s
+> Executable Ground-Truth Trace
+> Scene Description:
+> Ball bouncing between walls at 1.0 Hz. t=6.49s: wall_contact (wall_negative) c=1
+> t=7.49s: wall_contact (wall_positive) c=2
+> Final Answer: 2
+
+Blinking                   
+
+> Question: How many times did the object blink?
+> t = 17.50s t = 18.50s
+> t = 19.22s Event #1 t = 20.00s
+> t = 21.00s t = 22.00s
+> Executable Ground-Truth Trace
+> Scene Description:
+> An object pulsing ON and OFF at 1.0 Hz. t=19.22s: blink_pulse (state: ON) c=1
+> Final Answer: 1
+
+State Machine                                    
+
+> Question: How many state transitions occurred in the video?
+> t = 5.20s t = 5.65s Event #1
+> t = 6.32s Event #2 t = 6.60s
+> t = 6.99s Event #3 t = 7.30s
+> Executable Ground-Truth Trace
+> Scene Description:
+> Visual state transitions at 1.5 Hz. t=5.65s: transition (State DState A) c=1
+> t=6.32s: transition (State AState D) c=2
+> t=6.99s: transition (State DState B) c=3
+> Final Answer: 3
+
+Figure 2: Controlled videos and executable traces. For each (N, F ), the renderer records event times, state changes, and cumulative count ci for alignment with model-reported timestamps. 
+
+3.3 Experimental Protocol and Operating Boundaries 
+
+Unparseable final answers are incorrect and malformed traces receive no matches. Interventions use the same videos and seeds. Sampling and prompting alter one requested compo-nent; event-centered keyframes are an upper-bound visual-access condition because they may reveal N .We use τ = 0 .80 as a stringent operational reliability target. A cell must be correct on at least 8 of 10 randomized renderings. The threshold summarizes the full surface rather than providing a confidence bound; the cell-wise accuracy surfaces remain available for inspection. Appendix B.5 reports seed-level variation and boundary robustness. Let N+ =
+
+N \ { 0} denote positive counts. Here d indexes a visual domain, θ identifies the evaluated model, and bPdθ (N, F ) is its observed exact-match accuracy from Equation 1 at count 
+
+N and frequency F . For domain d and fixed frequency F ,the count boundary is 
+
+N ∗,d τ (F ) = max 
+
+n ∈ N + min 
+
+n′∈N +
+
+n′≤n
+
+bPdθ (n′, F ) ≥ τ
+
+ (5) Here n is a candidate positive count and n′ ranges over each tested positive count up to n. The outer maximum selects the largest candidate whose lowest observed accuracy across that prefix meets τ . Thus, it is the largest tested count for which accuracy remains at least 80% at that count and every smaller positive count. If accuracy is below 80% at N = 1 ,we report the count boundary as N ∗,d τ (F ) < 1. The N = 0 
+
+condition is treated separately as a no-event control. For domain d and fixed count N , the complementary operational frequency boundary is 
+
+F ∗,d τ (N ) = max 
+
+f ∈ F min 
+
+f ′∈F 
+
+f ′≤f
+
+bPdθ (N, f ′) ≥ τ
+
+ (6) Here f is a candidate tested frequency and f ′ ranges over every tested frequency no greater than f . The outer maximum selects the highest candidate whose lowest observed accuracy across that lower-frequency prefix meets τ . It is therefore the largest tested event rate for which accuracy remains at least 
+
+80% at that rate and every lower tested rate. If the model fails at the lowest tested rate of 0.5 Hz, we report the frequency boundary as F ∗,d τ (N ) < 0.5 Hz. Together, the count and frequency boundaries describe complementary slices of the two-dimensional reliable operating region. 
+
+4 Mapping Reliable Operating Regions 
+
+Figure 3 reports capability surfaces across the complete N ×F
+
+grid. Its Gemini panel reports Gemini 3.6 Flash accuracy. We apply the Section 3.3 boundary definitions with the 80% 
+
+operational target. A reliable cell has at least eight correct answers from ten randomized renderings. The N = 0 column shows correct no-event responses. 
+
+Role of input sampling. The profiles evaluate complete end-to-end systems. Gemini receives 1 FPS input and Qwen 
+
+2 FPS input, so sampling and interface remain confounds. Higher-density frame sequences in Section 6 probe whether sampling contributes to high-frequency failures. 
+
+Gemini count boundaries. Bounce Ball reaches N = 10 
+
+only at 0.5 Hz and fails the target at the first positive count from 1.0 to 4.0 Hz. Blinking has no reliable positive-count region. State Machine is reliable through N = 12 at 0.5 and 
+
+1.0 Hz, contracts to N = 2 at 1.5 Hz, and is generally limited to N = 1 above it. 0 1 2 3 4 5 6 8 10 12                                                                                                                                                                                                                                           
+
+> Event Count N
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+> 1.00 0.90 1.00 1.00 1.00 0.90 0.90 1.00 0.80 0.70 1.00 0.50 0.60 0.40 0.60 0.00 0.60 0.80 0.30 0.60 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.10 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> Bounce Ball
+> 0123456810 12
+> Event Count N
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+> 1.00 0.10 0.20 0.30 0.20 0.20 0.30 0.50 0.20 0.10 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> Blinking
+> 0123456810 12
+> Event Count N
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+> 0.91 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.91 0.90 1.00 0.90 0.90 1.00 0.90 1.00 0.90 0.80 0.91 0.91 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.91 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 1.00 0.36 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.77 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.82 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> State Machine
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Final Answer Accuracy
+
+(a) Gemini 3.6 Flash capability surfaces across synthetic domains. 
+
+(b) Supplementary Qwen3-VL-235B system profile across synthetic domains. 
+
+Figure 3: Capability surfaces across synthetic domains. Final-answer exact match over event count N and frequency F for Bounce Ball, Blinking, and State Machine. Gemini supports the broadest region for persistent State Machine transitions. Qwen shows the same concentration of accuracy at low counts and frequencies. 
+
+Gemini frequency boundaries. Bounce Ball is generally reliable only through 0.5 Hz, while Blinking has no reliable positive-count frequency region. State Machine reaches 3.0
+
+Hz at N = 1 , 1.5 Hz at N = 2 , and 1.0 Hz from N = 3 
+
+through N = 12 . Bounce Ball has an isolated N = 8 
+
+exception at 1.0 Hz, but its N = 12 accuracy is already below target at the lowest tested frequency. The contiguous-boundary rule prevents isolated successes after a failure from being treated as a reliable operating region. 
+
+Operating-region interpretation. There is no universal count or frequency threshold. Persistent State Machine tran-sitions yield the broadest region, but the domains also vary visual form and semantics. With fixed 24-second clips, active span grows as N/F , so the surfaces profile joint event load and retention span. They characterize the full model and input pipeline, not the language model component in isolation. 
+
+Supplementary Qwen comparison. Figure 3b supplies a supplementary Qwen3-VL-235B system check. Bounce Ball and Blinking have no broad reliable region, and State Machine reaches N = 1 only in isolated 2.5- and 3.5-Hz cells. Qwen has no contiguous frequency region for positive counts because it fails at 0.5 Hz. Although its geometry differs from Gemini, neither system retains a broad high-count region. Full-resolution capability heatmaps appear in Appendix B, and Appendix B.3 reports the model configurations and boundary summaries. 
+
+5 Diagnosing Trace-Level Failures 
+
+Final-answer exact match indicates whether the reported count is correct, but not whether the model reports timestamps aligned with the event sequence. Table 1 compares Gemini’s reported timestamps with executable traces using the rate-relative alignment in Section 3.2. Part A reports results by visual domain, Part B groups the N × F surface into four operating regions, and Part C reports the interventions discussed in Section 6. These are behavioral output measures, not direct observations of latent reasoning. 
+
+Trace fidelity follows event representation. Across do-mains, macro-average final exact match is 21 .1% , while timestamp recall is 31 .2% and trace F1 is 36 .4% . State Ma-chine performs best in both final prediction and timestamp recovery, with 37 .1% exact match and 53 .9% trace F1. Blink-ing performs worst, with 6.4% exact match and 18 .6% trace 
+
+F1. Bounce Ball lies between these extremes. This ordering matches the operating regions in Figure 3a. It is consistent with persistent event displays producing more recoverable Evaluation Domain / Region Final EM (%) VOR Trace P (%) Trace R (%) Trace F 1 (%) ACR (%) RFR (%) Part A. Trace Evaluation by Task Domain                                                                                                                    
+
+> Bounce Ball 19.6% 0.71 59.2% 31.5% 36.6% 3.9% 3.6% Blinking 6.4% 0.60 42.2% 13.8% 18.6% 2.4% 0.3% State Machine 37.1% 0.74 72.5% 48.1% 53.9% 10.8% 3.1%
+> Macro Average 21.1% 0.68 58.0% 31.2% 36.4% 5.7% 2.3% Part B. Trace Evaluation across ( N×F) Capability Regions
+> Low Count, Low Freq 47.7% 1.19 50.2% 45.6% 45.5% 15.3% 4.2% High Count, Low Freq 29.2% 0.57 72.7% 46.1% 51.8% 1.8% 4.5% Low Count, High Freq 17.2% 1.12 21.7% 12.4% 14.9% 14.2% 0.3% High Count, High Freq 0.2% 0.28 70.7% 18.1% 27.7% 0.2% 0.0%
+> Part C. Trace Diagnosis of Bounce Ball Interventions
+> Visual Evidence Family
+> Native + Structured (Baseline) 19.6% 0.71 59.2% 31.5% 36.6% 3.9% 3.6% Dense Sampling (4 FPS) 29.3% 0.72 4.7% 3.3% 3.7% 28.3% 0.4% Event-Centered Keyframes 68.6% 1.07 10.0% 9.8% 9.7% 68.3% 0.0%
+> Prompting and Reasoning Family
+> Direct Answer †20.4% 1.16 45.6% 40.2% 38.5% 7.5% 3.2% Structured Trace 19.6% 0.71 59.2% 31.5% 36.6% 3.9% 3.6% Multi-Turn Verification 20.3% 0.40 15.9% 9.5% 10.1% 18.2% 0.6% Thinking / CoT 19.5% 2.13 33.8% 48.5% 36.9% 14.3% 2.1% Role Prompting 19.3% 1.52 37.2% 44.9% 37.6% 10.8% 2.1%
+
+Table 1: Timestamp-recovery evaluation for Gemini 3.6 Flash. Trace metrics use δ(F ) = 1 /(2 F ) and positive-event trials. Final EM includes no-event controls. Part B uses N ≤ 3, N ≥ 5, F ≤ 2.0, and F ≥ 2.5 Hz. Part C evaluates Bounce Ball. 
+
+> †
+
+Direct Answer scores voluntarily reported timestamps. reported timestamps, while not isolating persistence from other domain differences. 
+
+The error pattern changes with count and frequency. In the low-count, low-frequency region, the Visual Observation Ratio is 1.19 , so the model reports more timestamps than occur. Precision is 50 .2% , and 15 .3% of trials have a correct final answer despite a low-fidelity reported trace. Some correct counts therefore coexist with unmatched reported timestamps. At high count and low frequency, the Visual Observation Ratio falls to 0.57 , indicating substantial under-reporting. Precision rises to 72 .7% , but recall remains only 46 .1% . The model is usually accurate about the timestamps it does report, while omitting much of the sequence. This effect is strongest at high count and high frequency. The model reports only 28% as many timestamps as occur, and trace recall falls to 18 .1% , while precision remains 70 .7% .The dominant high-load signature is therefore incomplete reported-timestamp recovery rather than broad over-reporting. Separating missed events from merged events would require a richer type- and order-aware alignment than used here. The regional comparison reveals two distinct output regimes. At low load, excess reports and accidental cor-rect counts are consistent with a mixture of unmatched and compensating events. At high load, reported events are com-paratively well supported but far too few, which is consistent with omission or merging dominating the failure. The final integer alone would obscure this shift in error pattern. 
+
+Failure can also occur after event recovery. Most degra-dation is associated with incomplete reported traces, but timestamp recovery does not fully determine the final answer. RFR reaches 4.5% in the high-count, low-frequency region. In these cases, the reported trace meets the F1 criterion but the final count remains incorrect, which is consistent with an output-level trace-to-answer aggregation mismatch. 
+
+6 What Moves the Boundary? 
+
+We choose Bounce Ball for interventions because each wall contact requires spatial localization of an interaction as well as temporal separation, retention, and accumulation of repeated events. We test whether its failures arise from temporal sampling, event localization, or inference format. Figure 4 reports accuracy averaged across frequencies. Appendix C.10 contains the complete intervention surfaces, and Table 1 Part C contains trace metrics. 
+
+Denser sampling improves low-count temporal access. 
+
+Gemini’s native-video interface uses approximately 1 FPS in our setup. Explicit 4-FPS sampling raises overall accuracy from 19 .6% to 29 .3% , and 10 FPS is reliable for one event through 4.0 Hz. The recovery does not extend to longer sequences, and no stable high-count region emerges. The 4-FPS trace F1 is only 3.7% , while 28 .3% of trials have a correct answer with a low-fidelity trace. Better counts therefore need not reflect faithful event recovery. 0 2 4 6 8 10 12             
+
+> Event Count N
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Final Answer Accuracy
+> A. Visual Sampling Densities
+> 1 FPS 2 FPS 4 FPS 8 FPS 16 FPS = 0.80
+> 0246810 12
+> Event Count N
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Final Answer Accuracy
+> B. Keyframe Evidence vs Native & 16 FPS
+> Native Video 16 FPS Keyframe = 0.80
+> 0246810 12
+> Event Count N
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Final Answer Accuracy
+> C. Prompting & Reasoning Formats
+> Direct Structured Trace Multi-Turn Verification Thinking / CoT Role Prompting = 0.80
+
+Figure 4: Bounce Ball interventions. Final-answer exact match averaged over frequencies. Sampling helps low counts, event-centered frames help through N = 5 , and prompting does not expand the reliable region. 
+
+Keyframe evidence produces the largest recovery. For each ground-truth event at ti, we provide keyframes at ti −0.1,
+
+ti, and ti + 0 .1 seconds. This removes event search from the complete video. Accuracy rises to 68 .6% and is near-perfect through N = 5 , but falls to 0.66 at N = 6 , 0.57 at N = 8 , and nearly zero at N ≥ 10 . Localization is therefore important, but retention or accumulation still limits longer sequences. The trace F1 remains 9.7% , and 68 .3% of trials have a correct answer with a low-fidelity trace. Because one frame group is supplied per true event, this is an upper-bound visual-access condition. 
+
+Reasoning formats do not provide consistent recovery. 
+
+Direct answering, structured tracing, multi-turn verification, thinking, and role prompting yield 19 .3% to 20 .4% accuracy. Thinking raises recall to 48 .5% but over-reports events with a Visual Observation Ratio of 2.13 and 33 .8% precision. Structured tracing is more precise at 59 .2% , but recovers only 31 .5% of true events. No prompting format expands the reliable count or frequency region. Together, the interventions show that improved visual access does not eliminate the high-count boundary. 
+
+7 Natural-Video Boundary Transfer 1-2 3-4 5-6 7-8 9-10 11-15 16-20 21-30 >30 
+
+> Event Count Bins (N)
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7
+> Final Answer Accuracy
+> Real-World Transfer Performance (RepCount Dataset)
+> Zero-Shot Direct Chain of Thought (CoT)
+
+Figure 5: Natural-video count-pattern check. Exact-match accuracy on 152 TransRAC clips (Hu et al. 2022). All prompt-ing formats concentrate accuracy in low-count bins. Figure 5 reports exact-match accuracy by event-count bin for the three prompting formats. We use 151 clips from Tran-sRAC with repetition annotations (Hu et al. 2022), grouped by event count. Each clip is evaluated once with zero-shot, direct-answer, and chain-of-thought prompting for 456 trials. These natural videos contain camera motion, clutter, occlu-sion, and variable lighting. Frequency cannot be controlled independently, so this is a count-pattern check rather than a replication of the N × F surface. It reports final-answer exact match by count bin and does not apply trace-level evaluation. Accuracy concentrates in low-count bins N ≤ 4, and no prompting format establishes a stable high-count region. This supports the qualitative prediction that reliability declines as repeated-event load rises despite natural variation, with-out claiming matched absolute accuracy or a specific causal mechanism. Natural videos therefore test external relevance of the controlled pattern, not whether the synthetic and natural distributions are identical. Outcomes above six events are sparse and often zero across prompting formats. 
+
+8 Conclusion and Discussion 
+
+Beyond benchmark scoring. This work maps reliable tem-poral regions and intervention effects. Controlled N × F
+
+profiles separate visibility, resolution, sequence length, and aggregation. 
+
+What the diagnosis reveals. Results are consistent with staged failure involving event access, retention, and aggrega-tion. State Machine is easier than Blinking, but performance declines with sequence length. Keyframes provide one frame group per event, yet their residual decline shows visual search is insufficient. 
+
+Why executable traces and interventions matter. Final answers cannot distinguish access from downstream fail-ures. Alignment reveals unmatched, under-reported, and over-reported events; joint metrics expose answer-trace mismatches. Interventions test alternatives. 
+
+Limitations. The study uses clean, regularly spaced re-peated events, and increasing N at fixed F raises event load and span. Only two systems are profiled synthetically. Natural-video evaluation neither controls frequency nor uses executable traces. Reported traces are behavioural evidence, not direct access to latent computation. Acknowledgments 
+
+Baskar, Cai, Shabihi, Satheesh, Islam, and Huang are sup-ported by DARPA HR001124S0029-AIQ-FP-019, National Science Foundation TRAILS Institute (2229885). Private support was provided by Open Philanthropy and Apple. The Authors acknowledge the National Artificial Intelligence Research Resource (NAIRR) Pilot for contributing to this research result. 
+
+References 
+
+Agarwal, A.; Patel, H. L.; Panda, S.; Meghwani, H.; Singh, J.; Dua, K.; Li, P.; Sheng, T.; Ravi, S.; and Roth, D. 2025. RCI: A Score for Evaluating Global and Local Reasoning in Multimodal Benchmarks. arXiv:2509.23673. Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.; Deng, L.; Ding, W.; Gao, C.; Ge, C.; Ge, W.; Guo, Z.; Huang, Q.; Huang, J.; Huang, F.; Hui, B.; Jiang, S.; Li, Z.; Li, M.; Li, M.; Li, K.; Lin, Z.; Lin, J.; Liu, X.; Liu, J.; Liu, C.; Liu, Y.; Liu, D.; Liu, S.; Lu, D.; Luo, R.; Lv, C.; Men, R.; Meng, L.; Ren, X.; Ren, X.; Song, S.; Sun, Y.; Tang, J.; Tu, J.; Wan, J.; Wang, P.; Wang, P.; Wang, Q.; Wang, Y.; Xie, T.; Xu, Y.; Xu, H.; Xu, J.; Yang, Z.; Yang, M.; Yang, J.; Yang, A.; Yu, B.; Zhang, F.; Zhang, H.; Zhang, X.; Zheng, B.; Zhong, H.; Zhou, J.; Zhou, F.; Zhou, J.; Zhu, Y.; and Zhu, K. 2025. Qwen3-VL Technical Report. arXiv:2511.21631. Cai, Z.; Wang, A.; Satheesh, A.; Nakhawa, A.; Jae, H.; Powell, K.; Liu, M.; Jay, N.; Oh, S.; Wang, X.; Liang, Y.; Goldstein, T.; and Huang, F. 2025. MORSE-500: A Programmatically Controllable Video Benchmark to Stress-Test Multimodal Reasoning. arXiv:2506.05523. Chandrasegaran, K.; Gupta, A.; Hadzic, L. M.; Kota, T.; He, J.; Eyzaguirre, C.; Durante, Z.; Li, M.; Wu, J.; and Fei-Fei, L. 2024. HourVideo: 1-Hour Video-Language Understand-ing. In Advances in Neural Information Processing Systems ,volume 37, 53168–53197. Chen, L.; Li, J.; Dong, X.; Zhang, P.; Zang, Y.; Chen, Z.; Duan, H.; Wang, J.; Qiao, Y.; Lin, D.; and Zhao, F. 2024. Are We on the Right Way for Evaluating Large Vision-Language Models? arXiv:2403.20330. Cheng, Z.; Hu, J.; Liu, Z.; Si, C. P.; Li, W.; and Gong, S. 2026. V-STaR: Benchmarking Video-LLMs on Video Spatio-Temporal Reasoning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Findings .Chow, W.; Mao, J.; Li, B.; Seita, D.; Guizilini, V.; and Wang, Y. 2025. PhysBench: Benchmarking and Enhancing Vision-Language Models for Physical World Understanding. In 
+
+International Conference on Learning Representations .Clark, C.; Zhang, J.; Ma, Z.; Park, J. S.; Salehi, M.; Tripathi, R.; Lee, S.; Ren, Z.; Kim, C. D.; Yang, Y.; Shao, V.; Yang, Y.; Huang, W.; Gao, Z.; Anderson, T.; Zhang, J.; Jain, J.; Stoica, G.; Han, W.; Farhadi, A.; and Krishna, R. 2026. Molmo2: Open Weights and Data for Vision-Language Models with Video Understanding and Grounding. arXiv:2601.10611. Cores, D.; Dorkenwald, M.; Mucientes, M.; Snoek, C. G. M.; and Asano, Y. M. 2025. Lost in Time: A New Temporal Benchmark for VideoLLMs. In 36th British Machine Vision Conference 2025, BMVC 2025 . BMVA. Feng, B.; Lai, Z.; Li, S.; Wang, Z.; Wang, S.; Huang, P.; and Cao, M. 2025. Breaking Down Video LLM Bench-marks: Knowledge, Spatial Perception, or True Temporal Understanding? arXiv preprint arXiv:2505.14321 .Fu, C.; Dai, Y.; Luo, Y.; Li, L.; Ren, S.; Zhang, R.; Wang, Z.; Zhou, C.; Shen, Y.; Zhang, M.; Chen, P.; Li, Y.; Lin, S.; Zhao, S.; Li, K.; Xu, T.; Zheng, X.; Chen, E.; Shan, C.; He, R.; and Sun, X. 2025. Video-MME: The First-Ever Comprehensive Evaluation Benchmark of Multi-modal LLMs in Video Analysis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 24108–24118. Fu, X.; Hu, Y.; Li, B.; Feng, Y.; Wang, H.; Lin, X.; Roth, D.; Smith, N. A.; Ma, W.-C.; and Krishna, R. 2024. BLINK: Multimodal Large Language Models Can See but Not Perceive. arXiv:2404.12390. Hao, Y.; Gu, J.; Wang, H. W.; Li, L.; Yang, Z.; Wang, L.; and Cheng, Y. 2025. Can MLLMs Reason in Multimodality? EMMA: An Enhanced MultiModal ReAsoning Benchmark. In Proceedings of the 42nd International Conference on Machine Learning (ICML 2025) .Hu, H.; Dong, S.; Zhao, Y.; Lian, D.; Li, Z.; and Gao, S. 2022. TransRAC: Encoding Multi-scale Temporal Correlation with Transformers for Repetitive Action Counting. arXiv preprint arXiv:2204.01018 .Hu, K.; Wu, P.; Pu, F.; Xiao, W.; Zhang, Y.; Yue, X.; Li, B.; and Liu, Z. 2025. Video-MMMU: Evaluating Knowledge Acquisition from Multi-Discipline Professional Videos. arXiv preprint arXiv:2501.13826 .Johnson, J.; Hariharan, B.; van der Maaten, L.; Fei-Fei, L.; Zitnick, C. L.; and Girshick, R. 2017. CLEVR: A Diagnostic Dataset for Compositional Language and Elementary Visual Reasoning. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2901– 2910. Li, C.; Chen, Q.; Li, Z.; Tao, F.; and Zhang, Y. 2024a. VideoCogQA: A Controllable Benchmark for Evaluating Cognitive Abilities in Video-Language Models. arXiv:2411.09105. Li, K.; Wang, Y.; He, Y.; Li, Y.; Wang, Y.; Liu, Y.; Wang, Z.; Xu, J.; Chen, G.; Luo, P.; Wang, L.; and Qiao, Y. 2024b. MVBench: A Comprehensive Multi-modal Video Under-standing Benchmark. arXiv:2311.17005. Li, Y.; Chen, X.; Hu, B.; Wang, L.; Shi, H.; and Zhang, M. 2024c. Videovista: A versatile benchmark for video under-standing and reasoning. arXiv preprint arXiv:2406.11303 .Liu, Y.; Li, S.; Liu, Y.; Wang, Y.; Ren, S.; Li, L.; Chen, S.; Sun, X.; and Hou, L. 2024. TempCompass: Do Video LLMs Really Understand Videos? In Findings of the Association for Computational Linguistics: ACL 2024 . Association for Computational Linguistics. Liu, Y.; Ouyang, K.; Wu, H.; Liu, Y.; Sui, L.; Li, X.; Zhong, Y.; Charles, Y.; Zhou, X.; and Sun, X. 2025. VideoReason-Bench: Can MLLMs Perform Vision-Centric Complex Video Reasoning? arXiv preprint arXiv:2505.23359 .Lu, H.; Huo, Y.; Du, Y.; Zhao, Z.; Guo, L.; Wang, B.; Chen, W.; and Liu, J. 2025. Needle In A Video Haystack: A Scalable Synthetic Evaluator for Video MLLMs. In Yue, Y.; Garg, A.; Peng, N.; Sha, F.; and Yu, R., eds., International Conference on Learning Representations , volume 2025, 99750–99782. Lu, P.; Bansal, H.; Xia, T.; Liu, J.; Li, C.; Hajishirzi, H.; Cheng, H.; Chang, K.-W.; Galley, M.; and Gao, J. 2024. MathVista: Evaluating Mathematical Reasoning of Foundation Models in Visual Contexts. arXiv:2310.02255. Mangalam, K.; Akshulakov, R.; and Malik, J. 2023. EgoSchema: A Diagnostic Benchmark for Very Long-form Video Language Understanding. In Oh, A.; Naumann, T.; Globerson, A.; Saenko, K.; Hardt, M.; and Levine, S., eds., Ad-vances in Neural Information Processing Systems , volume 36, 46212–46244. Curran Associates, Inc. Qiu, S.; Guo, S.; Song, Z.-Y.; Sun, Y.; Cai, Z.; Wei, J.; Luo, T.; Yin, Y.; Zhang, H.; Hu, Y.; et al. 2025. Phybench: Holistic evaluation of physical perception and reasoning in large language models. arXiv preprint arXiv:2504.16074 .Rawal, R.; Saifullah, K.; Farr ’e, M.; Basri, R.; Jacobs, D.; Somepalli, G.; and Goldstein, T. 2024. Cinepile: A long video question answering dataset and benchmark. arXiv preprint arXiv:2405.08813 .Shojaee, P.; Mirzadeh, I.; Alizadeh, K.; Horton, M.; Bengio, S.; and Farajtabar, M. 2025. The Illusion of Thinking: Under-standing the Strengths and Limitations of Reasoning Models via the Lens of Problem Complexity. arXiv:2506.06941. Song, E.; Chai, W.; Xu, W.; Xie, J.; Liu, Y.; and Wang, G. 2025. Video-MMLU: A Massive Multi-Discipline Lecture Understanding Benchmark. arXiv:2504.14693. Sun, Y.; Hu, S.; Zhou, G.; Zheng, K.; Hajishirzi, H.; Dziri, N.; and Song, D. 2025. OMEGA: Can LLMs Reason Outside the Box in Math? Evaluating Exploratory, Compositional, and Transformative Generalization. arXiv:2506.18880. Tong, J.; Tang, J.; Li, H.; Mou, Y.; Zhang, M.; Zhao, J.; Wen, Y.; Song, F.; Zhan, J.; Lu, Y.; Tao, C.; Guo, Z.; Yu, J.; Cheng, T.; Xi, Z.; Jiang, C.; Yin, Z.; Zheng, Y.; Ge, W.; Chen, G.; Gui, T.; Qiu, X.; Zhang, Q.; and Huang, X. 2025. Game-RL: Synthesizing Multimodal Verifiable Game Data to Boost VLMs’ General Reasoning. arXiv:2505.13886. Tong, S.; Liu, Z.; Zhai, Y.; Ma, Y.; LeCun, Y.; and Xie, S. 2024. Eyes Wide Shut? Exploring the Visual Shortcomings of Multimodal LLMs. arXiv:2401.06209. Wang, W.; Gao, Z.; Gu, L.; Pu, H.; Cui, L.; Wei, X.; Liu, Z.; Jing, L.; Ye, S.; Shao, J.; Wang, Z.; Chen, Z.; Zhang, H.; Yang, G.; Wang, H.; Wei, Q.; Yin, J.; Li, W.; Cui, E.; Chen, G.; Ding, Z.; Tian, C.; Wu, Z.; Xie, J.; Li, Z.; Yang, B.; Duan, Y.; Wang, X.; Hou, Z.; Hao, H.; Zhang, T.; Li, S.; Zhao, X.; Duan, H.; Deng, N.; Fu, B.; He, Y.; Wang, Y.; He, C.; Shi, B.; He, J.; Xiong, Y.; Lv, H.; Wu, L.; Shao, W.; Zhang, K.; Deng, H.; Qi, B.; Ge, J.; Guo, Q.; Zhang, W.; Zhang, S.; Cao, M.; Lin, J.; Tang, K.; Gao, J.; Huang, H.; Gu, Y.; Lyu, C.; Tang, H.; Wang, R.; Lv, H.; Ouyang, W.; Wang, L.; Dou, M.; Zhu, X.; Lu, T.; Lin, D.; Dai, J.; Su, W.; Zhou, B.; Chen, K.; Qiao, Y.; Wang, W.; and Luo, G. 2025. InternVL3.5: Advancing Open-Source Multimodal Models in Versatility, Reasoning, and Efficiency. arXiv:2508.18265. Wang, X.; Wei, J.; Schuurmans, D.; Le, Q.; Chi, E.; Narang, S.; Chowdhery, A.; and Zhou, D. 2022. Self-consistency improves chain of thought reasoning in language models. 
+
+arXiv preprint arXiv:2203.11171 .Wang, X.; Zhou, Y.; Liu, X.; Lu, H.; Xu, Y.; He, F.; Yoon, J.; Lu, T.; Liu, F.; Bertasius, G.; Bansal, M.; Yao, H.; and Huang, F. 2024. Mementos: A Comprehensive Benchmark for Multimodal Large Language Model Reasoning over Image Sequences. In Ku, L.-W.; Martins, A.; and Srikumar, V., eds., 
+
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) ,416–442. Bangkok, Thailand: Association for Computational Linguistics. Wu, H.; Li, D.; Chen, B.; and Li, J. 2024. LongVideoBench: A Benchmark for Long-context Interleaved Video-Language Understanding. arXiv:2407.15754. Xiang, K.; Li, H.; Zhang, T. J.; Huang, Y.; Liu, Z.; Qu, P.; He, J.; Chen, J.; Yuan, Y.-J.; Han, J.; Xu, H.; Li, H.; Sachan, M.; and Liang, X. 2025. SeePhys: Does Seeing Help Thinking? – Benchmarking Vision-Based Physics Reasoning. arXiv:2505.19099. Yuan, H.; Sun, Y.; Li, Y.; Zhang, T.; Deng, X.; Ding, H.; Qi, L.; Wang, A.; Li, X.; and Yang, M.-H. 2025. Visual Reasoning Tracer: Object-Level Grounded Reasoning Benchmark. arXiv preprint arXiv:2512.05091 .Yue, X.; Ni, Y.; Zhang, K.; Zheng, T.; Liu, R.; Zhang, G.; Stevens, S.; Jiang, D.; Ren, W.; Sun, Y.; Wei, C.; Yu, B.; Yuan, R.; Sun, R.; Yin, M.; Zheng, B.; Yang, Z.; Liu, Y.; Huang, W.; Sun, H.; Su, Y.; and Chen, W. 2024. MMMU: A Massive Multi-discipline Multimodal Understanding and Reasoning Benchmark for Expert AGI. arXiv:2311.16502. Zelikman, E.; Wu, Y.; Mu, J.; and Goodman, N. 2022. Star: Bootstrapping reasoning with reasoning. Advances in Neural Information Processing Systems , 35: 15476–15488. Contents 
+
+1 Introduction 12 Related Work 23 Controlled Profiling and Trace Evaluation 3
+
+3.1 Controlled Temporal Task Space . . . . . . 33.2 Executable Traces and Metrics . . . . . . . 33.3 Experimental Protocol and Operating Bound-aries . . . . . . . . . . . . . . . . . . . . . 4
+
+4 Mapping Reliable Operating Regions 45 Diagnosing Trace-Level Failures 56 What Moves the Boundary? 67 Natural-Video Boundary Transfer 78 Conclusion and Discussion 7A Benchmark Setup and Model Specifications 10 
+
+A.1 Task and Renderer Specifications . . . . . . 10 A.2 Supplied Frame Sequences . . . . . . . . . 11 A.3 Model Configurations . . . . . . . . . . . . 11 
+
+B Capability Boundaries and Statistical Robustness 12 
+
+B.1 Qwen3-VL Scale Comparison . . . . . . . 12 B.2 InternVL3.5 Scale and Domain Comparison 12 B.3 Operational Boundary Summary . . . . . . 12 B.4 Seed-Level Variation . . . . . . . . . . . . 12 B.5 Operational Boundary Robustness . . . . . 13 
+
+C Interventions, Prompts, and Trace Evaluation 13 
+
+C.1 Domain Task Questions . . . . . . . . . . . 13 C.2 Experiment 1: Full N × F Matrix Boundary Sweep . . . . . . . . . . . . . . . . . . . . 13 C.3 Experiment 2: Frame Sampling Density In-terventions . . . . . . . . . . . . . . . . . . 13 C.4 Experiment 3: Oracle Keyframe Evidence Interventions . . . . . . . . . . . . . . . . 13 C.5 Experiment 4: Prompting & Reasoning Mode Interventions . . . . . . . . . . . . . . . . 14 C.6 Experiment 5: MORSE Trace Diagnosis & Error Taxonomy . . . . . . . . . . . . . . . 14 C.7 Real-World Transfer Evaluation Prompts . . 14 C.8 Output Parsing and Evaluation . . . . . . . 15 C.9 Cross-Model Prompting Results . . . . . . 15 C.10 Frame-Sampling Density Sweeps . . . . . . 15 C.11 Event-Centered Keyframe Extraction . . . . 15 C.12 Complete Gemini Intervention Analyses . . 15 C.13 Open-Model Keyframe and Sampling Inter-ventions . . . . . . . . . . . . . . . . . . . 15 C.14 GPT-5.6 Sol Frame-Sequence Interventions & API Limitations . . . . . . . . . . . . . 15 C.15 Trace Extraction and Matching Algorithm . 17 C.16 Aggregate Trace Error Summary . . . . . . 18 
+
+D Computational Cost Analysis 18 E Extended Related Work 18 
+
+E.1 Video-Language Benchmarks and Controlled Evaluation . . . . . . . . . . . . . . . . . . 18 E.2 Programmatic Video and Intermediate Traces 19 
+
+F Qualitative Trace Examples and Taxonomy Profil-ing 19 
+
+F.1 Case-Selection Protocol . . . . . . . . . . . 20 F.2 Faithful Event Recovery (Correct Matches) 20 F.3 Missed Events (Under-Reporting / Perception Failure) . . . . . . . . . . . . . . . . . . . 20 F.4 Hallucinated Events (Over-Reporting / Spu-rious Detection) . . . . . . . . . . . . . . . 20 F.5 Wrong Accumulation (Reasoning Failure Ra-tio / RFR) . . . . . . . . . . . . . . . . . . 20 F.6 Accidental Correctness (Accidental Correct-ness Ratio / ACR) . . . . . . . . . . . . . . 20 F.7 Temporally Displaced Events . . . . . . . . 20 
+
+Appendix Overview 
+
+This appendix provides the extended evidence, methodologi-cal detail, and reproducibility material that support the main paper’s central finding: current video–language models can fail at elementary event bookkeeping as temporal load in-creases. The sections below connect each supplement directly to a component of the main-paper argument. 
+
+• Section A specifies the controlled Manim-based task renderer, supplied frame sequences, and model configura-tions. These details establish that the capability boundary is measured on videos with known temporal ground truth. 
+
+• Section B provides the full capability heatmaps, cross-model boundary summaries, seed-level variation, and operational boundary robustness, showing how perfor-mance changes across event count, frequency, scale, and domain. 
+
+• Section C details diagnostic interventions (prompting formats, sampling density sweeps, and oracle keyframes) alongside trace extraction, matching algorithms, and error auditing. 
+
+• Section D provides the complete computational API fi-nancial cost analysis across all experiments and visual domains. 
+
+• Section E situates the benchmark within the broader video-language and programmatic video literature. 
+
+• Section F provides representative qualitative trace exam-ples across all 6 diagnostic failure categories. 
+
+A Benchmark Setup and Model Specifications 
+
+A.1 Task and Renderer Specifications 
+
+Each synthetic instance is specified by a visual domain d,event count N , event frequency F , and rendering seed s. We use Bounce Ball wall contacts, Blinking on-pulses, and State Machine categorical transitions. The task question asks for the number of target events in the rendered video. Manim Animation Engine and Trace Generation. We construct all synthetic video benchmarks using the Manim 1
+
+mathematical animation engine in Python. Manim is chosen because it allows programmatic, frame-accurate control over spatial trajectories, visual state transitions, and rendering framerates without visual compression artifacts or timing jitter. For each trial (d, N, F, s ):1. Event Scheduling: Given count N and frequency F , a deterministic event scheduler calculates the ground-truth event timestamps t1, t 2, . . . , t N within the active temporal window. 2. Manim Video Rendering: Manim scenes procedurally an-imate visual elements (wall collisions in bounce_ball ,visual pulse opacities in blinking , and categorical node highlights in state_machine ) matching the ex-act timestamps ti.3. Executable Trace Generation: Simultaneously during scene construction, the renderer logs an executable ground-truth trace 
+
+T ∗ =  (ti, e i, s − 
+
+> i
+
+, s + 
+
+> i
+
+, c i)Ni=1 ,
+
+where ti is the event timestamp, ei is the event type, s−
+
+> i
+
+and s+ 
+
+> i
+
+are the states before and after the event, and ci is the running cumulative count. Executing the trace returns the final count cN = N .We evaluate N ∈ { 0, 1, 2, 3, 4, 5, 6, 8, 10 , 12 } and F ∈{0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0} Hz . Every clip has a fixed duration of 24 seconds. The active event sequence occupies approximately N/F seconds. The remaining time is filled with static frames before or after the active sequence, with the allocation determined by the rendering seed. Thus the design varies event load and active temporal span without changing total duration. For each positive-count (N, F ) cell, we render ten random-ized videos. The seed changes nuisance appearance factors, including color, geometry, trajectory, initial state, orientation, and start delay, while preserving the event schedule. The 
+
+N = 0 control is rendered ten times at nominal F = 1 .0 Hz 
+
+and is excluded from positive-event trace ratios. This yields 730 videos per domain and 2,190 videos across the three domains. 
+
+Rationale for Capability Axes, Parameter Ranges, and Granularity. We select Event Count ( N ) and Event Fre-quency ( F ) as orthogonal capability axes to isolate two complementary failure modes in video-language models: temporal working memory load ( N ) and temporal percep-tual resolution ( F ). The frequency range F ∈ [0 .5, 4.0] Hz spans from 0.5 Hz (consecutive events separated by 2.0s, well within standard VLM 1–2 FPS sampling windows) up to 4.0 Hz ( 0.25 s spacing), deliberately pushing models be-yond standard VLM frame-sampling resolution. The count range N ∈ [0 , 12] includes N = 0 as a no-event negative control and extends up to N = 12 , which fills the entire 24-second clip duration at the minimum frequency F = 0 .5 Hz (N/F = 12 /0.5 = 24 s). Sweep granularity uses finer steps 
+
+> 1https://github.com/3b1b/manim
+
+at low event counts ( N ∈ { 1, 2, 3, 4, 5, 6}) to precisely lo-cate the onset of breakdown, and wider steps at high loads (N ∈ { 8, 10 , 12 }). This parametric design generalizes to any temporal accounting task by defining a target event primitive, sweeping event load N and occurrence rate F , and auditing predicted responses against executable ground-truth traces. 
+
+A.2 Supplied Frame Sequences 
+
+The reported sampling rates describe the frames supplied to the evaluated systems, not undocumented internal video processing. Gemini receives native video at approximately 1 FPS in our setup and Qwen receives 2 FPS. The Bounce Ball visual-access study reuses the same generated videos and seed identifiers while changing one source of evidence at a time. Frame-sampling conditions provide regularly sampled frame sequences at the selected density. The event-centered keyframe condition supplies three frames around each true event, at ti − 0.1, ti, and ti + 0 .1 seconds. This condition re-moves the need to search the full video for event locations, but it still requires the model to retain and aggregate the supplied event evidence. The frame interventions therefore diagnose whether a change in final-answer accuracy is compatible with improved external visual access, without attributing the change to any particular internal mechanism. 
+
+A.3 Model Configurations 
+
+The main synthetic evaluation compares Gemini 3.6 Flash and Qwen3-VL-235B. Both systems receive the same domain-specific zero-shot question and use their native video inter-faces. Gemini is supplied approximately 1 FPS and Qwen 2 FPS. These rates are external input settings. They should not be interpreted as measurements of either system’s internal temporal processing. Table 2 reports the configuration, domain-level exact-match accuracy, and maximum count boundary for the available cross-model profiles. The table shows that State Machine is the strongest domain for every listed model, while the reliable count prefix remains short for most open-model configurations. The 38B InternVL variant reaches the largest open-model count boundary of six, but this remains below Gemini’s boundary of twelve. Table 3 compares the main-paper Gemini macro average with pooled open-model trace metrics. Although the two render sets differ slightly, both instantiate the same three tasks and the same N -by-F design. The comparison is therefore task-matched rather than paired. As detailed in Appendix C.15, these statistics evaluate timestamps expressed in the model response and constitute behavioural evidence rather than direct measurements of internal representations. Gemini attains the highest pooled trace F1 (36 .4% ). Among the open models, Qwen3-VL-8B attains the highest reported-trace F1 (15 .8% ), but exhibits severe over-reporting (VOR 
+
+= 13 .04 ). Qwen3-VL-32B and Qwen3-VL-235B instead under-report events (VOR = 0 .43 and 0.21 , respectively). InternVL yields nonzero final-answer accuracy but no ex-tractable timestamped events. Accordingly, its zero trace values characterize the format of its visible responses, rather than establishing that the model observed no events. A con-trolled cross-model trace-fidelity comparison would require Model Input Bounce EM (%) Blink EM (%) State EM (%) Max. count boundary                                    
+
+> Gemini 3.6 Flash 1 FPS 19.6 6.4 37.1 12 Qwen3-VL-8B 2 FPS 12.4 10.9 26.6 2Qwen3-VL-32B 2 FPS 15.5 13.2 26.2 1Qwen3-VL-235B 2 FPS 19.2 12.0 26.4 1InternVL3.5-8B 16 frames 9.0 11.2 26.2 3InternVL3.5-30B-A3B 16 frames 9.2 10.4 24.5 3InternVL3.5-38B 16 frames 12.8 9.9 32.0 6
+
+Table 2: Cross-model temporal-profile summary. Exact-match accuracy is reported separately for Bounce Ball, Blinking, and State Machine across 730 trials per domain. The maximum count boundary is the largest reliable contiguous positive-count prefix observed at any tested frequency and domain.                                                           
+
+> Model EM (%) VOR P (%) R (%) Trace F1(%) ACR (%) RFR (%)
+> Gemini 3.6 Flash 21.1 0.68 58.0 31.2 36.4 5.7 2.3 Qwen3-VL-8B 16.6 13.04 21.0 18.8 15.8 6.9 1.4 Qwen3-VL-32B 18.3 0.43 21.2 14.0 14.8 9.3 1.5 Qwen3-VL-235B 19.2 0.21 18.4 10.0 11.4 10.3 1.1 InternVL3.5-8B 15.5 0.00 0.0 0.0 0.0 15.5 0.0 InternVL3.5-30B-A3B 14.7 0.00 0.0 0.0 0.0 13.7 0.0 InternVL3.5-38B 18.2 0.00 0.0 0.0 0.0 13.8 0.0
+
+Table 3: Task-matched cross-model trace metrics across temporal domains. Macro averages reported on task-matched videos, with 730 trials per domain. Metrics score only explicit, parser-recognized timestamps and do not infer events from free-form text. a common structured-output prompt; the present results com-pare the evidence each model externalizes under its available protocol. 
+
+B Capability Boundaries and Statistical Robustness 
+
+This section provides full-resolution capability surfaces for the primary evaluation and extended model-family comparisons. Each cell reports final-answer exact match for a controlled event-count and event-frequency condition. The family plots provide a qualitative cross-architecture check of whether the low-count concentration observed in the primary profiles recurs at other model scales. Figures 11 and 12 provide the Qwen3-VL family and InternVL3.5 family profiles, respec-tively. 
+
+B.1 Qwen3-VL Scale Comparison 
+
+Figure 11 compares Qwen3-VL-8B, Qwen3-VL-32B, and Qwen3-VL-235B on the State Machine task. Across the three scales, accuracy is concentrated at small event counts and falls sharply once the count exceeds four, including at the lowest tested frequency. Larger scales improve some easy cells, but the figure does not show a broad high-count region at slow event rates. Thus, scale changes the level of accuracy in parts of the surface but does not remove the count-dependent boundary in this task. 
+
+B.2 InternVL3.5 Scale and Domain Comparison 
+
+Figure 12 extends the comparison to InternVL3.5-8B, InternVL3.5-30B-A3B, and InternVL3.5-38B across State Machine, Blinking, and Bounce Ball. The family shares the same qualitative shape across domains. Performance is strongest in the small-count regime and contracts as event count grows, including in low-frequency conditions where events are well separated. These figures report end-to-end system behaviour under controlled inputs; they do not identify the internal mechanism producing the boundary. Their value is to show that the boundary pattern is not restricted to one Qwen configuration or to one temporal domain. 
+
+B.3 Operational Boundary Summary 
+
+For each model, domain, and fixed frequency, the count boundary is the largest positive count whose tested prefix meets the 80% operational target. The frequency boundary is defined analogously at a fixed count. This contiguous-prefix rule prevents a later isolated success from being reported as a reliable operating region. We use the cross-model comparison as a qualitative robustness check, not as a claim of universality across video-language models. 
+
+B.4 Seed-Level Variation 
+
+Each synthetic cell contains ten independently randomized renderings. For a cell with k correct answers, the reported accuracy is k/ 10 . Seed-level uncertainty is summarized with a two-sided 95% Wilson score interval for selected headline cells and intervention comparisons. The full heatmaps retain the cell-wise accuracy rather than replacing the surface with a single aggregate score. Table 4 reports the interval summary for the baseline and key intervention comparisons. The baseline interval does not overlap the event-centered-keyframe interval, and the keyframe improvement is much larger than the corresponding sampling improvement. These intervals quantify uncertainty in the aggregate exact-match estimates, while the heatmaps retain the variation across individual (N, F ) cells. 
+
+B.5 Operational Boundary Robustness 
+
+We use τ = 0 .80 as an operational reliability target. A cell is reliable when at least eight of ten renderings are correct. At fixed frequency, the count boundary is the largest tested positive count for which that count and every smaller tested positive count meet the target. At fixed count, the frequency boundary applies the same rule over increasing tested frequencies. This definition is descriptive and does not treat the threshold as a confidence bound. 
+
+C Interventions, Prompts, and Trace Evaluation 
+
+This appendix documents all domain task questions, prompt condition templates, and input formatting instructions across the 5 core experiments defined in our controlled evaluation framework. 
+
+C.1 Domain Task Questions 
+
+For every experimental trial across all 5 experiments, the model receives the visual video input paired with a zero-shot domain task question requesting the total count of target events. The exact questions per benchmark domain are:                        
+
+> Benchmark Task Questions
+> Bounce Ball Domain:
+> "How many times did the ball contact the walls?"
+> Blinking Domain:
+> "How many times did the object blink?"
+> State Machine Domain:
+> "How many state transitions occurred in the video?"
+
+C.2 Experiment 1: Full N × F Matrix Boundary Sweep 
+
+Motivation & Protocol. Experiment 1 establishes the baseline operational capability boundary ( x∗) across Event Count ( N ∈ [0 , 1, 2, 3, 4, 5, 6, 8, 10 , 12] ) and Event Fre-quency ( F ∈ [0 .5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0] Hz). All tri-als in Experiment 1 use the structured_trace prompt baseline on native video inputs.                                    
+
+> Experiment 1: Structured Trace Baseline Prompt (structured_trace )
+> Question: question Observe the video carefully and provide astep-by-step reasoning trace tracking every event, its timestamp (in seconds), and the running count. Format your response as follows: 1. Step-by-Step Event Ledger (timestamp, event type, running count) 2. Final Answer inside \boxed{} (e.g. \boxed{4})
+
+C.3 Experiment 2: Frame Sampling Density Interventions 
+
+Motivation & Protocol. Experiment 2 tests whether perfor-mance breakdown at high frequencies ( F ≥ 2.0 Hz) stems from temporal perceptual sampling limits or downstream temporal reasoning limits. It evaluates 7 sampling densities (native_video , 1, 2, 4, 8, 10, 16 FPS) paired with the structured trace prompt:                                         
+
+> Experiment 2: Frame Sampling Density Intervention Prompt
+> [INPUT MODE: Supplied Frame Grid at FPS FPS] Question: question Observe the video carefully and provide astep-by-step reasoning trace tracking every event, its timestamp (in seconds), and the running count. Format your response as follows: 1. Step-by-Step Event Ledger (timestamp, event type, running count) 2. Final Answer inside \boxed{} (e.g. \boxed{4})
+
+C.4 Experiment 3: Oracle Keyframe Evidence Interventions 
+
+Motivation & Protocol. Experiment 3 isolates video frame search from temporal tallying by supplying perfect oracle visual keyframes. For each ground-truth event at ti, frame triplets at (ti − 0.1s, t i, t i + 0 .1s) are extracted and provided directly to the model.                                             
+
+> Experiment 3: Oracle Keyframe Evidence Prompt (oracle_evidence )
+> [ORACLE EVIDENCE AVAILABLE: Key event windows extracted at ti±0.1s] Question: question Observe the video carefully and provide astep-by-step reasoning trace tracking every event, its timestamp (in seconds), and the running count. Format your response as follows: 1. Step-by-Step Event Ledger (timestamp, event type, running count) 2. Final Answer inside \boxed{} (e.g. \boxed{4})
+
+Condition Correct Runs Total Runs Accuracy (%) Lower Interval (%) Upper Interval (%) 
+
+Gemini native-video baseline 143 730 19.6 16.9 22.6 Gemini 4-FPS sampling 214 730 29.3 26.1 32.7 Gemini event-centered keyframes 501 730 68.6 65.2 71.9 
+
+Table 4: Gemini seed-level variation for Bounce Ball interventions. Each condition has 730 trials. Intervals are two-sided 95% Wilson score intervals for final-answer exact match. 
+
+C.5 Experiment 4: Prompting & Reasoning Mode Interventions 
+
+Motivation & Protocol. Experiment 4 measures the impact of prompt structures, reasoning formats, self-correction, and system instructions on capability breakdown. It evaluates 5 distinct prompt conditions: 
+
+Experiment 4.1: Direct Answer Condition ( direct )
+
+Question: question Observe the video carefully. Provide your final answer formatted inside \boxed{} (e.g. \boxed{4}). 
+
+Experiment 4.2: Structured Trace Condition (structured_trace )
+
+Question: question Observe the video carefully and provide a step-by-step reasoning trace tracking every event, its timestamp (in seconds), and the running count. Format your response as follows: 1. Step-by-Step Event Ledger (timestamp, event type, running count) 2. Final Answer inside \boxed{} (e.g. \boxed{4}) 
+
+Experiment 4.3: Multi-Turn Verification Condition (multi_turn_verification )
+
+Question: question First, carefully list every detected event with its approximate timestamp and current count. Second, audit your event list to verify whether any events were missed, merged, or double-counted. Finally, state your verified final answer inside \boxed{} (e.g. \boxed{4}). 
+
+Experiment 4.4: Thinking / Chain-of-Thought Condi-tion ( thinking )
+
+Question: question Use deep step-by-step video analysis. Thoroughly analyze the temporal video sequence frame-by-frame, count all target visual events, and output your final count inside \boxed{} (e.g. \boxed{4}). 
+
+Experiment 4.5: Role Prompting Condition (role_prompting )
+
+System Instruction: You are an expert video analytics systems auditor specializing in fine-grained temporal event verification. Question: question Apply rigorous visual event auditing. Log all timestamped visual transitions and state your final answer inside \boxed{} (e.g. \boxed{4}). 
+
+C.6 Experiment 5: MORSE Trace Diagnosis & Error Taxonomy 
+
+Motivation & Protocol. Experiment 5 audits intermedi-ate model reasoning traces against executable ground-truth traces to measure Trace Precision ( P ), Recall ( R), Trace F1,Accidental Correctness Rate (ACR), and Reasoning Failure Rate (RFR). 
+
+Experiment 5: MORSE Executable Trace Diagnostic Prompt 
+
+Question: question Observe the video carefully and provide a step-by-step reasoning trace tracking every event, its timestamp (in seconds), and the running count. Format your response as follows: 1. Step-by-Step Event Ledger (timestamp, event type, running count) 2. Final Answer inside \boxed{} (e.g. \boxed{4}) 
+
+C.7 Real-World Transfer Evaluation Prompts 
+
+To evaluate model transfer performance on real-world physical activity videos (e.g., the RepCount / TransRAC benchmark), we test zero-shot, chain-of-thought ( cot ), and direct prompt conditions using the following exact templates: 
+
+Real-World Zero-Shot Prompt ( zero_shot )
+
+How many times does the person perform the repetitive exercise in this video? Show your reasoning and put the final answer in \boxed{}. Real-World Chain-of-Thought Prompt ( cot )                                                
+
+> How many times does the person perform the repetitive exercise in this video? First, describe what exercise is being performed. Then, enumerate each individual repetition you observe, noting approximately when each one occurs. Finally, provide your total count. Put the final answer in \boxed{}.
+> Real-World Direct Answer Prompt ( direct )
+> Count the number of exercise repetitions in this video. Reply with only anumber.
+
+C.8 Output Parsing and Evaluation 
+
+We parse the final integer from each response, treating an unparseable answer as incorrect. Trace extraction is described in Appendix C.15. Briefly, only explicit timestamps in the visible response are treated as reported events; ordinal de-scriptions and final counts alone do not yield timestamps. Consequently, the trace metrics quantify the evidence exter-nalized by each prompting condition. Direct-answer outputs are scored for exact match, and any trace score is based solely on timestamps voluntarily included in the response. 
+
+C.9 Cross-Model Prompting Results 
+
+Table 5 places all available Qwen3-VL-8B and InternVL3.5-8B prompt conditions beside the corresponding Gemini refer-ence conditions. The render sets differ slightly but share the Bounce Ball task and parameterization. Gemini’s prompt variants have similar final-answer accu-racy but substantially different reported-evidence profiles. The available Qwen conditions exhibit a related separation. Multi-turn produces the highest final-answer exact match (13 .5% ) and trace F1 (13 .4% ) among the listed Qwen variants, whereas Direct and CoT exhibit substantial over-reporting and low precision. InternVL produces nonzero final answers in every condition but no extractable timestamps. These results distinguish the evidence expressed under each prompt from any unobserved internal reasoning process. In particular, the table shows that changing the requested reasoning format can change the visible trace substantially without establishing a corresponding change in temporal capability. 
+
+C.10 Frame-Sampling Density Sweeps 
+
+All visual-access interventions evaluate Bounce Ball, Blink-ing, and State Machine visual tasks using the same rendered videos and seeds as the native-video baseline. The sampling sweep changes only the density of supplied frames. The main paper reports the corresponding Gemini results. This appendix provides the complete cross-domain Gemini and open-model visual-access evidence below. 
+
+C.11 Event-Centered Keyframe Extraction 
+
+For each true event at time ti, the keyframe condition provides the frame triplet 
+
+Ki = {I(ti − 0.1 s) , I (ti), I (ti + 0 .1 s) }.
+
+This is an upper-bound visual-access probe because one frame group is provided for every true event. It removes the need to search the full video for event locations while preserving the requirement to retain and aggregate event evidence. 
+
+C.12 Complete Gemini Intervention Analyses 
+
+Figures 6, 7, and 8 present the 3-panel intervention analysis across visual sampling densities, keyframe evidence, and prompting formats for all three benchmark domains. Full cell-by-cell 12-panel capability surface heatmaps for Bounce Ball (Figure 13), Blinking (Figure 14), and State Machine (Figure 15) are detailed in the heatmap section preceding the qualitative examples. Denser regular sampling improves a limited low-count portion of the surface, whereas event-centered keyframes extend accuracy on discrete phys-ical contact domains (Bounce Ball exact match increases from 19 .5% baseline up to 68 .6% ). However, on the State Machine domain, oracle keyframe evidence causes a severe performance collapse for Gemini 3.6 Flash (exact match drops from 36 .8% baseline and 40 .7% under 4 FPS down to 6.3% ). Because state transitions represent categorical mode shifts requiring continuous temporal context to verify state persis-tence, stripping non-event frames removes the background state history necessary for sequential state tracking. 
+
+C.13 Open-Model Keyframe and Sampling Interventions 
+
+On the State Machine domain, supplying event-centered keyframe evidence substantially improves open-model exact match. For Qwen3-VL-8B, exact match increases from 26 .6% 
+
+under native video (800 trials) to 69 .4% under event-centered keyframes (720 trials), a gain of +42 .8 percentage points. For InternVL3.5-8B, keyframe triplets improve exact match from 
+
+26 .2% to 32 .1% (+5 .9 points). 
+
+C.14 GPT-5.6 Sol Frame-Sequence Interventions & API Limitations 
+
+Unlike native video models, GPT-5.6 Sol does not accept raw container video files directly. Instead, videos are manually sampled into ordered sequences of image frames before being passed to the API. 
+
+API Frame Ceiling & Token Context Limitations. Dur-ing multi-density sampling sweeps, GPT-5.6 Sol encoun-tered strict API payload constraints. Specifically, the deploy-ment environment enforces a maximum limit of 50 images per request ( BadRequestError: Too many images in request: 51, maximum allowed: 50 ). Con-sequently, 24-second videos sampled at higher densities (4 FPS = 96 frames, 8 FPS = 192 frames, 10 FPS = 240 frames, 16 FPS = 384 frames) failed due to payload size and token context window limits. Evaluation was suc-cessfully completed for 1 FPS (24 frames ≤ 50 ), 2 FPS (48 frames ≤ 50 ), Oracle Keyframe Evidence ( ≈ 3N
+
+frames), and 2-FPS prompting interventions ( direct ,
+
+structured_trace , multi_turn_verification ,
+
+thinking , role_prompting ). Table 6 provides the 0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+A. Visual Sampling Densities 
+
+1 FPS 2 FPS 4 FPS 8 FPS 16 FPS = 0.80 
+
+0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+B. Keyframe Evidence vs Native & 16 FPS 
+
+Native Video 16 FPS Keyframe = 0.80 
+
+0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+C. Prompting & Reasoning Formats 
+
+Direct Structured Trace Multi-Turn Verification Thinking / CoT Role Prompting = 0.80 Figure 6: Bounce Ball interventions. Final-answer exact match averaged over frequencies across visual sampling densities, keyframe evidence, and prompting strategies. 0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+A. Visual Sampling Densities 
+
+1 FPS 2 FPS 4 FPS 8 FPS 16 FPS = 0.80 
+
+0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+B. Keyframe Evidence vs Native & 16 FPS 
+
+Native Video 16 FPS Keyframe = 0.80 
+
+0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+C. Prompting & Reasoning Formats 
+
+Direct Structured Trace Multi-Turn Verification Thinking / CoT Role Prompting = 0.80 
+
+Figure 7: Blinking interventions. Final-answer exact match averaged over frequencies across visual sampling densities, keyframe evidence, and prompting strategies. 0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+A. Visual Sampling Densities 
+
+1 FPS 2 FPS 4 FPS 8 FPS 16 FPS = 0.80 
+
+0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+B. Keyframe Evidence vs Native & 16 FPS 
+
+Native Video 16 FPS Keyframe = 0.80 
+
+0 2 4 6 8 10 12 
+
+Event Count N 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+C. Prompting & Reasoning Formats 
+
+Direct Structured Trace Multi-Turn Verification Thinking / CoT Role Prompting = 0.80 
+
+Figure 8: State Machine interventions. Final-answer exact match averaged over frequencies across visual sampling densities, keyframe evidence, and prompting strategies. Model Prompt EM (%) VOR P (%) R (%) Trace F1 (%) ACR (%) RFR (%)                                                                                                 
+
+> Gemini 3.6 Flash Direct 20.4 1.16 45.6 40.2 38.5 7.5 3.2 Gemini 3.6 Flash Structured trace 19.6 0.71 59.2 31.5 36.6 3.9 3.6 Gemini 3.6 Flash Multi-turn 20.3 0.40 15.9 9.5 10.1 18.2 0.6 Gemini 3.6 Flash Thinking / CoT 19.5 2.13 33.8 48.5 36.9 14.3 2.1 Gemini 3.6 Flash Role prompt 19.3 1.52 37.2 44.9 37.6 10.8 2.1 Qwen3-VL-8B Direct 12.4 28.76 16.8 17.5 13.0 4.9 1.7 Qwen3-VL-8B CoT 8.2 18.69 11.1 30.5 11.6 2.6 0.8 Qwen3-VL-8B Multi-turn 13.5 0.26 23.8 11.5 13.4 4.7 1.7 Qwen3-VL-8B-Thinking CoT 10.2 0.17 10.9 4.3 5.4 5.6 0.4 InternVL3.5-8B Direct 9.0 0.00 0.0 0.0 0.0 9.9 0.0 InternVL3.5-8B CoT 9.8 0.00 0.0 0.0 0.0 9.0 0.0 InternVL3.5-8B Multi-turn 9.8 0.00 0.0 0.0 0.0 10.7 0.0
+
+Table 5: Task-matched cross-model prompting and trace summary on Bounce Ball. All model profiles evaluate 730 trials per domain. All trace metrics use frequency-relative timestamp matching and score only explicit, parser-recognized timestamps. 
+
+Figure 9: Qwen3-VL-8B-Instruct under denser frame sam-pling (10 FPS). Exact-match capability surfaces across tem-poral counting tasks under 10-FPS supplied-frame prepro-cessing. The figure provides an open-model counterpart to the visual-access interventions. quantitative trace summary across protocols, and the cor-responding capability surfaces are reported in Figure 16 (Blinking) and Figure 17 (State Machine). 
+
+Keyframe Breakdown on State Transitions vs Flash Events. 
+
+On the Blinking task, supplying oracle keyframe triplets (±0.1s around event timestamps) elevates GPT-5.6 Sol exact match from 7.1% (1 FPS) and 14 .4% (2 FPS) up to 76 .4% ,as isolated keyframe thumbnails directly capture the visual flash on-pulse. Conversely, on the State Machine task, oracle keyframes yield low exact match ( 8.5% ), whereas continu-ous 2-FPS frame sampling achieves GPT-5.6 Sol’s highest performance ( 55 .5% –58 .8% exact match). This discrepancy highlights a fundamental domain difference: while discrete flash events can be identified from isolated keyframes, track-ing state machine transitions requires continuous intermediate visual context to verify color/state persistence and track cu-mulative state history. Stripping non-event frames removes the intermediate state evidence necessary to track sequential transitions across the video. 
+
+C.15 Trace Extraction and Matching Algorithm 
+
+For every evaluation record, we retrieve the executable trace emitted by the renderer for the corresponding video and 
+
+Figure 10: Oracle keyframe evidence intervention analysis for Qwen3-VL-8B-Instruct. Exact-match accuracy across event count and frequency when models are supplied with oracle event-centered keyframe triplets versus baseline video sampling. deduplicate repeated event entries in the log. Gemini is prompted to produce a structured event ledger, from which we extract explicit minute–second entries. For the open models, whose responses are free-form, we extract minute–second and decimal-second expressions preceded by temporal cues such as “at”, “from”, or “frame”. Mentions within 0.1 seconds are deduplicated. Ordinal descriptions and final counts alone do not create reported events. This conservative procedure avoids assigning timestamps that the model did not provide, while making trace metrics conditional on the temporal evidence externalized in the response. For a ground-truth trace with N events and a model report with M events, we form candidate pairs whose timestamps differ by at most δ(F ) = 1 /(2 F ). This rate-relative tolerance ranges from 1.0 second at 0.5 Hz to 0.125 second at 4.0 Hz and keeps adjacent true-event windows disjoint. We choose a one-to-one matching that maximizes the number of aligned pairs 
+
+K, breaking ties by the smallest total timestamp deviation. An unmatched true event contributes to a miss and an Model / Intervention Protocol EM (%) VOR P (%) R (%) Trace F1 (%) ACR (%) RFR (%)                                                  
+
+> GPT-5.6 Sol (1 FPS Structured Trace) 21.9 0.88 87.5 62.2 63.9 15.8 29.7 GPT-5.6 Sol (2 FPS Structured Trace) 34.9 0.86 86.4 60.4 60.7 21.9 21.4 GPT-5.6 Sol (2 FPS Direct Answer) 35.5 0.01 1.4 1.4 1.4 34.1 0.0 GPT-5.6 Sol (2 FPS Multi-Turn) 35.1 0.39 66.1 38.6 44.6 12.6 5.7 GPT-5.6 Sol (2 FPS Thinking / CoT) 29.9 0.05 12.8 4.5 5.6 27.3 0.4 GPT-5.6 Sol (2 FPS Role Prompt) 39.5 0.48 58.6 39.9 42.4 25.8 13.5 GPT-5.6 Sol (Oracle Keyframes) 42.5 1.18 81.2 79.6 71.1 20.4 34.9
+
+Table 6: GPT-5.6 Sol intervention trace evaluation summary. Macro averages reported on non-errored task-matched evaluation records across sampling densities, oracle keyframes, and prompting formats. unmatched reported event contributes to an unsupported report. The reported trace then yields precision K/M , recall 
+
+K/N , trace F1, and the Visual Observation Ratio M/N .When M = 0 , precision and trace F1 are defined as zero. A correct final count with trace F1 < 0.80 contributes to ACR, while an incorrect final count with trace F1 ≥ 0.80 
+
+contributes to RFR. 
+
+C.16 Aggregate Trace Error Summary 
+
+Table 7 defines the task-general taxonomy used for the case inventory. State-specific discrepancies are treated as instances of misidentified events rather than as a separate type. Table 8 aggregates these categories over all positive-count videos for each model. Matched, missed, hallucinated, dis-placed, and misidentified entries are event-level counts. Wrong accumulation is a video-level count. We report zero merged or collapsed events because no visible response was manu-ally verified to combine multiple true events into one report. Gemini has the largest number of matched events, while the open-model rows show either many unmatched timestamp entries or no parser-recognized temporal report. The latter should not be read as absence of visual processing. It means that the visible answer did not provide timestamped evidence under the extraction rule. Table 9 reports the sensitivity of the trace metrics to the timestamp-matching tolerance. Final-answer exact match and VOR are unchanged because they do not depend on pairing. Precision, recall, and trace F1 increase as the tolerance widens, as expected. The selected rate-relative tolerance lies between the fixed settings and preserves non-overlapping matching windows for adjacent events at every tested frequency. 
+
+D Computational Cost Analysis 
+
+To ensure full transparency and reproducible benchmarking standards, we record financial API costs incurred across all evaluation protocols. In total, across all 5 core experimental sweeps and real-world transfer evaluations across all three visual domains, the benchmark evaluation processed 37,924 individual evaluation trials, incurring a total financial API evaluation cost of $3,661.78 USD. Table 10 presents the high-level cost breakdown across experiments. The vast majority of financial expenditure ($3,426.86 USD, or 93.6% of total cost) was consumed by Experiment 2 (Frame Sampling Density Interventions), as high sampling densities (8–16 FPS) convert 24-second videos into long sequences of image patches, creating massive context window loads across all three visual domains. As detailed in Table 11, increasing frame sampling rates from native video (1 FPS equivalent, $19.02) up to 16 FPS ($1,348.43) scales input processing costs exponentially. Im-portantly, despite supplying 16 × more visual frames and spending over $3,420 USD on multi-frame density inter-ventions across domains, the fundamental Low-Frequency Trap failure boundary remains completely intact. While extra visual frames provide minor bumps in final-integer count accu-racy on bounce_ball (from 19.6% to 29.3%), the faithful step-by-step trace agreement remains near zero (3.7%), and models fail completely at high frequencies ( F ≥ 2.0 Hz). Thus, supplying higher-density visual inputs merely inflates evaluation costs exponentially without resolving the under-lying architectural VLM bottleneck in temporal tracking and event bookkeeping. Table 12 reports the domain-wise resource allocation across state_machine ($1,249.46 USD), bounce_ball ($1,247.40 USD), and blinking 
+
+($1,146.10 USD). 
+
+E Extended Related Work 
+
+This section situates the paper against the work most directly relevant to controlled video evaluation and trace-grounded diagnosis. 
+
+E.1 Video-Language Benchmarks and Controlled Evaluation 
+
+Video-MME, TempCompass, HourVideo, EgoSchema, MVBench, LongVideoBench, Mementos, VideoNIAH, VideoCogQA, and Video-MMLU evaluate complementary aspects of video understanding (Fu et al. 2025; Liu et al. 2024; Chandrasegaran et al. 2024; Mangalam, Akshulakov, and Ma-lik 2023; Li et al. 2024b; Wu et al. 2024; Wang et al. 2024; Lu et al. 2025; Li et al. 2024a; Song et al. 2025). VideoReason-Bench focuses more specifically on multi-step reasoning over videos that contain partially observed state changes (Liu et al. 2025). These resources are complementary to our study, but their examples are fixed. Event count, event rate, duration, and visual complexity are not independently swept. In contrast, our generator changes count and frequency while holding the event semantics and rendering family fixed, which makes the resulting capability boundary directly interpretable. Controlled visual benchmarks provide a useful precedent for this design. CLEVR and recent physics-oriented probes Type Definition           
+
+> Correct match A reported event aligns one-to-one with a true event within the timestamp tolerance and has the correct available event attribute. Missed event A true event has no aligned reported event. Merged or collapsed events The visible response explicitly combines two or more true events into one report. This type is assigned only when the response supports that interpretation. Hallucinated event A reported event has no aligned true event. Temporally displaced event A report corresponds to the appropriate event in the sequence but falls outside the timestamp tolerance. Misidentified event A timestamp aligns, but the reported event attribute is incorrect, such as the contacted wall, blink phase, or resulting state. Wrong accumulation The reported event sequence is sufficiently faithful with trace F1≥0.80 , but the final count is incorrect.
+
+Table 7: Task-general trace-error taxonomy. The first six types concern individual reported or true events. Wrong accumulation concerns the relationship between an otherwise faithful report and the final answer.                                                                             
+
+> Error type Gemini Qwen Qwen Qwen InternVL InternVL InternVL 3.6 Flash 3-VL-8B 3-VL-32B 3-VL-235B 3.5-8B 3.5-30B-A3B 3.5-38B
+> True events 12,240 12,223 12,223 12,223 12,223 12,223 12,223 Matched events 3,907 2,458 1,678 1,130 000Missed events 8,333 9,765 10,545 11,093 12,223 12,223 12,223 Merged events 0000000Hallucinated events 2,096 88,506 2,348 931 000Displaced events 448 245 402 142 000Misidentified events 1,556 737 518 200 000Wrong accumulation 50 34 34 23 000Videos 2,160 2,160 2,160 2,160 2,160 2,160 2,160
+
+Table 8: Aggregate trace-error counts by model. Counts aggregate all positive-count videos across Bounce Ball, Blinking, and State Machine. Matched, missed, hallucinated, displaced, and misidentified rows count events. Wrong accumulation counts videos with an incorrect final answer and trace F1 ≥ 0.80 . A displaced event is an order-aligned timestamp outside the tolerance. A misidentified event has an aligned timestamp but an incorrect available event attribute. Merged events require explicit visible evidence and are not inferred from missing timestamps. Gemini and open-model sets contain 12,240 and 12,223 true events, respectively. use controlled scenes to isolate compositional or physical-reasoning factors (Johnson et al. 2017; Chow et al. 2025; Xiang et al. 2025; Qiu et al. 2025). We extend that diagnostic philosophy to temporal event bookkeeping and then test the controlled finding on natural repeated-event videos. 
+
+E.2 Programmatic Video and Intermediate Traces 
+
+Recent controllable-video benchmarks use fully scripted clips and scalable task difficulty to stress-test multimodal reasoning. Our contribution is orthogonal to this controlled generation. Every video in our study is paired with a renderer-produced event schedule, which lets us score a model-reported event sequence rather than only its final answer. Visual Reasoning Tracer is the closest precedent for evalu-ating intermediate visual reasoning traces. It assesses object-level traces in images against ground-truth visual annotations (Yuan et al. 2025). Our setting differs in both modality and supervision. We evaluate temporal event sequences in video, and the reference trace is generated directly by the renderer. This permits timestamp-aware matching and separates missed or hallucinated events from errors in final count aggregation. Broader work on reasoning evaluation motivates treating a final answer or a long rationale with care. Self-consistency and STaR improve or bootstrap language-model reasoning (Wang et al. 2022; Zelikman et al. 2022), while recent stress tests expose failures that emerge as reasoning tasks become more compositional or difficult (Shojaee et al. 2025; Sun et al. 2025). In multimodal settings, EMMA, RCI, and Game-RL study reasoning capability, visual-information requirements, or verifiable task generation (Hao et al. 2025; Agarwal et al. 2025; Tong et al. 2025). These are useful context, but none supplies a renderer-generated temporal event schedule against which a video model’s reported event sequence can be aligned. 
+
+F Qualitative Trace Examples and Taxonomy Profiling 
+
+This appendix presents representative model responses along-side the corresponding rendered key-event frame strips and executable ground-truth traces across all 6 diagnostic tax-onomy categories. To ensure clear visual resolution while fitting comfortably within publication page height limits, each 5-sample category is presented across two page-optimized full-width figure panels: Part 1 (Cases 1–3) and Part 2 (Cases 4–5). Matching Tolerance Strategy Acc (%) VOR Precision (%) Recall (%) Trace F1 (%) ACR (%)                                     
+
+> Fixed δ= 1 .0s21.1 0.68 75.6 41.2 47.6 1.9 Fixed δ= 0 .5s21.1 0.68 67.8 35.2 41.3 6.4 Fixed δ= 0 .25 s21.1 0.68 49.7 21.7 27.2 14.2 Rate-Relative δ=12F21.1 0.68 58.0 31.2 36.4 5.7
+
+Table 9: Trace-metric sensitivity to timestamp tolerance for the Gemini 3.6 Flash baseline. Final EM averages the full grid; VOR, precision, recall, trace F1, and ACR average positive-event trials only. The rate-relative tolerance δ(F ) = 1 /(2 F ) bounds matching within each event’s unique inter-event half-period.                                        
+
+> Experiment / Protocol Trials Input Tokens Output Tokens Total Tokens Cost ($USD)
+> Exp 1: Baseline N×FMatrix Sweep 2,203 3,659,556 1,803,571 5,463,127 $19.02 Exp 2: Frame Density Interventions (1–16 FPS) 20,102 2,438,029,486 15,172,075 2,453,201,561 $3,426.86 Exp 3: Oracle Keyframe Evidence Interventions 3,449 45,757,799 3,050,018 48,807,817 $89.47 Exp 4: Prompting Strategies & Thinking Modes 11,714 18,905,824 10,567,098 29,472,922 $107.61 Real-World Transfer (RepCount / TransRAC) 456 8,014,360 906,931 8,921,291 $18.82
+> Total Benchmark Evaluation 37,924 2,514,367,025 31,499,693 2,545,866,718 $3,661.78
+
+Table 10: Comprehensive benchmark evaluation cost and token usage breakdown across all three visual domains. 
+
+Summarizes total evaluation trials, input/output token counts, and financial API costs across all 5 core experiments and real-world transfer evaluation. 
+
+F.1 Case-Selection Protocol 
+
+Qualitative cases were sampled from Gemini 3.6 Flash structured-trace predictions across all three synthetic benchmark domains ( bounce_ball , blinking , and 
+
+state_machine ). For every sample card: 1. Event Frame Strips: Every ground-truth event timestamp 
+
+te ∈ GT_events is captured at its exact physical occurrence timestamp (highlighted with a green event boundary badge and timestamp label), complemented by context frames placed in start/end intervals. 2. Executable vs Reported Alignment: Model-reported timestamps in the step-by-step event ledger are aligned against ground-truth event timestamps using a rate-relative matching tolerance ( τmatch = 1 .0s). 3. Taxonomy Classification: Samples are assigned to mu-tually exclusive failure categories based on final integer exact match and trace precision/recall/ F1.
+
+F.2 Faithful Event Recovery (Correct Matches) 
+
+Figures 18 and 19 present representative cases where Gemini 3.6 Flash achieves perfect trace alignment ( F1 = 100% , Preci-sion = 100% , Recall = 100% ). In low-count, low-frequency operating regions (e.g., N = 5 , F = 0 .5), the model accu-rately logs every wall contact timestamp in sequential order, leading to a correct final integer count ( ˆy = N ). 
+
+F.3 Missed Events (Under-Reporting / Perception Failure) 
+
+Figures 20 and 21 illustrate perception failures under high temporal load ( N ≥ 8, F ≥ 1.5Hz). As event frequency in-creases, visual evidence becomes compressed in time. Gemini under-reports the sequence, omitting intermediate wall colli-sions (e.g., reporting only 1 or 2 timestamps for an 8-event video), resulting in severe recall degradation. 
+
+F.4 Hallucinated Events (Over-Reporting / Spurious Detection) 
+
+Figures 22 and 23 show over-reporting failures typical of low-load operating regions. The model generates spurious timestamps for wall contacts or state transitions during con-tinuous motion intervals where no physical event occurred, lowering trace precision ( P < 50% ). 
+
+F.5 Wrong Accumulation (Reasoning Failure Ratio / RFR) 
+
+Figures 24 and 25 demonstrate Reasoning Failure Ratio (RFR). Here, the model successfully maintains a 100% accurate step-by-step event ledger in its reasoning response ( F1 ≥ 80% ), but fails at the final aggregation step—outputting an incorrect integer in ‘\boxed{}‘ (e.g., declaring ˆy = 4 or ˆy = 5 despite correctly listing all 5 or 6 timestamped events). This isolates a distinct trace-to-answer accumulation failure. 
+
+F.6 Accidental Correctness (Accidental Correctness Ratio / ACR) 
+
+Figures 26 and 27 present Accidental Correctness (ACR). In these trials, the final integer prediction matches ground truth (ˆy = N ), but the underlying event trace is severely degraded (F1 < 40% ) with missing or hallucinated timestamps. Relying solely on final-answer exact match would misclassify these ungrounded responses as successful temporal reasoning. 
+
+F.7 Temporally Displaced Events 
+
+Figures 28 and 29 illustrate temporal displacement, where the model detects the presence and sequence of visual transitions, but assigns boundary timestamps that drift beyond the 1.0stolerance window relative to physical ground truth. Frame Density Trials Input Tokens Output Tokens Cost ($USD) 
+
+Native Video 2,203 3,659,556 1,803,571 $19.02 1 FPS 2,862 58,130,830 2,004,410 $95.80 2 FPS 2,933 115,870,930 2,206,109 $167.95 4 FPS 3,428 225,535,430 2,479,566 $313.27 8 FPS 3,453 452,188,230 2,633,080 $662.41 10 FPS 3,554 589,062,945 2,692,969 $839.01 16 FPS 3,872 997,241,121 3,155,941 $1,348.43 
+
+Table 11: Cost breakdown by frame sampling density across all tasks (Experiment 2). Demonstrates how frame sampling rate converts video inputs into large image-patch token sequences, scaling input processing costs. 
+
+Visual Domain / Task Trials Input Tokens Output Tokens Cost ($USD) 
+
+state_machine 13,141 910,900,516 9,798,474 $1,249.46 
+
+bounce_ball 10,363 778,500,899 10,729,970 $1,247.40 
+
+blinking 13,964 816,951,250 10,064,318 $1,146.10 
+
+repcount (Real-World) 456 8,014,360 906,931 $18.82 
+
+Total 37,924 2,514,367,025 31,499,693 $3,661.78 
+
+Table 12: Evaluation cost and token usage breakdown by visual domain. Summarizes computational allocation across synthetic video domains and real-world transfer datasets. 0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> State Transition Frequency (Hz)
+
+1.00 0.90 0.90 0.60 0.30 0.30 0.00 0.30 0.10 0.10 1.00 0.70 0.80 0.50 0.30 0.00 0.00 0.00 0.00 0.00 1.00 0.90 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.90 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.90 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Qwen3-VL-8B 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+1.00 0.60 0.80 0.40 0.20 0.10 0.10 0.60 0.20 0.10 1.00 0.60 0.80 0.60 0.30 0.00 0.00 0.00 0.00 0.00 1.00 0.80 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.90 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.90 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Qwen3-VL-32B 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+1.00 0.70 0.70 0.40 0.30 0.20 0.10 0.10 0.10 0.30 1.00 0.60 0.80 0.70 0.30 0.00 0.00 0.00 0.00 0.00 1.00 0.80 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Qwen3-VL-235B 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Blinking Frequency (Hz)
+
+1.00 0.10 0.20 0.00 0.00 0.00 0.10 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.10 0.00 0.10 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+1.00 0.50 0.10 0.00 0.20 0.10 0.20 0.10 0.00 0.00 1.00 0.40 0.10 0.10 0.00 0.00 0.10 0.30 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.10 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+1.00 0.70 0.10 0.00 0.10 0.00 0.00 0.10 0.00 0.10 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Bouncing Ball Frequency (Hz)
+
+0.80 0.40 0.30 0.10 0.00 0.10 0.00 0.00 0.10 0.10 0.80 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.40 0.20 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.70 0.30 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.40 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.60 0.40 0.00 0.00 0.00 0.00 0.10 0.00 0.00 0.00 0.50 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+1.00 0.60 0.50 0.20 0.10 0.00 0.20 0.20 0.10 0.10 1.00 0.50 0.20 0.10 0.00 0.00 0.10 0.00 0.00 0.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.10 0.00 0.00 0.80 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.50 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.90 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.90 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.90 0.70 0.60 0.50 0.40 0.30 0.10 0.50 0.20 0.00 0.90 0.60 0.30 0.10 0.00 0.00 0.00 0.00 0.00 0.10 1.00 0.70 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.80 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0.0 0.2 0.4 0.6 0.8 1.0 Success Rate 
+
+Figure 11: Qwen3-VL family capability heatmaps. Final-answer exact match across event count and frequency for State Machine transitions. The panels compare Qwen3-VL-8B, Qwen3-VL-32B, and Qwen3-VL-235B. 0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> State Transition Frequency (Hz)
+
+0.10 0.90 0.90 1.00 0.50 0.50 1.00 0.30 0.40 0.40 0.10 1.00 0.80 0.80 0.60 0.50 0.50 0.20 0.00 0.00 0.10 1.00 0.60 0.40 0.30 0.30 0.00 0.10 0.00 0.00 0.00 0.90 0.60 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.90 0.00 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.10 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+InternVL3.5-8B 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.50 1.00 0.80 0.80 0.70 0.30 0.20 0.20 0.10 0.00 0.50 1.00 0.60 0.50 0.30 0.10 0.00 0.00 0.00 0.00 0.60 1.00 0.60 0.30 0.10 0.10 0.00 0.00 0.00 0.00 0.20 1.00 0.70 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.60 0.70 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.40 0.80 0.60 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.30 0.90 0.20 0.20 0.10 0.00 0.00 0.00 0.00 0.00 0.40 0.90 0.20 0.10 0.00 0.00 0.00 0.00 0.00 0.00 
+
+InternVL3.5-30B-A3B 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.90 0.90 0.80 0.90 0.90 0.80 0.90 0.40 0.50 0.20 0.80 1.00 0.70 0.70 0.80 0.50 0.20 0.00 0.10 0.00 0.80 1.00 0.70 0.30 0.30 0.10 0.10 0.00 0.00 0.00 0.40 1.00 0.60 0.30 0.10 0.00 0.00 0.00 0.10 0.00 0.60 0.90 0.70 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.90 0.80 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.90 0.10 0.00 0.10 0.10 0.00 0.00 0.00 0.00 0.50 0.80 0.00 0.10 0.10 0.00 0.00 0.00 0.00 0.00 
+
+InternVL3.5-38B 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Blinking Frequency (Hz)
+
+0.30 0.30 0.40 0.10 0.40 0.30 0.00 0.00 0.00 0.00 0.20 0.20 0.10 0.30 0.20 0.30 0.00 0.00 0.00 0.00 0.60 0.30 0.10 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.30 0.00 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.50 0.20 0.00 0.10 0.20 0.00 0.00 0.00 0.00 0.00 0.50 0.20 0.00 0.00 0.20 0.20 0.10 0.10 0.00 0.00 0.60 0.40 0.10 0.10 0.10 0.10 0.00 0.00 0.00 0.00 0.10 0.20 0.00 0.20 0.10 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.30 0.00 0.50 0.20 0.40 0.00 0.00 0.00 0.00 0.00 0.20 0.30 0.10 0.60 0.40 0.00 0.00 0.00 0.00 0.00 0.10 0.10 0.20 0.50 0.10 0.00 0.00 0.00 0.20 0.00 0.20 0.10 0.00 0.20 0.10 0.00 0.00 0.00 0.10 0.00 0.20 0.10 0.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.30 0.20 0.00 0.20 0.10 0.00 0.00 0.00 0.00 0.00 0.30 0.10 0.00 0.40 0.10 0.00 0.00 0.00 0.00 0.00 0.10 0.20 0.10 0.30 0.10 0.00 0.00 0.10 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.60 0.20 0.00 0.00 0.10 0.40 0.00 0.00 0.00 0.00 0.70 0.20 0.00 0.00 0.00 0.30 0.00 0.00 0.00 0.00 0.80 0.10 0.00 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.00 1.00 0.00 0.10 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.60 0.10 0.00 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.40 0.00 0.10 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.80 0.00 0.00 0.00 0.10 0.10 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Bouncing Ball Frequency (Hz)
+
+0.00 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.00 1.00 0.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.20 0.80 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Number of Events (Count) 
+
+0.30 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.10 0.00 0.50 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.40 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.20 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.30 0.90 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.30 0.90 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.50 0.70 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.20 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+0.0 0.2 0.4 0.6 0.8 1.0 Success Rate Figure 12: InternVL3.5 family capability heatmaps. Final-answer exact match across event count and frequency for State Machine, Blinking, and Bounce Ball. Columns compare the evaluated InternVL3.5 scales. 0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.90 1.00 1.00 1.00 0.90 0.90 1.00 0.80 0.70 1.00 0.50 0.60 0.40 0.60 0.00 0.60 0.80 0.30 0.60 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.10 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Native Video (Baseline) 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.71 0.80 1.00 0.47 0.67 0.80 0.70 0.30 0.18 0.41 0.71 0.40 0.30 0.23 0.06 0.60 0.30 0.10 0.35 0.11 0.71 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.71 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.71 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.71 0.10 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.71 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.71 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 1 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.62 0.62 0.62 0.60 0.55 0.27 0.00 0.00 0.00 0.00 0.62 0.62 0.62 0.70 0.70 0.30 0.30 0.00 0.00 0.00 0.62 0.47 0.43 0.00 0.30 0.40 0.10 0.15 0.00 0.09 0.62 0.25 0.69 0.40 0.36 0.25 0.10 0.27 0.09 0.10 0.62 0.14 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.62 0.14 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.62 0.19 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.62 0.07 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 2 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.91 1.00 0.60 0.30 0.20 0.00 0.00 0.00 0.00 0.00 0.91 0.83 0.50 0.70 0.40 0.20 0.00 0.00 0.00 0.00 0.91 0.90 1.00 0.70 0.40 0.10 0.20 0.00 0.00 0.00 0.91 0.70 0.90 0.40 0.40 0.30 0.30 0.10 0.00 0.00 0.91 0.50 0.50 0.30 0.20 0.20 0.30 0.10 0.00 0.10 0.91 0.64 0.50 0.30 0.00 0.00 0.00 0.10 0.10 0.00 0.91 0.30 0.50 0.40 0.30 0.30 0.00 0.00 0.30 0.10 0.91 0.60 0.40 0.30 0.30 0.10 0.30 0.50 0.20 0.20 
+
+Sampling: 4 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 0.80 0.14 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.80 0.80 0.09 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.80 1.00 0.31 0.21 0.00 0.10 0.00 0.00 0.00 1.00 0.91 0.90 0.31 0.23 0.08 0.00 0.00 0.00 0.00 1.00 1.00 0.80 0.46 0.13 0.08 0.10 0.00 0.00 0.00 1.00 0.80 0.91 0.50 0.29 0.00 0.10 0.20 0.00 0.00 1.00 0.90 0.64 0.45 0.21 0.00 0.00 0.00 0.10 0.00 1.00 0.70 0.75 0.30 0.33 0.10 0.10 0.00 0.00 0.00 
+
+Sampling: 8 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.80 0.90 0.10 0.10 0.00 0.00 0.00 0.00 0.00 1.00 1.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.70 0.20 0.20 0.00 0.00 0.00 0.00 0.00 1.00 0.80 0.80 0.50 0.20 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.70 0.60 0.00 0.00 0.10 0.00 0.00 0.00 1.00 0.90 0.70 0.30 0.40 0.07 0.18 0.00 0.00 0.00 1.00 0.90 0.80 0.50 0.40 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 10 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.90 1.00 0.50 0.10 0.10 0.10 0.00 0.00 0.00 0.00 0.90 0.40 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.90 0.90 0.70 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.90 0.80 0.82 0.20 0.20 0.00 0.00 0.00 0.00 0.00 0.90 0.80 0.90 0.20 0.10 0.00 0.00 0.00 0.00 0.00 0.90 0.60 0.80 0.20 0.20 0.00 0.00 0.00 0.00 0.00 0.90 0.80 0.80 0.60 0.20 0.10 0.00 0.00 0.00 0.00 0.90 0.80 0.60 0.30 0.20 0.00 0.07 0.00 0.00 0.00 
+
+Sampling: 16 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.60 0.90 1.00 1.00 1.00 1.00 1.00 0.40 0.00 0.00 0.60 0.70 1.00 1.00 1.00 1.00 0.90 0.70 0.00 0.00 0.60 0.80 1.00 1.00 1.00 1.00 0.60 0.40 0.00 0.00 0.60 1.00 1.00 1.00 1.00 1.00 0.50 0.50 0.00 0.00 0.60 0.90 1.00 1.00 1.00 1.00 0.60 0.30 0.00 0.00 0.60 1.00 1.00 1.00 1.00 1.00 0.90 0.70 0.10 0.10 0.60 1.00 1.00 1.00 1.00 0.80 0.50 0.70 0.20 0.00 0.60 1.00 1.00 1.00 1.00 1.00 0.30 0.90 0.10 0.00 
+
+Keyframe Evidence 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.50 0.56 0.77 0.59 0.91 0.83 0.47 0.83 0.67 0.47 0.50 0.35 0.60 0.55 0.55 0.08 0.50 0.62 0.12 0.30 0.50 0.21 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.50 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.50 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.50 0.09 0.00 0.00 0.00 0.00 0.07 0.00 0.00 0.00 0.50 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.50 0.10 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Direct Answer 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.42 0.53 0.83 0.48 0.62 0.39 0.42 0.71 0.62 0.47 0.42 0.50 0.50 0.30 0.33 0.00 0.29 0.44 0.12 0.47 0.42 0.17 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.42 0.11 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.42 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.42 0.06 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.42 0.05 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.42 0.00 0.04 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Multi-Turn 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.57 0.69 0.91 0.69 0.59 0.91 0.64 0.71 0.62 0.47 0.57 0.50 0.43 0.43 0.43 0.00 0.43 0.53 0.20 0.38 0.57 0.27 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.57 0.07 0.00 0.00 0.00 0.00 0.07 0.00 0.00 0.00 0.57 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.57 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.57 0.06 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.57 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Thinking / CoT 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.91 0.91 0.91 0.64 0.67 0.90 0.64 1.00 0.80 0.80 0.91 0.36 0.43 0.40 0.38 0.00 0.55 0.80 0.20 0.60 0.91 0.21 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.14 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Role Prompting 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+Figure 13: Complete Gemini visual-access intervention surfaces on Bounce Ball. Final-answer exact-match accuracy for native video, supplied frame-sampling densities, and event-centered keyframes. 0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.10 0.20 0.30 0.20 0.20 0.30 0.50 0.20 0.10 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Native Video (Baseline) 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.10 0.20 0.30 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 1 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.40 0.50 0.20 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.60 0.30 0.10 0.00 0.00 0.00 0.00 0.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 2 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.90 0.57 0.07 0.05 0.00 0.00 0.00 0.00 0.00 1.00 0.75 0.29 0.07 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.42 0.31 0.00 0.05 0.00 0.00 0.00 0.00 0.00 1.00 0.64 0.39 0.25 0.00 0.05 0.00 0.00 0.00 0.00 1.00 0.37 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.56 0.00 0.06 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.23 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.27 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 4 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.45 0.53 0.39 0.00 0.07 0.00 0.00 0.00 0.00 0.00 0.45 0.53 0.27 0.21 0.06 0.00 0.00 0.00 0.00 0.00 0.45 0.60 0.28 0.06 0.00 0.00 0.00 0.00 0.00 0.00 0.45 0.83 0.27 0.24 0.10 0.00 0.00 0.00 0.00 0.00 0.45 0.56 0.38 0.24 0.05 0.00 0.00 0.00 0.00 0.00 0.45 0.67 0.46 0.16 0.12 0.06 0.05 0.00 0.00 0.00 0.45 0.48 0.50 0.11 0.17 0.06 0.00 0.00 0.00 0.00 0.45 0.44 0.35 0.06 0.06 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 8 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.43 0.41 0.14 0.05 0.05 0.05 0.00 0.00 0.00 0.00 0.43 0.45 0.21 0.00 0.05 0.00 0.00 0.00 0.00 0.00 0.43 0.53 0.29 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.43 0.45 0.26 0.16 0.11 0.05 0.00 0.00 0.00 0.00 0.43 0.62 0.32 0.10 0.00 0.05 0.00 0.00 0.00 0.00 0.43 0.45 0.14 0.24 0.05 0.05 0.05 0.00 0.00 0.00 0.43 0.56 0.50 0.24 0.00 0.00 0.00 0.00 0.00 0.00 0.43 0.41 0.42 0.15 0.11 0.00 0.06 0.00 0.00 0.00 
+
+Sampling: 10 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.45 0.53 0.11 0.13 0.13 0.00 0.00 0.00 0.00 0.00 0.45 0.56 0.18 0.19 0.05 0.00 0.00 0.00 0.00 0.00 0.45 0.47 0.09 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.45 0.39 0.12 0.18 0.00 0.00 0.00 0.00 0.00 0.00 0.45 0.53 0.27 0.16 0.04 0.00 0.00 0.00 0.00 0.00 0.45 0.41 0.14 0.10 0.05 0.00 0.00 0.00 0.00 0.00 0.45 0.36 0.38 0.05 0.11 0.00 0.00 0.00 0.00 0.00 0.45 0.43 0.29 0.24 0.18 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 16 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.29 0.59 0.40 0.61 0.59 0.50 0.10 0.33 0.00 0.00 0.29 0.50 0.48 0.67 0.48 0.32 0.04 0.12 0.00 0.00 0.29 0.62 0.59 0.42 0.42 0.57 0.08 0.00 0.00 0.00 0.29 0.59 0.45 0.55 0.48 0.42 0.09 0.00 0.00 0.00 0.29 0.43 0.52 0.68 0.38 0.42 0.00 0.29 0.00 0.00 0.29 0.40 0.61 0.59 0.75 0.04 0.05 0.00 0.00 0.04 0.29 0.48 0.61 0.59 0.55 0.43 0.17 0.04 0.04 0.00 0.29 0.53 0.44 0.62 0.57 0.55 0.27 0.12 0.04 0.00 
+
+Keyframe Evidence 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.52 0.09 0.13 0.15 0.10 0.09 0.18 0.32 0.09 0.10 0.52 0.05 0.00 0.00 0.05 0.00 0.00 0.00 0.00 0.00 0.52 0.14 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.52 0.12 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.52 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.52 0.12 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.52 0.22 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.52 0.12 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Direct Answer 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.55 0.05 0.09 0.15 0.10 0.10 0.26 0.35 0.12 0.08 0.55 0.04 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.55 0.13 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.55 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.55 0.15 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.55 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.55 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.55 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Multi-Turn 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.83 0.07 0.13 0.20 0.14 0.15 0.27 0.31 0.20 0.08 0.83 0.08 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.18 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.13 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.17 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.17 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.36 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.18 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Thinking / CoT 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.91 0.09 0.18 0.25 0.18 0.18 0.36 0.36 0.20 0.10 0.91 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.27 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.17 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.17 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.15 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.18 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Role Prompting 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+Figure 14: Complete Gemini visual-access intervention surfaces on Blinking. Final-answer exact-match accuracy for native video, supplied frame-sampling densities, and event-centered keyframes. 0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.91 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.91 0.90 1.00 0.90 0.90 1.00 0.90 1.00 0.90 0.80 0.91 0.91 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.91 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 1.00 0.36 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.77 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.91 0.82 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Native Video (Baseline) 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 0.67 0.56 0.48 0.53 0.38 0.39 1.00 0.40 1.00 0.90 0.45 0.59 0.39 0.62 0.47 0.36 1.00 1.00 1.00 0.21 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 1 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.48 0.59 0.71 0.53 0.53 0.45 0.46 0.28 0.20 0.18 0.48 0.50 0.45 0.71 0.50 0.42 0.45 0.41 0.24 0.18 0.48 0.56 0.43 0.57 0.53 0.28 0.56 0.43 0.59 0.69 0.48 0.53 0.62 0.47 0.42 0.47 0.33 0.12 0.25 0.00 0.48 0.45 0.57 0.23 0.15 0.21 0.00 0.00 0.00 0.00 0.48 0.59 0.44 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.48 0.71 0.32 0.05 0.00 0.00 0.00 0.00 0.00 0.00 0.48 0.71 0.43 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 2 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.50 0.50 0.45 0.41 0.39 0.33 0.31 0.14 0.00 0.00 0.50 0.38 0.48 0.50 0.47 0.53 0.32 0.17 0.06 0.00 0.50 0.50 0.53 0.50 0.62 0.43 0.50 0.39 0.29 0.17 0.50 0.53 0.47 0.48 0.50 0.71 0.83 0.50 0.50 0.33 0.50 0.43 0.36 0.53 0.47 0.48 0.38 0.62 0.60 0.44 0.50 0.53 0.32 0.59 0.60 0.53 0.41 0.50 0.53 0.24 0.50 0.56 0.53 0.67 0.53 0.41 0.42 0.53 0.31 0.45 0.50 0.45 0.33 0.43 0.45 0.60 0.25 0.14 0.23 0.15 
+
+Sampling: 4 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.53 0.62 0.59 0.47 0.39 0.30 0.28 0.06 0.00 0.00 0.53 0.53 0.71 0.45 0.41 0.27 0.13 0.00 0.05 0.00 0.53 0.53 0.53 0.56 0.44 0.50 0.22 0.06 0.05 0.00 0.53 0.71 0.62 0.53 0.44 0.26 0.21 0.19 0.10 0.00 0.53 0.62 0.62 0.50 0.39 0.47 0.37 0.06 0.15 0.06 0.53 0.53 0.48 0.56 0.71 0.29 0.47 0.41 0.20 0.22 0.53 0.62 0.45 0.45 0.67 0.56 0.59 0.47 0.29 0.25 0.53 0.53 0.47 0.50 0.62 0.45 0.44 0.27 0.54 0.24 
+
+Sampling: 8 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.43 0.42 0.45 0.37 0.57 0.43 0.20 0.05 0.00 0.00 0.43 0.71 0.56 0.62 0.42 0.20 0.35 0.00 0.05 0.00 0.43 0.67 0.47 0.42 0.33 0.36 0.05 0.05 0.04 0.00 0.43 0.48 0.56 0.53 0.44 0.33 0.19 0.29 0.05 0.00 0.43 0.56 0.56 0.50 0.40 0.30 0.24 0.13 0.09 0.00 0.43 0.50 0.53 0.43 0.53 0.39 0.29 0.19 0.12 0.05 0.43 0.53 0.53 0.56 0.44 0.43 0.44 0.40 0.12 0.24 0.43 0.53 0.45 0.53 0.45 0.62 0.37 0.28 0.14 0.09 
+
+Sampling: 10 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.61 0.54 0.62 0.43 0.21 0.40 0.17 0.04 0.00 0.00 0.61 0.44 0.57 0.42 0.36 0.12 0.00 0.00 0.00 0.00 0.61 0.62 0.55 0.36 0.41 0.29 0.14 0.00 0.00 0.00 0.61 0.59 0.50 0.39 0.26 0.23 0.20 0.04 0.04 0.00 0.61 0.46 0.55 0.55 0.41 0.14 0.17 0.09 0.00 0.00 0.61 0.46 0.52 0.39 0.43 0.35 0.08 0.00 0.05 0.00 0.61 0.42 0.65 0.45 0.32 0.43 0.17 0.09 0.09 0.00 0.61 0.64 0.40 0.67 0.38 0.35 0.18 0.10 0.09 0.00 
+
+Sampling: 16 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.60 0.00 0.00 0.00 0.00 0.00 0.12 0.00 0.27 0.20 0.60 0.05 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.60 0.00 0.00 0.06 0.07 0.00 0.00 0.00 0.73 0.00 0.60 0.18 0.00 0.00 0.00 0.09 0.00 0.00 0.40 0.33 0.60 0.36 0.35 0.12 0.08 0.00 0.09 0.00 0.50 0.18 
+
+Keyframe Evidence 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.83 1.00 1.00 1.00 0.91 0.91 1.00 0.91 1.00 0.75 0.83 0.90 1.00 0.82 0.90 1.00 0.82 0.91 0.90 0.80 0.83 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.83 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.83 0.36 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 0.91 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.83 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Direct Answer 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 0.91 1.00 1.00 1.00 1.00 1.00 0.90 1.00 0.90 0.90 0.90 0.90 1.00 0.90 0.90 1.00 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.91 0.45 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.45 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.91 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Multi-Turn 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.90 1.00 0.90 1.00 0.90 0.90 0.90 0.90 1.00 0.90 0.90 1.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Thinking / CoT 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.90 1.00 0.90 0.90 0.90 1.00 1.00 0.90 0.90 1.00 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Prompt: Role Prompting 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Final Answer Accuracy
+
+Figure 15: Complete Gemini visual-access intervention surfaces on State Machine. Final-answer exact-match accuracy for native video, supplied frame-sampling densities, and event-centered keyframes. 0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.20 0.20 0.40 0.20 0.20 0.30 0.50 0.20 0.10 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 1 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.50 0.60 0.50 0.30 0.60 0.10 0.30 0.30 0.50 1.00 0.50 0.60 0.30 0.60 0.10 0.40 0.30 0.40 0.10 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 2 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.00 0.90 1.00 1.00 1.00 1.00 0.80 0.90 0.70 0.80 0.00 1.00 1.00 1.00 1.00 1.00 0.80 0.90 0.70 0.50 0.00 1.00 1.00 1.00 1.00 1.00 0.60 0.00 0.00 0.00 0.00 1.00 1.00 1.00 1.00 1.00 0.60 0.00 0.00 0.00 0.00 1.00 1.00 1.00 1.00 1.00 0.80 1.00 0.50 0.40 0.00 1.00 1.00 1.00 1.00 0.30 0.10 0.10 0.40 0.20 0.00 1.00 1.00 1.00 1.00 1.00 1.00 0.90 0.50 0.60 0.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.30 0.50 
+
+Keyframe Evidence 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.50 0.60 0.50 0.30 0.50 0.20 0.30 0.30 0.50 1.00 0.60 0.60 0.40 0.60 0.10 0.40 0.30 0.50 0.10 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Direct Answer 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.50 0.62 0.50 0.30 0.44 0.11 0.38 0.67 0.56 1.00 0.50 0.67 0.25 0.50 0.12 0.33 0.38 0.56 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.12 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Multi-Turn 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.50 0.60 0.50 0.22 0.57 0.12 0.44 0.44 0.56 1.00 0.60 0.60 0.30 0.56 0.14 0.38 0.22 0.33 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.67 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.22 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.22 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.11 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Thinking / CoT 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 0.50 0.50 0.50 0.00 0.75 0.33 0.29 0.25 0.50 1.00 0.57 0.62 0.50 0.50 0.00 0.50 0.50 0.25 0.50 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.70 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.22 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.11 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Role Prompting 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> GPT-5.6 Sol Accuracy (Blinking)
+
+Figure 16: GPT-5.6 Sol capability surfaces on Blinking. Final-answer exact-match accuracy under 1–2 FPS sampling densities, oracle keyframes, and 2-FPS prompting interventions. 0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.40 1.00 0.90 0.90 0.90 1.00 1.00 1.00 0.90 1.00 1.00 0.90 0.40 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.40 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.10 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.20 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.30 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 1 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.90 1.00 1.00 1.00 1.00 0.90 1.00 1.00 1.00 1.00 0.80 0.80 0.90 0.70 0.90 1.00 0.80 1.00 1.00 1.00 0.80 0.80 0.90 0.70 0.30 0.40 0.00 1.00 1.00 0.60 0.60 0.30 0.10 0.20 0.00 0.00 0.00 1.00 1.00 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.60 0.10 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+Sampling: 2 FPS 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.70 0.80 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.20 0.20 0.10 0.00 0.90 0.00 0.00 0.00 0.00 0.10 0.00 0.00 0.00 0.00 0.80 0.70 0.00 0.00 0.20 0.10 0.00 0.00 0.10 0.10 0.70 0.50 
+
+Keyframe Evidence 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.90 1.00 1.00 1.00 0.90 1.00 1.00 1.00 1.00 0.80 0.80 1.00 0.80 0.80 1.00 0.90 1.00 1.00 1.00 0.80 0.78 0.80 0.70 0.40 0.40 0.00 1.00 1.00 0.60 0.70 0.22 0.20 0.20 0.00 0.00 0.00 1.00 1.00 0.80 0.10 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.60 0.11 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Direct Answer 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.80 1.00 1.00 1.00 1.00 0.67 0.75 0.86 0.83 1.00 0.80 1.00 1.00 0.89 1.00 0.78 0.89 0.88 0.62 0.00 0.50 0.00 1.00 1.00 0.56 0.57 0.30 0.22 0.12 0.00 0.00 0.00 1.00 1.00 0.78 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.62 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.56 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Multi-Turn 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 0.90 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.75 1.00 1.00 1.00 0.89 1.00 1.00 1.00 1.00 0.80 0.67 0.83 0.83 1.00 1.00 0.67 1.00 1.00 1.00 1.00 0.78 0.89 0.75 0.29 0.33 0.00 1.00 1.00 0.60 0.75 0.14 0.00 0.14 0.00 0.00 0.00 1.00 1.00 0.83 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.50 0.20 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.60 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Thinking / CoT 
+
+0 1 2 3 4 5 6 8 10 12 
+
+Event Count N 
+
+> 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> Event Frequency F (Hz)
+
+1.00 1.00 1.00 0.90 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.83 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.83 0.60 1.00 0.60 0.71 1.00 0.75 1.00 1.00 1.00 0.86 0.88 0.86 0.80 0.22 0.40 0.00 1.00 1.00 0.67 0.67 0.50 0.17 0.33 0.00 0.00 0.00 1.00 1.00 0.80 0.14 0.00 0.00 0.00 0.00 0.00 0.00 1.00 0.83 0.62 0.00 0.00 0.00 0.00 0.00 0.00 0.00 1.00 1.00 0.56 0.00 0.00 0.00 0.00 0.00 0.00 0.00 
+
+2 FPS Prompt: Role Prompting 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> GPT-5.6 Sol Accuracy (State Machine)
+
+Figure 17: GPT-5.6 Sol capability surfaces on State Machine. Final-answer exact-match accuracy under 1–2 FPS sampling densities, oracle keyframes, and 2-FPS prompting interventions. Figure 18: Faithful Event Recovery (Part 1: Cases 1–3): Gemini 3.6 Flash accurately tracks all key event timestamps and running counts on blinking , bounce_ball , and state_machine , achieving 100% Trace F1 and matching final integer counts. Figure 19: Faithful Event Recovery (Part 2: Cases 4–5): Additional faithful event recovery profiles on state_machine 
+
+across low-frequency operating conditions ( N ≤ 12 , F ≤ 1.0Hz). Figure 20: Missed Events / Under-Reporting (Part 1: Cases 1–3): Under high temporal load ( N ≥ 2, F ≥ 1.5Hz), Gemini omits intermediate event transitions on blinking and bounce_ball , reporting only a fraction of true timestamps (Trace Recall < 60% ). Figure 21: Missed Events / Under-Reporting (Part 2: Cases 4–5): Severe recall degradation under compressed inter-event timing on state_machine .Figure 22: Hallucinated Events / Over-Reporting (Part 1: Cases 1–3): Spurious event generation on blinking and 
+
+bounce_ball . Gemini logs non-existent boundary collisions and state transitions during continuous motion, degrading Trace Precision ( P < 50% ). Figure 23: Hallucinated Events / Over-Reporting (Part 2: Cases 4–5): Over-reporting profiles on bounce_ball and 
+
+state_machine .Figure 24: Wrong Accumulation / Reasoning Failure Ratio (Part 1: Cases 1–3): Disconnect between trace maintenance and final answer output on blinking , bounce_ball , and state_machine . Gemini logs an accurate event ledger ( F1 ≥ 80% ), but miscalculates the final integer aggregation in \boxed{}. Figure 25: Wrong Accumulation / Reasoning Failure Ratio (Part 2: Cases 4–5): Additional RFR instances on 
+
+state_machine isolating arithmetic aggregation failures despite faithful trace records. Figure 26: Accidental Correctness / ACR (Part 1: Cases 1–3): Unfaithful final counting on blinking and bounce_ball .The final integer prediction matches ground truth ( ˆy = N ), but the intermediate reasoning trace is severely degraded ( F1 < 40% ). Figure 27: Accidental Correctness / ACR (Part 2: Cases 4–5): Unverified correct answers on state_machine masking underlying temporal perception failures. Figure 28: Temporally Displaced Events (Part 1: Cases 1–3): Timestamp boundary offset on blinking . Gemini detects event occurrences, but reported seconds fall outside the 1.0s tolerance window relative to ground truth. Figure 29: Temporally Displaced Events (Part 2: Cases 4–5): Temporal boundary drift profiles on blinking and 
+
+state_machine .

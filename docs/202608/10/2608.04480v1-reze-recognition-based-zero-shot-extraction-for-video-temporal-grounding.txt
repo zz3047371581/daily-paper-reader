@@ -1,0 +1,480 @@
+Title: REZE: Recognition-Based Zero-Shot Extraction for Video Temporal Grounding
+
+URL Source: https://arxiv.org/pdf/2608.04480v1
+
+Published Time: Thu, 06 Aug 2026 00:33:15 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# REZE: Recognition-Based Zero-Shot Extraction for Video Temporal Grounding 
+
+# Boyang Li, Chenhui Gou, Jianfei Cai ∗
+
+Department of Data Science and AI, Monash University blii0116@student.monash.edu, {chenhui.gou, jianfei.cai}@monash.edu 
+
+Abstract 
+
+Video temporal grounding (VTG) refers to the task of identi-fying the time interval in a video that corresponds to a given natural-language query. A common zero-shot strategy asks a large vision-language model (VLM) to generate the start and end timestamps directly, so the result depends heavily on the design and training of the model, and grounding accuracy dif-fers widely from one VLM to another. We therefore propose REcognition-based Zero-shot Extraction (REZE), a simple training-free method that splits the video into short clips, asks the model for a clip-level confidence score for the query, and uses a deterministic algorithm to convert the resulting score curve into the output required by the task. Because temporal aggregation is performed outside the model, REZE adapts to different task outputs, from single- and multi-interval moment retrieval to highlight detection. On QVHighlights, REZE im-proves the best reported training-free moment-retrieval mAP from 38 .23 to 40 .32 , while on highlight detection it reaches 
+
+44 .18 mAP and 73 .41 HIT@1, establishing a new state of the art among training-free methods. Its HIT@1 also outperforms all fully supervised SoTAs on the QVHighlights test split. We evaluate REZE on seven backbones from three model fami-lies. On Charades-STA and QVHighlights, it outperforms di-rect timestamp generation in every available comparison. We further observe that with REZE an earlier-generation model can approach the native performance of a newer model in its family. 
+
+# 1 Introduction 
+
+Video temporal grounding (VTG) identifies when the con-tent described by a natural-language query occurs in a video. Depending on the benchmark, the required output may be a single interval, several relevant intervals, or a saliency score for each video clip (Gao et al. 2017; Lei, Berg, and Bansal 2021). Despite these different output formats, every setting requires the system to measure how strongly the query matches the video over time. The system must then convert this evidence into the output expected by the task. Existing methods handle these requirements in two main ways. Trained grounding models learn to localise queries from annotated videos (Zhang et al. 2020; Zeng et al. 2020; Mun, Cho, and Han 2020; Li et al. 2025). Training-free approaches instead reuse a frozen model and obtain temporal predictions through prompting, visual overlays, or clip-level similarity and confidence scores (Zheng et al. 2024; Wu 
+
+> ∗
+
+Corresponding author. 
+
+et al. 2025; Lee et al. 2025; Aklilu, Wang, and Yeung-Levy 2025). Among these approaches, a common strategy is direct timestamp generation ( Direct ), in which a VLM returns the start and end timestamps as text (Wang et al. 2024; Bai et al. 2025b,a). This strategy avoids task-specific training; however, the model still has to recognise the queried content and generate its timestamps in the same response, and thus an error in either step may lead to an incorrect prediction. Instead of asking a VLM to recognise the queried con-tent and generate its timestamps in the same response, we propose REcognition-based Zero-shot Extraction (REZE), a simple training-free method that separates these two steps. REZE uses a frozen VLM to evaluate the query on short clips and obtains a confidence score from each clip. When ordered along the video timeline, these scores describe how the model’s confidence in the queried content changes over time. A deterministic temporal aggregation algorithm then converts the resulting score sequence into the output required by the task. Because temporal aggregation is performed outside the VLM, REZE can adapt the same score sequence to different task outputs by changing only the final aggregation rule. For single-interval moment retrieval, the aggregation extracts one interval, whereas for multi-interval moment retrieval it can return multiple disjoint intervals. Highlight detection requires no interval extraction and instead uses the same scores to rank clips by saliency. The video segmentation, recognition question, and score extraction therefore remain unchanged across all three settings. We evaluate REZE on Charades-STA, ActivityNet Cap-tions, and QVHighlights (Gao et al. 2017; Krishna et al. 2017; Lei, Berg, and Bansal 2021), covering single-interval and multi-interval moment retrieval as well as highlight de-tection. Figure 1 compares REZE with Direct timestamp gen-eration across the three output formats. On QVHighlights, REZE establishes new training-free state-of-the-art results on both tasks, reaching 40 .32 mAP for moment retrieval and 
+
+44 .18 mAP and 73 .41 HIT@1 for highlight detection (Jeon et al. 2026; Wu et al. 2025). Its HIT@1 outperforms all fully supervised SoTAs on the QVHighlights test split (Han et al. 2024; Moon et al. 2026; Gordeev et al. 2026). On Activ-ityNet Captions, REZE raises Qwen2.5-VL from 12 .61 to 
+
+36 .47 mIoU, approaching the 36 .76 achieved by Qwen3-VL under Direct (Bai et al. 2025a). On Charades-STA, REZE arXiv:2608.04480v1 [cs.CV] 5 Aug 2026 Figure 1: Direct timestamp generation ( Direct ) versus REZE across three VTG outputs and three backbones (Wang et al. 2024; Bai et al. 2025b; Zhu et al. 2025). Each adjacent bar pair compares the same backbone, with Direct on the left and REZE on the right. The blocks report Charades-STA mIoU, QVHighlights MR mAP, and QVHighlights HD HIT@1. Direct generation has no native highlight output, so its predicted intervals are converted into a per-clip saliency mask. Exact scores are printed above the bars, and the marker identifies the training-free state of the art in HIT@1. Results use the benchmark test splits. outperforms Direct on all six VLMs that support native timestamp generation. REZE also enables the image-only LLaVA-1.5 (Liu et al. 2024a) to perform VTG even though the model has no native Direct setting. 
+
+Contributions. Our contributions are threefold. (i) We propose REZE, which separates clip-level recognition from temporal aggregation and applies to both video-capable and image-only VLMs without task-specific training. (ii) We evaluate REZE across seven VLMs from three families and show that it improves every available Direct comparison on Charades-STA and QVHighlights; its HIT@1 on QVHigh-lights highlight detection sets a new state of the art among training-free methods. (iii) We demonstrate that the same method supports single-interval and multi-interval moment retrieval as well as highlight detection by changing only the final aggregation rule. 
+
+# 2 Related Work 
+
+Supervised video temporal grounding. Supervised VTG learns temporal predictions from videos and queries paired with interval or saliency annotations. Early work estab-lished single-interval retrieval on Charades-STA and de-veloped stronger ways to match temporal candidates with a query (Gao et al. 2017; Zhang et al. 2020; Zeng et al. 2020; Mun, Cho, and Han 2020). QVHighlights later in-troduced multi-interval moment retrieval and highlight de-tection in one benchmark (Lei, Berg, and Bansal 2021). On this benchmark, QD-DETR, CG-DETR, and UVCOM improve query–clip matching, while R2-Tuning and SDST adapt pretrained visual encoders (Moon et al. 2023, 2024; Xiao et al. 2023; Liu et al. 2024b; Pujol-Perich, Escalera, and Clapés 2025). Our highlight-detection comparisons fur-ther include HL-CLIP, CVA, SG-DETR, and CoSTL, which also use QVHighlights annotations during training (Han et al. 2024; Moon et al. 2026; Gordeev et al. 2026; Dong et al. 2026). Video VLMs such as TimeChat, VTimeLLM, TRACE, Time-R1, and UniTime likewise learn grounding from timestamp-annotated data (Ren et al. 2024; Huang et al. 2023; Guo et al. 2025; Wang et al. 2025b; Li et al. 2025). In particular, UniTime uses “zero-shot” to describe trans-fer to a new dataset without target-specific fine-tuning, but the model has already been trained for temporal grounding. MeCo avoids timestamp generation by training a video VLM to generate structural tokens and ground them to event seg-ments (Pang, Otani, and Nakashima 2026). REZE instead performs temporal grounding without task-specific training. 
+
+Training-free video temporal grounding. Other training-free methods also keep pretrained models frozen. TFVTG decomposes a query into ordered sub-events, while NumPro overlays numeric indices on video frames (Zheng et al. 2024; Wu et al. 2025). TAG, Robust Zero-Shot, and GranAlign construct intervals from video–text similarity or alignment scores (Lee et al. 2025; Banditakkarakul, Chen, and Gould 2026; Jeon et al. 2026). The Robust Zero-Shot result used in our Charades-STA comparison is a three-model ensemble, whereas GranAlign provides the strongest prior training-free QVHighlights moment-retrieval result in our comparison. ZEAL is closest to REZE because both convert VLM con-fidence scores into temporal predictions (Aklilu, Wang, and Yeung-Levy 2025). However, ZEAL expands an action cat-egory into descriptions of its typical start and end states and scores sampled frames against them. REZE instead scores each short clip against the original natural-language query and aggregates the ordered scores into a single interval, mul-tiple intervals, or clip-level saliency. 
+
+Video and timestamp interfaces in VLMs. The evaluated backbones expose different native interfaces. The Qwen-VL series accepts video and generates textual timestamps, the InternVL series treats sampled frames as multi-image input, and image-only LLaVA-1.5 has no native timestamp out-put (Wang et al. 2024; Bai et al. 2025b,a; Chen et al. 2025; Zhu et al. 2025; Wang et al. 2025a; Liu et al. 2024a). REZE applies the same clip-level scoring and external aggregation to all three interfaces. It therefore does not ask the VLM to 2order evidence across the full video, a capability that prior work has found challenging for several tested video-language models (Bagad, Tapaswi, and Snoek 2023; Jung et al. 2025). 
+
+# 3 Method: REZE 
+
+## 3.1 Problem Formulation 
+
+Given an untrimmed video V of duration D and a natural-language query q, video temporal grounding (VTG) identi-fies when the queried content occurs. Although this objective is shared across benchmarks, the required output varies by task. Charades-STA (Gao et al. 2017) and ActivityNet Cap-tions (Krishna et al. 2017) require one interval (ˆ ts, ˆte), where 
+
+0 ≤ ˆts < ˆte ≤ D. By contrast, QVHighlights moment re-trieval (Lei, Berg, and Bansal 2021) requires a ranked list because one query can correspond to multiple relevant mo-ments. In addition, QVHighlights highlight detection assigns a saliency score to each clip. To separate content recognition from task-specific output construction, REZE supports all three outputs through the same intermediate representation. It divides V into N tem-porally ordered clips {Fi}Ni=1 , where N is the number of clips and Fi is the i-th clip. A frozen VLM assigns each Fi
+
+a confidence score pi ∈ [0 , 1] for the query q. These scores form the ordered sequence P = ( p1, . . . , p N ), which de-scribes how the model’s confidence changes over the video. External temporal aggregation then maps P to the output required by the task. Figure 2 summarises the pipeline. 
+
+## 3.2 Clip-Level Confidence Scoring 
+
+Clip construction. REZE divides V into consecutive, non-overlapping clips with maximum duration τ = 3 seconds and samples each clip at f = 2 frames per second. Thus, a complete clip contains six evenly spaced frames. We use the same τ and f for every backbone and task. Appendix A gives the exact segmentation procedure, while Appendix C shows that reducing τ to 2 seconds improves mAP by only about 0.7 points but requires 1.5× as many clip evaluations. 
+
+Binary verification prompt. For each clip Fi, REZE asks whether the queried content is clearly and actively present. The asymmetric prompt permits Yes only when this condi-tion is satisfied and uses No as the default response, which is intended to suppress high scores on background clips. We use the same prompt for all backbones and tasks. Appendix A provides the complete prompt, and Appendix C reports a wording sweep. 
+
+Continuous clip score. Instead of turning the model’s an-swer into a hard decision, REZE reads the next-token logits 
+
+ℓ(i) 
+
+> Yes
+
+and ℓ(i) 
+
+> No
+
+and normalises them with a two-way softmax: 
+
+pi = P (Yes | Fi, q ) = exp( ℓ(i)
+
+> Yes
+
+)exp( ℓ(i)
+
+> Yes
+
+) + exp( ℓ(i) 
+
+> No
+
+) . (1) The resulting value pi is used as a relative confidence score for temporal aggregation, not as a calibrated probability over the full vocabulary. Reading the logits directly also avoids asking the VLM to generate a numerical score. Moreover, keeping pi continuous preserves confidence differences that hard thresholding would remove. Appendix A gives the exact tokenisation and extraction procedure, while Appendix C compares continuous and binary scores. 
+
+Backbone interfaces. A multi-frame backbone receives all sampled frames from Fi together and produces one score 
+
+pi. By contrast, an image-only backbone scores the frames separately, after which REZE averages them to obtain the same clip-level output. The distinction affects only how pi
+
+is obtained; the downstream aggregation is unchanged. Both interfaces therefore produce the ordered sequence P without additional training or a cross-clip temporal model. 
+
+## 3.3 External Temporal Aggregation 
+
+Per-second score curve. To aggregate the independently obtained clip scores, REZE first converts P into a per-second curve s(t). Here, t ∈ { 0, . . . , ⌊D⌋ − 1} indexes integer sec-onds, and s(t) ∈ [0 , 1] is the confidence assigned to second t.Each second receives the score of the clip that covers it. The resulting curve restores the temporal order of the clip-level evidence and serves as the common input to three output-specific readouts. All subsequent operations are determinis-tic and performed outside the VLM. Appendix A specifies the boundary and interpolation rules used to construct s(t).
+
+Single-interval output. For a task that requires one inter-val, we smooth s(t) with a one-dimensional Gaussian kernel. Its standard deviation is σ = max(1 , ⌊D⌋/15) seconds, and we denote the smoothed curve by ¯s(t). We use this duration-dependent rule for both single-interval benchmarks rather than tuning a separate bandwidth for each dataset. Across the reported test backbones, fixed 2- or 3-second kernels change mIoU by at most 1.3 points on Charades-STA and 1.5 points on ActivityNet Captions. By contrast, removing smoothing entirely can reduce mIoU by 4.2 points (Appendix C). We then subtract the video mean: 
+
+s′(t) = ¯ s(t) − 1
+
+⌊D⌋
+
+> ⌊D⌋− 1
+
+X
+
+> u=0
+
+¯s(u), (2) where u indexes all integer seconds and s′(t) is the mean-centred score. Mean-centring prevents the non-negative curve from favouring the entire video. It also makes positive values represent above-average evidence and negative values penalise below-average regions. REZE then uses Kadane’s algorithm (Bentley 1984) to find the half-open range [t⋆s , t ⋆e )
+
+that maximises Pt⋆e −1 
+
+> t=t⋆s
+
+s′(t). This objective accumulates ev-idence over time, allowing a sustained region of moderate confidence to outweigh an isolated peak. Finally, the se-lected range is mapped back to the original video timeline to obtain (ˆ ts, ˆte). Section 4.3 compares this interval extractor with nine alternatives. 
+
+Multi-interval output. QVHighlights moment retrieval can require several disjoint intervals. For this task, a duration-dependent kernel can become broad on long videos and blur shorter relevant regions. The multi-interval readout is also more sensitive to this scale than the single-interval readout. With the threshold fixed, shortening σ from ⌊D⌋/15 to 3
+
+seconds raises QVHighlights validation mAP by 16 .0 points 3Figure 2: The REZE pipeline, illustrated with a single-interval example from Charades-STA. The 30 .7-second video is divided into 11 three-second clips, each represented by six frames. A frozen VLM evaluates every clip with the same binary prompt and produces one P (Yes ) score, yielding the 11 temporally ordered scores shown on the right. Deterministic aggregation outside the VLM then converts these scores into the predicted interval. Multi-interval moment retrieval and highlight detection use the same score sequence with different external readouts. (Appendix C). We therefore smooth s(t) at the clip scale using σ = τ = 3 seconds, so the smoothing width does not grow with video duration. Otsu’s method (Otsu 1979) then determines a threshold θ from the values of the smoothed curve ¯s(t). Because θ is estimated separately for each curve, the readout adapts to its score distribution without using a fixed global threshold. Contiguous regions above θ become ranked candidate intervals, which allows one query to pro-duce several disjoint outputs. This readout is fixed across backbones and test queries. Appendix A gives the filtering, ranking, and fallback rules, while Appendix C reports the smoothing and threshold ablations. 
+
+Highlight detection. Highlight detection uses the un-smoothed curve s(t) because it requires no interval bound-aries. Since QVHighlights evaluates consecutive two-second clips (Lei, Berg, and Bansal 2021), REZE averages s(t) over each evaluation clip and uses the result as its saliency score. Thus, the same sequence P supports one interval, multiple intervals, and clip-level saliency by changing only the deter-ministic external readout. 
+
+# 4 Experiments 
+
+## 4.1 Experimental Setup 
+
+Benchmarks and metrics. We evaluate REZE on three VTG benchmarks that cover all three output formats con-sidered in this work. Charades-STA (Gao et al. 2017; Sig-urdsson et al. 2016) ( 3,720 test queries) and ActivityNet Captions (Krishna et al. 2017) (val_2, 17 ,031 queries) eval-uate single-interval retrieval, for which we report mean in-tersection over union (mIoU) and Recall at IoU thresholds of 
+
+0.3, 0.5, and 0.7. QVHighlights (Lei, Berg, and Bansal 2021) evaluates multi-interval moment retrieval and clip-level high-light detection on its test split ( 1,542 queries). Following the benchmark protocol, we report moment-retrieval mAP, and for highlight detection, we report mAP and HIT@1. 
+
+Models and comparisons. Across these benchmarks, we evaluate seven pretrained VLMs from three model families: the image-only LLaVA-1.5-7B (Liu et al. 2024a), Qwen2-VL-7B, Qwen2.5-VL-7B, and Qwen3-VL-8B (Wang et al. 2024; Bai et al. 2025b,a), and InternVL2.5-8B, InternVL3-8B, and InternVL3.5-8B (Chen et al. 2025; Zhu et al. 2025; Wang et al. 2025a). For each video-capable backbone, we compare REZE with Direct timestamp generation under the same evaluation protocol. The only exception is the image-only LLaVA-1.5, which has no Direct setting and is therefore evaluated only with REZE. To extend this same-backbone comparison beyond Direct, we also include the training-free NumPro baseline (Wu et al. 2025) on Qwen2-VL-7B. Beyond these controlled comparisons, we compare REZE against the reported benchmark results of prior training-free and supervised grounding methods. 
+
+Evaluation protocol. We use one fixed REZE configura-tion for each output type across all backbones. Any data-dependent choices are made on the Charades-STA training split or the QVHighlights validation split and then frozen be-fore test evaluation. For QVHighlights highlight detection, we convert the intervals predicted by Direct into a binary mask over the two-second evaluation clips, while REZE uses its clip-level scores directly. We evaluate the public QVHigh-lights test annotations with the official Moment-DETR eval-4(A) Same backbone, training-free Method Char. mIoU HD mAP HIT@1                                                    
+
+> Direct 6.48 12.32 19.58 NumPro (Qwen2-VL) 38.50 23.60 43.40
+> REZE 51.49 43.28 71.66 (C) Measured inference cost Method Input tokens per query Throughput (queries/s) Extra memory (GB/call)
+> Charades-STA
+> Direct ∼5.6k 0.41 0.5–1.7 REZE 1.1k ×11 0.27 0.26
+> QVHighlights
+> Direct ∼31.5k 0.073 6.6–7.2 REZE 1.4k ×51 0.052 0.31
+> (B) QVHighlights test results Method MR HD HIT@1
+> Target-benchmark training
+> CVA (Moon et al. 2026) 47.49 44.43 66.01 SG-DETR (Gordeev et al. 2026) 54.10 43.76 69.13 HL-CLIP (Han et al. 2024) –41.94 70.60 CoSTL (Dong et al. 2026) 46.68 41.36 71.59
+> External pretraining + target fine-tuning
+> SG-DETR (w/PT) (Gordeev et al. 2026) 58.80 44.70 71.00
+> Training-free
+> GranAlign (Jeon et al. 2026) 38.23 ––NumPro (Qwen2-VL) (Wu et al. 2025) –23.60 43.40 REZE (Qwen2.5-VL) 40.32 42.21 69.58 REZE (InternVL3) 39.33 44.18 73.41
+
+Table 1: Main performance and cost comparisons. (A) Direct, NumPro, and REZE use the same Qwen2-VL-7B backbone; columns report Charades-STA mIoU and QVHighlights highlight-detection mAP and HIT@1. (B) Published QVHighlights moment-retrieval (MR) mAP and highlight-detection (HD) mAP and HIT@1. Underlining marks the best training-free result, while bold marks the best overall result. Each REZE row contains one backbone. (C) Measured cost on Qwen2.5-VL-7B; input tokens are totals per query, throughput is measured in queries per second, and extra memory is the transient GPU-memory increase per call above the loaded model. Percentages for all performance metrics. uator. Appendix A provides the complete evaluation and im-plementation details, including the prompts, parsing rules, and test-release information. 
+
+## 4.2 Main Results 
+
+Controlled same-backbone comparison. With the eval-uation protocol fixed, we first compare the three training-free approaches on the same Qwen2-VL-7B backbone. As shown in Table 1A, REZE outperforms both Direct and NumPro when all three use Qwen2-VL-7B. On Charades-STA, REZE reaches 51 .49 mIoU, compared with 6.48 for Direct and 38 .50 for NumPro. For QVHighlights highlight detection, REZE reaches 43 .28 mAP and 71 .66 HIT@1, whereas Direct reaches 12 .32 mAP and 19 .58 HIT@1. With the same Qwen2-VL-7B backbone, NumPro improves these scores to 23 .60 mAP and 43 .40 HIT@1 but remains below REZE. These results isolate the improvement from the tem-poral grounding procedure rather than a stronger backbone. Query-level bootstrap intervals and a paired Direct–REZE test are reported in Appendix B. 
+
+Training-free state of the art on QVHighlights. Having established the improvement on a fixed backbone, we next compare REZE with published results on QVHighlights in Table 1B. For moment retrieval, REZE with Qwen2.5-VL-7B reaches 40 .32 mAP, improving the previous best training-free result of 38 .23 reported by GranAlign (Jeon et al. 2026). For highlight detection, REZE with InternVL3-8B establishes a new training-free state of the art at 44 .18 mAP and 73 .41 
+
+HIT@1. SG-DETR retains a slightly higher mAP of 44 .70 ,whereas REZE’s 73 .41 HIT@1 surpasses CoSTL’s 71 .59 
+
+and all other fully supervised SoTAs on the QVHighlights test split (Gordeev et al. 2026; Dong et al. 2026). 
+
+Generality across task outputs. After evaluating multi-interval retrieval and highlight detection on QVHighlights, we examine the same method on the single-interval bench-marks. The controlled Charades-STA comparison in Ta-ble 1A already shows a substantial improvement. On Ac-tivityNet Captions, REZE raises the mIoU of Qwen2.5-VL from 12 .61 to 36 .47 , reaching the 36 .76 achieved by Qwen3-VL through Direct timestamp generation. On Qwen3-VL it-self, Direct remains slightly higher than REZE ( 36 .76 ver-sus 35 .43 mIoU). Qwen3-VL combines textual timestamp alignment with large-scale spatio-temporal video grounding data, and its post-training includes reinforcement learning on grounding tasks (Bai et al. 2025a). These components directly train the capability used by Direct timestamp gener-ation, which helps explain why moving temporal aggregation outside the model no longer improves Qwen3-VL on Activi-tyNet. Taken together, the results across all three output for-mats show that the same clip-level scoring formulation sup-ports single-interval retrieval, multi-interval retrieval, and highlight detection by changing only the external readout. Appendix B reports the complete per-benchmark results, in-cluding Recall. 
+
+Generality across backbones. Table 2 evaluates cross-backbone generalisation using seven backbones on Charades-STA and four on QVHighlights. Across the Charades-STA and QVHighlights results in this table, REZE improves over Direct whenever a Direct baseline exists. On Charades-STA, Direct ranges from 6.48 to 53 .30 mIoU across six backbones, whereas REZE ranges from 42 .37 to 55 .66 across all seven, including 42 .37 on the image-only LLaVA-1.5, which has no Direct setting. Within the Qwen family, Qwen2-VL with REZE reaches 51 .49 mIoU, approaching the 53 .30 achieved 5Figure 3: Score representation on Charades-STA. Continu-ous clip scores are compared with hard binary decisions and the same continuous scores shuffled along the video timeline across three Qwen backbones. Percentages. by Qwen3-VL through Direct timestamp generation. 
+
+Accuracy–cost trade-off. Table 1C places the correspond-ing computational cost beside the main performance com-parisons. On Qwen2.5-VL-7B, REZE processes 2.2–2.3×
+
+more input tokens per query, while Direct achieves 1.4–1.5×
+
+higher batched query throughput. In exchange, each REZE call contains only 1.1–1.4k input tokens and uses less than 
+
+0.35 GB of transient memory, while a Direct call on a 150 -second QVHighlights video reaches approximately 31 .5k to-kens and 7 GB. REZE therefore trades total throughput for a bounded per-call context and memory footprint. Appendix E provides the complete measurement protocol and per-dataset results. 
+
+## 4.3 Ablations and Analysis 
+
+Continuous and temporally ordered scores. We first ex-amine whether the ordered continuous score sequence pro-vides useful temporal evidence. Figure 3 compares the de-fault REZE scores with two controls. Binary keeps the same clips, prompt, and external aggregation as REZE, but re-places the continuous score obtained by normalising the 
+
+Yes and No logits with a hard decision: the clip receives 
+
+1 when Yes has the larger logit and 0 otherwise. Shuffled keeps the continuous scores unchanged but randomly per-mutes their positions along the video timeline. Continuous scores achieve the highest mIoU on all three Qwen back-bones. The effect is largest for Qwen2.5-VL, where binari-sation reduces mIoU from 54 .22 to 19 .10 , while shuffling reduces all three backbones to 21 .8–23 .1. Because shuffling preserves the score values but removes their temporal posi-tions, this decline shows that REZE uses temporally ordered evidence and cannot be explained by the score distribution or a duration preference alone (Otani et al. 2020). 
+
+Single-interval extractor. REZE uses the mean-shifted max-subarray defined in the Method section. To test whether its performance depends on this particular extractor, Table 3A replaces only the extractor while keeping the saved Qwen3-VL score curves unchanged. This sensitivity analysis is per-formed on the official Charades-STA training split, while the extractor used for the reported test results remains fixed. The mean-shifted max-subarray reaches 53 .49 mIoU, while the cumulative-sum scan and its standardised variant reach 53 .41 
+
+and 53 .21 . Their similar results show that performance does not depend on selecting one particular scanning algorithm. By contrast, threshold-based extractors trail by 6 to 14 points, indicating that the important design choice is to accumulate evidence relative to the video mean. We use the same max-subarray for all test results because it returns exactly one interval without introducing an additional threshold. 
+
+Multi-interval aggregation. The multi-interval readout has a different requirement because it must separate sev-eral relevant regions in a long video. Table 3B evaluates the smoothing bandwidth and threshold on the QVHighlights validation split. To separate their effects, the first three set-tings use the same per-video mean threshold and vary only the smoothing bandwidth. The duration-dependent band-width σ = ⌊D⌋/15 , where D is the video duration, reaches 
+
+20 .76 mAP. Replacing it with a fixed three-second band-width, matched to the clip duration, raises mAP to 36 .77 ,while a fixed two-second bandwidth reaches 39 .74 . The two fixed settings show that the improvement comes from pre-venting the smoothing bandwidth from growing with the video duration, rather than from the exact choice of three seconds. Finally, with the three-second bandwidth held fixed, replacing the video-mean threshold with the per-curve Otsu threshold further raises mAP to 42 .46 . This contrast explains why the multi-interval readout uses a short fixed bandwidth, while the single-interval readout uses a duration-dependent bandwidth. 
+
+Verifier strength and boundary precision. The aggrega-tion study resolves the dependence on video length, but it does not remove the resolution limit of one score per clip. In the short-moment diagnostic reported in Appendix C, Qwen3-VL has the largest median ratio between scores on relevant and background clips, yet it reaches only 28 .21 
+
+moment-retrieval mAP on QVHighlights, below Qwen2-VL’s 34 .99 . A sharper verifier therefore does not by itself recover sub-clip boundary precision: clip-level recognition supports highlight ranking, while short-moment retrieval ad-ditionally requires evidence of where an event begins and ends within a clip. 
+
+# 5 Limitations 
+
+REZE scores each short clip independently and therefore does not explicitly model relations across clips. Tasks that re-quire temporal ordering, event counting, or motion direction fall outside the current design. In addition, the ActivityNet evaluation covers only the Qwen family, and the Qwen3-VL result in Section 4.2 shows that REZE does not improve every backbone–dataset pair. Appendix G provides further details. REZE also trades query-level efficiency for a smaller per-call memory footprint. On Qwen2.5-VL-7B, it processes 2.2–
+
+2.3× as many input tokens per query as Direct, while Direct achieves 1.4–1.5× higher batched query throughput. In re-turn, Direct uses 1.9–6.5× as much transient memory per call on Charades-STA and 21 –23 × as much on QVHigh-lights (Table 1C). 6Charades mIoU QVH MR mAP QVH HD mAP QVH HD HIT@1 Backbone Direct REZE ∆ Direct REZE ∆ Direct REZE ∆ Direct REZE ∆                                                                                    
+
+> LLaVA-1.5-7B –42.37 n/a –––––––––InternVL2.5-8B 9.35 50.93 +41 .6–––––––––InternVL3-8B 20.16 52.91 +32 .89.67 39.33 +29 .716.49 44.18 +27 .725.29 73.41 +48 .1
+> InternVL3.5-8B 30.17 52.70 +22 .5–––––––––Qwen2-VL-7B 6.48 51.49 +45 .06.20 34.99 +28 .812.32 43.28 +31 .019.58 71.66 +52 .1
+> Qwen2.5-VL-7B 42.74 54.22 +11 .532.11 40.32 +8 .224.03 42.21 +18 .233.07 69.58 +36 .5
+> Qwen3-VL-8B 53.30 55.66 +2 .426.60 28.21 +1 .622.98 43.37 +20 .435.21 71.98 +36 .8
+
+Table 2: Per-backbone Direct versus REZE under one protocol. Charades-STA mIoU; QVHighlights test moment retrieval (MR mAP) and highlight detection (HD mAP, HIT@1). ∆ is REZE minus Direct. REZE improves on Direct wherever Direct is defined, and the gain shrinks as the backbone’s own generation matures. Image-only LLaVA-1.5 has no native video-time interface, so no comparable Direct gap is reported ( n/a ): REZE enables this backbone rather than improving a baseline. Direct HD is a naive binary mask (compare against trained detectors, Table 1). “–”: undefined or not measured. Full Recall in Appendix B.                        
+
+> (A) Single-interval extractor (Charades-STA train , mIoU)
+> mean-shifted max-subarray (used) 53.49
+> cumulative-sum scan 53.41 standardised cumulative-sum 53.21 median-shifted max-subarray 45.24 percentile (60/70/80th) 47.35/46.48/42.89 adaptive mean +kσ (k=0 .3/0.5/1)45.44/44.45/39.02
+> (B) Multi-interval aggregation (QVH val, MR mAP)
+> mean threshold, σ=⌊D⌋/15 20.76 mean threshold, σ=3 s36.77 mean threshold, σ=2 s39.74 Otsu threshold, σ=3 s(used) 42.46
+
+Table 3: Sensitivity of the external readout. Panel A changes only the single-interval extractor using the same saved Qwen3-VL score curves. Panel B changes the smoothing and threshold for QVHighlights multi-interval retrieval us-ing Qwen2.5-VL. Percentages. 
+
+# 6 Conclusion 
+
+REZE performs video temporal grounding without task-specific training and without asking the VLM to generate timestamps. It obtains a confidence score for the query from each short clip and constructs the required temporal out-put through external aggregation. By changing only the ag-gregation rule, the same clip-level scoring procedure sup-ports single-interval retrieval, multi-interval retrieval, and highlight detection. Since the procedure only requires clip-level scores, it applies to both video-capable and image-only backbones. Across seven backbones from three model families, REZE improves every available Direct comparison on Charades-STA and QVHighlights and establishes new training-free state-of-the-art results on both QVHighlights tasks. Together, these results show that the clip-level recog-nition ability already available in VLMs can serve as a com-mon basis for different VTG tasks, while external aggregation adapts the scores to each required output. 
+
+# References 
+
+Aklilu, J.; Wang, X.; and Yeung-Levy, S. 2025. Zero-shot Action Localization via the Confidence of Large Vision-Language Models. arXiv:2410.14340. Bagad, P.; Tapaswi, M.; and Snoek, C. G. M. 2023. Test of Time: Instilling Video-Language Models with a Sense of Time. arXiv:2301.02074. Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; et al. 2025a. Qwen3-VL Technical Report. arXiv:2511.21631. Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; et al. 2025b. Qwen2.5-VL Technical Report. arXiv:2502.13923. Banditakkarakul, N.; Chen, B.; and Gould, S. 2026. Towards Robust Zero-Shot Video Temporal Grounding. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops , 11143–11152. Bentley, J. 1984. Programming pearls: algorithm design techniques. Commun. ACM , 27(9): 865–873. Chen, Z.; Wang, W.; Cao, Y.; Liu, Y.; Gao, Z.; et al. 2025. Expanding Performance Boundaries of Open-Source Mul-timodal Models with Model, Data, and Test-Time Scaling. arXiv:2412.05271. Dong, X.; Geng, W.; Deng, W.; and Tang, Y. 2026. CoSTL: Comprehensive Spatial-Temporal Representation Learning for Moment Retrieval and Highlight Detection. arXiv:2606.01149. Gao, J.; Sun, C.; Yang, Z.; and Nevatia, R. 2017. TALL: Temporal Activity Localization via Language Query. arXiv:1705.02101. Gordeev, A.; Dokholyan, V.; Tolstykh, I.; and Kuprashevich, M. 2026. Saliency-Guided DETR for Moment Retrieval and Highlight Detection. arXiv:2410.01615. Guo, Y.; Liu, J.; Li, M.; Liu, Q.; Chen, X.; et al. 2025. TRACE: Temporal Grounding Video LLM via Causal Event Modeling. arXiv:2410.05643. Han, D.; Seo, S.; Park, E.; Nam, S.-U.; and Kwak, N. 2024. Unleash the Potential of CLIP for Video Highlight Detection. arXiv:2404.01745. 7Huang, B.; Wang, X.; Chen, H.; Song, Z.; and Zhu, W. 2023. VTimeLLM: Empower LLM to Grasp Video Mo-ments. arXiv:2311.18445. Jeon, M.; Yoon, S.; Kim, J.; and Kim, J. 2026. GranAlign: Granularity-Aware Alignment Framework for Zero-Shot Video Moment Retrieval. arXiv:2601.00584. Jung, M.; Xiao, J.; Zhang, B.-T.; and Yao, A. 2025. On the Consistency of Video Large Language Models in Temporal Comprehension. arXiv:2411.12951. Krishna, R.; Hata, K.; Ren, F.; Fei-Fei, L.; and Niebles, J. C. 2017. Dense-Captioning Events in Videos. arXiv:1705.00754. Lee, J.-S.; Lee, S.; Ahn, J.; Choi, Y.; and Lee, J.-H. 2025. TAG: A Simple Yet Effective Temporal-Aware Approach for Zero-Shot Video Temporal Grounding. arXiv:2508.07925. Lei, J.; Berg, T. L.; and Bansal, M. 2021. QVHighlights: Detecting Moments and Highlights in Videos via Natural Language Queries. arXiv:2107.09609. Li, Z.; Di, S.; Zhai, Z.; Huang, W.; Wang, Y.; et al. 2025. Uni-versal Video Temporal Grounding with Generative Multi-modal Large Language Models. arXiv:2506.18883. Liu, H.; Li, C.; Li, Y.; and Lee, Y. J. 2024a. Improved Baselines with Visual Instruction Tuning. arXiv:2310.03744. Liu, Y.; He, J.; Li, W.; Kim, J.; Wei, D.; et al. 2024b. 
+
+R2-Tuning: Efficient Image-to-Video Transfer Learning for Video Temporal Grounding. arXiv:2404.00801. Moon, S.; Lee, S.; Seo, J.; and Im, S. 2026. CVA: Context-aware Video-text Alignment for Video Temporal Grounding. arXiv:2603.24934. Moon, W.; Hyun, S.; Lee, S.; and Heo, J.-P. 2024. Correlation-Guided Query-Dependency Calibration for Video Temporal Grounding. arXiv:2311.08835. Moon, W.; Hyun, S.; Park, S.; Park, D.; and Heo, J.-P. 2023. Query-Dependent Video Representation for Moment Retrieval and Highlight Detection. arXiv:2303.13874. Mun, J.; Cho, M.; and Han, B. 2020. Local-Global Video-Text Interactions for Temporal Grounding. arXiv:2004.07514. Otani, M.; Nakashima, Y.; Rahtu, E.; and Heikkilä, J. 2020. Uncovering Hidden Challenges in Query-Based Video Mo-ment Retrieval. arXiv:2009.00325. Otsu, N. 1979. A Threshold Selection Method from Gray-Level Histograms. IEEE Transactions on Systems, Man, and Cybernetics , 9(1): 62–66. Pang, Z.; Otani, M.; and Nakashima, Y. 2026. Mea-sure Twice, Cut Once: A Semantic-Oriented Approach to Video Temporal Localization with Video LLMs. arXiv:2503.09027. Pujol-Perich, D.; Escalera, S.; and Clapés, A. 2025. Sparse-Dense Side-Tuner for efficient Video Temporal Grounding. arXiv:2507.07744. Ren, S.; Yao, L.; Li, S.; Sun, X.; and Hou, L. 2024. TimeChat: A Time-sensitive Multimodal Large Language Model for Long Video Understanding. arXiv:2312.02051. Sigurdsson, G. A.; Varol, G.; Wang, X.; Farhadi, A.; Laptev, I.; et al. 2016. Hollywood in Homes: Crowdsourcing Data Collection for Activity Understanding. arXiv:1604.01753. Wang, P.; Bai, S.; Tan, S.; Wang, S.; Fan, Z.; et al. 2024. Qwen2-VL: Enhancing Vision-Language Model’s Percep-tion of the World at Any Resolution. arXiv:2409.12191. Wang, W.; Gao, Z.; Gu, L.; Pu, H.; Cui, L.; et al. 2025a. InternVL3.5: Advancing Open-Source Multimodal Models in Versatility, Reasoning, and Efficiency. arXiv:2508.18265. Wang, Y.; Wang, Z.; Xu, B.; Du, Y.; Lin, K.; et al. 2025b. Time-R1: Post-Training Large Vision Language Model for Temporal Video Grounding. arXiv:2503.13377. Wu, Y.; Hu, X.; Sun, Y.; Zhou, Y.; Zhu, W.; et al. 2025. Num-ber it: Temporal Grounding Videos like Flipping Manga. arXiv:2411.10332. Xiao, Y.; Luo, Z.; Liu, Y.; Ma, Y.; Bian, H.; et al. 2023. Bridging the Gap: A Unified Video Comprehension Framework for Moment Retrieval and Highlight Detection. arXiv:2311.16464. Zeng, R.; Xu, H.; Huang, W.; Chen, P.; Tan, M.; et al. 2020. Dense Regression Network for Video Grounding. arXiv:2004.03545. Zhang, S.; Peng, H.; Fu, J.; and Luo, J. 2020. Learning 2D Temporal Adjacent Networks for Moment Localization with Natural Language. arXiv:1912.03590. Zheng, M.; Cai, X.; Chen, Q.; Peng, Y.; and Liu, Y. 2024. Training-free Video Temporal Grounding using Large-scale Pre-trained Models. arXiv:2408.16219. Zhu, J.; Wang, W.; Chen, Z.; Liu, Z.; Ye, S.; et al. 2025. InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models. arXiv:2504.10479. 8Appendices 
+
+## A. Implementation and Reproducibility 
+
+This appendix gives the core REZE code, the REZE and Direct prompts, the output format, and the design details that the main text only summarises. All code is origi-nal and relies on the following third-party libraries, used as released: PyTorch, vLLM, HuggingFace Transformers, 
+
+qwen-vl-utils , OpenCV, NumPy, and SciPy. Charades-STA, ActivityNet Captions, and QVHighlights are public datasets used as released, and all backbones are publicly released pretrained weights. As in the main paper, Direct 
+
+denotes direct timestamp generation. All headline accuracy results use one deterministic greedy-decoding pass per query. Randomised ancillary analyses use fixed seeds: 0 for boot-strap and efficiency sampling, and 2027 for validation-subset construction. The experiments were run on Ubuntu 22.04 with a single NVIDIA RTX 6000 Ada Generation GPU with 48 GB of memory. The archived environment records Python 3.10.19, PyTorch 2.10.0 with CUDA 12.9, NumPy 2.2.6, and SciPy 1.15.3. Videos are divided from the start into consecutive clips of at most 3 seconds. A final residual shorter than 0.3 seconds is discarded, and every retained clip is sampled at 2 frames per second. The interval extractor below is the single-interval readout. For QVHighlights moment retrieval, REZE instead smooths the per-second curve with σ = 3 seconds and ap-plies an Otsu threshold. Contiguous runs above the threshold are candidate intervals; runs shorter than 2 seconds are re-moved, and the remaining candidates are ranked by their accumulated excess above the threshold before the top ten are returned. If no candidate survives, the whole video is re-turned as one interval. Highlight detection uses no smoothing or thresholding: it averages the raw per-second curve over the benchmark’s consecutive 2-second clips. 
+
+A.1. Direct timestamp-generation prompts Direct uses no system prompt. For the single-interval Charades-STA and ActivityNet Captions benchmarks, the user prompt is:                         
+
+> Please find the visual event described by the sentence ’{query}’, determining its starting and ending times. The format should be: ’The event happens in <start time> -<end time> seconds’.
+
+Because QVHighlights moment retrieval can contain sev-eral relevant intervals, Direct instead receives the following duration-aware prompt:                                                                
+
+> You are given a clipped video. Its duration is {duration:.2f} seconds. All timestamps must be relative to THIS clipped video. The valid timestamp range is from 0.00 to {duration:.2f} seconds. Task: find all time windows where the following description occurs: "{query}" Rules: 1. Only output timestamps inside [0.00, {duration:.2f}]. 2. If the event appears multiple times, list every separate window. 3. If you are unsure, output the most likely window. 4. Do not include explanations. Output format, one window per line: [start_seconds, end_seconds]
+
+The Qwen2-VL QVHighlights implementation further clarifies that timestamps refer to the clipped video rather than the original source video; the remaining instructions are unchanged. All Direct responses use greedy decoding (temperature=0 ), with at most 128 output tokens, or 
+
+256 for this Qwen2-VL implementation. Thinking mode is disabled for Qwen3-VL. 
+
+A.2. Evaluation release and Direct parsing We evaluate QVHighlights on the public held-out test labels released in the Moment-DETR repository after the CodaLab server was closed (commit 7c61a84 , 9 March 2026). Predictions are matched to highlight_test_release by query iden-tifier and scored with the released Moment-DETR evaluator. For the single-interval benchmarks, the Direct parser ex-tracts the first two non-negative numbers from the response, orders them as start and end times, and returns a parse fail-ure when fewer than two numbers are present or the two times are equal. Every parsed interval is scored by its IoU; only parse failures and zero-length intervals receive zero by definition. For QVHighlights moment retrieval, the parser accepts bracketed pairs, “from . . . to . . . ” expressions, and two numbers separated by “to”, a hyphen, or a comma. It orders each pair, clips both endpoints to the video duration, removes intervals shorter than 0.3 seconds, removes near-duplicate pairs within 0.5 seconds, and keeps at most ten predictions. For highlight detection, each predicted Direct interval becomes a binary mask over the benchmark’s two-second evaluation clips.                                                    
+
+> SYSTEM =("You are astrict video action verifier. Your default answer is ""’No’. Answer ’Yes’ ONLY if you are highly confident the described " "action is clearly and actively occurring in the frames. If there " "is any doubt, answer ’No’. Output :asingle word ’Yes’ or ’No’.")
+> def build_user(query, n_frames):
+> return f"Action: {query}\nIs this action CLEARLY occurring in these "\f"{n_frames} frames? Answer:"
+
+The prompt is deliberately asymmetric: the model defaults to No and commits to Yes only when the action is clearly present, which biases the verifier against background false positives and widens the P (Yes ) gap. 
+
+A.4. Per-clip aggregation and interval extraction Ev-ery verifier call is issued with greedy decoding, a single output token, and the top-20 next-token log-probabilities (max_tokens=1 , logprobs=20 , temperature=0 ); the score of Equation 1 is then computed from the re-9turned log-probabilities as below. The final branch of 
+
+extract_pyes is a fallback for the rare case where one an-swer token falls outside the returned top-20, which happens only at extreme confidence. Rather than failing the query, the score is then approximated by the remaining token’s prob-ability, or set to 0 when Yes itself is absent. Because the prompt restricts the answer to Yes or No , both tokens are almost always inside the top-20, so this branch rarely fires and leaves the reported curves unchanged. The ablations of Appendix C show that the pipeline does not rely on fine calibration of the score in any case.                                                                                                                                                                                       
+
+> import math, re, numpy as np
+> from scipy.ndimage import gaussian_filter1d
+> from scipy.interpolate import interp1d
+> #vLLM call: SamplingParams(max_tokens=1, logprobs=20, temperature=0.0)
+> def extract_pyes(logprobs, yes_id, no_id): y, n=logprobs.get(yes_id), logprobs. get(no_id)
+> if yis not None and nis not None:
+> #normal path: Eq. (1)
+> m=max (y.logprob, n.logprob) ey, en =math.exp(y.logprob -m), math.exp(n.logprob -m)
+> return ey /(ey +en)
+> #fallback: one token left the top-20 (extreme confidence only)
+> return math.exp(y.logprob) if yis not
+> None else 0.0
+> def segments_to_curve(scores, segments, duration, resolution=1.0): n=max (1, int (duration /resolution)) curve, counts =np.zeros(n), np.zeros(n)
+> for sc, (s, e) in zip (scores, segments):
+> for iin range (max (0, int (s /resolution)), min (n, int (e /resolution) +1)): curve[i] += sc; counts[i] += 1mask =counts >0curve[mask] /= counts[mask]
+> if not mask. all () and mask. any (): vi =np.where(mask)[0] curve =interp1d(vi, curve[vi], kind =’nearest’, fill_value=’ extrapolate’)(np.arange(n)) if len (vi) >1else \np.full(n, curve[vi[0]])
+> return curve
+> def maxsubarray_extract(curve, duration): n=len (curve) #per-second curve length, i.e. floor(D)
+> sm =gaussian_filter1d(curve, sigma= max
+> (1.0, n/15.0)) #sigma =floor(D)/15
+> shifted = sm -sm.mean() best, bs, be, cs, cstart =-float (’inf’) ,0, 0, 0.0, 0
+> for iin range (n): cs += shifted[i]
+> if cs >best: best, bs, be =cs, cstart, i
+> if cs <0: cs, cstart =0.0, i+1
+> return (bs /n) * duration, ((be + 1) / n) * duration
+
+Two discretisation conventions are visible in the listing: a boundary second shared by two adjacent clips receives their average, and the per-second curve has ⌊D⌋ integer-second positions that are mapped back to the full duration. Re-running afterwards with half-open bin assignment and unrescaled one-second bins shifts Charades mIoU by be-tween −1.5 and +0 .1 across the Qwen backbones, so neither convention drives the results. 
+
+A.5. Design choices (full) Why segment-level rather than frame-level? We score short clips rather than individual frames for two reasons. First, a single frame lacks the motion context that differen-tiates “picking up the cup” from “putting down the cup”. Second, calling the VLM once per sampled frame would re-quire roughly six times as many forward passes under our six-frame clip construction. A three-second clip therefore balances short-motion context against call count and pro-duces one decision for each local portion of the video. This concerns the scale at which we decide, not how each clip is scored internally. A multi-frame backbone can exploit the within-clip motion jointly, while an image-only backbone uses the same six-frame temporal support but aggregates in-dependent frame-wise evidence into one clip-level decision. Both therefore decide at clip rather than frame level. 
+
+Why externalise temporal aggregation? Direct genera-tion requires the VLM to (a) recognise the action wherever it occurs, (b) maintain a consistent absolute-time coordinate, and (c) verbalise a parseable string. Delegating (b) and (c) to a deterministic algorithm isolates (a), the local recognition signal measured by the clip-level verifier. The diagnostics of Appendix D show that failures at these two stages account for a large share of the error when Direct performs poorly. 
+
+Additional extractor check. Table 3 in the main paper compares the mean-shifted max-subarray with nine alterna-tive single-interval extractors. We also checked afterwards whether the multi-interval Otsu readout could serve here by retaining only its highest-scoring interval. On Charades-STA, it remains within one mIoU point of the max-subarray on all three Qwen backbones. The comparison script is re-leased with the code. 
+
+A.6. Output format Each run writes one JSON record per query (here REZE on Qwen2-VL-7B, Charades-STA; 
+
+scores abbreviated):                            
+
+> {"id": "55NRK_1", "video": "55NRK.mp4", "query": "person begins sneezing.", "scores": [0.22, 0.55, 0.53, 0.55, 0.42, 0.59, 0.71, 0.84, ...], "segments": [[0.0, 3.0], [3.0, 6.0], ..., [30.0, 30.6]], "pred_start": 19.4, "pred_end": 30.6, " duration": 30.6, "gt_start": 19.1, "gt_end": 30.6, "iou": 0.98}
+
+10 B. Complete Main Results 
+
+Statistical uncertainty. A query-level bootstrap with 
+
+2,000 resamples gives 95% confidence intervals of 
+
+[54 .7, 56 .6] mIoU on Charades-STA (Qwen3-VL), 
+
+[38 .5, 42 .2] mAP on QVHighlights moment retrieval (Qwen2.5-VL), and [43 .0, 45 .3] mAP and [71 .3, 75 .6] 
+
+HIT@1 on highlight detection (InternVL3). Because the per-query predictions of prior methods are not available, these intervals characterise uncertainty in the REZE estimates rather than a paired comparison with published methods. A paired Wilcoxon signed-rank test between REZE and Direct on Qwen2-VL Charades-STA gives p < 0.001 .
+
+B.1. Full Cross-Benchmark Leaderboard The compact comparison of Table 1 in the main paper is expanded in Table 4 with the full competitor list, grouped by training regime. Each REZE row contains one backbone, while com-posite baselines are explicitly labelled; the four backbones evaluated on QVHighlights each appear with their own Cha-rades and QVHighlights numbers. The † marks methods built on InternVideo2 features, and highlight detection varies only modestly across the REZE backbones ( 42 –44 mAP and 70 –
+
+73 HIT@1). We omit target-trained Charades-STA detectors and do not claim a Charades state of the art: REZE’s highest Charades number sits on the strongest backbone (Qwen3-VL), where it roughly matches that backbone’s own native generation ( 53 .30 ); REZE’s value on Charades lies instead in the large gain it brings to weaker backbones and to image-only LLaVA-1.5 (Table 5). 
+
+B.2. Charades-STA Table 5 reports all seven backbones. REZE’s minimum is 42 .37 (LLaVA-1.5-7B) and maximum 
+
+55 .66 (Qwen3-VL-8B), a 13 .3-point band, while Direct rises from non-existent (image-only) through 6.48 (Qwen2-VL), 
+
+42 .74 (Qwen2.5-VL), to 53 .30 (Qwen3-VL). The same pat-tern, REZE nearly flat while Direct catches up, holds within each family: in Qwen, REZE goes 51 .5 → 55 .7 while Direct goes 6.5 → 53 .3; in InternVL, REZE goes 50 .9 → 52 .7
+
+while Direct goes 9.4 → 30 .2.
+
+B.3. ActivityNet On the longer ActivityNet videos (Ta-ble 6) REZE reaches about 35 mIoU, over 15 points below Charades, as a local six-frame verifier is less useful when the action can span a quarter of a three-minute video. Within Qwen, Direct is essentially flat from Qwen2-VL ( 12 .83 ) to Qwen2.5-VL ( 12 .61 ) and jumps only on Qwen3-VL ( 36 .76 ). Qwen3-VL is the one case where Direct ( 36 .76 ) slightly exceeds REZE ( 35 .43 ). Table 8 reports the corresponding single-interval bandwidth sweep across all three Qwen back-bones. 
+
+B.4. QVHighlights, per backbone Table 2 of the main pa-per gives the four-backbone Direct-versus-REZE breakdown, and Figure 4 plots the highlight-detection band against the fully trained range. The margin over Direct on moment re-trieval is smallest on Qwen3-VL ( +1 .6 mAP): its verifier curves are highly polarised (near 0 or 1) and fragment long intervals under a fixed small bandwidth. A per-model aggre-gator could raise this case further, but the reported numbers keep the single Otsu aggregation for all four backbones to avoid per-model tuning. InternVL3-8B direct generation uses 
+
+Figure 4: QVHighlights test highlight-detection mAP of REZE on four backbones (dots) against selected target-trained baselines (shaded, HL-CLIP to CVA). All four sit inside this band. Test N =1542 .a sparse 40 -frame input, the most its 12 ,288 -token context admits for a 150 -second video, whereas REZE issues one short clip per call. 
+
+## C. Additional Ablations 
+
+Continuous scores and temporally shuffled scores. 
+
+Hard-thresholding pi to {0, 1} drops Qwen2.5-VL mIoU from 54 .22 to 19 .10 on Charades and 36 .47 to 15 .48 on ActivityNet, showing that the continuous scores carry infor-mation the hard decision loses. Shuffling segment scores in time drops mIoU to 21 –25 for all six dataset/model pairs (the temporally shuffled null; Charades values are the mean over ten permutations, standard deviation below 0.5). Be-cause shuffling preserves the score distribution but destroys its temporal order, REZE’s 11 –35 -point margin shows that its gains cannot be explained by a learned duration heuristic alone (Otani et al. 2020). Verifier discriminability (GT/non-GT ratio) rises 1.91 × → 4.28 × from Qwen2-VL to Qwen3-VL on Charades while REZE mIoU barely moves (Table 7), matching the diminishing returns of verifier strength dis-cussed in Section 4.3 of the main paper. 
+
+Single-interval smoothing bandwidth. Table 8 varies only the Gaussian bandwidth while holding the clips, prompt, saved confidence scores, mean shift, and max-subarray ex-tractor fixed. No fixed bandwidth is best across all three ActivityNet backbones. We therefore retain one duration-dependent rule for both single-interval datasets instead of selecting a bandwidth for each dataset or backbone. 
+
+Multi-interval aggregation sweep. Table 9 separates the two length-dependent choices on Qwen2.5-VL validation. Replacing the length-proportional smoothing with a fixed clip-scale kernel lifts mAP from 20 .76 to 36 .77 , and the per-curve Otsu threshold lifts it to 42 .46 . The gain concentrates in the mid-length band that the global mean had over-extended, while short moments stay near the floor. This validation-selected aggregation is then frozen for the test results. 11 Charades QVH-MR QVH-HD QVH-HD Method mIoU mAP mAP HIT@1                                                                    
+
+> Trained on the target benchmark
+> Moment-DETR (Lei, Berg, and Bansal 2021) –30.73 35.69 55.60 HL-CLIP (Han et al. 2024) ––41.94 70.60 CVA (Moon et al. 2026) –47.49 44.43 66.01 SDST †(Pujol-Perich, Escalera, and Clapés 2025) –53.31 43.40 69.13 SG-DETR †(Gordeev et al. 2026) –54.10 43.76 69.13 CoSTL (Dong et al. 2026) –46.68 41.36 71.59
+> External pretraining + target fine-tuning
+> SG-DETR (w/PT) †(Gordeev et al. 2026) –58.80 44.70 71.00
+> Externally pretrained, zero-shot on target
+> SG-DETR (ZS) (Gordeev et al. 2026) –48.30 43.00 68.00
+> Training-free (no gradient updates)
+> Robust Zero-Shot (3-VLM ens.) (Banditakkarakul, Chen, and Gould 2026) 47.95 –––NumPro (Qwen2-VL-7B) (Wu et al. 2025) 38.50 –23.60 43.40 GranAlign (Jeon et al. 2026) 38.00 38.23 ––REZE, Qwen2-VL-7B (ours) 51.49 34.99 43.28 71.66 REZE, Qwen2.5-VL-7B (ours) 54.22 40.32 42.21 69.58 REZE, Qwen3-VL-8B (ours) 55.66 28.21 43.37 71.98 REZE, InternVL3-8B (ours) 52.91 39.33 44.18 73.41
+
+Table 4: Complete cross-benchmark comparison, grouped by how much training each method uses (expanded form of Table 1 in the main paper). Charades-STA mIoU; QVHighlights test moment-retrieval mAP and highlight-detection mAP and HIT@1. REZE is listed once per backbone, so every REZE row contains one model; composite baselines are explicitly labelled. † marks methods built on InternVideo2 features; “–” marks a benchmark a method does not report. Bold marks the best value in each QVHighlights column (the Charades column is not a target of this work; see text). Percentages. 
+
+Verifier prompt wording. Table 10 repeats the pipeline on a fixed random 800-query validation subset with four veri-fier instructions, holding the clips and the frozen aggregation identical. The strict wording was written before this com-parison and was not selected from it. The strict default-No 
+
+wording is best at 43 .56 mAP; a neutral symmetric wording costs 2.2, a minimal one 3.8, and a paraphrase of the strict intent 4.4. No variant collapses, and the spread is compa-rable to switching between aggregation variants in Table 9, so the grounding signal comes from the verification task it-self. The asymmetric instruction contributes a consistent but second-order sharpening of the score separation. 
+
+Short moments are detected, not delimited. Figure 5 groups QVHighlights validation moments by duration. Moment-retrieval mAP is 5.39 for moments no longer than 10 
+
+seconds, compared with 47 .82 and 46 .50 for the two longer groups. The near-floor moment-retrieval mAP on short mo-ments shows that localisation fails on short moments; on its own it does not say whether recognition fails too. A direct check on the native per-clip scores separates the two. On the 
+
+45 test queries whose ground-truth windows are all shorter than 10 seconds, clips overlapping the ground truth outscore the remaining clips of the same video with a per-query AU-ROC of 0.84 –0.87 on all four backbones (per-query median GT-to-non-GT score ratio 2.2×–22 .9×). Restricting to the strictest case, the 326 individual ground-truth windows no longer than 2 seconds, shorter than the 3-second clip itself, 
+
+Figure 5: QVHighlights validation moment-retrieval mAP by ground-truth moment duration using Qwen2.5-VL-7B and the reported REZE configuration. Percentages. still gives a per-window AUROC of 0.71 –0.76 , with 72 –
+
+82% of windows scored above their video’s non-ground-truth clips. The verifier therefore detects most sub-clip moments; what a single clip-level score cannot supply is their sub-clip boundary, which is the resolution argument of Section 4.3 in the main paper. This post hoc diagnostic uses the reported test predictions and does not affect model or parameter selection. 
+
+Clip length. Table 11 varies the clip length τ ∈{2, 3, 4, 5} s on the validation split, checking afterwards how sensitive the results are to the τ =3 s fixed in advance for the 12 Model mIoU R@0.3 R@0.5 R@0.7                                                         
+
+> Image-only backbone
+> LLaVA-1.5-7B ––––
+> + REZE 42.37 63.20 41.02 20.86
+> InternVL family
+> InternVL2.5-8B 9.35 10.56 5.16 2.61
+> + REZE 50.93 75.46 53.63 29.27 InternVL3-8B 20.16 27.74 17.66 8.90
+> + REZE 52.91 77.23 58.82 33.33 InternVL3.5-8B 30.17 44.84 28.25 12.72
+> + REZE 52.70 78.39 58.09 31.75
+> Qwen-VL family
+> Qwen2-VL-7B 6.48 6.88 4.81 2.15
+> + REZE 51.49 77.63 54.62 29.46 Qwen2.5-VL-7B 42.74 63.66 43.17 22.66
+> + REZE 54.22 79.78 59.92 35.05 Qwen3-VL-8B 53.30 79.87 62.88 32.15
+> + REZE 55.66 80.59 64.92 37.80
+
+Table 5: Main results on Charades-STA test (N=3720). Each backbone appears as its Direct timestamp generation (model row) and the same model under REZE (the indented + REZE rows). REZE mIoU stays within a band of about 13 .3 points (lowest 
+
+42 .37 on LLaVA-1.5-7B, highest 55 .66 on Qwen3-VL-8B), whereas Direct ranges from undefined on the image-only backbone up to 53 .30 . “–” marks models whose direct timestamp generation is unreliable or undefined. Bold marks the best value in each column. All values in percentages.                             
+
+> Model mIoU R@0.3 R@0.5 R@0.7
+> Qwen2-VL-7B 12.83 17.23 9.75 4.87
+> + REZE 35.74 53.11 33.10 15.23 Qwen2.5-VL-7B 12.61 16.41 8.75 4.20
+> + REZE 36.47 54.64 33.85 15.51 Qwen3-VL-8B 36.76 52.93 33.94 18.67
+> + REZE 35.43 53.10 32.80 15.04
+
+Table 6: Main results on ActivityNet val_2 (N=17031), shown as Direct (model row) and + REZE (indented), as in Table 5. InternVL ActivityNet evaluation is deferred to future work. Bold marks the best value in each column. All values in percentages. main paper, keeping six frames per clip so the frame rate is 6/τ . Under the frozen σ=3 s Otsu aggregation, moment-retrieval mAP falls steadily from 43 .17 at τ =2 s to 40 .53 
+
+at τ =5 s, and the loss is concentrated in the short moments while the mid and long ranges stay roughly flat. This is the clip-length resolution limit of Section 4.3 in the main paper seen from the clip side: a coarser clip cannot place a short boundary. The finest clip length τ =2 s is marginally better than τ =3 s (under 0.7 mAP) but issues 1.5× the verification calls, so τ =3 s is a resolution–compute compromise rather than a tuned optimum. Matching the smoothing to the clip (σ=τ ) rather than fixing it at 3s is no better, and worse at coarse clip lengths, because a wide clip with wide smoothing over-blurs short moments: their mAP falls from 9.31 at τ =2 sto 1.80 at τ =5 s. 
+
+## D. Direct-Generation Diagnostics 
+
+Each Direct response is sorted into one of five groups, and the mIoU over the cleanly parsed (“reasonable”) group is re-ported separately (Table 12): (i) parse fail, (ii) short interval (< 0.3 s), (iii) out-of-bound, (iv) collapsed start (parsed inter-val at exactly 0.0, a template-collapse heuristic; legitimate early predictions are scored normally in the main mIoU), (v) reasonable. 
+
+Interface failures account for a large share of Direct er-rors. Although the Direct prompt explicitly requests sec-onds, Qwen2-VL-7B’s 6.48 Direct mIoU suffers a 52 .7% 
+
+out-of-bound rate because it emits frame indices (“From Frame 400 to Frame 599”); restricting to the reasonable group raises its mIoU to 24 .88 , an 18-point jump. The rea-sonable subset is a conditional sample, and 24 .88 still sits far below REZE’s 51 .49 , so on Qwen2-VL the interface ac-counts for a large share of the error rather than all of it. The strongest support for the interface reading comes from the newer models: Qwen2.5-VL and Qwen3-VL close the parse/OOB gap ( 0.0% parse fail; 11 .9% and 1.0% OOB), and their reasonable mIoU ( 43 .50 , 54 .48 ) approaches REZE (54 .22 , 55 .66 ), within 1.18 for Qwen3-VL. InternVL3.5-8B shows subtle template collapse: a 93 .4% reasonable rate yet 
+
+30 .17 mIoU, because many of its parsed responses fall into a few fixed “ K to K+5 seconds” templates. Across all four models, Direct requires the backbone to verbalise absolute time in a parseable, query-conditional form; REZE removes that requirement and applies unchanged across their different native video and timestamp interfaces. 13 Dataset Model Logits Binary Shuffled GT mean Non-GT mean Ratio FP >0.3                                           
+
+> Charades-STA Qwen2-VL-7B 51.49 46.93 23.08 0.700 0.366 1.91 ×45.6% Qwen2.5-VL-7B 54.22 19.10 22.21 0.247 0.099 2.50 ×7.5% Qwen3-VL-8B 55.66 43.62 21.82 0.453 0.106 4.28 ×12.0% ActivityNet Qwen2-VL-7B 35.74 30.26 24.65 0.710 0.524 1.35 ×64.2% Qwen2.5-VL-7B 36.47 15.48 23.48 0.228 0.126 1.81 ×14.9% Qwen3-VL-8B 35.43 26.00 22.52 0.360 0.180 2.00 ×19.7%
+
+Table 7: Score distribution analysis across three Qwen models and two datasets. “Logits” is the default REZE using continuous P(Yes); “Binary” replaces continuous scores with hard 0/1 thresholding; “Shuffled” applies REZE to randomly permuted segment scores (duration-prior baseline). GT/Non-GT mean denotes the average P(Yes) on segments inside / outside ground-truth intervals; Ratio is GT/Non-GT. FP >0.3 is the fraction of non-GT segments scoring above 0.3. On Charades-STA, the Shuffled column is the mean over ten random permutations (standard deviation below 0.5). All mIoU values in percentages.                                                     
+
+> (A) Charades-STA
+> Bandwidth Train Test Min Max
+> max(1 ,⌊D⌋/15) (used) 53.41 51.47 42.37 55.66
+> 2s53.82 51.70 42.48 56.15
+> 3s52.70 50.64 42.21 54.70
+> 5s49.06 47.60 41.03 50.57 no smoothing 47.96 50.06 41.84 52.99
+> (B) ActivityNet Captions
+> Bandwidth Qwen2-VL Qwen2.5-VL Qwen3-VL
+> max(1 ,⌊D⌋/15) (used) 35.73 36.46 35.26
+> 2s36.36 36.67 33.75
+> 3s36.24 36.78 34.25
+> 5s36.05 36.73 34.79 no smoothing 36.37 36.33 31.86
+
+Table 8: Single-interval Gaussian-bandwidth sensitivity (mIoU). (A) Charades-STA uses Qwen3-VL on the official training split ( N =12 ,408 ); Test, Min, and Max summarise the seven reported backbones on the test split ( N =3 ,720 
+
+each). (B) ActivityNet Captions contains 17 ,031 queries per backbone. Only σ changes between rows. The reported rule is not the best entry in every column: 2 s is 0.41 points higher on Charades train but 1.51 lower on ActivityNet Qwen3-VL, and no fixed bandwidth is best across all three ActivityNet backbones. For the 2- and 3-second alternatives, the largest deviation from the reported rule is 1.28 on Charades and 
+
+1.51 on ActivityNet. Removing smoothing costs 5.45 points on Charades train and up to 4.15 across the reported test backbones. Values are recomputed from six-decimal saved scores. The D/ 15 row matches every Charades test result to 
+
+0.00 . It differs from the original Charades-train and Activi-tyNet evaluations by at most 0.17 because rounding creates rare ties on flat curves. Percentages. 
+
+## E. Efficiency 
+
+REZE issues ⌈D/τ ⌉ verification calls per query, about eleven for a 30 -second Charades video and fifty-one for a 150 -second QVHighlights video, versus one generation call for Direct. Table 13 reports the measured cost of both modes                          
+
+> Aggregation mAP short mid long
+> mean threshold, σ=⌊D⌋/15 20.76 0.27 11.88 43.05 mean threshold, σ=3 s36.77 3.21 38.51 46.36 mean threshold, σ=2 s39.74 5.05 44.39 44.92 Otsu threshold, σ=3 s(selected) 42.46 5.39 47.82 46.50
+
+Table 9: Aggregation selection on QVHighlights 
+
+validation with Qwen2.5-VL-7B (average mAP and duration-stratified mAP). Every row uses the same run filtering and ranking procedure, so the rows differ only in the smoothing bandwidth and the threshold. The length-proportional smoothing σ=⌊D⌋/15 inflates to roughly 10 
+
+seconds on a 150 -second video and erases the moment; a fixed clip-scale kernel ( σ=3 s, matched to the clip) removes most of the loss ( +16 .0), and replacing the per-video mean with a per-curve Otsu threshold at the same bandwidth adds 
+
++5 .69 . The gain concentrates in the mid-length band that the global mean was over-extending; moments shorter than a clip stay near the floor. σ=2 s is reported as a sensitivity check. The selected aggregation (Otsu, σ=3 s) is frozen unchanged for the test results of Table 2 of the main paper.                 
+
+> Verifier prompt MR mAP R1@0.5 R1@0.7
+> strict default-No (used) 43.56 70.12 52.88
+> neutral (“is this present?”) 41.35 68.00 50.25 short (“does the video show”) 39.78 68.38 48.25 paraphrase of the strict intent 39.19 67.12 47.50
+
+Table 10: Verifier-prompt wording on an 800-query QVHigh-lights validation subset (Qwen2.5-VL, frozen aggregation). Every wording stays within 4.4 mAP of the one used, so the method does not depend on one crafted sentence; the or-dering consistently favours the strict default-No instruction, which widens the score separation between in-moment and out-of-moment clips. on Qwen2.5-VL. Throughput is the process-level wall-clock of a fixed random 200-query subset run through the actual vLLM pipeline (engine initialisation amortised over the sub-set), with each mode at its stable concurrency: 32 concurrent 14 Figure 6: Qualitative comparison on Charades-STA with Qwen2-VL-7B. Each row shows a frame strip, the query, and the ground-truth (green) and REZE (blue) intervals with IoU. Direct emits frame indices or narration rather than parseable seconds and cannot be placed on the timeline (red diagnostic box). The first two rows are successes where REZE recovers the interval while Direct fails the output interface; the last is an honest REZE failure on a short early action. sequences for REZE and 8 sequences with request batches of 4 for Direct, both at 2 fps and 0.85 GPU-memory fraction. Peak memory comes from a separate single-stream Hugging-Face measurement; the reported figure is the transient incre-ment above the resident 16.6 GB of loaded model weights, taken with a fresh baseline before every call. The headline trade-off is summarised in Table 1C of the main paper and measured in full in Table 13: REZE processes 
+
+2.2–2.3× more input tokens per query, its batched throughput is 1.4–1.5× lower, and in exchange every call has a bounded footprint that does not depend on the video length. Two fur-ther observations follow. First, the per-call cost is constant in a strong sense: clip-level throughput stays at 2.6–2.8 calls per second on both benchmarks, so the per-query cost scales only through the call count ⌈D/τ ⌉. Second, without batching the estimated serial latency of REZE is 5.4 s per Charades query and 27 .5 s per QVHighlights query, against a batched effec-tive 3.8 s and 19 .1 s; these are medians over 20 real queries, with decoding, preprocessing, and generation timed per clip and multiplied by the call count. One caveat applies to the wall-clock comparison. The REZE pipeline decodes each clip separately with OpenCV, about a quarter of the serial es-timate, whereas the Direct pipeline decodes each video once with decord, so the gap in pure model compute is smaller than the wall-clock gap suggests. 
+
+## F. Qualitative Results 
+
+Figure 7 shows six real per-clip P (Yes ) curves on Charades-STA (Qwen2-VL-7B), with the ground truth at the start, mid-dle, and end of the video plus a failure. In the five successes the aggregation tracks the action; in the failure ( 0QAZ7_1 )REZE selects the wrong run, far from the short ground-truth segment at the very end. 15 Clip τ fps MR mAP short mid long                      
+
+> 2 s 3.0 43.17 6.06 49.08 46.63 3 s (used) 2.0 42.46 5.39 47.82 46.50 4 s 1.5 40.80 4.37 46.50 44.69 5 s 1.2 40.53 4.39 45.60 45.13
+
+Table 11: Clip-length sweep on QVHighlights validation 
+
+with Qwen2.5-VL-7B. Each clip keeps six frames, so the frame rate is 6/τ . Under the frozen σ=3 s Otsu aggregation, moment-retrieval mAP degrades steadily as the clip length-ens, and the loss concentrates in short moments while mid and long stay roughly flat: a coarser clip cannot place a short boundary, the same resolution limit seen in Section 4.3 of the main paper. The finest clip length τ =2 s is only 0.7 mAP bet-ter than τ =3 s yet issues 1.5× the verification calls, so τ =3 s is a resolution–compute compromise rather than a tuned peak. Scaling the smoothing to the clip ( σ=τ ) instead of fixing it gives 42 .60 /42 .46 /39 .87 /38 .17 mAP for τ =2 /3/4/5, no better and worse at the coarse end. 
+
+## G. Limitations and Outlook 
+
+REZE has several limitations that warrant future investiga-tion: 
+
+• Computational Trade-offs: REZE requires approxi-mately ⌈D/τ ⌉ forward passes per query, resulting in a 
+
+1.4–1.5× lower batched throughput compared to direct generation (Appendix E). In return, its memory footprint remains constant regardless of video length. 
+
+• Cross-clip Relations: The aggregation preserves the tem-poral order of the clip scores, but the verifier scores each clip independently. It therefore cannot model cross-clip relations required for action ordering, counting, or motion direction. 
+
+• Dataset and Backbone Edge Cases: Our ActivityNet evaluation is limited to the Qwen family, relying on Charades-STA and QVHighlights for cross-backbone evidence. On single-interval long videos within these datasets, Qwen3-VL direct generation marginally outper-forms REZE ( 36 .76 vs. 35 .43 mIoU). This is not caused by the aggregation: applying a clip-scale aggregation changes REZE by at most 1.2 mIoU and fails to close the gap (Appendix B). 16 Model Direct mIoU Parse Fail Short Interval OOB Collapsed Start Reasonable Reasonable mIoU                             
+
+> Qwen2-VL-7B 6.48 0.7% 0.0% 52.7% 28.1% 18.5% 24.88 Qwen2.5-VL-7B 42.74 0.0% 0.4% 11.9% 2.8% 84.9% 43.50 Qwen3-VL-8B 53.30 0.1% 0.0% 1.0% 11.0% 87.9% 54.48
+> InternVL3.5-8B 30.17 0.0% 0.4% 5.8% 0.4% 93.4% 31.47
+
+Table 12: Where direct generation goes wrong on Charades-STA. Each row sorts the 3720 Direct responses into five groups. “Reasonable” means the response parsed correctly and fell inside the video duration; the other four are failures. “Reasonable mIoU” is the mIoU over the reasonable group alone, that is, how accurate the prediction is when the model does get the format right. All percentages of N=3720.                          
+
+> Setting calls input tokens queries/s peak ∆VRAM/call
+> Direct, Charades 1∼5.6k 0.41 0.5–1.7 GB REZE, Charades ∼11 1.1k ×11 0.27 0.26 GB Direct, QVH 1∼31.5k 0.073 6.6–7.2 GB REZE, QVH ∼51 1.4k ×51 0.052 0.31 GB
+
+Table 13: Measured per-query inference cost, all on Qwen2.5-VL-7B. Throughput is the process-level wall-clock of a 200-query subset through the vLLM pipeline. Peak ∆VRAM is the transient peak of a single active request above the 16 .6 GB of loaded weights (range over sampled queries), not a sum across calls: sequential REZE calls reuse the same footprint. Direct’s tokens and memory grow roughly linearly with video length, whereas each REZE call is constant and only the call count grows. 17 Figure 7: Real P (Yes ) curves on Charades-STA (Qwen2-VL-7B) for six queries whose ground truth falls at the start, middle, and end of the video, plus one failure. Grey steps are per-clip P (Yes ); the blue line is the smoothed curve; the dashed line is the video-mean threshold. Ground truth is shaded green and the REZE interval (the mean-shifted maximum-subarray interval of Section 3.2) is shaded orange, read from the same smoothed curve; the dashed video-mean line is the zero level of the mean-shifted objective. 18

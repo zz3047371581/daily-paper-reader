@@ -1,0 +1,419 @@
+Title: NTDH: Complex Reasoning for Comprehensive Affective Analysis
+
+URL Source: https://arxiv.org/pdf/2608.06425v1
+
+Published Time: Mon, 10 Aug 2026 00:02:41 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# NTDH: Complex Reasoning for Comprehensive Affective Analysis 
+
+## Tianlei Zhu a, Zhiwei Liu b,∗, Yuyan Wang b, Xiao-Yang Liu a and Sophia Ananiadou b
+
+> a
+
+Columbia University, New York, NY, USA 
+
+> b
+
+Department of Computer Science, The University of Manchester, Manchester, United Kingdom 
+
+A R T I C L E I N F O 
+
+Keywords :affective computing emotion analysis reasoning paths reinforcement learning GRPO reasoning-data synthesis SemEval-2018 
+
+A B S T R A C T 
+
+Comprehensive affective analysis is challenging for two reasons: it spans heterogeneous predic-tion tasks with continuous, ordinal, and multi-label outputs, and affective meaning is context-dependent, requiring conflicting cues to be reconciled rather than mapped directly to labels. Existing methods learn this mapping directly and do not model the reconciliation explicitly. We recast the task as a complex-reasoning problem, which yields one output interface across heterogeneous label spaces and a trajectory over which a verifiable reward can be optimised; to our knowledge, this is the first such treatment covering both sentiment and emotion. The obstacle is on the data side: affective reasoning traces must be synthesised, and generic synthesis is misaligned with the targets, tolerances, and phenomena of affect, and discards or leaks its failure cases. We propose NTDH , which addresses these four failures. Naturalisation sets the training answer to the gold label, so it is correct by construction. A Tolerance -aware gate checks each answer against the task’s own scoring margin. Domain -aware strategies refine the reasoning using ideas from affective science. Directional Hints report only the type and direction of an error, without exposing the target. We train Qwen3-8B with SFT and then GRPO under the same tolerance used for verification (up to a more permissive construction gate on the multi-label subtask), and a component ablation quantifies the data-quality effect of each part. Using 16 ,302 
+
+training records, about 14× fewer than comparable instruction-tuned systems, the final policy improves over its SFT checkpoint on five of six official-test metrics and achieves the strongest EI-reg result among the compared systems, at a Pearson correlation of 0.862 .
+
+## 1. Introduction 
+
+Affective analysis aims to identify the sentiment, emotions, and affective intensities expressed in text, providing fundamental signals for applications such as opinion and stance analysis, emotion-aware retrieval, conversational agents, mental-health monitoring, and social-media analysis [1]. Despite substantial progress, comprehensive affective analysis remains challenging for two fundamental reasons. First, it encompasses heterogeneous prediction tasks. Sentiment and emotion capture complementary dimensions of affect, while outputs may be represented as continuous intensities, ordinal categories, or multi-label emotion sets [2]. Consequently, heterogeneous labels require unified representations while preserving their task-specific semantics and evaluation criteria. Second, affective meaning is inherently context-dependent. Reliable prediction requires integrating multiple contextual cues, including polarity shifts (e.g., negation and intensification) [3, 4], figurative language (e.g., irony, sarcasm, and idioms) [5, 6], and interactions among multiple emotions [7–9], rather than directly mapping text to labels. We investigate these challenges across the four complementary SemEval-2018 subtasks: emotion-intensity regression (EI-reg), multi-label emotion classification (E-c), valence regression (V-reg), and ordinal valence classification (V-oc) [10]. Research on affective analysis has evolved from feature-based methods [11–13] through pre-trained language models to instruction-tuned large language models (LLMs), of which EmoLLM [14] is the closest to our setting; §2.1 reviews this line in detail. Nevertheless, existing methods primarily learn a direct mapping from input text to output labels, without explicitly modelling the reasoning process required to reconcile contextual and potentially conflicting affective evidence. Modelling this process explicitly is valuable less for immediate accuracy gains than for three capabilities that a direct mapping cannot provide. First, it supplies a single output interface for heterogeneous label spaces: continuous intensities, ordinal categories, and multi-label emotion sets can all be expressed as a structured reasoning trace terminating in a natural-language conclusion, so that affective cue analysis is shared across subtasks and only the final commitment remains task-specific. This makes a single policy, rather than one specialised model per output space, feasible for comprehensive affective analysis. Second, affective labels are verifiable under task-specific criteria, 
+
+> ∗
+
+Corresponding author. E-mail address: zhiwei.liu@manchester.ac.uk 
+
+Page 1 of 16 arXiv:2608.06425v1 [cs.CL] 5 Aug 2026 NTDH for Comprehensive Affective Analysis 
+
+namely numerical tolerance for regression, exact match for ordinal classes, and set agreement for multi-label outputs. Verifiability is a precondition for reward-based optimisation, but a reward requires a space over which to optimise; an explicit reasoning trace provides that space, whereas a single scalar prediction offers reinforcement learning nothing to reshape. Third, an explicit trace renders the judgement inspectable, which is important both for a task whose annotations are themselves contested and for deployment settings such as mental-health monitoring, where an unexplained score is not actionable. Recent reasoning frameworks combining supervised reasoning traces with reinforcement learning have demon-strated remarkable success in domains such as mathematics [15, 16] and clinical question answering [17], where rationales can be synthesised by a teacher model and filtered by a judge [18, 19]. However, directly transferring these frameworks to affective analysis remains challenging. Generated reasoning traces may terminate in incorrect or inconsistently formatted conclusions, generic verification mechanisms cannot faithfully evaluate heterogeneous regression and classification tasks, domain-independent refinement offers limited support for affective phenomena such as valence shifting, irony, and emotion interactions, and unsuccessful trajectories are commonly discarded or repaired by revealing the gold answer. These failures define four requirements for constructing reliable affective reasoning data: (1) task-consistent target representations, (2) evaluation-aware verification, (3) domain-informed reasoning, and (4) informative guidance for resolving difficult cases without compromising supervision. Existing reasoning frameworks fail to satisfy these four requirements simultaneously. To address these limitations, we propose NTDH , a quality-aware reasoning-data synthesis framework for cross-task affective analysis. Rather than treating initially generated reasoning traces as ready-to-use supervision, NTDH controls four dimensions of reasoning-data quality through four complementary components, one per requirement. 
+
+Naturalisation (N) converts heterogeneous task labels into scale-aware natural-language targets while preserving their task-specific semantics. Tolerance-aware Verification (T) evaluates generated conclusions using task-specific acceptance criteria that account for numerical tolerances, categorical decisions, and multi-label agreement. Domain-aware Refinement (D) revises unsuccessful reasoning trajectories using affect-specific knowledge, including contex-tual valence shifts, figurative language, and interactions among emotions (§3). Directional Hints (H) provide target-derived corrective feedback without directly disclosing the exact reference answer, enabling difficult trajectories to be refined while reducing direct answer leakage. Using the resulting quality-controlled corpus, we first perform supervised fine-tuning (SFT) to initialise Qwen3-8B [20] with cross-task affective reasoning patterns. We subsequently apply Group Relative Policy Optimization (GRPO) [17, 21] with task-specific verifiable rewards, defined by the same tolerance the verifier applies, to further optimise its reasoning and prediction policy. Together, these components provide a unified approach to constructing and exploiting reasoning supervision across heterogeneous affective tasks. Our contributions are: 1. A unified reasoning formulation for affective analysis. We formulate sentiment, emotion, intensity regression, ordinal prediction and multi-label classification as structured generation with an explicit reasoning path, rather than as independent text-to-label mappings, obtaining one output interface and one verifiable reward across four heterogeneous subtasks. 2. NTDH, a quality-aware reasoning pipeline. Four data-side fixes, each grounded in the affect literature: 
+
+Naturalisation , Tolerance -aware verification, Domain -aware refinement, and directional Hints . Only 18 .4% 
+
+of the initial model-generated conclusions satisfy the gold tolerance; Naturalisation instead supplies a gold-consistent <answer> for every retained SFT trace. Of the half-A pool, 5,388 verified traces form the SFT set, while the remaining 2,762 hard cases are routed to RL with half-B. This routing uses all 16 ,302 instances ( 5,388 
+
+SFT + 10 ,914 RL). A component ablation (§5.3) checks each part: N drives target correctness, T removes 48 –
+
+63% of the out-of-tolerance accepts, H eliminates label leakage from the fallback, and D helps the fine-grained E-c subtask. 3. Evaluation across four affective tasks. Using 16 ,302 total SFT and RL records—about 14× fewer than EmoLLM’s 234 K instruction records—RL-final outperforms the SFT initialisation checkpoint on five of six metrics on the official 9,201 -instance test set and achieves the strongest EI-reg result among the compared systems, while remaining competitive across all four subtasks. Component ablations and qualitative error analysis identify where performance changes and where rare-emotion recall remains limiting. 
+
+> Page 2 of 16 NTDH for Comprehensive Affective Analysis
+
+## 2. Related Work 
+
+2.1. Affective Analysis of Text 
+
+Recent affective-analysis research has shifted from task-specific encoders to generative language models [1]. Transformer encoders such as BERT [22] and RoBERTa [23], together with affect- and social-media-specialised variants including BERTweet [24] and SentiBERT [25], remain strong supervised baselines, but are typically fine-tuned with a separate prediction head for each label space. This task-specific paradigm also characterises the original SemEval-2018 Task 1 systems [10]: SeerNet combines multiple lexical regressors [26], whereas NTUA-SLP uses deep attentive recurrent networks [27]. Work since 2023 has increasingly examined whether LLMs can replace these separate pipelines with prompting or instruction tuning. A broad evaluation over 13 sentiment-analysis tasks and 26 datasets finds that LLMs are effective on simpler settings but still lag specialised models on several complex or structured tasks [28]. Recent systems therefore target particular sources of difficulty: THOR elicits reasoning for implicit sentiment [29]; InstructERC combines instruction tuning and retrieval for conversational emotion [30]; Feng et al. compare in-context learning and task-specific fine-tuning for conversational affect [31]; DECC decomposes emotion-cause reasoning [32]; and TEII develops iterative LLM workflows for cross-lingual emotion detection [33]. Other recent work broadens either task coverage or interpretability. EmoLLM unifies multiple affective tasks through large-scale instruction tuning [14]; EmotionQueen evaluates event, implicit-emotion, intention and empathetic-response capabilities [34]; and MASIVE moves beyond a small closed inventory toward open-ended affective-state generation [35]. EmoRationale adds retrieved evidence to multilingual emotion and intensity predictions [36], while cognitive-science-based analyses argue for grounding model design in theories of emotion and communication [37]. Nevertheless, these approaches mainly address a single affective setting, evaluate general-purpose LLMs, or generate answers without constructing verifier-controlled reasoning trajectories across sentiment, emotion and intensity. NTDH addresses this gap while retaining EmoLLM’s unified, instruction-following formulation. 
+
+2.2. Complex Reasoning with LLMs 
+
+A second line of work makes LLMs reason step by step. Chain-of-thought (CoT) prompting elicits intermediate reasoning and improves multi-step tasks [38], and works even zero-shot [39]. Later methods sharpen it: self-consistency votes over many sampled chains [40]. Inference-time reasoning then grew into a paradigm of its own with OpenAI o1 [41] and DeepSeek-R1 [15]. Reinforcement learning turns reasoning from a prompt into a trained skill. Reinforcement learning from human feedback (RLHF) can align language models with human preferences by optimising a learned reward model; InstructGPT performs this optimisation using PPO [42, 43]. When answers are checkable, a verifier can supply the reward. Verifiers were first trained for mathematical word problems [16], and DeepSeek-R1 [15] shows that RL with verifiable rewards alone can induce strong reasoning. Group Relative Policy Optimization (GRPO) [21] makes this practical by estimating advantages from groups of samples and dropping the value network; open implementations [44, 45] reproduce the SFT-then-GRPO pipeline. These recipes need reasoning data, which is usually synthesised by a teacher model. STaR bootstraps rationales by keeping the ones that reach the right answer [18], and step-by-step distillation transfers a teacher’s rationales to a smaller model [19]. HuatuoGPT-o1 [17] is the closest method to ours: a verifier first guides the model to synthesise correct CoT traces for SFT, then a second RL stage refines them. The recurring problem is the quality of the synthesised traces. Many reach the right answer by unfaithful reasoning, or fail; the usual fix is to keep verified traces and discard the rest, which throws away much of the pool. NTDH targets exactly this data-quality problem. 
+
+2.3. Positioning: Reasoning Meets Affect 
+
+These two lines have rarely met. On the affect side, reasoning has so far been used mostly at inference time, through prompting. THOR chains CoT steps to infer implicit sentiment [29]; recent work also adds decomposed reasoning for emotion-cause extraction [32]. None of these synthesises quality-controlled, RL-ready affective reasoning data, and none trains with a verifiable reward. On the reasoning side, the verifier-driven recipes above were built for mathematics and medicine. Their generic “rethink” steps are blind to the cues that govern affect: valence shifters, irony, idioms, the emotion/sentiment distinction, and the circumplex. We sit at the intersection. To our knowledge, we are the first to bring the verifiable-reward reasoning recipe to comprehensive affective analysis through affect-specific synthesis, verification and refinement. Unlike HuatuoGPT-o1 
+
+> Page 3 of 16
+
+NTDH for Comprehensive Affective Analysis (a) Reasoning-path synthesis (NTDH)          
+
+> Raw SemEval-2018 Task 1
+> 4 subtasks
+> 50/50 seed split
+> half-A / half-B
+> Stage 1
+> Preprocess & format conv.
+> Stage 2
+> GT naturalisation (N) Stage 3
+> CoT gen + tol. verify (T) Stage 4
+> Quality filtering
+> refine loop (D) +(H)
+> SFT set
+> converged (+CoT)
+> RL set
+> unconverged half-A + half-B
+> Stage 1: SFT
+> Qwen3-8B, full-parameter
+> Stage 2: GRPO
+> binary tolerance-matched reward
+> Reasoning policy
+> converged (with CoT) half-B (Q/A only) unconverged half-A (Q/A only) policy init
+> Data / Input Model / Policy Verification / Reward Filtering / Output Unconverged / Fallback
+> (b) Two-stage training
+> Stage 1: Supervised Fine-Tuning (SFT)
+> Initialise the policy with the verified reasoning traces; Qwen3-8B, full-parameter training
+> Stage 2: Reinforcement Learning (GRPO)
+> Optimise with the binary tolerance-matched reward to improve reasoning quality
+> Final reasoning policy
+
+Figure 1: Overview of the proposed approach. NTDH turns raw SemEval-2018 data into verified, reasoning-augmented su-pervision through four synthesis stages. Naturalisation (N) , tolerance-aware verification (T) , domain-aware refinement (D) 
+
+and directional hints (H) are realised in Stages 2–3. Converged traces supervise SFT; unconverged hard cases and half-B supply GRPO, yielding the final affective reasoning policy in one integrated pipeline. 
+
+[17], which discards unconverged cases, and EmoLLM [14], which is trained with SFT alone, we naturalise the gold label and route the hard cases into GRPO [21], so no training instance is wasted. §1 quantifies this claim. 
+
+## 3. Reasoning-Path Synthesis 
+
+We present NTDH , a quality-aware reasoning-path synthesis pipeline that converts raw SemEval-2018 labels into verified, reasoning-augmented training data. Inspired by HuatuoGPT-o1 [17], we adapt its SFT →GRPO framework to comprehensive affective analysis: SFT acquires the structured affective reasoning and prediction format from verified trajectories, and GRPO further improves the policy with task-aware rewards. We describe the training stage in §4 and defer all hyperparameters to §5.1. NTDH builds on the EmoLLM Chain-of-thought (CoT) synthesis pipeline [14] and improves four of its stages, one per letter of the name: • (N) Naturalisation rewrites each raw label as a scale-aware sentence, so the generator, the verifier, and the final supervised target all share one natural-language form (§3.1, Stage 2); • (T) Tolerance-aware verification replaces the original binary LLM judge with a deterministic gate matched to each subtask’s scoring tolerance (§3.3); • (D) Domain-aware refinement grounds the four rethink strategies in the affective-science literature, so the refinement mirrors how affect is expressed and resolved (§3.4); • (H) Directional Hints steer a stalled trajectory toward the gold answer without ever revealing it (§3.4). Each surviving sample is tagged with a quality tier that drives the SFT/RL routing (§3.5). The end-to-end flow runs in four stages, shown in Figure 1. We first follow these stages in order (§3.1), then detail the task formulation, tolerance-aware gate (§3.3), domain-aware refinement and directional hints (§3.4), and quality-based routing (§3.5). 
+
+Page 4 of 16 NTDH for Comprehensive Affective Analysis          
+
+> Table 1
+> Ground-truth naturalisation templates. Each subtask’s raw label is converted into a sentence that explicitly states the task scale.
+> Task Raw Naturalised sentence
+> EI-reg 0.562 Based on the text, the anger emotion has an intensity of 0.562 on a scale from 0 (lowest) to 1 (highest).
+> V-reg 0.532 The sentiment intensity of this text is 0.532 on a scale from
+> −1 (most negative) to 1 (most positive).
+> V-oc 2Intensity Class: 2: moderately positive mental state can be inferred.
+> E-c 7. anticipation, 9. optimism
+> The text’s emotional tone is: 7. anticipation, 9. optimism.
+
+3.1. Data Processing Pipeline 
+
+We now walk through the four pipeline stages of Figure 1, from raw SemEval-2018 data to quality-filtered, reasoning-augmented training data; the improvements above are realised within Stages 2 and 3. 
+
+Stage 1: Preprocessing and format conversion. We convert the raw SemEval-2018 Task 1 data into a task-specific instruction that embeds the analysis objective and the expected output format, paired with the ground-truth label. The encodings differ by subtask: EI-reg names the target emotion and requests a score in [0 , 1] ; V-reg is rescaled to the symmetric scale [−1 , 1] , so a stored value such as 0.532 already denotes a mildly positive valence; V-oc enumerates the seven ordinal classes ( −3 = very negative, . . . , 3 = very positive); and E-c uses a fixed index map over the eleven emotions (1. joy, . . . , 11. trust; 0. neutral when none applies; the ordering is fixed in the released code and is not the alphabetical listing of §3.2), applied identically in the gold target, the prompt, and the exact-set reward. 
+
+Stage 2: Ground-truth naturalisation. We convert each raw label into a fluent, scale-aware sentence with a per-subtask template (Table 1). The supervised <answer> target is set to this naturalised ground truth , not to the model’s (possibly drifted) rewritten response; this is the single fix behind the answer-source correctness reported in §5.3. Because the conversion runs before CoT generation, the verifier compares model outputs against the same natural-language form as the final targets, removing one source of format mismatch. 
+
+Stage 3: CoT generation with verification. This is the core stage, summarised in Figure 2. A generator LLM produces an initial chain of Inner Thinking steps and a Final Conclusion , which the deterministic tolerance gate of §3.3 checks against the naturalised ground truth. On failure, the pipeline enters a two-level search: an outer loop of 
+
+𝐴 fresh restarts (default 𝐴 =3 ) and an inner loop of 𝐷 refinement rounds (default 𝐷 =3 ), each round applying one of the four domain-aware strategies of §3.4 and re-verifying. When the budget is exhausted, the fallback of §3.4 applies: hint refinement, allow failure, or label leakage. On convergence, the chain is reformatted into fluent, step-by-step reasoning, and a quality tier is assigned from the verification trajectory (§3.5). 
+
+Stage 4: Quality filtering and routing. The final stage routes samples as in §3.5: converged half-A samples (with CoT) form the SFT set; half-B and the unconverged half-A samples (question/answer only) form the RL set. 
+
+3.2. Task Formulation 
+
+We treat all four subtasks as a single conditional generation problem. Let 𝑥 denote an input tweet paired with a task-specific instruction, and let the policy 𝜋 𝜃 map 𝑥 to a structured output containing an explicit reasoning trace and a final answer ̂𝑦 . The subtasks differ only in the form of ̂𝑦 and the criterion by which it is scored: • EI-reg (emotion-intensity regression): given a tweet and a target emotion 𝑒 ∈ { anger, fear, joy, sadness }, predict an intensity ̂𝑦 ∈ [0 , 1] .• V-reg (valence regression): predict a real-valued sentiment ̂𝑦 ∈ [−1 , 1] .• V-oc (ordinal valence classification): predict one of seven ordinal classes ̂𝑦 ∈ {−3 , … , 3} .• E-c (multi-label emotion classification): predict the subset ̂ 𝑦 ⊆  of present emotions, with  = { anger, anticipation, disgust, fear, joy, love, optimism, pessimism, sadness, surprise, trust } (or neutral when none applies). 
+
+> Page 5 of 16
+
+NTDH for Comprehensive Affective Analysis (a) Initial CoT generation    
+
+> Generate an initial chain-of-thought and prediction.
+> (b) Tolerance-aware verification
+> Check the prediction against tolerance τ.
+> Pass (within τ)? (c) Strategy refinement
+> Revise using a domain strategy (D) or a hint
+> (H) .
+> Budget left? (d) Fallback
+> Stop refining; mark as fallback (low quality).
+> (e) Reformat + respond
+> Reformat the trace and emit the response.
+> (f) Quality metadata
+> Attach the quality tier and store the trace.
+> No Yes No Yes, retry
+
+Figure 2: Inner loop of Stage 3 for a single sample. The refinement cycle (c → b) may iterate up to 𝐷 × 𝐴 times (where 𝐷 
+
+is the search depth and 𝐴 the number of restart attempts) before the fallback path (d) is taken. 
+
+A prediction is counted correct under a task-matched strict criterion 𝜏 : absolute error |̂𝑦 − 𝑦 | ≤ 0.05 for the regression subtasks, exact class match for V-oc, and exact set match for E-c (Table 2). This 𝜏 defines the GRPO accuracy reward (§4) and the strict accuracy reported in our evaluation. The construction-time gate reuses it for the regression and ordinal subtasks, but is more permissive for E-c, where it accepts a trace at 𝐹 1 ≥ 0.7 against the gold set (§3.3). Final reporting additionally follows the official SemEval metrics: Pearson correlation for EI-reg, V-reg, and V-oc, and Jaccard, micro-F1, and macro-F1 for E-c (§5.1). In Algorithm 1, component (D) samples one of four domain-aware refinement operations: Backtrack revisits an earlier interpretation, Explore tests an alternative cue path, Verify checks the draft against textual evidence, and Correct repairs a local label or intensity error; their affective grounding is detailed in §3.4. Here Verify is a reasoning-revision strategy within (D) , distinct from the deterministic accept/reject gate (T) .The per-sample synthesis procedure is illustrated on a concrete tweet in Figure 3. The fifth SemEval-2018 subtask, emotion-intensity ordinal classification (EI-oc), is a coarse re-binning of the EI-reg signal and is omitted as redundant. In Algorithm 1, ̂𝑦 is the generator’s candidate conclusion and is used only to verify whether the associated reasoning chain satisfies the task-specific construction criterion. Once the chain converges, the naturalised gold answer 𝑦 —rather than ̂𝑦 —is written to the supervised <answer> field. 
+
+3.3. Tolerance-Aware Verification 
+
+In the original EmoLLM construction pipeline [14], after the generator produces a CoT and final conclusion, a separate judge LLM receives that conclusion together with the reference answer and is prompted to return True 
+
+(semantically consistent) or False (inconsistent). This judgement is a data-construction filter—it decides whether the trace is retained or refined—rather than the model’s task prediction. Because the binary prompt does not define task scales or numerical tolerances, it can reject a valid regression near-match (e.g. 0.55 versus 0.56) or accept a value outside the evaluation tolerance. In the LLM-judge configuration we replaced, such false acceptance occurred for 48 –63% of the out-of-tolerance regression responses presented to the judge, allowing incorrect targets into SFT. 
+
+Page 6 of 16 NTDH for Comprehensive Affective Analysis 
+
+Algorithm 1: NTDH reasoning-path synthesis (single sample) 
+
+Input: tweet+instruction 𝑥 ; gold answer 𝑦 ; tolerance 𝜏 ; max restarts 𝐴 , depth 𝐷 
+
+Output: reasoning trace and naturalised gold answer (SFT), or unconverged (RL) 
+
+𝑦 ← NATURALISE (𝑦 ) // (N) scale-aware gold sentence 
+
+(chain ,̂𝑦 ) ← GENERATE COT(𝑥 )
+
+for 𝑎 ← 1 to 𝐴 do for 𝑑 ← 1 to 𝐷 do if ̂𝑦 matches 𝑦 within 𝜏 (T) then return REFORMAT (chain) , 𝑦 // gold 𝑦 supervises the answer // (D) sample one domain-aware refinement operation 
+
+𝑠 ← SAMPLE DOMAIN STRATEGY ({ BACKTRACK , EXPLORE , VERIFY , CORRECT }) 
+
+ℎ ← DIRECTIONAL HINT (̂𝑦, 𝑦 ) // (H) label-free guidance 
+
+(chain ,̂𝑦 ) ← REFINE (𝑥, chain , 𝑠, ℎ )
+
+reset chain 
+
+return unconverged // no CoT → RL set 1 Input 2 Initial reasoning 3 Verification (T) 4 Refinement (D)+(H) 5 Final (accepted)       
+
+> “Oh great, another Monday. Just what I needed.”
+> Task: valence, [−1, 1]
+> Gold: y = −0.5 “great” and “just what I needed” are read literally, as positive.
+> ŷ = +0.6
+> |ŷ − y| = 1.1 > τ, so the trace is rejected by the tolerance gate. error: too positive
+> Irony detected: “Oh great… another Monday” is sarcastic, so the literal polarity reverses.
+> ŷ = −0.5
+> |ŷ − y| ≤ τ on re-verification. accepted; trace → SFT set
+> Directional hint (H). “The sentiment may be too positive given the context” — direction only, never the value −0.5.
+> verify reject accept
+
+Figure 3: A worked example of one NTDH synthesis loop (illustrative). An ironic tweet is first read literally as positive. The tolerance-aware verifier (T) computes the task-specific error and rejects the trace; the directional hint (H) reports only that the prediction is too positive, without exposing the gold value; and Backtracking (D) then revisits the literal reading and detects the irony. The corrected trace passes verification and enters the SFT set. 
+
+NTDH separates format interpretation from the final decision. The judge LLM is retained only to parse heteroge-neous natural-language conclusions and for logging; a deterministic tolerance-aware verifier (T) compares the parsed prediction with the gold answer under the task-specific construction criterion in Table 2. If the trace fails, the verifier passes only the signed error category—not the gold value—to the directional hint module (H) . Thus, in Figure 3, (T) 
+
+computes |0.6 − (−0 .5) | = 1 .1 > 0.05 and rejects the trace, whereas (H) communicates only “too positive”. The domain-aware strategy (D) then determines how to revise the reasoning, here by backtracking to inspect irony. For E-c only, the construction gate accepts 𝐹 1 ≥ 0.7 so a mostly correct reasoning trace can supervise SFT, whereas the GRPO accuracy reward requires an exact label-set match. Because Naturalisation pairs an accepted trace with the complete gold label set, a trace that passes this permissive gate may not explicitly justify every label in its supervised answer. This reasoning–answer mismatch is a limitation of the present construction and is discussed in §6. 
+
+3.4. Domain-Aware Refinement and Directional Hints 
+
+When the initial CoT fails verification, the pipeline enters an iterative refinement loop. The original framework either randomly selects from four generic search strategies or falls back to label leakage , where the ground-truth 
+
+Page 7 of 16 NTDH for Comprehensive Affective Analysis                         
+
+> Table 2
+> Task-specific criteria used by the deterministic construction verifier and the GRPO accuracy reward. The E-c construction gate is intentionally more permissive. Final reporting additionally follows the official SemEval metrics listed in §5.1.
+> Task Scale Construction verifier (T) GRPO strict criterion
+> EI-reg [0 ,1] Absolute error ≤0.05 Same V-reg [−1 ,1] Absolute error ≤0.05 Same E-c 11 labels Label-set 𝐹 1≥0.7Exact label-set match V-oc 7 classes Exact class match Same
+
+answer is injected into the prompt. Label leakage guarantees convergence at the cost of superficially correct reasoning that contaminates the training data. 
+
+Domain-aware search strategies. The four strategies— Backtracking , Exploring New Paths , Verification , and 
+
+Correction —are each augmented with sentiment- and emotion-specific guidance grounded in a finding from affective science, so the refinement mirrors how affect is expressed and resolved in text rather than following a generic “rethink”. 
+
+Backtracking fires when a deeper cue overturns the surface reading: emotion and sentiment differ [2], valence shifters (negation, intensifiers, diminishers) can flip or rescale a valenced word [3], and irony reverses the literal affect [5]. 
+
+Exploring New Paths switches from lexical to contextual cues—idioms and metaphors are non-compositional [6], emotions co-occur in regular (Plutchik) patterns [9], and Russell’s circumplex [7] spreads affect over arousal × valence. 
+
+Verification checks the draft label directly against evidence in the tweet, including emotion words, shifters, emoji, and punctuation. Correction fixes fine-grained, often ordinal errors—degree adverbs give an intensity order ( slightly <
+
+very < extremely ) [3], the anger–disgust co-occurrence [8] licenses targeted E-c fixes, and the contextual-versus-prior polarity distinction [4] guides the V-oc thresholds. The strategies are applied one at a time across successive refinement rounds : each round randomly selects one, appends its reasoning, and re-verifies (the inner loop of Stage 3, §3.1). 
+
+Hint mode. Instead of revealing the label, the refinement prompt receives only a directional hint derived from the verifier. We design task-specific hint logic rather than a uniform error-based scheme: • Regression tasks (EI-reg, V-reg): the hint indicates whether the prediction is too high , too low , slightly high ,
+
+slightly low , or close , calibrated by error magnitude, with the band cut-offs given in the released code; on the signed valence scale these are rendered as too positive /too negative .• Multi-label classification (E-c): the hint conveys over-identified (too many emotions), incomplete (missed emotions, with co-occurrence reminders such as anger–disgust), or partially correct .• Ordinal classification (V-oc): instead of a generic “incorrect” signal, the hint specifies sentiment polarity direction with three granularity levels: slightly too positive/negative (one-level deviation), too positive/negative 
+
+(two- to three-level), and far too positive/negative (four or more levels). The model is steered toward the correct answer without ever seeing the label, so the resulting reasoning chain stays authentic. 
+
+Failure handling. After exhausting the search budget, three mutually exclusive strategies are available: (1) hint refinement , which provides a directional hint and re-attempts verification without forcing success (recommended); (2) allow failure , which marks the sample as unconverged and excludes it from the SFT set (it is still usable for RL, §3.5); or (3) label leakage (legacy), which injects the ground-truth label; such samples are flagged and assigned the lowest quality tier. 
+
+Enhanced search budget. We raise the maximum number of fresh restarts from 1 to 3 and the refinement depth per attempt from 2 to 3, giving the search more room to converge without resorting to label leakage. 
+
+3.5. Quality Tiering and Data Routing 
+
+Each generated sample is assigned a quality tier based on its verification trajectory (Table 3). The corresponding quality weight can be used for weighted loss during supervised fine-tuning or for data selection. Here the quality tier mainly serves as a converged/unconverged filter. Inspired by the two-stage design of HuatuoGPT-o1 [17], we route verified reasoning traces to SFT and answer-labelled cases to GRPO. We split each                        
+
+> Page 8 of 16 NTDH for Comprehensive Affective Analysis
+> Table 3
+> Quality tier definitions. Iterations denotes the number of verification rounds before the first success.
+> Tier Wt. Iter. Description
+> Gold 1.0 1First-attempt success Silver 0.8 2–3 Success after limited refinement Bronze 0.5 ≥4Success after extensive refine-ment Low 0.0 —Success via label leakage Unconv. 0.0 —No correct answer reached
+
+subtask’s training pool 50/50 by a fixed seed (42) into half-A and half-B . Half-A is sent through the CoT pipeline above; its converged samples (gold/silver/bronze, all carrying a non-empty reasoning chain and an answer) form the 
+
+SFT set. The RL set is the union of (i) all of half-B, which is never sent through CoT generation and so carries only (question, answer) pairs, and (ii) the unconverged hard samples from half-A. GRPO can still extract a reward signal from a (question, answer) pair without a CoT trace. Under this routing every training instance is used exactly once (§5.1). Weighted loss using the gold/silver/bronze sub-weights is left as future work; in the present setup all retained samples enter training with uniform weight. 
+
+## 4. Two-Stage Training 
+
+We train Qwen3-8B in two stages and defer all hyperparameters to §5.1. 
+
+Stage 1: Supervised fine-tuning. We fine-tune Qwen3-8B [20] with full-parameter SFT on the converged, reasoning-augmented SFT set, teaching the policy to emit a structured <think> trace followed by an <answer> .This stage fixes the reasoning format and yields a usable initial policy, whose checkpoint initialises the RL stage. 
+
+Stage 2: Reinforcement learning with GRPO. Starting from the SFT policy, we apply GRPO [21] on the RL set with a binary, tolerance-matched reward (§5.1): a sampled completion scores 1 when its parsed answer meets the task tolerance 𝜏 of §3.2 and 0 otherwise. GRPO estimates advantages from groups of sampled completions, so it needs no separate value network. It learns directly from the strict criterion of Table 2, which also gates construction on the regression and ordinal subtasks, closing the loop between synthesis and optimisation. The unconverged hard cases (a gold answer but no CoT trace) supply additional reward signal at this stage rather than being discarded. 
+
+## 5. Experiments and Results 
+
+5.1. Experimental Setup 
+
+We run the full pipeline with all four NTDH improvements enabled. 
+
+Data. We build on SemEval-2018 Task 1 [10], restricted to the four English subtasks (E-c, EI-reg, V-reg, V-oc). Each subtask’s training pool is halved by a fixed seed (§3.5): half-A is sent through CoT synthesis and its converged samples become the SFT set, while half-B together with the unconverged half-A hard cases form the RL set. Every training instance is therefore used exactly once (100% utilisation; 16,302 instances total: 5,388 SFT and 10,914 RL), and Table 4 gives the per-subtask split sizes. 
+
+Realised quality-tier distribution. Table 5 reports the quality tiers (§3.5) assigned to the 8,150 half-A CoT generations, computed from each sample’s verification trajectory. No sample required label leakage (the low tier is empty): directional hints (§3.4) replaced the gold-answer injection that the original framework fell back to. 
+
+Baselines. We situate our model against the prior systems collected in the EmoLLM benchmark [14], in four groups: (i) the SemEval-2018 competition systems SeerNet [26] and NTUA-SLP [27]; (ii) fine-tuned pre-trained language models (BERT, RoBERTa, SentiBERT); (iii) zero- and few-shot LLM baselines (Falcon, Vicuna, LLaMA2, ChatGPT, GPT-4); and (iv) the instruction-tuned EmoLLM family (EmoBART/T5/OPT/BLOOM and EmoLLaMA), of which                                                                          
+
+> Page 9 of 16 NTDH for Comprehensive Affective Analysis
+> Table 4
+> Dataset statistics per subtask. Half-A is sent through CoT generation; its converged samples form the SFT set, and its hard (2,746 unconverged and 16 empty- or invalid-chain) samples join half-B in the RL set. All reported results use the official test split.
+> half-A SFT →RL half-B RL official Subtask (CoT) (conv.) (hard) (RL src) (total) (test) EI-reg 3,551 2,585 966 3,551 4,517 4,068 E-c 3,419 1,999 1,420 3,419 4,839 3,259 V-reg 590 315 275 591 866 937 V-oc 590 489 101 591 692 937 Total 8,150 5,388 2,762 8,152 10,914 9,201
+> Table 5
+> Realised quality-tier distribution of the 8,150 half-A CoT generations, assigned by verification trajectory (§3.5). The gold/silver/bronze tiers contain 5,404 converged trajectories; 16 empty- or invalid-chain cases are routed to RL, leaving 5,388 SFT trajectories. The low (label-leakage) tier is empty under the hint-refinement fallback.
+> Task Gold Silver Bronze Unconv. Total
+> EI-reg 371 1,477 744 959 3,551 E-c 914 828 260 1,417 3,419 V-reg 45 186 85 274 590 V-oc 169 262 63 96 590 All 1,499 2,753 1,152 2,746 8,150
+
+EmoLLaMA-chat-13B is the strongest on EI-reg and V-oc and serves as our primary reference. All baseline numbers are reproduced verbatim from [14] and are scored on the official test split. Table 7 reports their results and our official-test results in the same task-specific format. 
+
+Metrics. We report the SemEval-2018 primary metrics, so that our results are directly comparable with prior work: • EI-reg, V-reg (regression) and V-oc (7-class ordinal): Pearson correlation 𝑟 against the gold values, with EI-reg macro-averaged over the four target emotions. • E-c (11-label multi-label): Jaccard similarity (the SemEval “acc”), micro-F1, and macro-F1. The strict, tolerance-based accuracy of Table 2 is used for the GRPO reward but is not reported as a headline metric, since no prior system reports it. Predictions are parsed from the structured <think> /<answer> output produced by the policy; there are no parsing failures for either checkpoint reported on the official test. 
+
+Models and training. We fine-tune Qwen3-8B [20] with full-parameter SFT, then run GRPO [21] from the SFT checkpoint with the open-r1 / TRL stack [44, 45]; Table 6 lists the hyperparameters. We report two checkpoints on the official test: the SFT checkpoint used to initialise GRPO ( SFT init , step 280) and the last saved GRPO checkpoint (RL-final ). Throughout, “step” denotes the trainer’s logged global step. Both were fixed in advance; no checkpoint selection was performed on the official test split. 
+
+Reward function. The GRPO reward combines a binary accuracy term with a small format bonus, 1.0 ⋅ 𝑟 acc +0.1 ⋅ 𝑟 fmt . The accuracy reward 𝑟 acc is binary : it is 1 when the parsed prediction satisfies the task’s GRPO strict criterion in Table 2—note that this requires an exact label-set match on E-c, unlike the permissive construction gate—and 0 otherwise; a missing <answer> block scores 0. The format reward 𝑟 fmt is 1 iff the output matches the <think>...</think>\n\n<answer>...</answer> template. The consequences of this binary objective are examined through the official-test error analysis in §6.                                  
+
+> Page 10 of 16 NTDH for Comprehensive Affective Analysis
+> Table 6
+> Training hyperparameters for the two stages, both fine-tuning Qwen3-8B. “—” marks settings that do not apply.
+> SFT GRPO
+> Framework LLaMA-Factory open-r1 / TRL Learning rate 5×10 −6 1×10 −6
+> LR schedule cosine, 0.1warmup cosine, 0.1min-LR Epochs 32Per-device batch 1 ( ×2 GPUs) 2Gradient accumulation 84Max length 8192 4096 / 8192 (prompt / completion) Precision / runtime bf16, ZeRO-3 vLLM colocated generation Validation split 10% held out —Group size 𝐺 —8KL coefficient 𝛽 —0.01
+> Sampling temperature —1.0
+
+5.2. Main Results and Comparison with Prior Work 
+
+Official-test comparison. The official NTDH scores and prior-system results are compared directly in Table 7. NTDH achieves its strongest result on EI-reg. RL-final obtains a macro-averaged Pearson correlation of 0.862 ,outperforming SeerNet by 0.063 and EmoLLaMA-chat-13B by 0.031 . It also achieves the highest correlation on all four target emotions. Performance is more mixed on the other subtasks. RL-final reaches 0.840 on V-reg and 0.831 on V-oc, trailing the strongest baselines by 0.047 and 0.029 , respectively, while its E-c Jaccard of 0.579 is the second-best score in the table. 
+
+Comparison within the EmoLLM family. NTDH remains competitive with the EmoLLM family while using approximately 14× fewer total training records than EmoLLM’s AAID corpus. RL-final exceeds all seven EmoLLM variants on EI-reg, while its V-reg and V-oc results remain below the strongest members of that family. On E-c it achieves a Jaccard score of 0.579 , exceeding the strongest EmoLLM result, EmoT5 at 0.559 , by 0.020 , while remaining 
+
+0.030 below SeerNet. This pattern indicates that the compact NTDH corpus is effective for emotion-intensity regression and structured multi-label prediction, although macro-F1 shows that rare-label recall remains a limitation. 
+
+Two-stage training outcome. Relative to the SFT initialisation checkpoint on the same official split, RL-final improves EI-reg Pearson correlation from 0.800 to 0.862 , V-reg from 0.785 to 0.840 , and V-oc from 0.785 to 0.831 . On E-c, Jaccard increases from 0.557 to 0.579 and micro-F1 from 0.667 to 0.677 , whereas macro-F1 decreases from 0.555 
+
+to 0.543 . The EI-reg improvement occurs across all four target emotions: +0 .076 for anger, +0 .059 for fear, +0 .034 
+
+for joy, and +0 .080 for sadness. 
+
+5.3. Ablation of NTDH Components 
+
+We isolate each NTDH component and measure its effect on the synthesis output, scored against the true tolerance 𝜏 
+
+of §3.2. These figures are data-side: they characterise the quality of the synthesised data independently of downstream model evaluation. For N, T and H, the effect is an offline counterfactual read off the full synthesis run; for D, which is on by default, we run a matched 320 -instance re-synthesis with generic rethink prompts. Table 8 summarises the results.   
+
+> Page 11 of 16 NTDH for Comprehensive Affective Analysis
+> Table 7
+> Comparison with prior work on SemEval-2018 Task 1 (English). EI-reg / V-reg / V-oc use Pearson correlation 𝑟 ; the EI-reg “ave” column is the macro-average over the four emotions. E-c is reported with multi-label accuracy (“acc”, i.e. Jaccard), micro-F1 and macro-F1. All systems, including the two NTDH checkpoints, are evaluated on the official test split. The best score in each column is in bold , and the second-best score is underlined; ties receive the same marking. EI-oc is excluded from our pipeline by design, so its columns are omitted.
+
+EI-reg (Pearson) V-reg V-oc E-c System ave anger fear joy sadness (Pearson) (Pearson) acc mi-F1 ma-F1 
+
+SemEval-2018 competition systems 
+
+SemEval baseline 0.520 — — — — 0.585 0.509 — — —NTUA-SLP 0.757 — — — — 0.839 0.765 0.579 — —SeerNet 0.799 0.827 0.779 0.792 0.798 0.873 0.856 0.609 0.724 0.592 
+
+Pre-trained language models 
+
+BERT-base 0.785 0.800 0.781 0.783 0.742 0.840 0.805 0.567 0.718 0.568 RoBERTa-base 0.717 0.670 0.736 0.769 0.694 0.845 0.772 0.563 0.721 0.536 SentiBERT 0.722 0.724 0.740 0.731 0.691 0.835 0.763 0.535 0.700 0.522 
+
+Zero- / few-shot LLM baselines 
+
+Falcon 0.114 0.147 0.082 0.095 0.131 0.135 0.189 0.190 0.318 0.253 Vicuna 0.281 0.307 0.257 0.260 0.299 0.298 0.579 0.220 0.359 0.253 LLaMA2-7B-chat 0.194 0.176 0.257 0.097 0.247 0.094 0.497 0.257 0.414 0.286 LLaMA2-13B-chat 0.488 0.524 0.506 0.398 0.526 0.312 0.568 0.274 0.424 0.302 ChatGPT 0.599 0.637 0.573 0.569 0.618 0.637 0.748 0.382 0.546 0.429 ChatGPT-FS 0.550 0.572 0.482 0.587 0.560 0.739 0.791 0.413 0.563 0.466 GPT-4 0.656 0.699 0.575 0.686 0.667 0.811 0.788 0.444 0.572 0.497 GPT-4-FS 0.679 0.704 0.654 0.679 0.678 0.825 0.793 0.460 0.582 0.515 
+
+EmoLLM family (instruction tuning on AAID) 
+
+EmoBART 0.795 0.798 0.803 0.795 0.782 0.851 0.835 0.528 0.686 0.548 EmoT5 0.783 0.785 0.797 0.798 0.751 0.852 0.836 0.559 0.712 0.568 EmoOPT 0.825 0.827 0.830 0.837 0.805 0.887 0.843 0.532 0.680 0.550 EmoBLOOM 0.791 0.802 0.797 0.790 0.776 0.857 0.822 0.528 0.683 0.552 EmoLLaMA-7B 0.822 0.819 0.821 0.837 0.809 0.879 0.843 0.545 0.695 0.563 EmoLLaMA-chat-7B 0.824 0.825 0.830 0.832 0.810 0.876 0.827 0.534 0.693 0.540 EmoLLaMA-chat-13B 0.831 0.827 0.835 0.843 0.817 0.886 0.860 0.537 0.696 0.545 
+
+Ours (NTDH CoT → SFT → GRPO on Qwen3-8B) SFT init (ckpt-280) 0.800 0.753 0.799 0.845 0.802 0.785 0.785 0.557 0.667 0.555 RL-final 0.862 0.829 0.858 0.879 0.882 0.840 0.831 0.579 0.677 0.543 
+
+Table 8: Ablation of the four NTDH components, each removed in isolation. Metrics are data-side, measured on the CoT-synthesis output against the true tolerance. For N, 18 .4% is the proportion of initial model conclusions within gold tolerance over all 8,150 half-A samples; 100% denotes correctness of the gold-derived answer field for retained SFT traces. T and H are computed on the full run and D on a matched 320 -instance sample.                
+
+> Component removed Data-quality metric NTDH w/o
+> Naturalisation (N) answer-source gold consistency 100% 18 .4%
+> Tolerance gate (T) out-of-tol. accepts (EI-reg / V-reg) 0% 62 .7%∕47 .5%
+> Domain strat. (D) convergence yield (overall / E-c) 66%∕56% 65%∕46%
+> Hints (H) label leakage in the fallback 0% gold answer injected
+> Page 12 of 16 NTDH for Comprehensive Affective Analysis
+
+Naturalisation (N). Without naturalisation, the candidate <answer> is the model’s own initial conclusion, which lands within gold tolerance for only 18 .4% of the 8,150 half-A samples, and far less often on the regression subtasks. With naturalisation, the answer source is instead the naturalised gold label, so the <answer> field of every retained SFT sample is correct by construction. Accordingly, 100% here denotes answer-target correctness. The synthesis stage retains 5,388 samples with verified, non-empty traces for SFT and routes the other 2,762 half-A samples to RL. 
+
+Tolerance gate (T). Replacing the deterministic gate with the original LLM judge silently admits out-of-tolerance regression answers most of the time (Table 8), corrupting the supervised targets; the ordinal and multi-label subtasks are less affected. The deterministic gate removes this leakage entirely. 
+
+Domain-aware strategies (D). Domain strategies barely move the overall convergence yield, but the effect is task-dependent: they help the fine-grained, multi-label E-c subtask by about 10 points (Table 8), where Plutchik co-occurrence and the circumplex apply, while leaving the coarser regression subtasks unchanged. Their role is to keep the refinement grounded in affective-science theory rather than to raise yield, consistent with reasoning mattering most at the micro level. These are single-run estimates, so the small overall gap may reflect run-to-run variation; the larger E-c difference is promising but requires repeated runs before it can be treated as robust. 
+
+Directional hints (H). When a trace exhausts the search budget, the original framework fell back to injecting the gold answer, so any trace rescued that way carried the target in its own reasoning. Directional hints replace that fallback with a label-free signal, and the effect is visible in the realised tier distribution: the low (label-leakage) tier of Table 5 is empty, so no retained trace owes its supervision to a leaked answer (Table 8). Traces that the hints do not rescue are routed to RL rather than repaired, so the mechanism trades a lower yield for supervision that is honestly derived throughout. 
+
+## 6. Discussion 
+
+Target quality under sparse verifiable rewards. The final two-stage policy scores above the SFT initialisation checkpoint on five of six official-test metrics while using 16,302 total SFT and RL records, approximately 14× fewer than the ∼234 K records in EmoLLM’s AAID corpus. The SFT stage itself uses only 5,388 reasoning trajectories. This result is consistent with the importance of target quality when reward is sparse. With a {0 , 1} reward and group-relative advantages, a prompt group yields no GRPO gradient when all its completions score alike. A controlled estimate obtained with a proxy generator rather than the fine-tuned policy ( 𝑛 = 70 prompts, 𝑘 = 8 samples per prompt) places the share of such zero-variance groups at 77 .1% for E-c and 75 .7% for V-reg; RL thus learns only from the minority of groups that straddle the decision boundary, while wrong SFT targets anchor the policy badly before RL even begins. Naturalisation replaces the model-derived answer source (only 18 .4% of initial conclusions meet the gold tolerance) with gold-consistent targets for every retained SFT sample. Together with the tolerance-aware gate, it is therefore a main lever; adding data mostly adds more zero-variance groups. The one official-test metric that declines, E-c macro-F1 (0.555 → 0.543 ), motivates the qualitative error analysis below. 
+
+Error analysis on the official test. The representative cases in Table 9 expose three recurring failure modes: reasoning–answer inconsistency on E-c, collapse of mixed-valence clauses into neutrality on V-oc, and over-correction on explicit sarcasm markers. The remaining errors therefore arise from rare-label omission, fine-grained intensity calibration, and conflicting contextual cues rather than from output formatting. 
+
+Limitation of permissive E-c verification. The 𝐹 1 ≥ 0.7 E-c construction threshold improves trace coverage but does not guarantee that an accepted trace supports every label in the complete gold answer supplied through Naturalisation. Consequently, some E-c SFT records may contain a locally plausible reasoning trace paired with a broader gold label set. Our present verifier checks the candidate conclusion against the gold set but does not separately test entailment between each reasoning step and each output label. The results should therefore not be interpreted as evidence that every generated rationale is fully faithful. A label-wise reasoning–answer consistency gate is an important next step. 
+
+Implications of the cases. The E-c example shows that a plausible trace is insufficient unless the final answer is checked against the trace itself; future verification should therefore add a reasoning–answer consistency test before                             
+
+> Page 13 of 16 NTDH for Comprehensive Affective Analysis
+> Table 9
+> Representative errors of the GRPO policy on the official test. Gold and predicted labels are shown in the benchmark’s output space; excerpts are shortened only for presentation.
+> Task Tweet excerpt Gold →prediction Observed failure
+> E-c “Indian army is on its way to dispatch all terrorists to hell” {anger, anticipation, op-timism, trust} →{anger, disgust} The trace mentions anticipation and optimism, but the final answer omits them and substitutes disgust, expos-ing a reasoning–answer consistency error. V-oc “YAY, that’s awesome . . . it makes me sad you’re leaving”
+> −2 →0Opposing positive and negative clauses are collapsed into neutrality instead of resolving which cue controls the ordinal judgement. V-reg “The fun never stops. [upside-down-face] #sarcasm”
+> 0.392 →−0 .266 The explicit sarcasm marker trig-gers a polarity reversal stronger than the benchmark annotation, illustrat-ing over-correction by a salient do-main cue.
+
+applying the gold-based gate. The mixed-valence V-oc case motivates an explicit cue-weighting step, whereas the sarcasm case cautions against treating a domain hint as a deterministic label flip. Together, the cases favour confidence-aware, label-specific rewards over uniformly stronger refinement. 
+
+Two lessons for verifiable-reward pipelines. First, the binary reward decouples strict accuracy from the continuous metrics by construction: once a prediction enters the ±0 .05 band, no additional credit distinguishes a close estimate from an exact one. A shaped reward (soft F1 for E-c and distance-aware credit for regression and ordinal tasks) is therefore a natural next step. Second, multi-stage SFT →RL routing changes dataset membership after the initial split, so split disjointness has to be re-verified after every routing decision rather than once at the start. 
+
+## 7. Conclusion 
+
+We asked whether a small, carefully synthesised reasoning corpus plus RL can make an 8B model competitive on fine-grained affective analysis without the hundreds of thousands of supervised instances prior recipes use. NTDH answers the data-quality half of the question: ground-truth naturalisation and a tolerance-aware gate provide gold-consistent answer targets for all 5,388 retained SFT traces, while routing the other 2,762 half-A cases to RL uses all 
+
+16 ,302 instances. A component ablation (§5.3) isolates the contribution of each stage. On the official 9,201-instance test set, RL-final obtains Pearson correlations of 0.862 , 0.840 , and 0.831 on EI-reg, V-reg, and V-oc, respectively, together with Jaccard, micro-F1, and macro-F1 scores of 0.579 , 0.677 , and 0.543 on E-c. It scores above the SFT initialisation checkpoint on five of six metrics and achieves the strongest EI-reg result among the compared systems, demonstrating competitive performance across four heterogeneous subtasks (Table 7). Two refinements follow from our analysis: a shaped GRPO reward that grades how close a prediction lies to the scoring tolerance, and a quality-weighted SFT loss that uses the gold/silver/bronze tiers already produced during synthesis. Beyond SemEval-2018, NTDH is a general recipe for building verifiable-reward reasoning data. Its two core ideas (deriving the verification gate and the reward from one task tolerance, and steering failed traces with label-free directional hints) apply to any task with a checkable answer, such as graded relevance, ordinal stance, or multi-label tagging. NTDH therefore applies to verifiable-reward training on information-retrieval and text-mining tasks, not only on affect. 
+
+## Code and Data Availability 
+
+The NTDH data pipeline, the (frozen) SFT/GRPO training configurations, the evaluation harness, the released prediction and metric files, and the official-test inference script are organised in a single self-contained repository, 
+
+> Page 14 of 16
+
+NTDH for Comprehensive Affective Analysis 
+
+to be released publicly upon publication. The two training files (SFT and RL) rebuild bit-identically from the raw SemEval-2018 inputs at the fixed seed reported above. 
+
+## Ethical Considerations 
+
+SemEval-2018 Task 1 is a public benchmark of English tweets, used here under its original terms; the excerpts in Table 9 are included solely for aggregate error analysis and are minimally reproduced. Affective analysis of social-media text carries dual-use risk: the same models that can support, e.g., mental-health screening can also enable intrusive surveillance of individuals’ emotional states. We therefore frame this work as a study of reasoning and data quality on a fixed academic benchmark, and caution that any deployment on real users requires consent, privacy safeguards, and domain-appropriate validation well beyond the benchmark evidence presented here. 
+
+## References 
+
+[1] Y. Zhang, X. Yang, X. Xu, Z. Gao, Y. Huang, S. Mu, S. Feng, D. Wang, Y. Zhang, K. Song, G. Yu, Affective computing in the era of large language models: A survey from the NLP perspective, arXiv preprint arXiv:2408.04638 (2024). [2] M. Munezero, C. S. Montero, E. Sutinen, J. Pajunen, Are they different? Affect, feeling, emotion, sentiment, and opinion detection in text, IEEE Transactions on Affective Computing 5 (2014) 101–111. [3] A. Kennedy, D. Inkpen, Sentiment classification of movie reviews using contextual valence shifters, Computational Intelligence 22 (2006) 110–125. [4] T. Wilson, J. Wiebe, P. Hoffmann, Recognizing contextual polarity: An exploration of features for phrase-level sentiment analysis, Computational Linguistics 35 (2009) 399–433. [5] A. Reyes, P. Rosso, D. Buscaldi, From humor recognition to irony detection: The figurative language of social media, Data & Knowledge Engineering 74 (2012) 1–12. [6] A. Prochnow, J. E. Bendler, C. Lange, F. I. Tzavellos, B. M. Goritzer, M. ten Thij, R. Batista-Navarro, IDEM: The IDioms with EMotions dataset for emotion recognition, in: Proceedings of the 2024 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING), 2024. URL: https://aclanthology.org/2024.lrec-main.752/ .[7] J. A. Russell, A circumplex model of affect., Journal of personality and social psychology 39 (1980) 1161. [8] A. Mill, L. Kööts-Ausmees, J. Allik, A. Realo, The role of co-occurring emotions and personality traits in anger expression, Frontiers in psychology 9 (2018) 123. [9] M. Jabreel, A. Moreno, A deep learning-based approach for multi-label emotion classification in tweets, Applied Sciences 9 (2019) 1123. [10] S. M. Mohammad, F. Bravo-Marquez, M. Salameh, S. Kiritchenko, SemEval-2018 task 1: Affect in tweets, in: Proceedings of the 12th International Workshop on Semantic Evaluation (SemEval-2018), 2018, pp. 1–17. doi: 10.18653/v1/S18-1001 .[11] P. D. Turney, Thumbs up or thumbs down? semantic orientation applied to unsupervised classification of reviews, in: Proceedings of ACL, 2002, pp. 417–424. [12] B. Pang, L. Lee, S. Vaithyanathan, Thumbs up? sentiment classification using machine learning techniques, in: Proceedings of EMNLP, 2002, pp. 79–86. doi: 10.3115/1118693.1118704 .[13] C. J. Hutto, E. Gilbert, VADER: A parsimonious rule-based model for sentiment analysis of social media text, in: Proceedings of the International AAAI Conference on Web and Social Media (ICWSM), volume 8, 2014, pp. 216–225. [14] Z. Liu, K. Yang, Q. Xie, T. Zhang, S. Ananiadou, EmoLLMs: A series of emotional large language models and annotation tools for comprehensive affective analysis, in: Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD ’24), ACM, Barcelona, Spain, 2024, pp. 5487–5496. doi: 10.1145/3637528.3671552 .[15] DeepSeek-AI, DeepSeek-R1: Incentivizing reasoning capability in LLMs via reinforcement learning, arXiv preprint arXiv:2501.12948 (2025). [16] K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J. Tworek, J. Hilton, R. Nakano, et al., Training verifiers to solve math word problems, arXiv preprint arXiv:2110.14168 (2021). [17] J. Chen, Z. Cai, K. Ji, X. Wang, W. Liu, R. Wang, J. Hou, B. Wang, HuatuoGPT-o1: Towards medical complex reasoning with LLMs, arXiv preprint arXiv:2412.18925 (2024). [18] E. Zelikman, Y. Wu, J. Mu, N. Goodman, Star: Bootstrapping reasoning with reasoning, Advances in Neural Information Processing Systems 35 (2022) 15476–15488. [19] C.-Y. Hsieh, C.-L. Li, C.-K. Yeh, H. Nakhost, Y. Fujii, A. Ratner, R. Krishna, C.-Y. Lee, T. Pfister, Distilling step-by-step! outperforming larger language models with less training data and smaller model sizes, in: Findings of the Association for Computational Linguistics: ACL 2023, 2023, pp. 8003–8017. [20] A. Yang, et al., Qwen3 technical report, arXiv preprint arXiv:2505.09388 (2025). [21] Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. Li, Y. Wu, D. Guo, DeepSeekMath: Pushing the limits of mathematical reasoning in open language models, arXiv preprint arXiv:2402.03300 (2024). [22] J. Devlin, M.-W. Chang, K. Lee, K. Toutanova, Bert: Pre-training of deep bidirectional transformers for language understanding, in: Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers), 2019, pp. 4171–4186. [23] Y. Liu, M. Ott, N. Goyal, J. Du, M. Joshi, D. Chen, O. Levy, M. Lewis, L. Zettlemoyer, V. Stoyanov, Roberta: A robustly optimized bert pretraining approach, arXiv preprint arXiv:1907.11692 (2019). 
+
+Page 15 of 16 NTDH for Comprehensive Affective Analysis 
+
+[24] D. Q. Nguyen, T. Vu, A.-T. Nguyen, Bertweet: A pre-trained language model for english tweets, in: Proceedings of the 2020 conference on empirical methods in natural language processing: system demonstrations, 2020, pp. 9–14. [25] D. Yin, T. Meng, K.-W. Chang, Sentibert: A transferable transformer-based architecture for compositional sentiment semantics, in: Proceedings of the 58th annual meeting of the association for computational linguistics, 2020, pp. 3695–3706. [26] V. Duppada, R. Jain, S. Hiray, SeerNet at SemEval-2018 task 1: Domain adaptation for affect in tweets, in: Proceedings of the 12th International Workshop on Semantic Evaluation (SemEval-2018), 2018, pp. 18–23. doi: 10.18653/v1/S18-1002 .[27] C. Baziotis, N. Athanasiou, A. Chronopoulou, A. Kolovou, G. Paraskevopoulos, N. Ellinas, S. Narayanan, A. Potamianos, NTUA-SLP at SemEval-2018 task 1: Predicting affective content in tweets with deep attentive RNNs and transfer learning, in: Proceedings of the 12th International Workshop on Semantic Evaluation (SemEval-2018), 2018, pp. 245–255. doi: 10.18653/v1/S18-1037 .[28] W. Zhang, Y. Deng, B. Liu, S. J. Pan, L. Bing, Sentiment analysis in the era of large language models: A reality check, in: Findings of the Association for Computational Linguistics: NAACL, 2024. [29] H. Fei, B. Li, Q. Liu, L. Bing, F. Li, T.-S. Chua, Reasoning implicit sentiment with chain-of-thought prompting, in: Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers), 2023, pp. 1171–1182. [30] S. Lei, G. Dong, X. Wang, K. Wang, R. Qiao, S. Wang, InstructERC: Reforming emotion recognition in conversation with multi-task retrieval-augmented large language models, arXiv preprint arXiv:2309.11911 (2023). [31] S. Feng, G. Sun, N. Lubis, W. Wu, C. Zhang, M. Gašić, Affect recognition in conversations using large language models, in: Proceedings of the 25th Annual Meeting of the Special Interest Group on Discourse and Dialogue, 2024, pp. 259–273. [32] J. Wu, Y. Shen, Z. Zhang, L. Cai, Enhancing large language model with decomposed reasoning for emotion cause pair extraction, arXiv preprint arXiv:2401.17716 (2024). [33] L. Cheng, Q. Shao, C. Zhao, S. Bi, G.-A. Levow, TEII: Think, explain, interact and iterate with large language models to solve cross-lingual emotion detection, in: Proceedings of the 14th Workshop on Computational Approaches to Subjectivity, Sentiment, and Social Media Analysis, 2024, pp. 495–504. [34] Y. Chen, S. Yan, S. Liu, Y. Li, Y. Xiao, EmotionQueen: A benchmark for evaluating empathy of large language models, in: Findings of the Association for Computational Linguistics: ACL 2024, 2024, pp. 2149–2176. [35] N. Deas, E. Turcan, I. E. Perez Mejia, K. McKeown, MASIVE: Open-ended affective state identification in english and spanish, in: Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing, 2024, pp. 20467–20485. [36] D. Saeedi, A. Kheirandish, S. Saeedi, H. Sahour, A. Panahi, I. Naeeni, GT-NLP at SemEval-2025 task 11: EmoRationale, evidence-based emotion detection via retrieval-augmented generation, in: Proceedings of the 19th International Workshop on Semantic Evaluation (SemEval-2025), 2025, pp. 640–650. [37] C. Bonard, G. Cortal, Improving language models for emotion analysis: Insights from cognitive science, in: Proceedings of the Workshop on Cognitive Modeling and Computational Linguistics, 2024, pp. 264–277. [38] J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. H. Chi, Q. V. Le, D. Zhou, Chain-of-thought prompting elicits reasoning in large language models, in: Advances in Neural Information Processing Systems (NeurIPS), 2022. [39] T. Kojima, S. S. Gu, M. Reid, Y. Matsuo, Y. Iwasawa, Large language models are zero-shot reasoners, in: Advances in Neural Information Processing Systems (NeurIPS), 2022. [40] X. Wang, J. Wei, D. Schuurmans, Q. Le, E. Chi, S. Narang, A. Chowdhery, D. Zhou, Self-consistency improves chain of thought reasoning in language models, in: International Conference on Learning Representations (ICLR), 2023. [41] A. Jaech, A. Kalai, A. Lerer, A. Richardson, A. El-Kishky, A. Low, A. Helyar, A. Madry, A. Beutel, A. Carney, et al., OpenAI o1 system card, arXiv preprint arXiv:2412.16720 (2024). [42] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. L. Wainwright, et al., Training language models to follow instructions with human feedback, in: Advances in Neural Information Processing Systems, volume 35, Curran Associates, Inc., 2022, pp. 27730–27744. URL: https: //proceedings.neurips.cc/paper_files/paper/2022/hash/b1efde53be364a73914f58805a001731-Abstract.html .[43] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, O. Klimov, Proximal policy optimization algorithms, arXiv preprint arXiv:1707.06347 (2017). [44] Hugging Face, Open R1: A fully open reproduction of DeepSeek-R1, 2025. URL: https://github.com/huggingface/open-r1 .[45] L. von Werra, Y. Belkada, L. Tunstall, E. Beeching, T. Thrush, N. Lambert, S. Huang, K. Rasul, Q. Gallouédec, TRL: Transformers reinforcement learning, 2020. URL: https://github.com/huggingface/trl .
+
+Page 16 of 16

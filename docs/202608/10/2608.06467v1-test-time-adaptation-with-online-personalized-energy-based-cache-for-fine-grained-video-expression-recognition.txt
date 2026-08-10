@@ -1,0 +1,407 @@
+Title: Test-Time Adaptation with Online Personalized Energy-Based Cache for Fine-Grained Video Expression Recognition
+
+URL Source: https://arxiv.org/pdf/2608.06467v1
+
+Published Time: Mon, 10 Aug 2026 00:08:05 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Test-Time Adaptation with Online Personalized Energy-Based Cache for Fine-Grained Video Expression Recognition 
+
+## Masoumeh Sharafi 1, Muhammad Osama Zeeshan 1, Soufiane Belharbi 1, Alessandro Lameiras Koerich 2, Marco Pedersoli 1, Eric Granger 1
+
+> 1
+
+LIVIA, Department of Systems Engineering, École de technologie supérieure, Montreal, Canada 
+
+> 2
+
+LIVIA, Department of Software and IT Engineering, École de technologie supérieure, Montreal, Canada {masoumeh.sharafi.1,muhammad-osama.zeeshan.1}@ens.etsmtl.ca {soufiane.belharbi,marco.pedersoli,alessandro.koerich,eric.granger}@etsmtl.ca 
+
+Abstract 
+
+Facial expression recognition (FER) in videos remains chal-lenging because models must identify subtle temporally evolv-ing affective states that vary significantly across target in-dividuals. Although vision-language models provide trans-ferable visual-semantic representations, models trained on subject-independent source data often degrade under subject-specific distribution shifts at inference time. State-of-the-art test-time adaptation (TTA) methods typically optimize mod-els during inference, increasing computational cost and la-tency. Cache-based approaches avoid parameter updates but typically require accumulating sufficient target samples to construct reliable class prototypes. This is difficult at the beginning of adaptation and when some classes are rarely observed. To alleviate these limitations, existing methods may store source prototypes, but these are not personalized to the current target subject. This paper introduces Energy-Based Cache Personalization ( EB-CaP ), a subject-based on-line TTA method for video FER that samples class-specific prototypes personalized to each target video on-the-fly. Un-like existing cache-based methods, EB-CaP does not require observing and accumulating large amounts of target data or storing diverse source prototypes across subjects. Instead, it relies on a lightweight energy-based model (EBM) to sam-ple class-wise prototypes from the current unlabeled video and populate a personalized cache online. The energy func-tion relies only on the pretrained CLIP model, where the similarity between the visual embedding of the target video and the class text embeddings guides the energy-based sam-pling process. In parallel, positive and negative caches store reliable and uncertain target embeddings, respectively. An adaptive entropy gating follows the evolving confidence dis-tribution to control cache updates, while a diversity gate prevents redundant samples from dominating the memory. Predictions are refined by combining cache-derived scores with the current CLIP scores. Experiments on 3 challeng-ing video datasets for video FER – BioVid , StressID ,and BAH – indicate that EB-CaP can outperform state-of-the-art TTA methods, while maintaining low computational and memory overhead. Our code is publicly available at https://github.com/MasoumehSharafi/EB-CaP. 
+
+## Introduction 
+
+Fine-grained FER in videos is challenging as closely related affective states may differ only in subtle facial movements, expression intensity, or temporal evolution. These cues also 
+
+Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+Figure 1: Cache-based TTA methods from target subject data. 
+
+(a) State-of-the-art methods with dynamic positive and neg-ative target caches may accumulate confident but incorrect pseudo-labels (Karmanov et al. 2024). (b) A prototype-based method mitigates this issue by constructing prototypes from source domain samples with ground-truth labels and stor-ing them at test time (Sharafi et al. 2026b). (c) In contrast, 
+
+EB-CaP samples subject-specific, class-wise prototypes on-line from each unlabeled target video using an EBM. vary across individuals, causing the same state to appear differently across subjects while different states may exhibit similar facial patterns. Consequently, models trained on fixed source subjects often generalize poorly to unseen individuals. arXiv:2608.06467v1 [cs.CV] 6 Aug 2026 This limitation is particularly important in many applications including human–computer interaction (Pu and Nie 2023), health monitoring (Gaya-Morey et al. 2025), and the assess-ment of pain (Sharafi et al. 2025, 2026a,b; Zeeshan et al. 2024, 2025a,b), depression (De Melo, Granger, and Hadid 2020), and stress (Calvo and D’Mello 2010). Reliable fine-grained video FER, therefore, requires representations that can capture subtle expression cues, temporal dynamics, and subject-specific variability. VLMs, and in particular CLIP models (Radford et al. 2021), provide a promising foundation for fine-grained FER by transferring semantic knowledge learned from large-scale visual–text data (Yu et al. 2022; Li et al. 2021, 2023). Recent CLIP-based models for FER have further improved recog-nition through task-specific prompting, temporal modeling, and richer textual supervision (Foteinopoulou and Patras 2024; Zhao and Patras 2023; Zhao et al. 2025). However, these approaches mainly learn subject-independent represen-tations and may degrade when the facial behavior, appear-ance, or recording conditions of an unseen subject differ from those observed during source training (Shu et al. 2023; Tu, Deng, and Gedeon 2023). This limitation is especially impor-tant in fine-grained FER, where small subject-specific vari-ations can alter predictions between closely related affective states. TTA can address this issue by personalizing a model to target subjects based on unlabeled videos captured at in-ference time. State-of-the-art CLIP-based TTA methods are broadly optimization-based or cache-based. Optimization-based methods update prompts, normalization statistics, or lightweight model components using objectives such as en-tropy minimization and prediction consistency (Shu et al. 2022; Feng et al. 2023; Abdul Samadh et al. 2023; Yoon et al. 2024; Zhang, Zhou, and Li 2024); however, repeated online optimization increases inference costs and may cause unstable adaptation when target data are ambiguous or incor-rectly predicted. Cache-based TTA offers a more efficient alternative, where target embeddings and their pseudo-labels are stored and re-trieved to refine subsequent predictions (Karmanov et al. 2024; Zhang et al. 2024; Huang et al. 2025; Nguyen et al. 2025; Liang et al. 2025; Zhu et al. 2025; Zhai et al. 2025; Chen et al. 2025b,a; Guan et al. 2025). Since model param-eters remain fixed, these methods are suitable for real-time applications. However, they often require sufficient target samples to form reliable class prototypes, creating a cold-start problem when classes are rare or initially absent. Some methods store source prototypes (Sharafi et al. 2026b), but these require extra storage and are not personalized to the cur-rent subject. The diversity of observed samples limits target caches. In video FER, highly correlated temporal windows can cause redundant high-confidence embeddings to dom-inate the cache, while incorrect pseudo-labels may propa-gate across ambiguous transitions. An effective cache-based method should therefore construct reliable, diverse, and per-sonalized prototypes without requiring large amounts of ac-cumulated target data. This paper introduces Energy-Based Cache Personaliza-tion ( EB-CaP ), a cache-based TTA method for video FER that operates without model optimization at inference time. It samples online using an energy-based model (EBM) (Duve-naud et al. 2020) to generate class-wise prototypes from each unlabeled target video. As illustrated in Figure 1 contrasts three cache construction strategies: target-only methods ac-cumulate positive and negative target embeddings but suffer from cache cold start (Fig. 1(a)); prototype-based methods store prototypes derived from labeled source data, provid-ing more reliable class references when target caches con-tain high-confidence but incorrectly pseudo-labeled samples (Fig. 1 (b)); and EB-CaP generates subject-specific, class-wise prototypes online from each unlabeled target video without storing source data or labels (Fig. 1(c)). The sam-pling process starts from the current video representation and is stochastic, enabling the generation of multiple diverse pro-totypes for each class. To implement this sampling strategy, 
+
+EB-CaP uses a lightweight class-conditional EBM whose energy is guided by the similarity between the target visual embedding and the CLIP class text embeddings. Generated prototypes are stored in a personalized sampled cache that is refreshed for every incoming video. In parallel, a positive cache stores reliable target embeddings, while a negative cache retains uncertain or class-conflicting embeddings as negative evidence. These target caches are maintained across videos of the same subject and reset for each new subject. Their updates are controlled by an adaptive entropy gate and a diversity gate that limits redundant samples. During infer-ence, cosine similarities between the incoming video and all three caches are converted into class scores and combined with the base CLIP scores to obtain the final prediction. The main contributions of this work are summarized as follows. (1) EB-CaP : an online strategy that rapidly sam-ples diverse class-wise embeddings personalized to each tar-get video. It addresses the cache cold start problem with-out accumulating target data or retaining source prototypes. A lightweight EBM guided by CLIP visual-text similarity enables this sampling. (2) Adaptive entropy and diversity gates for reliable cache construction. The entropy gate up-dates the caches based on each incoming video, while the diversity gate selects informative and non-redundant embed-dings, reducing noisy pseudo-labels and repeated cache en-tries. (3) An extensive set of experiments on three challeng-ing fine-grained video FER benchmarks – BioVid (Walter et al. 2013), StressID (Chaptoukaev et al. 2023), and 
+
+BAH (González-González et al. 2025) – show that EB-CaP 
+
+outperforms state-of-the-art optimization-based and cache-based TTA methods while maintaining low computational and memory overhead. 
+
+## Related Work 
+
+Vision-Language Models for FER. CLIP enables prompt-based recognition by matching visual features with semantic text representations (Radford et al. 2021), making it suitable for FER. However, facial expressions are fine-grained and affected by subject identity, temporal dynamics, and record-ing conditions. Recent CLIP-based FER methods improve textual guidance and temporal modeling through expression descriptions, language priors, and parameter-efficient adap-tation (Li et al. 2024; Zhao and Patras 2023; Foteinopoulou and Patras 2024; Zhao et al. 2025; Ma et al. 2025). Never-theless, they mainly focus on training-time adaptation and prompt design, leaving test-time personalization for video FER less explored. 
+
+Test-Time Adaptation. TTA adapts pretrained models to un-labeled test data under distribution shift. Early methods use self-supervised objectives or entropy minimization, while later approaches improve robustness under noisy, small-batch, and non-stationary streams through selective updates, teacher–student learning, and memory mechanisms (Sun et al. 2020; Zeeshan et al. 2026; Wang et al. 2022; Yuan, Xie, and Li 2023). However, repeated updates may accumulate er-rors and cause model drift. For VLMs, TPT, and PromptAl-ign adapt prompts or align test-time feature statistics, while other methods use prompt ensembling, weight averaging, or CLIP-specific objectives (Shu et al. 2022; Abdul Samadh et al. 2023; Osowiechi et al. 2024; Lafon et al. 2025). These approaches require forward and backward passes and remain sensitive to noisy predictions and optimization settings. 
+
+Cache-Based TTA. Cache-based TTA keeps the backbone frozen and adapts predictions through retrieval from a mem-ory (Karmanov et al. 2024). CLIP-Adapter, Tip-Adapter, and CODER improve CLIP predictions using adapters, key-value caches, or neighborhood retrieval (Gao et al. 2024; Zhang et al. 2022; Yi et al. 2024). Recent methods strengthen cache reliability through selective updates, calibration, and proto-type refinement (Nguyen et al. 2025; Liang et al. 2025; Zhang et al. 2024; Zhu et al. 2025; Zhai et al. 2025; Chen et al. 2025b,a; Guan et al. 2025). However, they require sufficient target samples to construct reliable prototypes, creating a cold-start problem when the cache is initialized or reset. Tar-get videos may also omit some expression classes, producing incomplete caches. Retaining source prototypes addresses missing classes (Sharafi et al. 2026b), but requires additional storage and is not personalized to the current subject. More-over, correlated temporal windows may fill the cache with redundant embeddings, while noisy pseudo-labels propagate errors. These limitations motivate generating diverse class-wise prototypes personalized to each target video. 
+
+## TTA through Cache Personalization 
+
+The core of EB-CaP is a personalized sampled cache that generates diverse class-wise prototypes from each incoming target video. This cache is rebuilt online for every video, providing immediate subject-adaptive representations with-out requiring the accumulation of large target data or the re-tention of source prototypes. EB-CaP further maintains two target caches across videos from the same subject: a positive cache of reliable target embeddings and a negative cache of uncertain embeddings. These target caches are reset when a new subject is encountered. For prediction, the current video embedding is compared with all cached representations, and the resulting similarities are converted into cache scores and combined with the CLIP scores. Adaptive entropy and diver-sity gates control updates to the target caches. Figure 2 summarizes the proposed method. Let tgt de-note a test target subject and let X tgt represent an unla-beled video sequence of length T from the target subject tgt. A frozen CLIP image encoder EI : RH×W ×3 → Rd
+
+maps each frame to an embedding vtgt . A temporal Trans-former encoder EV : ( Rd)L → Rd models the dependencies among L consecutive frame embeddings and produces the video-window representation ztgt . The temporal encoder is trained on the source data and remains fixed during test-time adaptation. Let C denote the set of expression classes, and let pc be the textual prompt associated with class c ∈ C .The frozen CLIP text encoder ET produces the normalized class embedding ec. Given the current video representa-tion ztgt , the CLIP class score for class c is computed as 
+
+stgt (c) = η cos( ztgt , ec), where η > 0 is the fixed CLIP logit scale. 
+
+Personalized Sampled Cache 
+
+For each target video, a personalized sampled cache is con-structed by drawing class-conditioned embeddings initial-ized from its normalized video representation ztgt . The frozen recognition model, parameterized by θ and trained on the source data, defines a learned class-conditional en-ergy through its class compatibility score (Duvenaud et al. 2020): 
+
+Eθ (z, c ) = −z⊤ec, (1) where ec is the normalized class embedding produced by the frozen model, and lower energy indicates greater compati-bility between representation z and class c.For every class c ∈ C, a separate stochastic gradient Langevin dynamics (SGLD) (Welling and Teh 2011) chain is initialized from the current target representation: z0 = ztgt .The chain is subsequently refined as 
+
+ezk+1 = ezk − α
+
+2 ∇ezk Eθ (ezk, c )+ √α σ ϵk, ϵk ∼ N (0, I),
+
+(2) where α is the SGLD step size, σ controls the noise mag-nitude, and ϵk is independently sampled at each iteration from the standard Gaussian distribution N (0, I). The sam-pled embedding is ℓ2-normalized after each refinement step to remain in the normalized representation space of the recog-nition model. Once the sampled embedding is predicted as the condition-ing class c, the chain is stopped to encourage diversity without introducing an additional confidence threshold. Specifically, sampling stops when arg max c′∈C ez⊤ 
+
+> k
+
+ec′ = c or when the maximum number of refinement steps is reached. The fi-nal sampled embedding is then ℓ2-normalized before being stored in the cache. The recognition model remains fixed throughout this process, and gradients are computed only with respect to the sampled embedding. After sampling, the personalized sampled cache is defined as Ks = {ezc,j | c ∈ C , j = 1 , . . . , m s}, where ms em-beddings are sampled for every class, and the class index 
+
+c indicates the corresponding conditioning class. Multiple chains can be sampled in parallel, including several samples from the same class. Since only the embedding is updated and the chains are stopped early, sampling requires few iterations and introduces limited computational overhead. Initializing each chain from the current target representa-tion preserves video-specific characteristics, while indepen-dently sampled Gaussian noise produces diverse embeddings Figure 2: Overview of EB-CaP for online TTA. Frozen CLIP encoders and a temporal encoder produce the current video representation and CLIP class scores. An energy-based model (EBM) samples class-conditioned embeddings initialized from the target video to construct a personalized sampled cache covering all classes. In parallel, adaptive entropy and diversity gates control updates to the positive and negative target caches. Final predictions combine the current CLIP prediction with the caches. for each class. A new Ks is constructed for every target video and cleared before processing the next one. Because the cache contains samples for all classes from the beginning, it also alleviates the cold-start problem and provides evidence for classes that have not yet been observed in the target caches. 
+
+Target Caches 
+
+In addition to Ks, EB-CaP maintains a positive target cache 
+
+Kp and a negative target cache Kn. Both caches are updated sequentially as the temporal representations of the current video are processed. Their capacities are bounded per class to maintain constant memory usage. Retrieval is completed before the current representation is considered for insertion, ensuring that the current sample does not contribute to its own refined prediction. 
+
+Positive cache. The positive cache is defined as Kp = {zpc,j |
+
+c ∈ C , j = 1 , . . . , m p}, where zpc,j is the j-th accepted tar-get embedding with pseudo-label c, and mp is the current number of positive entries for that class. Each class partition has a fixed capacity mp. The predictive entropy of each en-try is retained only as metadata for reliability-based cache replacement. 
+
+Negative cache. The negative cache is defined as Kn =
+
+{znc,j | c ∈ C , j = 1 , . . . , m n}, where znc,j is the j-th un-certain target embedding for which class c is the least likely prediction, and mn is the current number of negative entries for that class. Each class partition has a fixed capacity m−,and the stored entropy is used only for cache replacement. 
+
+Online TTA per User Video 
+
+For each target video, EB-CaP processes the temporal repre-sentations sequentially. The current representation ztgt pro-duces CLIP logits and retrieves evidence from Ks, Kp, and 
+
+Kn. The corresponding cache logits are combined with the current CLIP logits to obtain refined class scores. Cache updates are then controlled by an adaptive entropy gate for reliability and a diversity gate for representational coverage. 
+
+Adaptive entropy gate. The adaptive entropy gate con-trols whether the current target representation updates the dynamic caches. Predictive entropy is computed from the refined class probabilities, where lower entropy indicates higher confidence. During the first five temporal represen-tations of each video, fixed thresholds of 0.5 and 0.8 are used for the positive and negative caches, respectively. Af-terwards, the thresholds are adapted using the running mean 
+
+μ and standard deviation σ of the predictive entropy val-ues observed within the current video, as τp = μ − σ and 
+
+τn = μ+σ. Samples with entropy below τp are assigned their most probable class and considered for the positive cache, while samples with entropy between τp and τn are assigned their least probable class and considered for the negative cache. Samples above τn are rejected. The running entropy statistics are reset at the beginning of each video. 
+
+Diversity gate. While entropy measures candidate reliability, it does not indicate whether the candidate adds new informa-tion to the cache. Diversity is measured as the mean feature-wise variance of the embeddings stored in the corresponding class partition of Kp or Kn. For a candidate assigned to class c, this variance is computed before and after temporar-ily adding the candidate, and the diversity gain is defined as 
+
+∆D = Dafter − Dbefore . A positive gain indicates that the candidate increases the spread of the class representations, whereas a non-positive gain indicates limited or redundant information. The candidate is retained when ∆D > 0.
+
+Cache Retrieval and Final Prediction 
+
+For the current representation ztgt , cosine similarities are computed with all embeddings stored in the sampled, pos-itive, and negative caches. For each class, the similarity-weighted contributions of all cache entries associated with that class are aggregated to produce one sampled-cache score 
+
+ss, positive-cache score sp, and negative-cache score sn.Thus, no single prototype is selected; all available prototypes contribute to the corresponding class score. The refined class scores are obtained as 
+
+sfuse = stgt + ss + sp − sn, (3) The final prediction is obtained by selecting the class with the highest fused score, by = arg max c∈C sfuse (c).Protocol Method BioVid StressID BAH 
+
+WAR ↑ F1 ↑ WAR ↑ F1 ↑ WAR ↑ F1 ↑
+
+ZS CLIP-ViT-B/32 (Radford et al. 2021) (ICML’21) 50.0 33.3 60.4 34.8 39.5 28.1 CLIP-ViT-B/32 (Radford et al. 2021) (ICML’21) 69.7 66.6 67.0 44.5 60.4 39.8 EmoCLIP (Foteinopoulou and Patras 2024) (FG’24) 67.7 63.4 63.5 35.9 56.2 36.5 X-CLIP (Ni et al. 2022) (ECCV’22) 70.9 57.9 62.3 41.3 63.0 39.2 FT Exp-CLIP (Zhao et al. 2025) (WACV’25) 70.2 66.7 63.1 44.5 62.2 38.5 TPT (Shu et al. 2022) (NeurIPS’22) 71.1 67.5 70.9 57.9 65.6 39.7 TDA (Karmanov et al. 2024) (CVPR’24) 71.4 68.2 69.7 49.9 65.2 39.9 DPE (Zhang et al. 2024) (NeurIPS’24) 73.1 69.6 71.3 54.2 66.7 39.4 PromptAlign (Abdul Samadh et al. 2023) (NeurIPS’23) 75.3 71.6 74.6 53.2 67.1 39.7 ReTA (Liang et al. 2025) (ACMMM’25) 75.1 71.3 71.8 52.8 67.6 39.8 T3AL (Liberatori et al. 2024) (CVPR’24) 76.1 72.9 75.9 59.4 67.9 40.7 FT + TTA 
+
+EB-CaP (ours) 81.0 78.2 81.2 67.0 68.9 41.0 
+
+Table 1: Performance ( F1 score and WAR ) of zero-shot (ZS), fine-tuning (FT), and TTA on CLIP models for FER. Results are averaged over 10 target subjects for each dataset. CLIP-ViT-B/32 † denotes full CLIP fine-tuning. 
+
+Method Sub-1 Sub-2 Sub-3 Sub-4 Sub-5 Sub-6 Sub-7 Sub-8 Sub-9 Sub-10 Avg. TPT (Shu et al. 2022) 92.0 51.5 40.0 49.6 79.0 87.0 79.5 43.4 99.0 54.0 67.5 TDA (Karmanov et al. 2024) 94.9 50.3 43.5 48.0 80.8 86.2 80.2 43.5 100.0 55.0 68.2 DPE (Zhang et al. 2024) 90.4 51.5 43.5 73.1 72.0 83.6 79.8 48.5 100.0 54.4 69.6 PromptAlign (Abdul Samadh et al. 2023) 94.2 60.1 42.5 61.5 83.5 90.5 80.2 43.5 100.0 60.0 71.6 ReTA (Liang et al. 2025) 94.2 60.1 43.5 60.8 83.5 88.0 80.2 43.5 100.0 60.0 71.3 T3AL (Liberatori et al. 2024) 95.8 62.0 43.9 61.5 83.9 93.9 83.0 43.5 100.0 62.0 72.9 
+
+EB-CaP (ours) 94.4 66.0 33.3 73.0 99.5 97.1 89.0 47.0 100.0 83.3 78.2 
+
+Table 2: F1 score per subject on the BioVid dataset for EB-CaP and competing TTA methods. Best results are shown in bold .
+
+Method Sub-1 Sub-2 Sub-3 Sub-4 Sub-5 Sub-6 Sub-7 Sub-8 Sub-9 Sub-10 Avg. TPT (Shu et al. 2022) 70.7 43.6 86.0 83.1 36.4 78.7 41.1 50.0 40.0 50.0 57.9 TDA (Karmanov et al. 2024) 45.5 40.0 50.1 81.0 35.0 80.0 29.6 45.6 42.9 50.0 49.9 DPE (Zhang et al. 2024) 41.0 40.6 49.0 81.0 49.8 80.0 56.0 46.0 42.9 56.6 54.2 PromptAlign (Abdul Samadh et al. 2023) 41.3 45.0 45.6 82.3 48.1 80.0 44.0 58.0 42.9 45.5 53.2 ReTA (Liang et al. 2025) 43.2 41.0 53.0 80.9 36.1 80.0 39.1 53.3 42.9 59.3 52.8 T3AL (Liberatori et al. 2024) 46.3 48.6 48.6 80.1 51.0 80.0 61.8 68.0 44.0 66.0 59.4 
+
+EB-CaP (ours) 77.0 50.0 87.0 82.0 46.1 84.2 62.0 68.5 46.2 67.1 67.0 
+
+Table 3: F1 score per subject on StressID for EB-CaP and other TTA methods. 
+
+Method Sub-1 Sub-2 Sub-3 Sub-4 Sub-5 Sub-6 Sub-7 Sub-8 Sub-9 Sub-10 Avg. TPT (Shu et al. 2022) 40.6 35.7 43.7 45.9 45.6 43.1 35.0 34.7 40.7 32.9 39.7 TDA (Karmanov et al. 2024) 40.0 39.7 44.4 46.0 42.0 42.6 35.0 35.5 40.7 33.2 39.9 DPE (Zhang et al. 2024) 34.8 37.1 44.2 46.0 45.3 43.0 37.2 32.5 41.0 33.2 39.4 PromptAlign (Abdul Samadh et al. 2023) 25.0 37.0 46.9 51.0 46.1 43.5 41.0 32.5 41.0 33.2 39.7 ReTA (Liang et al. 2025) 25.0 36.9 41.9 51.0 46.1 51.2 40.0 32.5 41.0 33.2 39.8 T3AL (Liberatori et al. 2024) 41.6 37.0 44.7 46.0 45.2 43.0 38.0 36.2 41.0 35.0 40.7 
+
+EB-CaP (ours) 41.8 39.9 44.7 45.9 46.2 43.6 41.0 32.0 40.4 35.2 41.0 
+
+Table 4: F1 score per subject on BAH for EB-CaP and other TTA methods. 
+
+## Results and Discussion 
+
+Experimental Methodology 
+
+Datasets. Three challenging public video datasets are used to evaluate the proposed approach: BioVid (Walter et al. 2013), StressID (Chaptoukaev et al. 2023), and 
+
+BAH (González-González et al. 2025). In line with previ-ous studies (Zeeshan et al. 2024; Sharafi et al. 2025; Zeeshan et al. 2025a,b), subject-independent (cross-subject) splits are employed to construct the source and target sets. BioVid 
+
+Heat Pain Database (Part A) consists of controlled heat-pain recordings spanning several intensity levels plus a neu-tral condition, accompanied by synchronized facial video; the source set comprises 77 subjects, while the remaining 10 form the target set. StressID provides facial record-ings gathered during stress-inducing tasks along with cor-responding self-reported affect labels, split into 44 source subjects and 10 target subjects. BAH is a large-scale, mul-timodal dataset for recognizing ambivalence and hesitancy, captured via webcam and annotated at the frame level; it is divided into 143 source subjects and 10 target subjects. 
+
+Implementation Details. All experiments were conducted on a single NVIDIA A100 GPU with 48 GB of memory, using CLIP ViT-B/32 as the backbone and a batch size of 16. For each target video, the class-conditional sampler gen-erates ms=3 embeddings per class using at most 20 SGLD iterations, with a step size of 0.01 and a noise scale of 0.1.The positive and negative cache capacities are set to mp=5 
+
+and mn=4 embeddings per class, respectively. The running entropy statistics are reset at the beginning of each video. During the first five temporal representations, a positive en-tropy threshold of 0.5 and a negative entropy threshold of 0.8
+
+are used for warm-up. The thresholds are then adapted us-ing the entropy statistics accumulated within the same video, with both adaptation coefficients set to 1. The diversity gate retains a candidate only when it produces a positive variance gain, ∆D > 0, and negative cache scores are fused using unit weights. The same configuration is used for all datasets. Baseline comparisons cover both CLIP-based FER ap-proaches and TTA methods. For CLIP-based FER, EB-CaP 
+
+is benchmarked against the frozen CLIP-ViT-B/32 backbone in a zero-shot setting, CLIP-ViT-B/32 † (Foteinopoulou and Patras 2024) (CLIP fine-tuned on the source domain), and EmoCLIP (Foteinopoulou and Patras 2024) (which trains only an adapter). Further baselines include X-CLIP (Ni et al. 2022) and Exp-CLIP (Zhao et al. 2025), which use trainable projection modules; Exp-CLIP additionally uses LLM-generated expression descriptions. For TTA, EB-CaP 
+
+is compared with methods developed for image recogni-tion—namely TPT (Shu et al. 2022), TDA (Karmanov et al. 2024), DPE (Zhang et al. 2024), PromptAlign (Ab-dul Samadh et al. 2023), and ReTA (Liang et al. 2025)—as well as an adapted version of T3AL (Liberatori et al. 2024), a video-based action recognition approach. All baselines use the same CLIP backbone, prompts, preprocessing, and ex-perimental protocol. Consistent with prior CLIP-based FER                          
+
+> Method Time (ms) Memory (MB) WAR (%)
+> TPT 771.2 2800 71.1 PromptAlign 900.0 3100 75.3 TDA 97.8 2124 71.4 DPE 263.9 1700 73.1 ReTA 174.0 2390 75.1 T3AL 520.0 2200 76.1
+> EB-CaP 220.0 612.0 81.0
+
+Table 5: Complexity of TTA methods. Run time per batch (B=16), memory, and average WAR for the BioVid dataset. CLIP Sampled Cache Target Cache EB-CaP (Ours)  
+
+> 45 50 55 60 65 70 75 80
+> WAR (%)
+> 50.0 77.9 78.6 81.0
+
+Figure 3: Cache design on BioVid data. Results compare the CLIP baseline, personalized sampled cache, target cache (positive and negative), and complete EB-CaP method in terms of WAR .  
+
+> Entropy Diversity Both
+> 020 40 60 80 10 .422 .45.9
+
+Gate configuration Pass rate (%)  Pass rate 
+
+> 74 76 78 80 82 79 .178 81
+> WAR  (%)
+> WAR
+
+Figure 4: Adaptive entropy and diversity gates on BioVid .Bars report the percentage of candidates admitted by each gate configuration, while points show the corresponding 
+
+WAR . “Both” indicates that both gates are jointly applied. research (Zhao et al. 2025), the prompt template " a person with an expression of [CLS] " is applied across all TTA base-lines and EB-CaP . Further details on baseline and prompt selection can be found in supplementary materials. 
+
+Comparison with State-of-the-Art Methods 
+
+Table 1 compares zero-shot CLIP, fine-tuned FER models, and recent TTA approaches on BioVid , StressID , and 
+
+BAH . Fine-tuning and test-time adaptation generally improve over zero-shot inference, confirming that a fixed CLIP repre-sentation is insufficient to address the subject shift. Among the compared methods, EB-CaP achieves the best WAR 
+
+and F1 on all three datasets. The improvements are par-ticularly pronounced on BioVid and StressID , where 
+
+EB-CaP provides clear gains over the strongest competing TTA method in both metrics. On BAH , the improvement is smaller, indicating that the remaining recognition errors are more difficult to resolve through test-time personalization. The subject-wise results in Tables 2–4 show that only a few favorable subjects do not cause the improvements. On 
+
+BioVid and StressID , EB-CaP obtains the strongest performance for most target subjects and substantially im-proves the average F1 , although a small number of subjects remain challenging. The results on BAH are more mixed, with smaller differences among the methods and varying rankings across subjects. This subject-level variability high-lights the importance of evaluating personalization methods beyond dataset-level averages. Conditioned sampled embed-dings with reliable positive and complementary negative tar-get caches provide more robust adaptation than relying only on model optimization or observed target samples. More-over, these improvements are obtained without updating the recognition model during inference. A paired two-sided Wilcoxon signed-rank test over the subject-wise WAR results on BioVid confirms a statistically significant improvement over T3AL ( p = 0 .039 < 0.05 ). Complete subject-wise WAR 
+
+results and additional CLIP-based FER comparisons are pro-vided in the supplementary materials. 
+
+Computation Complexity . Table 5 further examines the accuracy–efficiency trade-off. Although TDA achieves the lowest runtime, its recognition performance remains substan-tially below that of EB-CaP . In contrast, EB-CaP achieves the highest WAR while requiring the least GPU memory among all compared methods. Its runtime remains lower than optimization-intensive approaches such as TPT, PromptAl-ign, and T3AL, showing that the additional class-conditioned sampling introduces moderate computational cost without the memory overhead of test-time model updates. Overall, 
+
+EB-CaP provides the strongest balance between adaptation performance and resource efficiency. 
+
+Ablation Studies 
+
+Ablation on Cache Design. Figure 3 evaluates the contri-bution of the proposed cache components on BioVid . The CLIP baseline achieves a WAR of 50 .0% , while using only the personalized sampled cache increases performance to 77 .9% .The target cache alone reaches 78 .6% , showing the benefit of subject-specific test-time information. Combining the sam-pled and target caches in EB-CaP yields the best result of 
+
+81 .0% , outperforming the individual caches by 3.1 and 2.4
+
+percentage points, respectively. These results indicate that the generated class-specific representations and the dynam-ically collected target embeddings provide complementary information for subject personalization. 
+
+Ablation on Cache-Update Gating. Figure 4 compares the adaptive entropy gate, the diversity gate, and their joint use on BioVid . The entropy-only and diversity-only configu-rations achieve WAR scores of 79.1% and 78.0%, with pass rates of 10.4% and 22.4%, respectively. Applying both gates reduces the pass rate to 5.9% while improving WAR to 81.0%. These results indicate that jointly enforcing reliability and di-versity produces a more selective cache and yields the best Method WAR (%) GMM-based 74.0 Classifier-based 77.6 Generator-based 79.1 Prototype ∗ (Sharafi et al. 2026b) 81.5 EEnergy-based with noise initialization 78.2 Energy-based with target initialization (ours) 81.0 Table 6: Comparison of personalized cache construction strategies on BioVid . Prototype-based cache construction requires source-derived class prototypes, whereas EB-CaP 
+
+constructs the cache through target-initialized energy-based sampling without source information. ∗Requires source-derived class prototypes. 1 2 3 4 5 6    
+
+> Cache capacity
+> 80.2 80.4 80.6 80.8 81.0
+> WAR (%)
+> ms= 3 mp= 5 mn= 4
+> Sampled cache ( ms)Positive cache ( mp)Negative cache ( mn)
+
+Figure 5: Sensitivity analysis of the sampled, positive, and negative cache capacities on BioVid .recognition performance. 
+
+Cache construction. Table 6 compares different personal-ized cache construction strategies. The GMM-, classifier-, and generator-based variants rely on representations learned from labeled source data, while noise-initialized energy-based sampling generates class-conditioned embed-dings without using the current target representation. The prototype-based strategy (Sharafi et al. 2026b) is included as a reference but requires source-derived class prototypes at test time. In contrast, the proposed target-initialized energy-based strategy (ours) uses no source samples, la-bels, or prototypes and initializes each SGLD chain from the current unlabeled target video. Despite this restric-tion, EB-CaP achieves competitive performance, showing that target-initialized sampling can construct effective class-specific caches without retaining source information. 
+
+Cache capacity. Figure 5 studies the effect of the sampled, positive, and negative cache capacities in EB-CaP . Each capacity is varied independently while the remaining two are fixed. Performance remains relatively stable across the evaluated settings, indicating limited sensitivity to moderate changes in capacity. The best configuration for BioVid is 
+
+ms=3 , mp=5 , and mn=4 .
+
+## Conclusion 
+
+This paper introduced EB-CaP , a personalized TTA method for fine-grained video FER. For each unlabeled target video, 
+
+EB-CaP constructs a personalized sampled cache by gen-erating class-wise embeddings using SGLD that is initial-ized from the current video representation. This cache is complemented by positive and negative target caches that retain reliable and uncertain observations. Adaptive entropy and diversity gates control cache updates to reduce noisy pseudo-label accumulation and redundant representations. The resulting cache-derived class scores are fused with the current CLIP scores while the recognition model remains fixed. Experiments on three challenging video datasets in-cluding BioVid , StressID , and BAH demonstrate that 
+
+EB-CaP consistently improves over existing fine-tuning and TTA methods without requiring source data, target labels, or test-time model updates. 
+
+Supplementary materials. Includes additional subject-wise WAR results for TTA methods, baseline and implementation details, code, the online TTA per video algorithm, and ex-tended ablations on prompt selection. 
+
+## References 
+
+Abdul Samadh, J.; Gani, M. H.; Hussein, N.; Khattak, M. U.; Naseer, M. M.; Shahbaz Khan, F.; and Khan, S. H. 2023. Align your prompts: Test-time prompting with distribution alignment for zero-shot generalization. Advances in Neural Information Processing Systems , 36: 80396–80413. Calvo, R. A.; and D’Mello, S. 2010. Affect detection: An interdisciplinary review of models, methods, and their ap-plications. IEEE Transactions on Affective Computing , 1(1): 18–37. Chaptoukaev, H.; Strizhkova, V.; Panariello, M.; Dalpaos, B.; Reka, A.; Manera, V.; Thümmler, S.; Ismailova, E.; Todisco, M.; Zuluaga, M. A.; et al. 2023. Stressid: a multimodal dataset for stress identification. Advances in Neural Infor-mation Processing Systems , 36: 29798–29811. Chen, S.; Chen, Y.; Yin, X.; Liu, X.; Lai, H.; and Zhang, T. 2025a. PAF: Prototype Adaptive Fusion for Test-Time Adap-tation of Vision-Language Models. In Proceedings of the 33rd ACM International Conference on Multimedia , 3007– 3016. Chen, X.; Zhai, H.; Zhang, C.; Shi, X.; and Li, R. 2025b. Multi-cache enhanced prototype learning for test-time gen-eralization of vision-language models. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,2281–2291. De Melo, W. C.; Granger, E.; and Hadid, A. 2020. A deep multiscale spatiotemporal network for assessing depression from facial dynamics. IEEE transactions on affective com-puting , 13(3): 1581–1592. Duvenaud, D.; Wang, J.; Jacobsen, J.; Swersky, K.; Norouzi, M.; and Grathwohl, W. 2020. Your classifier is secretly an energy based model and you should treat it like one. ICLR 2020 .Feng, C.-M.; Yu, K.; Liu, Y.; Khan, S.; and Zuo, W. 2023. Diverse data augmentation with diffusions for effective test-time prompt tuning. In Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , 2704–2714. Foteinopoulou, N. M.; and Patras, I. 2024. Emoclip: A vision-language method for zero-shot video facial expression recognition. In 2024 IEEE 18th International Conference on Automatic Face and Gesture Recognition (FG) , 1–10. IEEE. Gao, P.; Geng, S.; Zhang, R.; Ma, T.; Fang, R.; Zhang, Y.; Li, H.; and Qiao, Y. 2024. Clip-adapter: Better vision-language models with feature adapters. International Journal of Com-puter Vision , 132(2): 581–595. Gaya-Morey, F. X.; Buades-Rubio, J. M.; Palanque, P.; Lacuesta, R.; and Manresa-Yee, C. 2025. Deep learning-based facial expression recognition for the elderly: A sys-tematic review. arXiv preprint arXiv:2502.02618 .González-González, M.; Belharbi, S.; Zeeshan, M. O.; Sharafi, M.; Aslam, M. H.; Pedersoli, M.; Koerich, A. L.; Bacon, S. L.; and Granger, E. 2025. BAH Dataset for Am-bivalence/Hesitancy Recognition in Videos for Behavioural Change. arXiv preprint arXiv:2505.19328 .Guan, Z.; Yucan, Z.; Liu, W.; and Gu, X. 2025. Statistics Caching Test-Time Adaptation for Vision-Language Models. In The Thirty-ninth Annual Conference on Neural Informa-tion Processing Systems .Huang, F.; Jiang, J.; Jiang, Q.; Li, H.; Khan, F. N.; and Wang, Z. 2025. COSMIC: Clique-Oriented Semantic Multi-space Integration for Robust CLIP Test-Time Adaptation. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference , 9772–9781. Karmanov, A.; Guan, D.; Lu, S.; El Saddik, A.; and Xing, E. 2024. Efficient test-time adaptation of vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 14162–14171. Lafon, M.; Hakim, G. A. V.; Rambour, C.; Desrosier, C.; and Thome, N. 2025. Cliptta: Robust contrastive vision-language test-time adaptation. arXiv preprint arXiv:2507.14312 .Li, H.; Niu, H.; Zhu, Z.; and Zhao, F. 2024. Cliper: A unified vision-language framework for in-the-wild facial expression recognition. In 2024 IEEE International Conference on Mul-timedia and Expo (ICME) , 1–6. IEEE. Li, J.; Li, D.; Savarese, S.; and Hoi, S. 2023. Blip-2: Boot-strapping language-image pre-training with frozen image en-coders and large language models. In International confer-ence on machine learning , 19730–19742. PMLR. Li, Y.; Liang, F.; Zhao, L.; Cui, Y.; Ouyang, W.; Shao, J.; Yu, F.; and Yan, J. 2021. Supervision exists everywhere: A data efficient contrastive language-image pre-training paradigm. 
+
+arXiv preprint arXiv:2110.05208 .Liang, Y.; Chen, H.; Xiong, Y.; Zhou, Z.; Lyu, M.; Lin, Z.; Niu, S.; Zhao, S.; Han, J.; and Ding, G. 2025. Advancing Reliable Test-Time Adaptation of Vision-Language Models under Visual Variations. In Proceedings of the 33rd ACM International Conference on Multimedia , 4788–4797. Liberatori, B.; Conti, A.; Rota, P.; Wang, Y.; and Ricci, E. 2024. Test-time zero-shot temporal action localization. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 18720–18729. Ma, F.; He, Y.; Sun, B.; and Li, S. 2025. Multimodal Prompt Alignment for Facial Expression Recognition. In IEEE/CVF International Conference on Computer Vision (ICCV) .Nguyen, K.-B.; Bui, P.-N.; Choo, H.; and Nguyen, D. T. 2025. Adaptive Cache Enhancement for Test-Time Adaptation of Vision-Language Models. arXiv preprint arXiv:2508.07570 .Ni, B.; Peng, H.; Chen, M.; Zhang, S.; Meng, G.; Fu, J.; Xiang, S.; and Ling, H. 2022. Expanding Language-Image Pretrained Models for General Video Recognition. In Euro-pean Conference on Computer Vision , 1–18. Osowiechi, D.; Noori, M.; Vargas Hakim, G.; Yazdanpanah, M.; Bahri, A.; Cheraghalikhani, M.; Dastani, S.; Beizaee, F.; Ayed, I.; and Desrosiers, C. 2024. WATT: Weight average test time adaptation of CLIP. Advances in neural information processing systems , 37: 48015–48044. Pu, J.; and Nie, X. 2023. Convolutional channel attentional facial expression recognition network and its application in human–computer interaction. IEEE Access , 11: 129412– 129424. Radford, A.; Kim, J. W.; Hallacy, C.; Ramesh, A.; Goh, G.; Agarwal, S.; Sastry, G.; Askell, A.; Mishkin, P.; Clark, J.; et al. 2021. Learning transferable visual models from natural language supervision. In International conference on machine learning , 8748–8763. PmLR. Sharafi, M.; Belharbi, M. O., S. Zeeshan; Ben Salem, H.; Etemad, A.; Koerich, A.; Pedersoli, M.; Bacon, S.; and Granger, E. 2026a. Personalized Feature Translation for Expression Recognition: An Efficient Source-Free Domain Adaptation Method. In ICLR .Sharafi, M.; Ollivier, E.; Zeeshan, M. O.; Belharbi, S.; Ko-erich, A. L.; Pedersoli, M.; Bacon, S.; and Granger, E. 2025. Disentangled source-free personalization for facial expres-sion recognition with neutral target data. In 2025 IEEE 19th International Conference on Automatic Face and Gesture Recognition (FG) .Sharafi, M.; Zeeshan, M. O.; Belharbi, S.; Koerich, A. L.; Pedersoli, M.; and Granger, E. 2026b. Test-Time Adaptation via Cache Personalization for Facial Expression Recognition in Videos. arXiv preprint arXiv:2603.21309 .Shu, M.; Nie, W.; Huang, D.-A.; and Yu, Z. 2022. Test-time prompt tuning for zero-shot generalization in vision-language models. Advances in Neural Information Process-ing Systems , 35: 14274–14289. Shu, Y.; Guo, X.; Wu, J.; Wang, X.; Wang, J.; and Long, M. 2023. Clipood: Generalizing clip to out-of-distributions. In International conference on machine learning , 31716– 31731. PMLR. Sun, Y.; Wang, X.; Liu, Z.; Miller, J.; Efros, A.; and Hardt, M. 2020. Test-time training with self-supervision for general-ization under distribution shifts. In International conference on machine learning , 9229–9248. PMLR. Tu, W.; Deng, W.; and Gedeon, T. 2023. A closer look at the robustness of contrastive language-image pre-training (clip). Advances in Neural Information Processing Systems ,36: 13678–13691. Walter, S.; Gruss, S.; Ehleiter, H.; Tan, J.; Traue, H. C.; Werner, P.; Al-Hamadi, A.; Crawcour, S.; Andrade, A. O.; and da Silva, G. M. 2013. The biovid heat pain database data for the advancement and systematic validation of an auto-mated pain recognition system. In 2013 IEEE international conference on cybernetics (CYBCO) , 128–131. IEEE. Wang, Q.; Fink, O.; Van Gool, L.; and Dai, D. 2022. Con-tinual test-time domain adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 7201–7211. Welling, M.; and Teh, Y. W. 2011. Bayesian learning via stochastic gradient Langevin dynamics. In Proceedings of the 28th international conference on machine learning (ICML-11) , 681–688. Yi, C.; Ren, L.; Zhan, D.-C.; and Ye, H.-J. 2024. Leveraging cross-modal neighbor representation for improved clip clas-sification. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 27402–27411. Yoon, H. S.; Yoon, E.; Tee, J. T. J.; Hasegawa-Johnson, M.; Li, Y.; and Yoo, C. D. 2024. C-tpt: Calibrated test-time prompt tuning for vision-language models via text feature dispersion. arXiv preprint arXiv:2403.14119 .Yu, J.; Wang, Z.; Vasudevan, V.; Yeung, L.; Seyedhos-seini, M.; and Wu, Y. 2022. Coca: Contrastive cap-tioners are image-text foundation models. arXiv preprint arXiv:2205.01917 .Yuan, L.; Xie, B.; and Li, S. 2023. Robust test-time adapta-tion in dynamic scenarios. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,15922–15932. Zeeshan, M. O.; Aslam, M. H.; Belharbi, S.; Koerich, A. L.; Pedersoli, M.; Bacon, S.; and Granger, E. 2024. Subject-based domain adaptation for facial expression recognition. In 2024 IEEE 18th International Conference on Automatic Face and Gesture Recognition (FG) , 1–10. IEEE. Zeeshan, M. O.; Gillet, N.; Koerich, A. L.; Pedersoli, M.; Bremond, F.; and Granger, E. 2025a. MuSACo: Multi-modal Subject-Specific Selection and Adaptation for Ex-pression Recognition with Co-Training. arXiv preprint arXiv:2508.12522 .Zeeshan, M. O.; Pedersoli, M.; Koerich, A. L.; and Granger, E. 2025b. Progressive multi-source domain adaptation for personalized facial expression recognition. IEEE Transac-tions on Affective Computing .Zeeshan, M. O.; Sharafi, M.; Savary, B.; Koerich, A. L.; Ped-ersoli, M.; and Granger, E. 2026. Clip-autt: Test-time person-alization with action unit prompting for fine-grained video emotion recognition. arXiv preprint arXiv:2603.27999 .Zhai, H.; Chen, X.; Zhang, C.; Sha, T.; and Li, R. 2025. Mit-igating cache noise in test-time adaptation for large vision-language models. In 2025 IEEE International Conference on Multimedia and Expo (ICME) , 1–6. IEEE. Zhang, C.; Stepputtis, S.; Sycara, K.; and Xie, Y. 2024. Dual prototype evolving for test-time generalization of vision-language models. Advances in Neural Information Process-ing Systems , 37: 32111–32136. Zhang, D.-C.; Zhou, Z.; and Li, Y.-F. 2024. Robust test-time adaptation for zero-shot prompt tuning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, 16714–16722. Zhang, R.; Zhang, W.; Fang, R.; Gao, P.; Li, K.; Dai, J.; Qiao, Y.; and Li, H. 2022. Tip-adapter: Training-free adaption of clip for few-shot classification. In European conference on computer vision , 493–510. Springer. Zhao, Z.; Cao, Y.; Gong, S.; and Patras, I. 2025. Enhanc-ing zero-shot facial expression recognition by llm knowledge transfer. In 2025 IEEE/CVF Winter Conference on Applica-tions of Computer Vision (WACV). Zhao, Z.; and Patras, I. 2023. Prompting Visual-Language Models for Dynamic Facial Expression Recognition. In 
+
+BMVC .Zhu, X.; Wang, S.; Zhu, B.; Li, M.; Li, Y.; Fang, J.; Wang, Z.; Wang, D.; and Zhang, H. 2025. Dynamic multimodal prototype learning in vision-language models. In Proceed-ings of the IEEE/CVF international conference on computer vision , 2501–2511. Test-Time Adaptation with Online Personalized Energy-Based Cache for Fine-Grained Video Expression Recognition Supplementary Material 
+
+## Masoumeh Sharafi 1, Muhammad Osama Zeeshan 1, Soufiane Belharbi 1, Alessandro Lameiras Koerich 2, Marco Pedersoli 1, Eric Granger 1
+
+> 1
+
+LIVIA, Department of Systems Engineering, École de technologie supérieure, Montreal, Canada 
+
+> 2
+
+LIVIA, Department of Software and IT Engineering, École de technologie supérieure, Montreal, Canada {masoumeh.sharafi.1,muhammad-osama.zeeshan.1}@ens.etsmtl.ca {soufiane.belharbi,marco.pedersoli,alessandro.koerich,eric.granger}@etsmtl.ca 
+
+Table of Contents 
+
+1 Algorithmic Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 
+
+2 Additional Experimental Results . . . . . . . . . . . . . . . . . 1 2.1 TTA Baseline Implementation Details . . . . . . . . 1 2.2 Subject-Wise Results . . . . . . . . . . . . . . . . . . . . . . . . 2 2.3 Additional Ablation Studies . . . . . . . . . . . . . . . . . . 2 
+
+## 1 Algorithmic Details 
+
+This section provides additional algorithmic details for the online test-time adaptation pipeline introduced in the main paper. Algorithm 1 summarizes the complete inference pro-cedure of EB-CaP for each target subject and video. The frozen CLIP image encoder EI, temporal encoder EV, and text encoder ET are first used to extract the target video representation and class text embeddings. For each temporal representation, a personalized sampled cache is generated through class-conditioned SGLD initialized from the cur-rent target embedding. Evidence retrieved from this sampled cache and the positive and negative target caches is then combined with the current CLIP scores to obtain the refined prediction. Finally, adaptive entropy and diversity gates de-termine whether the current target representation is inserted into the positive or negative cache. The sampled cache is re-constructed for every target representation, whereas the target caches are maintained across videos of the same subject and reset when a new subject is encountered. This procedure enables fully online subject personalization without retain-ing source samples or prototypes and without updating the frozen recognition model at inference time. 
+
+## 2 Additional Experimental Results 
+
+2.1 TTA Baseline Implementation Details 
+
+Several CLIP-based test-time adaptation methods are in-cluded as baselines. TPT (Shu et al. 2022) performs test-time prompt tuning by optimizing the learnable text prompt tokens through entropy minimization over multiple strongly augmented views, while leaving the CLIP image and text encoders unchanged. TDA (Karmanov et al. 2024) avoids 
+
+Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+Algorithm 1: Online Test-Time Adaptation with EB-CaP 
+
+Require: Target video stream, frozen encoders EI, EV, and ET,class prompts {pc}c∈C 
+
+Ensure: Refined predictions by
+
+1: ec ← Normalize( ET(pc)) , ∀c ∈ C 
+
+2: for each target subject do 
+
+3: Initialize Kp, Kn ← ∅ 
+
+4: for each target video X tgt do 
+
+5: Reset video-level entropy statistics 6: for each temporal window Xtgt  
+
+> r
+
+do 
+
+7: ztgt ← Normalize  EV
+
+ EI(Xtgt  
+
+> r
+
+) 
+
+8: Compute CLIP scores stgt using ztgt and {ec}c∈C 
+
+9: Generate Ks using class-conditioned SGLD initialized from ztgt 
+
+10: Compute cache scores ss, sp, and sn
+
+11: sfuse ← stgt + ss + sp − sn
+
+12: by ← arg max c∈C sfuse (c)
+
+13: Compute entropy H and update thresholds τp and τn
+
+14: if H < τ p then 
+
+15: Update Kp with ztgt if ∆D > 0
+
+16: else if H ≤ τn then 
+
+17: Update Kn with ztgt if ∆D > 0
+
+18: end if 
+
+19: Discard Ks
+
+20: end for 
+
+21: end for 
+
+22: end for 
+
+test-time optimization and instead maintains an online feature–label memory containing both positive and nega-tive pseudo-label information. Predictions retrieved from this dynamic cache are combined with the original CLIP zero-shot scores. DPE (Zhang et al. 2024) jointly adapts visual and textual class prototypes during inference, aug-ments them with lightweight instance-dependent residuals, and imposes cross-modal consistency to preserve agreement between the two prototype spaces under target-domain shifts. 
+
+PromptAlign (Abdul Samadh et al. 2023) updates the textual prompts by matching test-time feature statistics to statis-tics estimated from the source domain, providing an ad-ditional alignment objective beyond entropy minimization. 
+
+ReTA (Liang et al. 2025) improves cache reliability through consistency-aware entropy reweighting for selective memory Method Sub-1 Sub-2 Sub-3 Sub-4 Sub-5 Sub-6 Sub-7 Sub-8 Sub-9 Sub-10 Avg. TPT (Shu et al. 2022) 91.9 53.0 50.0 61.5 79.0 88.9 76.0 50.0 98.9 62.0 71.1 TDA (Karmanov et al. 2024) 93.0 52.6 50.0 63.9 79.5 87.5 76.3 50.0 100.0 61.6 71.4 DPE (Zhang et al. 2024) 91.7 55.0 50.0 85.0 73.0 84.7 80.0 50.0 100.0 61.8 73.1 PromptAlign (Abdul Samadh et al. 2023) 93.8 65.2 50.0 70.0 85.0 92.0 80.0 50.0 100.0 67.6 75.3 ReTA (Liang et al. 2025) 93.8 65.2 50.0 69.5 85.0 90.2 80.0 50.0 100.0 67.6 75.1 T3AL (Liberatori et al. 2024) 94.0 66.5 50.0 70.0 85.2 94.2 83.9 50.0 100.0 67.6 76.1             
+
+> EB-CaP (ours) 94.8 71.9 50.0 95.4 92.1 97.5 90.8 50.0 100.0 68.0 81.0
+
+Table 1: WAR per subject on the BioVid dataset for EB-CaP and competing TTA methods. Best results are shown in bold .                                                                                         
+
+> Method Sub-1 Sub-2 Sub-3 Sub-4 Sub-5 Sub-6 Sub-7 Sub-8 Sub-9 Sub-10 Avg. TPT (Shu et al. 2022) 74.7 51.6 90.0 88.0 52.2 77.5 66.6 63.4 54.0 91.9 70.9 TDA (Karmanov et al. 2024) 66.9 45.2 75.6 90.1 49.6 80.0 41.2 75.3 81.8 91.9 69.7 DPE (Zhang et al. 2024) 64.0 55.0 73.9 90.0 52.6 80.0 50.9 73.0 81.8 92.0 71.3 PromptAlign (Abdul Samadh et al. 2023) 69.9 61.6 78.6 90.9 51.2 80.0 60.4 81.3 81.8 90.9 74.6 ReTA (Liang et al. 2025) 64.5 50.5 82.0 90.0 46.8 80.0 49.3 80.0 81.8 93.7 71.8 T3AL (Liberatori et al. 2024) 71.3 62.7 80.3 90.2 54.0 80.0 68.0 77.0 82.0 93.9 75.9
+> EB-CaP (ours) 81.1 66.9 91.2 89.0 69.9 81.2 69.5 83.8 84.6 95.7 81.2
+
+Table 2: WAR per subject on StressID for EB-CaP and other TTA methods. updates and diversity-driven distribution calibration, where each class is represented by a Gaussian distribution over dy-namically evolving text embeddings. Finally, T3AL (Libera-tori et al. 2024), originally designed for zero-shot temporal action localization, is modified for video classification. The adapted implementation derives video-level pseudo-labels from aggregated frame representations, refines frame-level predictions through self-supervision, and uses textual guid-ance to suppress irrelevant temporal regions. Its encoders remain frozen, and the adaptation state is reinitialized for every input video. 
+
+2.2 Subject-Wise Results 
+
+Tables 1, 2, and 3 report the WAR obtained for each of the ten target subjects. The results provide a detailed assessment of performance under subject-specific distribution shifts and reveal substantial variability across subjects and adaptation methods. On BioVid , EB-CaP achieves the best or tied-best per-formance for all ten target subjects and obtains an average 
+
+WAR of 81.0%. This represents a gain of 4.9 percentage points over T3AL, the strongest competing method with an average of 76.1%. The improvements are particularly pronounced for Sub-4, Sub-5, Sub-6, and Sub-7, indicating that the proposed personalization strategy is effective for subjects on which the baseline methods exhibit larger performance gaps. A similar trend is observed on StressID , where 
+
+EB-CaP achieves the highest performance for nine of the ten subjects and improves the average WAR to 81.2%. Com-pared with the strongest baseline average of 75.9%, this corresponds to an improvement of 5.3 percentage points. The gains are especially notable for Sub-1, Sub-3, Sub-5, Sub-8, and Sub-9, demonstrating improved robustness to the stronger inter-subject variability present in this dataset. Sub-4 remains the only subject for which the competing methods obtain higher performance. On BAH , the differences between methods are smaller. Nevertheless, EB-CaP achieves the best or tied-best result for nine subjects and obtains the highest average WAR of 68.9%, exceeding T3AL by 1.0 percentage point. The smaller overall gain reflects the greater difficulty of the dataset and the more limited separation between its expression classes. Sub-10 remains challenging, where EB-CaP does not improve over the strongest baselines. Overall, the subject-wise results show that the improve-ments of EB-CaP are distributed across most target subjects rather than being driven by a small subset. The personalized sampled cache, together with the positive and negative target caches and the adaptive entropy and diversity gates, provides more reliable adaptation to subject-specific characteristics without updating the recognition model at inference time. 
+
+2.3 Additional Ablation Studies 
+
+Class prompt selection. The influence of class-prompt for-mulation is evaluated using several templates commonly adopted in CLIP-based FER and prompt-driven recognition methods (Foteinopoulou and Patras 2024; Ni et al. 2022; Zhao et al. 2025). This experiment examines whether differ-ent textual descriptions of the expression categories lead to more discriminative class embeddings and improved recog-nition accuracy. All prompt variants are assessed with CLIP ViT-B/32 trained on the source subjects of BioVid and tested on the corresponding target subjects. The results in Ta-ble 4 show that performance varies noticeably across prompt formulations in terms of both WAR and F1 . The template “a person with an expression of [CLS]” achieves the strongest overall results and is consequently used for all prompt-based methods in the experiments. Method Sub-1 Sub-2 Sub-3 Sub-4 Sub-5 Sub-6 Sub-7 Sub-8 Sub-9 Sub-10 Avg. TPT (Shu et al. 2022) 62.0 53.7 73.9 80.0 81.2 71.0 58.0 55.0 69.0 53.0 65.6 TDA (Karmanov et al. 2024) 58.0 53.7 75.0 80.3 79.0 71.6 58.0 55.9 69.0 51.7 65.2 DPE (Zhang et al. 2024) 58.6 59.6 79.6 80.5 83.4 67.0 59.0 54.0 71.9 54.0 66.7 PromptAlign (Abdul Samadh et al. 2023) 59.1 59.1 72.0 84.5 84.1 72.4 58.5 55.9 71.5 54.9 67.1 ReTA (Liang et al. 2025) 61.4 60.0 72.0 84.0 84.1 72.4 58.5 55.9 72.0 56.0 67.6 T3AL (Liberatori et al. 2024) 61.0 58.9 75.0 85.6 83.6 74.7 60.0 56.0 71.0 53.6 67.9             
+
+> EB-CaP (ours) 62.1 60.4 79.9 85.6 84.5 74.7 61.1 56.5 72.0 53.0 68.9
+
+Table 3: WAR per subject on BAH for EB-CaP and other TTA methods. 
+
+Prompt Template WAR F1 score 
+
+a photo of a [CLS] 68.7 63.3 a_photo_of_the_[CLS]_face 66.5 59.3 a_photo_of_one_[CLS]_face 64.2 55.8 a_close-up_photo_of_the_[CLS]_face 68.2 62.6 a_low_resolution_photo_of_a_[CLS]_face 68.7 64.2 a_good_photo_of_a_[CLS]_face 69.2 65.4 a_photo_of_my_[CLS]_face 66.2 60.3 a_cropped_photo_of_the_[CLS]_face 64.5 57.5 a_photo_of_a_person_with_[CLS]_face 67.2 61.4 
+
+a person with an expression of [CLS] 69.7 66.6 
+
+a_portrait_of_a_person_in_[CLS] 58.2 46.7 a_face_showing_signs_of_[CLS] 68.7 64.1 a close up portrait of a [CLS] expression 69.2 63.0 a realistic photo of a person experiencing [CLS] 53.5 40.0 a cropped image of a person in [CLS] 69.0 64.5 a photo of a [CLS] person 69.5 64.3 a person with a facial expression of [CLS] 69.5 64.2 a high quality photo of a [CLS] expression 69.5 64.3 a photo of a face showing [CLS] 69.5 64.3 a photo of a face in [CLS] 69.0 61.8 
+
+Table 4: Comparison of class-prompt templates for the CLIP text encoder on BioVid with a CLIP ViT-B/32 backbone. The choice of prompt influences recognition accuracy, and 
+
+“a person with an expression of [CLS]” provides the best 
+
+WAR and F1 results. 
+
+Cache construction strategies. Additional details are pro-vided for the cache construction strategies compared in Ta-ble 5. All variants are evaluated using the same online TTA pipeline, cache capacity, retrieval mechanism, and score-fusion rule, such that the comparison isolates the effect of cache initialization. The classifier-based strategy uses the ℓ2-normalized weights of the frozen source classifier as class representa-tives. Each classifier weight defines the discriminative di-rection associated with its corresponding class in the em-bedding space (Yu et al. 2023). This approach requires no retained source samples or additional training, but provides only one fixed representative per class. The GMM-based 
+
+strategy increases the number of class representatives by treating each normalized classifier weight as the center of a Gaussian distribution and sampling multiple virtual embed-Method WAR (%) GMM-based 74.0 Classifier-based 77.6 Generator-based 79.1 Prototype ∗ (Sharafi et al. 2026) 81.5 EEnergy-based with noise initialization 78.2 Energy-based with target initialization (ours) 81.0 Table 5: Evaluation of different personalized cache con-struction methods on BioVid . The prototype-based method relies on class representatives derived from labeled source data, while EB-CaP generates class-conditioned cache en-tries from the current target representation through energy-based sampling. ∗Uses source-derived class prototypes. dings around it (Tian et al. 2021). Although this introduces diversity, the sampled features remain concentrated around a single classifier-defined class direction and may not capture the complete source feature distribution. The generator-based strategy trains a lightweight class-conditional feature generator using the frozen source clas-sifier as supervision (Qiu et al. 2021). A classification ob-jective encourages each generated embedding to be recog-nized as its conditioning class, while a contrastive objec-tive promotes intra-class compactness and inter-class sep-aration. This produces multiple class-specific embeddings without retaining the original source samples, but requires an additional generator-training stage. The prototype-based 
+
+strategy (Sharafi et al. 2026) instead constructs class pro-totypes directly from embeddings of labeled source videos. These prototypes preserve information from real source sub-jects and therefore provide reliable class anchors, but require source-derived representations to be stored and transferred to the test stage. Two energy-based variants are also evaluated. In energy-based sampling with noise initialization , each class-conditioned SGLD chain is initialized from a randomly sam-pled feature rather than from the current target representation. The energy defined by the frozen recognition model then guides the sample toward the corresponding class embed-ding. This variant requires neither stored source prototypes nor target labels, but the resulting samples are not explic-itly personalized to the current video. In contrast, energy-based sampling with target initialization , corresponding to 
+
+EB-CaP , initializes every class-conditioned chain from the λs λp λn WAR (%) 0.5 1.0 1.0 80.1 1.0 0.5 1.0 80.4 1.0 1.0 0.5 80.2             
+
+> 1.0 1.0 1.0 81.0
+> 1.5 1.0 1.0 80.3 1.0 1.5 1.0 80.5 1.0 1.0 1.5 80.4
+
+Table 6: Sensitivity of EB-CaP to the cache-fusion weights on BioVid . Each weight is varied independently while the remaining two are fixed to 1. Performance remains sta-ble across moderate changes, with (λs, λ p, λ n) = (1 , 1, 1) 
+
+achieving the highest WAR .current unlabeled target-video representation. Consequently, the sampled embeddings retain target-specific visual charac-teristics while being progressively guided toward different expression classes. The results show that the quality and personalization of the generated embeddings substantially influence adaptation. The GMM-, classifier-, and generator-based strategies ob-tain 74.0%, 77.6%, and 79.1% WAR , respectively. Energy-based sampling initialized from noise reaches 78.2%, in-dicating that class conditioning alone can generate useful cache entries but does not fully capture the current subject. The source-derived prototype strategy achieves the highest result of 81.5%, although it requires labeled source informa-tion at test time. Without retaining source samples, labels, or prototypes, the proposed target-initialized strategy achieves a competitive 81.0% WAR . This result demonstrates that ini-tializing the sampling process from the current target video provides effective class-specific and subject-adaptive cache representations. 
+
+Fusion weights. Table 6 evaluates the sampled-, positive-, and negative-cache weights λs, λp, and λn. Each weight is varied from 0.5 to 1.5 while the remaining two are fixed to 1. Performance remains relatively stable across the eval-uated settings, indicating limited sensitivity to moderate changes in the fusion weights. The balanced configuration 
+
+(λs, λ p, λ n) = (1 , 1, 1) achieves the highest WAR and is therefore used in all experiments. 
+
+## References 
+
+Abdul Samadh, J.; Gani, M. H.; Hussein, N.; Khattak, M. U.; Naseer, M. M.; Shahbaz Khan, F.; and Khan, S. H. 2023. Align your prompts: Test-time prompting with distribution alignment for zero-shot generalization. Advances in Neural Information Processing Systems , 36: 80396–80413. Foteinopoulou, N. M.; and Patras, I. 2024. Emoclip: A vision-language method for zero-shot video facial expression recognition. In 2024 IEEE 18th International Conference on Automatic Face and Gesture Recognition (FG) , 1–10. IEEE. Karmanov, A.; Guan, D.; Lu, S.; El Saddik, A.; and Xing, E. 2024. Efficient test-time adaptation of vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 14162–14171. Liang, Y.; Chen, H.; Xiong, Y.; Zhou, Z.; Lyu, M.; Lin, Z.; Niu, S.; Zhao, S.; Han, J.; and Ding, G. 2025. Advancing Reliable Test-Time Adaptation of Vision-Language Models under Visual Variations. In Proceedings of the 33rd ACM International Conference on Multimedia , 4788–4797. Liberatori, B.; Conti, A.; Rota, P.; Wang, Y.; and Ricci, E. 2024. Test-time zero-shot temporal action localization. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 18720–18729. Ni, B.; Peng, H.; Chen, M.; Zhang, S.; Meng, G.; Fu, J.; Xiang, S.; and Ling, H. 2022. Expanding Language-Image Pretrained Models for General Video Recognition. In Euro-pean Conference on Computer Vision , 1–18. Qiu, Z.; Zhang, Y.; Lin, H.; Niu, S.; Liu, Y.; Du, Q.; and Tan, M. 2021. Source-free domain adaptation via avatar prototype generation and adaptation. arXiv preprint arXiv:2106.15326 .Sharafi, M.; Zeeshan, M. O.; Belharbi, S.; Koerich, A. L.; Pedersoli, M.; and Granger, E. 2026. Test-Time Adaptation via Cache Personalization for Facial Expression Recognition in Videos. arXiv preprint arXiv:2603.21309 .Shu, M.; Nie, W.; Huang, D.-A.; and Yu, Z. 2022. Test-time prompt tuning for zero-shot generalization in vision-language models. Advances in Neural Information Process-ing Systems , 35: 14274–14289. Tian, J.; Zhang, J.; Li, W.; and Xu, D. 2021. VDM-DA: Virtual domain modeling for source data-free domain adap-tation. IEEE Transactions on Circuits and Systems for Video Technology , 32(6): 3749–3760. Yu, Q.; Xi, N.; Yuan, J.; Zhou, Z.; Dang, K.; and Ding, X. 2023. Source-free domain adaptation for medical image segmentation via prototype-anchored feature alignment and contrastive learning. In International Conference on Medical Image Computing and Computer-Assisted Intervention , 3– 12. Springer. Zhang, C.; Stepputtis, S.; Sycara, K.; and Xie, Y. 2024. Dual prototype evolving for test-time generalization of vision-language models. Advances in Neural Information Process-ing Systems , 37: 32111–32136. Zhao, Z.; Cao, Y.; Gong, S.; and Patras, I. 2025. Enhanc-ing zero-shot facial expression recognition by llm knowledge transfer. In 2025 IEEE/CVF Winter Conference on Applica-tions of Computer Vision (WACV).

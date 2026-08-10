@@ -1,0 +1,401 @@
+Title: CAVE: Competence-Aware Visual Boundary Evidence Alignment for Video Temporal Grounding
+
+URL Source: https://arxiv.org/pdf/2608.02078v1
+
+Published Time: Tue, 04 Aug 2026 02:16:06 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# CAVE: Competence-Aware Visual Boundary Evidence Alignment for Video Temporal Grounding 
+
+## Wei Jia 1,2 ∗, Zhicong Lu 2∗, Yu Chen 1∗, Xiang Wang 1†, Shuai Li 1,Wenqian Lv 1, Jiayue Cao 2, Huaxing Liu 1
+
+> 1
+
+AMAP, Alibaba Group 
+
+> 2
+
+University of Chinese Academy of Sciences jiawei22@mails.ucas.ac.cn, nazaritelzc@gmail.com 
+
+Abstract 
+
+Large vision-language models (LVLMs) have achieved sub-stantial performance gains in Video Temporal Grounding (VTG) through reinforcement learning (RL). However, ex-isting methods primarily rely on outcome correctness re-wards that evaluate only the final predicted intervals, leav-ing boundary-related visual evidence and its correspondence with timestamp predictions insufficiently constrained. In this paper, we delve into timestamp prediction and its underly-ing boundary-level visual evidence, showing prevalent mis-alignment between visual evidence and predicted timestamps across widely used benchmarks. To address this issue, we pro-pose Competence-Aware Visual Boundary Evidence Align-ment (CAVE), which augments localization optimization with boundary-specific visual evidence rewards to mitigate evidence–timestamp misalignment. Specifically, to explicitly represent the boundary-specific visual evidence, CAVE in-troduces boundary-specific evidence tokens and initializes their structured generation and distinct boundary semantics through a lightweight supervised warm-up. During RL, the visual boundary evidence alignment reward reinforces the vi-sual attention of special evidence tokens within the ground-truth boundaries, thereby promoting alignment between visual evidence and temporal boundaries. Moreover, performance-aware gating for evidence supervision is designed to adap-tively retain evidence guidance for poorly localized groups while reducing it once localization becomes sufficiently accu-rate to avoid over-constraining fine-grained boundary refine-ment. Extensive experiments on several public VTG bench-marks demonstrate the effectiveness of our method. 
+
+## Introduction 
+
+Video temporal grounding (VTG) aims to precisely iden-tify the start and end timestamps of a target event in an untrimmed video according to natural language queries. With their unified vision–language modeling capabilities, large vision-language models (LVLMs) have introduced a new generative paradigm for video temporal grounding (Zeng et al. 2025b; Qu et al. 2024; Huang et al. 2024). In recent years, reinforcement learning (RL)-based ap-proaches have substantially improved the temporal grounding 
+
+> ∗
+
+Equal contribution. 
+
+> †
+
+Corresponding author. Work done during internship at AMAP, Alibaba Group. Query: A white pickup truck drives through the desert.   
+
+> …
+> Ground truth : [102.0, 106.0]
+> Prediction :[104.3, 106.3] IoU reward
+> Visual Evidence-Timestamp Misalignment Start-visual evidence
+
+Figure 1: An illustrative example of evidence–timestamp misalignment in VTG. capabilities of LVLMs. Existing methods typically optimize verifiable rewards based on final interval accuracy (Wang et al. 2026b; Li et al. 2025b; Zhang et al. 2026; Yu et al. 2026; Chen et al. 2025), while some further construct high-quality reasoning trajectories to strengthen temporal reasoning (Guo et al. 2025a). However, such outcome-centric supervision leaves the visual evidence underlying timestamp generation largely unconstrained, leading to prevalent misalignment be-tween predicted timestamps and boundary-related visual ev-idence. As shown in Figure 1, the generated start-timestamp token assigns its strongest attention to video frames near the ground-truth start boundary, yet the predicted start times-tamp remains noticeably offset from the location indicated by this visual evidence. To further investigate this issue, we conduct an empiri-cal analysis of timestamp predictions and boundary-related visual attention in a representative baseline (Zhang et al. 2026) across several widely used VTG benchmarks (Zhang et al. 2026). Specifically, we compare the predicted times-tamps with the model’s visual attention patterns around the ground-truth start and end boundaries. The results show that a substantial proportion of incorrectly localized sam-ples still exhibit concentrated attention around both ground-truth boundaries, and this phenomenon remains consistent under more stringent evaluation criteria. These findings in-arXiv:2608.02078v1 [cs.CL] 3 Aug 2026 dicate that localization outputs are not reliably coupled with the model’s internal visual responses to event boundaries, as the presence of boundary-relevant responses does not nec-essarily ensure that they are correctly translated into times-tamp predictions. We refer to this phenomenon as visual ev-idence–timestamp misalignment. Consequently, supervision based solely on temporal overlap is insufficient to constrain the correspondence between internal boundary evidence and generated timestamps, motivating the explicit modeling of their alignment. To address this issue, we propose Competence-Aware 
+
+Visual boundary Evidence alignment ( CAVE ), which aug-ments timestamp optimization with boundary-specific vi-sual rewards to alleviate evidence–timestamp misalignment and improve temporal localization. Specifically, CAVE intro-duces dedicated <Start> and <End> evidence tokens to explicitly represent visual boundary evidence. A lightweight evidence-token warm-up stage teaches the structured output format and initializes distinct boundary semantics for these tokens. During RL, the Visual Boundary Evidence Align-ment Reward (VBEAR) reinforces the visual responses of the start and end evidence tokens within the neighborhoods of their corresponding ground-truth boundaries while suppress-ing irrelevant attention in non-boundary regions to promote alignment between visual evidence and temporal boundaries. Moreover, we introduce Performance-Aware Gating for Evi-dence Supervision (PAGE) to further adapt evidence super-vision to rollout group localization competence, retaining stronger guidance for poorly localized groups while pro-gressively reducing it for well-localized ones to avoid over-constraining fine-grained boundary refinement. To validate the effectiveness and generalizability of our method, we conduct extensive experiments on multiple repre-sentative VTG benchmarks with mainstream LVLMs. Over-all, our contributions are summarized as follows: 
+
+• We conduct an in-depth analysis of the relationship be-tween timestamp predictions and boundary-related vi-sual responses, revealing a prevalent visual evidence– timestamp misalignment in which visual boundary per-ception is not reliably translated into timestamp outputs. 
+
+• We propose CAVE, which introduces dedicated boundary evidence tokens and a visual boundary evidence align-ment reward to incorporate boundary-level visual su-pervision into timestamp optimization, thereby alleviat-ing evidence–timestamp misalignment. A performance-aware gating mechanism further adapts this supervision to localization competence, emphasizing poorly local-ized rollout groups while reducing its influence on well-localized ones. 
+
+• Extensive experiments across multiple representative VTG benchmarks demonstrate the effectiveness and gen-eralizability of CAVE. Further analyses show that CAVE substantially improves evidence–timestamp correspon-dence beyond gains in localization accuracy alone. 
+
+## Preliminary Study 
+
+In this section, we delve into timestamp predictions and their boundary-related visual evidence in VTG. Building on prior 
+
+Figure 2: Diagnosing evidence–timestamp misalignment in an existing VTG baseline. (a) Joint distribution of local-ization correctness and bilateral boundary evidence; red denotes strict evidence–timestamp misalignment. (b) Strict evidence–timestamp misalignment rates under increasingly stringent evidence thresholds. TL denotes TimeLens. work showing that cross-modal attention supports visual lo-calization and that attention supervision improves ground-ing (Hu et al. 2026; Wu et al. 2026), we assess whether timestamp-token attention captures meaningful boundary cues. In a representative baseline, the mean attention within the ground-truth start and end neighborhoods exceeds the mean attention in 83.9% and 82.9% of equal-width tempo-ral windows, respectively, indicating boundary-sensitive and query-conditioned behavior. We therefore use timestamp-token attention to characterize boundary-related visual re-sponses, with full diagnostics provided in the appendix. 
+
+Evidence–Timestamp Misalignment Measure 
+
+Given a video V = {vt}Tt=1 , a text query q, and a ground-truth interval y∗ = [ t∗ 
+
+> s
+
+, t ∗ 
+
+> e
+
+], a VTG model predicts an interval 
+
+ˆy = [ˆ ts, ˆte]. We measure localization quality using the stan-dard Intersection over Union (IoU) and consider a prediction correct if IoU(ˆ y, y ∗) ≥ η.Let b ∈ { s, e } denote the start or end boundary, and let 
+
+αnum  
+
+> b,t
+
+represent the final-layer attention from the correspond-ing generated numeric timestamp token to video frame vt.For a local window Wb centered at the ground-truth bound-ary t∗ 
+
+> b
+
+, we define anum  
+
+> b, win
+
+as the mean attention over frames in Wb and anum  
+
+> b, all
+
+as the mean attention over the entire video. The boundary-evidence density is then defined as 
+
+Dnum  
+
+> b
+
+= anum 
+
+> b, win
+
+anum  
+
+> b, all
+
++ ϵ , b ∈ { s, e }. (1) A value of Dnum  
+
+> b
+
+> 1 indicates that the response around the corresponding ground-truth boundary exceeds the video-wide average. To require concentrated responses at both boundaries, we define strong bilateral evidence as min( Dnum  
+
+> s
+
+, D num  
+
+> e
+
+) > τ , and weak evidence other-wise. Combining this criterion with localization correctness yields four prediction–evidence states. We define the strict evidence–timestamp misalignment rate at threshold τ as 
+
+Mτ = Pr(IoU(ˆ y, y ∗) < η, min( Dnum  
+
+> s
+
+, D num  
+
+> e
+
+) > τ ) . (2) Our main analysis uses η = 0 .5 and τ = 1 . Details of boundary-window construction and attention aggregation are deferred to the appendix. The event happens in 𝑡 !- 𝑡 " seconds. The visual information at the start moment is summarized into <Start> , and the visual information at the end moment is summarized into <End> .
+
+Stage I: Evidence-token warm-up 
+
+When does the woman place the two pieces of salmon onto the hot browning pan?    
+
+> Query (𝒒 ):
+
+LVLM  
+
+> Video (𝑽 ):
+
+GT : 54.0s 58.0s 
+
+> [54.0,58.0]
+> <Start> <End>
+
+1 1 1 0 0 00 0 0 1 1 1     
+
+> Attention to video frame Attention to video frame
+> ℒ!"#$"
+> ℒ%&'
+> 𝓛 𝒘𝒂𝒓𝒎 =𝝀 𝑳𝑴 𝓛 𝑳𝑴 + 𝝀 𝒂𝒕𝒕 𝓛 𝒂𝒕𝒕
+> 𝓛 𝒂𝒕𝒕 = 𝟎. 𝟓(𝓛 𝒔𝒕𝒂𝒓𝒕 + 𝓛 𝒆𝒏𝒅 )
+
+Stage II: Competence-Aware Reinforcement Learning                                       
+
+> Warm-Started Policy 𝝅 𝜽
+> Group of 𝑮 rollouts
+> 𝑜 ,:The event happens in 𝑡 -,-𝑡 .,seconds. … <Start> , … <End> .
+> …
+> 𝑜 /:The event happens in 𝑡 -/-𝑡 ./seconds. … <Start> , … <End> .
+> 𝑜 0:The event happens in 𝑡 -0-𝑡 .0seconds. … <Start> , … <End> .
+> <Start> <End>
+> <Start> attention to video frame: 𝛼 !
+> <End> attention to video frame: 𝛼 "
+> 𝜌 !=𝛼 !$%
+> 𝛼 !!&' + 𝜖 𝜌 "=𝛼 "$%
+> 𝛼 "!&' + 𝜖
+> gt start window : 𝑊 !
+> gt end window: 𝑊 !
+> 𝛼 !!"# : > 𝑚𝑒𝑎𝑛(𝛼 !)𝛼 $!"# ∶> 𝑚𝑒𝑎𝑛(𝛼 $)
+> 𝑅 (= 0.5(𝑟 !+ 𝑟 ")
+> 𝑟 != 𝕀[𝜌 !> 𝜏 "# ]min(𝜌 !/𝜏 !$% , 1)
+> Visual Boundary Evidence Alignment Reward
+> 𝑟 &= 𝕀[𝜌 &> 𝜏 "# ]min(𝜌 &/𝜏 '() , 1)
+> Performance-Aware Gating
+> Group mean IoU:
+> 𝑚 )= 𝑚𝑒𝑎𝑛 𝐼𝑜𝑈 = 1𝐺 ; 𝐼𝑜𝑈 *+*,-
+> 𝑚 )
+> 𝜆 (())
+> 𝑅 *+% = < 1, 𝑓𝑜𝑟𝑚𝑎𝑡 < 𝑆𝑡𝑎𝑟𝑡 >< 𝐸𝑛𝑑 > 0, 𝑜𝑡ℎ𝑒𝑟𝑤𝑖𝑠𝑒
+
+𝑅 = 𝑅 !"# + 𝜆 $%& 𝑅 $%& + 𝜆 '()) 𝑅 '
+
+> {𝐼𝑜𝑈 ,},-. /
+
+𝑽 𝑽      
+
+> 0𝜏 != 0.3 𝜏 "= 0.6 1.0
+
+Figure 3: Overview of CAVE. A supervised warm-up initializes boundary-specific evidence tokens. During RL, VBEAR evaluates the boundary-specific visual support of each candidate interval, while PAGE adapts evidence supervision to group-level localization competence. 
+
+Exploratory Analysis 
+
+We analyze a representative RL-based VTG baseline on three widely used benchmarks from TimeLens (Zhang et al. 2026): Charades-TimeLens, ActivityNet-TimeLens, and QVHighlights-TimeLens. Under its standard inference setting, we categorize predictions by localization correct-ness and bilateral boundary-response strength, and vary the evidence threshold τ to examine whether the observed mis-alignment persists under increasingly stringent criteria. 
+
+Results and analysis. As shown in Figure 2 (a), approxi-mately 22% –33% of valid examples are incorrectly localized despite exhibiting strong bilateral boundary evidence. Such cases account for more than half of all localization failures across the three benchmarks. Meanwhile, correctly local-ized examples with strong bilateral evidence do not dom-inate the distributions. These results indicate that accurate timestamp prediction and boundary-related visual responses are not reliably coupled. Figure 2(b) shows that the strict evidence–timestamp mismatch rate Mτ decreases as τ in-creases, but remains consistently observable across datasets and thresholds. The mismatch is therefore not limited to samples whose boundary responses only marginally exceed the video-wide average. The qualitative example in Figure 1 further shows that the start-timestamp response peaks near the ground-truth boundary while the generated start time re-mains shifted, whereas the end response and prediction are largely consistent. This suggests that a model may perceive an individual boundary transition without reliably translating it into the corresponding numerical timestamp. Overall, evidence–timestamp misalignment is a prevalent phenomenon rather than the result of a small number of outliers. The challenge lies not only in acquiring boundary-related visual evidence, but also in converting start- and end-specific evidence into accurate timestamp predictions. Its per-sistence under stricter evidence criteria further indicates that outcome-level optimization based solely on interval overlap is insufficient to establish a reliable correspondence between internal boundary evidence and generated timestamps. 
+
+## Method 
+
+Overview 
+
+In this section, we present the proposed CAVE method. As illustrated in Figure 3, CAVE aims to align boundary-specific visual evidence with generated timestamps. It in-troduces dedicated boundary evidence tokens and initializes their structured generation and boundary-related semantics through a lightweight supervised warm-up. During reinforce-ment learning, VBEAR provides a boundary-aware visual re-ward that encourages each evidence token to concentrate its attention on the corresponding ground-truth boundary rela-tive to salient off-boundary regions. PAGE further modulates the strength of this reward according to the localization com-petence of each rollout group, retaining stronger guidance for difficult queries while attenuating it for well-localized ones. Specifically, CAVE structures each model response as a numerical interval followed by two autoregressively gener-ated evidence tokens, zs = <Start> and ze = <End> ,which correspond to the start and end boundaries, respec-tively. Let b ∈ s, e denote the boundary type, and define αb,t 
+
+as the normalized attention from zb to frame vt, averaged over all final-layer heads and visual tokens associated with that frame. This ordering separates temporal-coordinate gen-eration from boundary-evidence representation. Numerical timestamp tokens primarily encode temporal values and are not explicitly designed to summarize the visual cues underly-ing individual boundary decisions. By contrast, the evidence tokens are conditioned on the completed temporal decision, allowing them to summarize the boundary-specific visual information associated with the predicted start and end. 
+
+Evidence-Token Warm-up 
+
+To initialize the generation behavior and boundary-specific semantics of the <Start> and <End> tokens while reduc-ing the exploration difficulty caused by sparse rollout-level rewards, we employ a lightweight supervised warm-up. The language-modeling loss LLM teaches the prescribed output format and supervises ground-truth timestamp generation. For each boundary b ∈ { s, e }, let pb,t denote the normalized attention of the corresponding evidence token to frame t,and let yb,t ∈ { 0, 1} indicate whether the frame lies within the local neighborhood of the corresponding ground-truth boundary. The boundary attention loss is defined as: 
+
+Lb = − 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+yb,t log pb,t + (1 − yb,t ) log(1 − pb,t ). (3) We average the start- and end-boundary losses and optimize the following warm-up objective: 
+
+Latt = Ls + Le
+
+2 , Lwarm = λLM LLM + λatt Latt . (4) The warm-up enables reliable evidence token generation while establishing an initial distinction between start and end boundary visual semantics, providing a suitable initialization for subsequent RL. 
+
+Competence-Aware Reinforcement Learning 
+
+Starting from the warm-up policy, we further optimize CAVE using Group Relative Policy Optimization (GRPO) (Shao et al. 2024). For each video–query pair, the policy samples a group of G rollouts, each containing a candidate tempo-ral interval followed by the corresponding <Start> and 
+
+<End> evidence tokens. VBEAR evaluates the boundary-specific visual evidence associated with each rollout, while PAGE adjusts the contribution of this reward according to the localization competence of the rollout group. The gated ev-idence reward is then combined with outcome-level rewards for policy optimization. 
+
+Visual Boundary Evidence Alignment Reward. To dis-tinguish valid boundary evidence from visually salient but boundary-irrelevant responses, VBEAR contrasts evidence-token attention within the corresponding ground-truth boundary neighborhood against salient off-boundary regions, thereby promoting boundary-specific evidence concentration while suppressing spurious visual saliency. For each boundary b ∈ { s, e }, we first map the ground-truth timestamp t∗ 
+
+> b
+
+to the nearest sampled frame. Starting from this boundary anchor, we construct a local neighbor-hood Wb by expanding toward the event interior. An adjacent frame is included only when it remains sufficiently similar to both the boundary anchor and the previously selected frame, subject to a maximum neighborhood size. This similarity-guided expansion preserves local semantic continuity while reducing the likelihood of crossing the event transition. We next construct a salient off-boundary reference set Sb. Frames outside Wb whose attention scores exceed the video-wide mean are selected as candidates. Let αb,t denote the attention from evidence token zb to frame vt. We define the mean attention within the boundary neighborhood and the salient off-boundary region as: 
+
+αbd  
+
+> b
+
+= 1
+
+|Wb|
+
+X
+
+> t∈Wb
+
+αb,t , αsal  
+
+> b
+
+= 1
+
+|S b|
+
+X
+
+> t∈S b
+
+αb,t . (5) The relative boundary-evidence ratio is then defined as: 
+
+ρb = αbd 
+
+> b
+
+αsal  
+
+> b
+
++ ϵ , b ∈ { s, e }, (6) where ϵ is a small constant for numerical stability. The boundary-level evidence reward is defined as: 
+
+rb = 1[ρb > τ on ] min 
+
+ ρb
+
+τsat 
+
+, 1
+
+
+
+, b ∈ { s, e }, (7) where τon = 1 and τsat = 2 are the activation and saturation thresholds. The overall visual reward is defined as 
+
+Rv = rs + re
+
+2 . (8) This formulation rewards a boundary only when its local evidence exceeds the salient off-boundary response. Beyond the activation threshold, the reward increases with relative evidence concentration and saturates at a bounded value. The two boundaries are evaluated independently, prevent-ing strong evidence at one boundary from compensating for insufficient evidence at the other. 
+
+Performance-Aware Gating for Evidence Supervision. To preserve useful evidence guidance without hindering fine-grained boundary refinement, PAGE estimates query-specific competence from the current on-policy rollout group and adaptively scales VBEAR, retaining stronger supervision for poorly localized groups while attenuating it for well-localized ones. For a rollout group g containing G candidate intervals 
+
+{ˆyi}Gi=1 , we define the group competence as 
+
+mg = 1
+
+G
+
+> G
+
+X
+
+> i=1
+
+IoU(ˆ yi, y ∗), λ(g) 
+
+> v
+
+= fexp (mg ), (9) where fexp is a normalized inverse-exponential gating func-tion shared by all rollouts in the group, and κ > 0 con-trols its decay sharpness. The gate retains the full evidence reward when mg ≤ τl, progressively attenuates it when 
+
+τl < m g < τ h, and suppresses it when mg ≥ τh. The exact normalized formulation is provided in the appendix. Unlike a global step-dependent schedule, PAGE adapts to both query difficulty and the evolving policy state. 
+
+Joint Policy Optimization. Let RIoU denote the overlap re-ward between the predicted and ground-truth intervals, and let Rfmt indicate whether the structured timestamps and ev-idence tokens follow the prescribed output format. The final reward is 
+
+R = RIoU + λfmt Rfmt + λ(g) 
+
+> v
+
+Rv . (10) PAGE modulates VBEAR before group-relative advantage estimation, after which the entire completion is optimized us-ing the standard GRPO objective. CAVE provides boundary-level visual supervision that encourages the policy to gen-erate timestamp predictions associated with more reliable boundary-related visual evidence. 
+
+## Experiments 
+
+Experimental Setup 
+
+Datasets. We evaluate CAVE on three VTG benchmarks us-ing the refined annotations provided by TimeLens (Zhang et al. 2026): Charades (Gao et al. 2017) (Char-TL), Ac-tivityNet (Heilbron et al. 2015) (ANet-TL), and QVHigh-lights (Lei, Berg, and Bansal 2021) (QVH-TL). 
+
+Baselines and Evaluation Metrics. We compare CAVE with representative proprietary and open-source multimodal models. The proprietary baselines include GPT-4o (OpenAI 2024), GPT-5 (OpenAI 2026), and the Gemini series (Team 2025a). The open-source baselines cover three categories: general-purpose LVLMs (MiMo-VL-7B (Yue et al. 2025), Qwen2.5-VL-7B (Bai et al. 2025), and Qwen3-VL-8B (Team 2025b)), video-oriented models (VideoChat-Flash-7B (Li et al. 2025a) and VideoChat-R1-7B (Li et al. 2025b)), and VTG-specialized models (TRACE (Guo et al. 2025c), Time-Suite (Zeng et al. 2025b), Grounded-VideoLLM (Wang et al. 2025), Time-R1-7B (Wang et al. 2026b), and TimeLens-7B/8B (Zhang et al. 2026)). Following prior VTG studies (Zhang et al. 2026; Wang et al. 2026b), we report R1@m under IoU thresholds m ∈{0.3, 0.5, 0.7} and mean IoU (mIoU). 
+
+Implementations. We use Qwen2.5-VL-7B-Instruct as the backbone and follow the interleaved textual timestamp en-coding of TimeLens. Videos are sampled at 2 FPS with at most 448 frames. CAVE performs parameter-efficient adapta-tion using LoRA (r=4) only during the evidence-token warm-up while keeping the vision encoder frozen. The evidence-token warm-up is performed for two epochs on 1,500 ex-amples randomly sampled from the open-source TimeLens-100K (Zhang et al. 2026), with the language-modeling and boundary-attention losses weighted by λLM = 0.5 and 
+
+λatt = 1 .0, respectively. Following prior VTG post-training methods (Wang et al. 2026b; Zhang et al. 2026), we train for one epoch on the same 2,500 difficulty-filtered RL ex-amples used by TimeLens. For each video–query pair, we sample G = 8 rollouts and optimize the overall reward with λfmt = 0 .1 and λ(g) 
+
+> v
+
+= 1 .0. The learning rates for warm-up and RL are set to 1 × 10 −4 and 1 × 10 −6, respec-tively. For PAGE, we use τl = 0 .3, τh = 0 .6, and κ = 4 .For experiments with Qwen3-VL-8B-Instruct, we follow the same training pipeline while adapting the warm-up stage to 3 epochs and setting λ(g) 
+
+> v
+
+= 0 .5. All other optimization settings remain unchanged. Following TimeLens, we select check-points using an early-stopping strategy based on validation performance. Training is conducted on 16 AMD MI308X GPUs with the ROCm/HIP runtime. Additional implemen-tation details are provided in the appendix. 
+
+Main Results 
+
+Table 1 reports the main results on the three TimeLens bench-marks. Overall, CAVE achieves the strongest overall per-formance among open-source 7B models. Compared with TimeLens-7B, it obtains an average improvement of approx-imately 1.9 points across the twelve evaluation metrics. The consistent gains across benchmarks demonstrate that explic-itly aligning boundary-related visual evidence with times-tamp prediction effectively strengthens temporal grounding. We further evaluate CAVE using the stronger Qwen3-VL-8B backbone. CAVE-8B outperforms TimeLens-8B across all three benchmarks on nearly every metric. These results indicate that the proposed boundary evidence alignment re-mains effective when scaling to stronger multimodal back-bones, suggesting that the benefit is not tied to a specific model architecture. Notably, CAVE achieves more substan-tial improvements under stricter localization criteria. While loose IoU thresholds mainly evaluate whether the predicted segment covers the queried event, higher IoU thresholds require more accurate estimation of both start and end boundaries. The consistent improvements on these boundary-sensitive metrics indicate that CAVE does not merely im-prove coarse event retrieval, but effectively refines tem-poral boundary prediction. This observation is consistent with the objective of VBEAR, which encourages boundary-specific visual evidence to provide more reliable guidance for timestamp generation. Moreover, the improvements are particularly pronounced on QVHighlights-TimeLens, where CAVE achieves substantial gains across both 7B and 8B set-tings. This may be because QVHighlights-TimeLens places stronger emphasis on precisely identifying the temporal ex-tent of query-relevant moments, making boundary-specific evidence supervision more valuable. By relatively comparing boundary-neighboring evidence with salient off-boundary responses, VBEAR provides more targeted supervision than optimizing localization overlap alone. 
+
+Ablation Study 
+
+To assess the contribution of each component, Table 2 presents ablation results of CAVE-7B. (i) Starting from the warm-up initialized GRPO baseline, introducing VBEAR consistently improves performance across all three bench-marks, with larger gains on ActivityNet-TimeLens and QVHighlights-TimeLens. This demonstrates that boundary-specific visual evidence provides complementary supervi-sion beyond the interval-level IoU reward, which only eval-uates the final localization outcome. (ii) Further introducing PAGE brings additional improvements across all datasets and metrics. Compared with fixed evidence supervision, PAGE adaptively adjusts the contribution of VBEAR according to the localization competence of rollout groups. The larger im-provements on stricter localization metrics indicate that such adaptive scheduling helps preserve stronger evidence guid-ance for inaccurate predictions while reducing unnecessary constraints after the model becomes sufficiently competent. Model Charades-TimeLens ActivityNet-TimeLens QVHighlights-TimeLens                                                                                                                                                                                                                                    
+
+> R1@0.3 R1@0.5 R1@0.7 mIoU R1@0.3 R1@0.5 R1@0.7 mIoU R1@0.3 R1@0.5 R1@0.7 mIoU
+> Proprietary Models
+> GPT-4o 60.6 44.5 23.5 41.8 55.2 41.4 25.8 40.4 69.0 54.8 38.5 52.1 GPT-5 59.3 42.0 22.0 40.5 57.4 44.9 30.4 42.9 72.4 60.4 46.4 56.8 Gemini-2.0-Flash 66.4 53.5 27.1 46.7 62.9 54.0 37.7 49.3 76.2 66.4 48.3 60.8 Gemini-2.5-Flash 68.7 56.1 30.6 48.6 66.8 57.5 41.3 52.5 78.2 69.4 55.0 64.3 Gemini-2.5-Pro 74.1 61.1 34.0 52.8 72.3 64.2 47.1 58.1 84.1 75.9 61.1 70.4
+> Open-Source Models
+> VideoChat-Flash-7B 60.2 37.9 17.8 39.7 35.5 21.8 10.5 24.8 45.2 30.6 16.7 32.7 VideoChat-R1-7B 51.9 30.8 11.7 33.7 35.0 23.9 11.3 25.0 29.3 19.1 9.4 21.5 Time-R1-7B 57.9 32.0 16.9 36.6 44.8 31.0 19.0 33.1 65.8 51.5 36.1 49.2 TRACE 37.2 21.8 9.6 27.1 43.4 33.9 22.0 32.7 49.7 39.1 28.1 39.0 TimeSuite 56.3 35.5 18.0 38.1 27.1 17.5 8.6 19.8 27.1 16.9 9.9 21.7 Grounded-VideoLLM 43.3 28.7 13.5 30.0 39.2 29.6 19.5 30.0 43.7 33.8 22.5 33.4 MiMo-VL-7B 57.9 42.6 20.5 39.6 49.3 38.7 22.4 35.5 57.1 42.6 28.4 41.5 Qwen2.5-VL-7B 59.7 37.8 16.6 39.3 44.1 31.0 16.1 31.4 41.5 27.8 15.2 31.6 TimeLens-7B 70.5 55.6 28.4 48.8 62.8 51.0 32.6 46.2 74.1 62.7 43.1 56.0 CAVE-7B (Ours) 70.4 56.0 30.2 50.0 63.3 51.4 34.0 47.0 77.1 66.8 48.4 60.2
+> Qwen3-VL-8B 69.2 53.4 27.5 48.3 62.1 51.2 34.4 46.8 74.2 64.6 49.3 59.4 TimeLens-8B 76.6 63.0 35.2 55.2 68.9 58.4 40.6 53.2 80.2 71.6 55.5 65.5 CAVE-8B (Ours) 77.0 63.8 35.6 55.4 68.8 59.1 42.1 53.8 80.3 71.6 56.8 66.5
+
+Table 1: Main results on TimeLens-Bench. Best results are highlighted in bold.                                                                      
+
+> Setting Charades-TimeLens ActivityNet-TimeLens QVHighlights-TimeLens
+> R1@0.3 R1@0.5 R1@0.7 mIoU R1@0.3 R1@0.5 R1@0.7 mIoU R1@0.3 R1@0.5 R1@0.7 mIoU (1) Warm-up +GRPO 69.9 54.4 28.6 48.5 60.0 47.2 29.2 43.3 73.5 60.7 39.8 54.3 (2) (1) +VBEAR 70.2 55.2 28.4 48.9 62.6 50.5 32.3 46.0 76.3 66.3 45.6 58.6 (3) CAVE w/o Latt 69.3 54.1 29.3 48.7 60.7 49.5 31.0 45.0 75.1 62.4 42.2 56.1 (4) (2) +PAGE (CAVE) 70.4 56.0 30.2 50.0 63.3 51.4 34.0 47.0 77.1 66.8 48.4 60.2
+
+Table 2: Ablation study of CAVE-7B on the three TimeLens-Bench datasets. Rows (1)–(2)–(4) progressively introduce VBEAR and PAGE, while row (3) removes the boundary-attention loss from the evidence-token warm-up stage. (iii) Removing the boundary attention loss Latt consistently degrades performance. This verifies that the warm-up stage is not merely required for learning the output format, but also plays an important role in initializing the boundary-specific semantics of the <Start> and <End> evidence tokens. Without such initialization, subsequent evidence-aware opti-mization becomes less effective. The ablation results validate the effectiveness of introducing boundary-specific visual ev-idence and adaptively optimizing its supervision. 
+
+Analyses 
+
+Evidence–Timestamp Misalignment Analysis. To evalu-ate whether CAVE mitigates the evidence–timestamp mis-alignment, we conduct the evidence–timestamp consistency analysis. Following the protocol of the preliminary study, we compare TimeLens-7B, Warm-up + GRPO, and CAVE-7B under identical attention extraction and thresholding settings, using the attention distributions from generated timestamp tokens to video frames. As shown in Figure 4 (a), CAVE achieves the lowest strict mismatch rate across all three benchmarks, indicating that it consistently reduces discrepancies between visual bound-ary evidence and timestamp outputs. To control for the con-founding effect of improved localization accuracy, Figure 4 (b) further compares paired outputs from the same exam-ples with nearly identical IoU and the same correctness sta-tus. Under matched localization quality, CAVE reduces the prevalence of strong bilateral evidence among incorrect pre-dictions while increasing it among correct predictions. The former indicates fewer cases in which strong boundary re-sponses fail to yield correct timestamps. The latter shows that accurate timestamp predictions are more often supported by clear boundary-specific visual responses. These results sug-gest that CAVE promotes a more reliable correspondence between visual boundary evidence and timestamp outputs, thereby contributing to more precise temporal localization. 
+
+Case Study. Figure 5 illustrates how CAVE improves the cor-respondence between boundary-related visual responses and timestamp predictions. In this case, the ground-truth interval spans 2–8 seconds, whereas TimeLens incorrectly localizes a late non-target segment at 22 –26 seconds. Its timestamp-token attention is likewise concentrated around this distractor Figure 4: Evidence–timestamp consistency analysis using generated timestamp-token attention. (a) Strict mismatch rate 
+
+M1 on three benchmarks. (b) Strong bilateral evidence rates for CAVE and Warm-up + GRPO on the same samples with 
+
+|∆IoU | ≤ 0.05 , separated into pairs that are both incorrect or both correct. Panel (b) reports the three-dataset macro average, and ∆ denotes CAVE minus Warm-up + GRPO. rather than the queried event. In contrast, CAVE correctly re-covers the target interval. The responses of <Start> and 
+
+<End> , together with the attention of the corresponding numeric timestamp tokens, peak near the respective event boundaries. This pattern is consistent with the intended ef-fect of VBEAR, which encourages boundary-specific visual responses to concentrate around the relevant temporal tran-sitions. This case qualitatively demonstrates that CAVE im-proves high-precision temporal localization while reducing evidence–timestamp misalignment. 
+
+## Related Work 
+
+Video Temporal Grounding. Early VTG methods typically employ pretrained visual and textual encoders to extract modality-specific features, followed by cross-modal fusion and task-specific localization modules for temporal bound-ary prediction. With the development of LVLMs, recent stud-ies (Ren et al. 2024; Li et al. 2025a; Zeng et al. 2025b; Guo et al. 2025c) increasingly formulate VTG as an autoregres-sive generation task and use supervised fine-tuning to directly generate temporal intervals. Several methods introduce spe-cialized temporal or evidence tokens to improve timestamp representation (Guo et al. 2025b; Liu et al. 2024; Wang et al. 2025; Qian et al. 2024) or event-level grounding (Zeng et al. 2025a). More recently, RL post-training has been applied to VTG (Wang et al. 2026b; Zhang et al. 2026; Yu et al. 2026) through verifiable localization rewards. Despite these advances, existing studies primarily focus on timestamp rep-resentation and final interval accuracy, while the boundary-specific visual evidence underlying the generated timestamps remains insufficiently explored. In this paper, CAVE intro-duces specialized visual boundary evidence tokens to model the visual responses associated with the start and end bound-aries and optimize their quality during policy learning. 
+
+RL for Video-Language Models. RL has recently emerged as an effective post-training paradigm for video-language models. General video RL methods typically construct veri-fiable rewards from final-answer correctness or task success 1s 2s 4s 8s 22s 26s              
+
+> Query: a person takes a pillow (video length: 30s)
+> Ground Truth
+> 2–8s
+> TimeLens-7B
+> 22–26s
+> Ours
+> 2–8s
+> 030s
+> Start-boundary attention
+> Ours <Start> Ours digits TimeLens-7B digits
+> 0.0 0.5 1.0
+> Attention
+> End-boundary attention
+> Ours <End> Ours digits TimeLens-7B digits
+> 0510 15 20 25 30
+> Time (s)
+> 0.0 0.5 1.0
+> Attention
+
+Figure 5: A case study comparing different methods. to improve video understanding and reasoning (Feng et al. 2025; Li et al. 2025b; Wang et al. 2026a; Yan et al. 2025). Recent studies (Wang et al. 2026b; Zhang et al. 2026; Yu et al. 2026) extend this paradigm to VTG by optimizing gen-erated temporal intervals with verifiable rewards based on timestamp accuracy or interval overlap, while further explor-ing data quality, timestamp representation, and thinking-free RLVR strategies. However, these reward designs mainly eval-uate the correctness of final outputs and provide limited su-pervision over the boundary-related visual responses under-lying timestamp generation. CAVE addresses this limitation through a visual boundary evidence alignment reward that encourages boundary-specific evidence tokens to concentrate on the corresponding ground-truth boundary neighborhoods. 
+
+## Conclusion 
+
+In this paper, we delve into timestamp prediction and its underlying boundary-level visual evidence in VTG, show-ing a prevalent evidence–timestamp misalignment under outcome-level optimization. To address this issue, we pro-pose CAVE, which explicitly couples boundary-related vi-sual evidence with timestamp generation for more reliable temporal localization. CAVE introduces boundary-specific evidence tokens and initializes their generation behavior and boundary semantics through a lightweight supervised warm-up. During RL, VBEAR rewards the correspondence be-tween boundary evidence and timestamp predictions, while PAGE modulates the strength of this supervision accord-ing to rollout group localization competence. Extensive ex-periments on representative VTG benchmarks demonstrate that CAVE improves temporal localization and effectively reduces evidence–timestamp misalignment. References 
+
+Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; Zhong, H.; Zhu, Y.; Yang, M.; Li, Z.; Wan, J.; Wang, P.; Ding, W.; Fu, Z.; Xu, Y.; Ye, J.; Zhang, X.; Xie, T.; Cheng, Z.; Zhang, H.; Yang, Z.; Xu, H.; and Lin, J. 2025. Qwen2.5-VL Technical Report. arXiv:2502.13923. Chen, R.; Luo, T.; Fan, Z.; Zou, H.; Feng, Z.; Xie, G.; Zhang, H.; Wang, Z.; Liu, Z.; and Zhang, H. 2025. Datasets and Recipes for Video Temporal Grounding via Reinforcement Learning. In Proceedings of the 2025 Conference on Em-pirical Methods in Natural Language Processing, EMNLP 2025 - Industry Track, Suzhou, China, November 4-9, 2025 ,983–992. Association for Computational Linguistics. Feng, K.; Gong, K.; Li, B.; Guo, Z.; Wang, Y.; Peng, T.; Wu, J.; Zhang, X.; Wang, B.; and Yue, X. 2025. Video-R1: Re-inforcing Video Reasoning in MLLMs. In Advances in Neu-ral Information Processing Systems 38: Annual Conference on Neural Information Processing Systems 2025, NeurIPS 2025, San Diego, CA, USA, December 2-7, 2025 / Mexico City, Mexico, November 30 - December 5, 2025 .Gao, J.; Sun, C.; Yang, Z.; and Nevatia, R. 2017. TALL: Tem-poral Activity Localization via Language Query. In IEEE International Conference on Computer Vision, ICCV 2017, Venice, Italy, October 22-29, 2017 , 5277–5285. IEEE Com-puter Society. Guo, C.; Mo, X.; Nie, Y.; Xu, X.; Xu, C.; Yu, F.; and Long, C. 2025a. TAR-TVG: Enhancing VLMs with Timestamp Anchor-Constrained Reasoning for Temporal Video Ground-ing. arXiv:2508.07683. Guo, Y.; Liu, J.; Li, M.; Cheng, D.; Tang, X.; Sui, D.; Liu, Q.; Chen, X.; and Zhao, K. 2025b. VTG-LLM: Integrat-ing Timestamp Knowledge into Video LLMs for Enhanced Video Temporal Grounding. In Walsh, T.; Shah, J.; and Kolter, Z., eds., Thirty-Ninth AAAI Conference on Artificial Intelligence, Thirty-Seventh Conference on Innovative Ap-plications of Artificial Intelligence, Fifteenth Symposium on Educational Advances in Artificial Intelligence, AAAI 2025, Philadelphia, PA, USA, February 25 - March 4, 2025 , 3302– 3310. AAAI Press. Guo, Y.; Liu, J.; Li, M.; Liu, Q.; Chen, X.; and Tang, X. 2025c. TRACE: Temporal Grounding Video LLM via Causal Event Modeling. In The Thirteenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. Heilbron, F. C.; Escorcia, V.; Ghanem, B.; and Niebles, J. C. 2015. ActivityNet: A large-scale video benchmark for human activity understanding. In IEEE Conference on Computer Vision and Pattern Recognition, CVPR 2015, Boston, MA, USA, June 7-12, 2015 , 961–970. IEEE Computer Society. Hu, R.; Wang, C.; Wei, L.; Bai, J.; Yu, B.; Huang, W.; Wang, K.; and Wang, Y. 2026. Attend to Evidence: Evidence-Anchored Spatial Attention Supervision for Multimodal RLVR. arXiv:2605.30912. Huang, B.; Wang, X.; Chen, H.; Song, Z.; and Zhu, W. 2024. VTimeLLM: Empower LLM to Grasp Video Mo-ments. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , 14271–14280. IEEE. Lei, J.; Berg, T. L.; and Bansal, M. 2021. Detecting Moments and Highlights in Videos via Natural Language Queries. In Ranzato, M.; Beygelzimer, A.; Dauphin, Y. N.; Liang, P.; and Vaughan, J. W., eds., Advances in Neural Information Processing Systems 34: Annual Conference on Neural Infor-mation Processing Systems 2021, NeurIPS 2021, December 6-14, 2021, virtual , 11846–11858. Li, X.; Wang, Y.; Yu, J.; Zeng, X.; Zhu, Y.; Huang, H.; Gao, J.; Li, K.; He, Y.; Wang, C.; Qiao, Y.; Wang, Y.; and Wang, L. 2025a. VideoChat-Flash: Hierarchical Compression for Long-Context Video Modeling. arXiv:2501.00574. Li, X.; Yan, Z.; Meng, D.; Dong, L.; Zeng, X.; He, Y.; Wang, Y.; Qiao, Y.; Wang, Y.; and Wang, L. 2025b. VideoChat-R1: Enhancing Spatio-Temporal Perception via Reinforcement Fine-Tuning. arXiv:2504.06958. Liu, Y.; Ma, Z.; Qi, Z.; Wu, Y.; Shan, Y.; and Chen, C. W. 2024. E.T. Bench: Towards Open-Ended Event-Level Video-Language Understanding. In Advances in Neural Information Processing Systems 37: Annual Conference on Neural Infor-mation Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 .OpenAI. 2024. GPT-4o System Card. arXiv:2410.21276. OpenAI. 2026. OpenAI GPT-5 System Card. arXiv:2601.03267. Qian, L.; Li, J.; Wu, Y.; Ye, Y.; Fei, H.; Chua, T.; Zhuang, Y.; and Tang, S. 2024. Momentor: Advancing Video Large Language Model with Fine-Grained Temporal Reasoning. In Forty-first International Conference on Machine Learn-ing, ICML 2024, Vienna, Austria, July 21-27, 2024 , volume 235 of Proceedings of Machine Learning Research , 41340– 41356. PMLR / OpenReview.net. Qu, M.; Chen, X.; Liu, W.; Li, A.; and Zhao, Y. 2024. ChatVTG: Video Temporal Grounding via Chat with Video Dialogue Large Language Models. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024 -Workshops, Seattle, WA, USA, June 17-18, 2024 , 1847–1856. IEEE. Ren, S.; Yao, L.; Li, S.; Sun, X.; and Hou, L. 2024. TimeChat: A Time-sensitive Multimodal Large Language Model for Long Video Understanding. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seat-tle, WA, USA, June 16-22, 2024 , 14313–14323. IEEE. Shao, Z.; Wang, P.; Zhu, Q.; Xu, R.; Song, J.; Zhang, M.; Li, Y. K.; Wu, Y.; and Guo, D. 2024. DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models. arXiv:2402.03300. Team, G. 2025a. Gemini 2.5: Pushing the Frontier with Ad-vanced Reasoning, Multimodality, Long Context, and Next Generation Agentic Capabilities. arXiv:2507.06261. Team, Q. 2025b. Qwen3-VL Technical Report. arXiv:2511.21631. Wang, H.; Xu, Z.; Cheng, Y.; Diao, S.; Zhou, Y.; Cao, Y.; Wang, Q.; Ge, W.; and Huang, L. 2025. Grounded-VideoLLM: Sharpening Fine-grained Temporal Grounding in Video Large Language Models. In Findings of the Associa-tion for Computational Linguistics: EMNLP 2025 , 959–975. Wang, Q.; Yu, Y.; Yuan, Y.; Mao, R.; and Zhou, T. 2026a. Videorft: Incentivizing video reasoning capability in mllms via reinforced fine-tuning. Advances in neural information processing systems , 38: 4350–4376. Wang, Y.; Wang, Z.; Xu, B.; Du, Y.; Lin, K.; Xiao, Z.; Yue, Z.; Ju, J.; Zhang, L.; Yang, D.; et al. 2026b. Time-r1: Post-training large vision language model for temporal video grounding. Advances in Neural Information Process-ing Systems , 38: 83330–83364. Wu, Q.; Cheng, K.; Yang, R.; Zhang, C.; Yang, J.; Jiang, H.; Mu, J.; Peng, B.; Qiao, B.; Tan, R.; et al. 2026. Gui-actor: Coordinate-free visual grounding for gui agents. Advances in Neural Information Processing Systems , 38: 15101–15128. Yan, Z.; He, Y.; Li, X.; Yue, Z.; Zeng, X.; Wang, Y.; Qiao, Y.; Wang, L.; and Wang, Y. 2025. VideoChat-R1.5: Visual Test-Time Scaling to Reinforce Multimodal Reasoning by Iterative Perception. In Advances in Neural Information Processing Systems 38: Annual Conference on Neural Information Pro-cessing Systems 2025, NeurIPS 2025, San Diego, CA, USA, December 2-7, 2025 / Mexico City, Mexico, November 30 -December 5, 2025 .Yu, F.; Lu, Z.; Niu, L.; Meng, F.; and Zhou, J. 2026. Ar-rowGEV: Grounding Events in Video via Learning the Ar-row of Time. In Findings of the Association for Computa-tional Linguistics, ACL 2026, San Diego, California, United States, July 2-7, 2026 , 34657–34671. Association for Com-putational Linguistics. Yue, Z.; Lin, Z.; Song, Y.; Wang, W.; Ren, S.; Gu, S.; Li, S.; Li, P.; Zhao, L.; Li, L.; Bao, K.; Tian, H.; Zhang, H.; Wang, X.; Zhu, D.; Cici; He, C.; Ye, B.; Shen, B.; Zhang, Z.; Jiang, Z.; Zheng, Z.; Song, Z.; Luo, Z.; Yu, Y.; Wang, Y.; Tian, Y.; Tu, Y.; Yan, Y.; Huang, Y.; Wang, X.; Xu, X.; Song, X.; Zhang, X.; Yong, X.; Zhang, X.; Deng, X.; Yang, W.; Ma, W.; Lv, W.; Zhuang, W.; Liu, W.; Deng, S.; Liu, S.; Chen, S.; Yu, S.; Liu, S.; Wang, S.; Ma, R.; Wang, Q.; Wang, P.; Chen, N.; Zhu, M.; Zhou, K.; Zhou, K.; Fang, K.; Shi, J.; Dong, J.; Xiao, J.; Xu, J.; Liu, H.; Xu, H.; Qu, H.; Zhao, H.; Lv, H.; Wang, G.; Zhang, D.; Zhang, D.; Zhang, D.; Ma, C.; Liu, C.; Cai, C.; and Xia, B. 2025. MiMo-VL Technical Report. arXiv:2506.03569. Zeng, W.; Gao, D.; Shou, M. Z.; and Ng, H. T. 2025a. Fac-torized Learning for Temporally Grounded Video-Language Models. In IEEE/CVF International Conference on Com-puter Vision, ICCV 2025, Honolulu, HI, USA, October 19-25, 2025 , 20683–20693. IEEE. Zeng, X.; Li, K.; Wang, C.; Li, X.; Jiang, T.; Yan, Z.; Li, S.; Shi, Y.; Yue, Z.; Wang, Y.; Wang, Y.; Qiao, Y.; and Wang, L. 2025b. TimeSuite: Improving MLLMs for Long Video Understanding via Grounded Tuning. In The Thirteenth In-ternational Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. Zhang, J.; Wang, T.; Ge, Y.; Ge, Y.; Li, X.; and Wang, L. 2026. TimeLens: Rethinking Video Temporal Grounding with Multimodal LLMs. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 10419–10429.

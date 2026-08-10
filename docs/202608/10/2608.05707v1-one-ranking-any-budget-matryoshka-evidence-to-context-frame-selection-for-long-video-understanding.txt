@@ -1,0 +1,768 @@
+Title: One Ranking, Any Budget: Matryoshka Evidence-to-Context Frame Selection for Long-Video Understanding
+
+URL Source: https://arxiv.org/pdf/2608.05707v1
+
+Published Time: Fri, 07 Aug 2026 00:45:57 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# One Ranking, Any Budget: Matryoshka Evidence-to-Context Frame Selection for Long-Video Understanding 
+
+Wang Chen 1,2, †, Yu Chen 2, Xiang Wang 2, ‡, Shuai Li 2, Jinfa Huang 3, Xiawu Zheng 1, B
+
+> 1Media Analytics and Computing Lab, Xiamen University, Xiamen, China
+> 2Amap, Alibaba Group, China
+> 3Department of Computer Science, University of Rochester, Rochester, NY, USA
+
+‡ Project Leader B Corresponding Author   
+
+> †This work was conducted during the authors 'internships at Amap, Alibaba Group.
+
+## Abstract 
+
+Frame selection is essential for applying Large Multimodal Models (LMMs) to long videos due to se-vere frame redundancy and limited context windows. Since the appropriate frame budget varies with the downstream LMM, reasoning demands, and latency constraints, a practical selector should serve multi-ple budgets. However, existing methods typically optimize an isolated frame subset for each predefined budget: when the budget changes, previously selected evidence may be replaced rather than progressively augmented. Ranking frames by a fixed score would allow prefix reuse across budgets, but it ignores the distinct roles of different ranking positions. In this paper, we formulate long-video frame selection as a Ma-tryoshka ranking problem: constructing a single priority sequence whose small prefixes concentrate query-conditioned evidence, while progressively larger prefixes preserve this evidence and add broader tempo-ral context. Efficiently constructing such a ranking is itself challenging, as densely sampling long videos and evaluating frame–query relevance incurs substantial overhead. We therefore introduce Matryoshka 
+
+Evidence-to-Context ( MEC ) Frame Selection, a training-free framework that builds a reusable sparse video index, discovers candidates through sparse probing and local zooming, and greedily constructs a position-adaptive ranking—early positions emphasize evidence; later positions progressively favor tempo-ral coverage while preserving visual diversity. A single ranking can thus be truncated to any target budget without rerunning the selector. Across four benchmarks and six frame budgets, MEC improves average accuracy over uniform sampling by 3.77 percentage points, matches strong state-of-the-art selectors, and reduces end-to-end selection latency by 47.37-51.19%. 
+
+# 1 Introduction 
+
+Recent advances in Large Multimodal Models (LMMs) [2, 3, 7, 27] have extended multimodal reasoning from static images to video. These models now support applications such as video question answering, temporal event localiza-tion, dense captioning, and video object tracking [12, 25, 30]. Yet scaling from short clips to long-form video remains challenging. A long recording may contain tens of thousands of highly redundant frames, while the evidence needed to answer a question may be confined to a fleeting action, a subtle state transition, or several events separated by minutes. Directly processing every frame is infeasible, whereas indiscriminately reducing the temporal stream can easily miss evidence that is fleeting, subtle, or distributed across distant moments. Keyframe selection addresses both challenges by choosing a compact set of query-relevant frames, thereby removing redundant observations while retaining the evidence needed by a downstream LMM. Agentic or iterative temporal search can adaptively locate evidence [33, 36], but repeated decisions, VLM evaluations, and, where applicable, tool invocations introduce additional search steps and latency. Visual-token compression shortens token sequences through hierarchical aggregation, merging, or pruning [1, 15, 19], but aggressive compression may discard fine-grained, query-critical evidence. Frame selection therefore offers a more direct and balanced approach, reducing redundant input while preserving visual evidence at its original fidelity. This raises a central question: what constitutes a better frame-selection strategy for long-video understanding? 
+
+> 1arXiv:2608.05707v1 [cs.CV] 6 Aug 2026
+
+MAC-AutoML 123             
+
+> Video Query
+> What is the male protagonist's daily life trajectory?
+> Budget-conditioned subsets K=8 K=64
+> E1 disappears
+> E1 06:00
+> E2 09:20 E3 13:20 E4 17:20
+> Separate optimization Evidence may change
+> Fixed-score ranking Position-invariant Hard to balance different budgets
+> Matryoshka ranking
+> K=8 K=32 K=64 Temporal coverage Evidence One ranking for any resource / reasoning demand
+> E4 17:20
+> E2 09:20
+> E1 06:00 E3 13:20 E4 17:20 E2 09:20
+> Rank 1 Rank 4 Rank 8
+> E1 06:00 E2 09:20 E3 13:20 E4 17:20
+
+(a) Frame-selection paradigms (b) Accuracy–latency trade-off 
+
+Figure 1. Motivation and empirical trade-off of MEC. (a) Budget-conditioned selection independently optimizes each subset and may replace previously selected evidence; fixed-score ranking reuses prefixes but struggles to balance performance across budgets. MEC instead constructs one Matryoshka ranking whose prefixes preserve early evidence and progressively extend temporal context. (b) On Video-MME Long, each marker is annotated with its frame budget and stars denote six-budget averages. MEC provides a favorable accuracy–latency balance relative to stronger budget-specific selectors. 
+
+A better selection strategy should remain effective as the frame budget changes, rather than being optimized for a single fixed budget. Many existing keyframe methods instead optimize a separate subset for each predefined budget K. Be-cause the appropriate budget varies with the downstream LMM, reasoning demands, and latency constraints, changing 
+
+K requires rerunning the selector. Moreover, as illustrated in Figure 1a, evidence selected under a tight budget may disappear as the budget increases. A fixed-score ranking may avoid this instability by serving each budget with a prefix, but it applies the same objective at every rank. Even when this objective combines relevance, diversity, and coverage, it cannot adjust their relative importance across positions and thus struggles to balance performance across budgets within a single sequence. Inspired by the Matryoshka principle explored in representation learning and multimodal visual-token modeling [4, 17], we formulate long-video frame selection as the Matryoshka ranking problem : the task of constructing one budget-independent priority sequence whose short prefixes concentrate query-conditioned evidence, while progressively longer prefixes preserve that evidence and add complementary context. Constructing such a ranking efficiently poses a challenge. Densely sampling a long video and evaluating each frame against the query can incur substantial selection cost. We address this challenge with Matryoshka Evidence-to-Context (MEC) Frame Selection, a training-free framework that separates reusable video analysis from query-conditioned dis-covery. MEC first builds a sparse index of low-resolution appearance, local visual change, and observability. For each query, it scores sparse probes using multiple cues, activates high-value segments, and zooms around anchors to form a compact candidate pool. It then greedily constructs a position-adaptive ranking: early positions emphasize query-conditioned evidence, whereas later positions progressively increase temporal coverage while maintaining visual diver-sity. Any target budget can be served by truncating this ranking and restoring chronological order, without rerunning the selector. Across four long-video benchmarks and six frame budgets, MEC remains competitive with strong methods while offering a favorable accuracy–latency trade-off. As shown in Figure 1b, MEC’s six-budget average on the Long subset of Video-MME exceeds AKS by 0.63 accuracy points while reducing cached end-to-end average latency by 47 .37 %. Our contributions are as follows: • We formulate the Matryoshka ranking problem for long-video frame selection: one sequence serves all budgets, concentrating query-conditioned evidence in short prefixes and progressively expanding context in longer ones. 
+
+2MAC-AutoML 
+
+• We introduce MEC, a training-free framework that efficiently constructs a position-adaptive Matryoshka ranking to serve multiple frame budgets in a single run. • Extensive experiments across four long-video benchmarks and six frame budgets demonstrate the effectiveness of MEC and its favorable accuracy–latency trade-off. 
+
+# 2 Related Work 
+
+Additional discussions of Matryoshka representations and visual-token compression are provided in Section A. 
+
+Video Large Multimodal Models. Video LMMs commonly map frames or clips to visual tokens and use a language model for joint cross-frame, spatiotemporal, and linguistic reasoning. Recent systems strengthen this interface through dynamic visual resolution, spatiotemporal position modeling, grounded video supervision, tracking, and codec-aware tokenization [2, 3, 7, 27]. These advances improve the downstream reasoner but do not remove the input-selection problem: even a stronger LMM can receive many redundant observations while missing a brief or visually subtle event. MEC consequently retains high-fidelity original-frame inputs and treats the downstream LMM as a black-box consumer, allowing one selector configuration to transfer across architectures without depending on internal token scores. 
+
+Frame Selection for Long-Video Understanding. Frame selection provides a practical means of adapting long videos to the constrained context windows of LMMs. Existing methods can be broadly grouped into the following categories. Methods that jointly optimize relevance, coverage, and diversity combine query alignment with complementary evi-dence or global coverage, including AKS, Nar-KFC, and BOLT [11, 20, 26]. Structure-aware selection first partitions or hierarchically organizes a video into clips, events, or scenes and then allocates or refines frames within these temporal units, including EFS, WFS-SB and InfoShot [5, 6, 34]. Iterative temporal search uses the evidence accumulated thus far to determine where to inspect next and when to stop, as in AKeyS and A.I.R. [10, 36]. Frame/token co-optimization jointly determines which temporal content to retain and how many visual tokens or what resolution to assign to it, as in Q-Frame, KVTP, and QuoTA [21, 22, 32]. Although these approaches differ in their selection units or optimization mechanisms, they generally return either a subset tailored to a prescribed budget or a query-specific search trajectory. In contrast, MEC constructs a single reusable nested sequence using a position-dependent objective, concentrating ev-idence in early ranks while progressively expanding temporal context in later ranks. 
+
+# 3 Method 
+
+Figure 2 summarizes MEC’s three stages: building a reusable sparse index, discovering query-conditioned evidence, and constructing an evidence-to-context Matryoshka ranking. 
+
+3.1 Problem Formulation 
+
+Let V={x1, . . . , x N } be a video, where xn is its n-th frame and N is the total number of frames, and let q be a question about the video. Given a frame budget K, a predefined-budget selector returns 
+
+FK = Φ( V, q, K ), |F K | = K, (1) where FK is optimized specifically for K. Changing the budget therefore requires another evaluation of Φ. In contrast, MEC specifies a budget-independent sequence length M , with 1 ≤ M ≤ N , and invokes its selector once: 
+
+R = Ψ( V, q, M ) = ( r1, r 2, . . . , r M ),
+
+FMEC  
+
+> K
+
+= {r1, . . . , r K }, 1 ≤ K ≤ M. (2) Here rk is the original-frame index at rank k, and all rk are distinct. This construction makes the selected sets nested across budgets, but nesting alone does not determine the quality of the ranking. Let B ⊆ { 1, . . . , M } be the supported budgets, let πK ≥ 0 denote their importance with ∑ 
+
+> K∈B
+
+πK =1, and let QK (R:K ; V, q ) measure the utility of prefix 
+
+R:K =(r1, . . . , r K ) under budget K. We define the Matryoshka ranking objective as 
+
+R⋆ ∈ arg max 
+
+> R∈ ΠM
+
+∑
+
+> K∈B
+
+πK QK (R:K ; V, q ), (3) where ΠM contains all sequences of M distinct frame indices. For tight budgets, QK should favor concentrated query-conditioned evidence; as the budget grows, it should additionally reward complementary temporal and visual context. Section 3.4 realizes this budget-dependent utility through an efficient position-adaptive surrogate. 
+
+> 3
+
+MAC-AutoML Downstream LMM 
+
+1 2 3Reusable Sparse Video Index 
+
+> Video Input ( Video-MME ，25Pt1AZO9EM.mp4 )Duration-Adaptive Sparse Probing
+
+... 
+
+> Resize
+> Visual Observability Assessment
+
+Query-Conditioned Evidence Discovery   
+
+> Q：What is the male protagonist's daily life trajectory? Multi-Cue Evidence Scoring
+> Relevance Visual-Change Observability Evidence
+> Evidence-Guided Segment Activation Anchor-Centered Local Zooming Candidate Pool Construction
+> Base Probe Zoom Probe Evidence Anchor Active Segment
+
+Evidence-to-Context Matryoshka Ranking          
+
+> Position-Adaptive Weight Scheduling
+> We(evidence) Wc(coverage) Wd(diversity)
+> 1rank k M
+> Greedy Matryoshka Ranking
+> r1r2r3rkrM
+> Sort selected frames by time
+> Low-Resolution Appearance Encoding
+
+...    
+
+> Grayscale Flatten Overexposed Good Underexposed Blurry
+> Local Visual-Change Estimation
+> L2 Probe i Probe i-1
+
+，MAX  
+
+> L2 Probe i+1 Probe i
+> 𝐀 𝐀 (𝐀) = 𝐀 𝐀 (𝐀)𝐀 𝐀 + 𝐀 𝐀 (𝐀)𝐀 𝐀 (𝐀) + 𝐀 𝐀 𝐀 𝐀 (𝐀)
+
+... ...        
+
+> Core Evidence Temporal Context
+> S8= [r 1, . . . , r 8]Sk= [r 1, . . . , r k]SM= [r 1, . . . , r M]
+
+... 
+
+Figure 2. Overview of MEC. A reusable sparse video index caches low-resolution appearance encodings, local visual-change estimates, and observability priors. For each query, MEC scores multi-cue evidence, activates promising segments, and performs local zooming before constructing a position-adaptive Matryoshka ranking whose nested prefixes support any frame budget. 
+
+3.2 Reusable Sparse Video Index 
+
+Exhaustively analyzing all N frames for every question repeats the same video-level computation. MEC instead builds a sparse index whose appearance, change, and observability cues are independent of q.
+
+Duration-Adaptive Sparse Probing. Let T denote the video duration in seconds, P0 the base probe count, P1 the maximum duration-dependent increment, and τp the saturation horizon. The number of uniformly distributed probes is 
+
+P = min 
+
+{
+
+N, 
+
+⌊
+
+P0 + min 
+
+( Tτp
+
+, 1
+
+)
+
+P1
+
+⌋} 
+
+. (4) We use P0=P1=256 and τp=1800 seconds. This schedule increases temporal resolution for longer videos while bounding the index size. Let P={p1, . . . , p P } be the temporally ordered original-frame indices of the probes. Consecutive groups of L probe intervals form segments {G 1, . . . , GJ }; we set L=4. These segments provide coarse temporal units for later query-conditioned refinement. 
+
+Low-Resolution Appearance Encoding. For all probes, we compute low-resolution appearance encodings as 
+
+fpi = L2-Norm (Vec (Gray (Resize d(xpi )))) . (5) Here, Resize d preserves the aspect ratio while setting the short side to d, and Gray and Vec denote grayscale conversion and vectorization, respectively. We set d=32 . Caching these compact encodings allows subsequent appearance-based computations to operate on low-dimensional vectors rather than the original-resolution frames, reducing storage and computational overhead. 
+
+Local Visual-Change Estimation. Let Adj P (n) contain the available probes immediately before and after frame index 
+
+n on the sparse grid. We define local visual-change as 
+
+∆n = 12 max 
+
+m∈Adj P (n)
+
+∥fn − fm∥2. (6) As a lightweight, query-independent cue, this score highlights probes that differ visually from their local temporal neighborhoods, helping subsequent evidence discovery focus on visually distinctive moments. 
+
+4MAC-AutoML 
+
+Visual Observability Assessment. We associate each frame with sharpness ssharp  
+
+> n
+
+∈ [0 , 1] and well-exposedness ℓlight  
+
+> n
+
+∈
+
+[0 , 1] . Following Crété-Roffet et al. [2007], sharpness measures how strongly directional local variation is attenuated by controlled reblurring; following Mertens et al. [2007], well-exposedness downweights pixels whose intensities are far from the mid-range, including severely dark or saturated regions. Section C.1 gives their detailed definitions. We define the visual observability prior as On=ssharp  
+
+> n
+
+ℓlight  
+
+> n
+
+. The product requires both adequate sharpness and exposure, preventing one component from compensating for failure of the other. 
+
+3.3 Query-Conditioned Evidence Discovery 
+
+The reusable index provides a global visual scaffold, while the question determines where answer-supporting observa-tions are likely to occur. MEC therefore scores the probes first and refines only the most promising temporal regions. 
+
+Multi-Cue Evidence Scoring. Let ρn(q) ∈ [0 , 1] be the frame–question matching probability produced by the BLIP-2 ITM head [18]. We define evidence as the suitability of a frame to serve as an effective observation for q within a compact visual context: 
+
+En(q) = λr ρn(q) + λ∆∆n + λoOn, (7) where λr =0.7, λ∆=0.2, and λo=0.1. Relevance aligns a frame with the question, visual change favors locally distinctive appearances, and observability suppresses frames whose content is difficult for the visual model to perceive. 
+
+Evidence-Guided Segment Activation. For segment Gj , let ¯Ej be its mean probe evidence score. Given an activation ratio η ∈ (0 , 1] , we retain the ⌈ηJ ⌉ segments with the largest ¯Ej , forming the active set A(q). We use η=0.25 . Segment-level aggregation is less sensitive to an isolated high score than selection based on individual probes, while restricting subsequent fine-grained search to a small part of the full timeline. 
+
+Anchor-Centered Local Zooming. For each A(q), the highest-evidence probe serves as the anchor aj . Its available preceding and following probes, a− 
+
+> j
+
+and a+ 
+
+> j
+
+, delimit the two local intervals to be refined. The operator Uni (a, b, L z )
+
+samples Lz distinct, uniformly spaced interior frame indices between a and b, producing the anchor-centered zoom set 
+
+Zj (q) = Uni (a− 
+
+> j
+
+, a j , L z ) ∪ Uni (aj , a + 
+
+> j
+
+, L z ). (8) We set Lz =2. Refining both sides of the anchor introduces fine-grained zoom probes that may capture informative observations missed by the global sparse grid. 
+
+Candidate Pool Construction. The final candidate pool C(q) combines the reusable sparse probes P with all query-conditioned zoom probes Z(q): C(q) = P ∪Z (q). For every newly sampled zoom probe, fn, ∆n, On, ρn(q), and En(q)
+
+are computed afresh using the definitions above. The resulting pool is independent of the target frame budget, and the requested ranking length satisfies M ≤ |C (q)|.
+
+3.4 Evidence-to-Context Matryoshka Ranking 
+
+The objective in Equation (3) requires each prefix to balance evidence and context according to its budget. Directly evaluating downstream task utility for every candidate prefix is impractical. We therefore use a position-dependent surrogate that combines query-conditioned evidence, temporal coverage, and visual diversity. 
+
+Temporal Coverage and Visual Diversity Assessment. For rank k ≥ 2, the selected prefix is Sk−1={r1, . . . , r k−1}.An unselected candidate n is assessed by 
+
+Hn(k) = min 
+
+(
+
+1, min m∈S k−1 |n − m|
+
+N /k
+
+)
+
+, (9) 
+
+Dn(k) = 1 − max 
+
+> m∈S k−1
+
+f⊤ 
+
+> n
+
+fm. (10) The reference interval N /k makes Hn(k) large for candidates in temporally uncovered regions, whereas Dn(k) favors appearances not yet represented in the selected prefix. Together, they expand context along complementary temporal and visual dimensions. 
+
+Position-Adaptive Weight Scheduling. To shift gradually from evidence concentration to context expansion, the weight decays with the ranking position according to 
+
+we(k) = w− 
+
+> e
+
++ ( w+ 
+
+> e
+
+− w− 
+
+> e
+
+)
+
+[
+
+1 −
+
+( kM
+
+)γ ]
+
+, (11) 
+
+> 5MAC-AutoML
+
+K Selector Video-MME Video-MME-v2 LVB MLVU Short Medium Long Overall Non-Lin. Micro Acc. 8 Uniform 69.00 57.44 50.44 58.96 8.59 23.84 54.15 57.40 8 AKS 70.89 62.00 53.33 62.07 10.59 26.19 61.18 66.40 8 WFS-SB 73.22 64.11 53.22 63.52 10.93 26.06 62.00 68.33 8 MEC (ours) 73.78 64.33 53.44 63.85 10.81 26.13 62.45 69.46 
+
+16 Uniform 73.67 60.67 53.56 62.63 10.06 25.44 57.52 60.29 16 AKS 75.67 65.00 54.56 65.07 11.30 27.03 60.81 68.65 16 WFS-SB 76.56 65.56 55.22 65.78 12.23 28.22 61.93 68.94 
+
+16 MEC (ours) 77.22 66.89 55.44 66.52 12.07 27.78 62.30 68.39 32 Uniform 77.78 65.11 55.56 66.15 11.41 27.47 58.86 65.00 32 AKS 79.00 68.67 57.00 68.22 12.95 29.50 61.33 70.43 32 WFS-SB 79.56 68.56 57.56 68.56 13.42 29.69 63.35 70.90 
+
+32 MEC (ours) 78.78 70.33 58.22 69.11 13.05 29.47 63.58 70.36 64 Uniform 80.44 68.78 59.22 69.48 12.79 28.78 60.73 69.69 64 AKS 81.33 72.33 59.78 71.15 14.23 31.00 64.62 72.46 64 WFS-SB 80.67 71.44 61.67 71.26 14.64 31.31 66.57 73.83 64 MEC (ours) 81.89 73.00 60.56 71.81 14.77 31.69 65.89 74.30 
+
+128 Uniform 83.00 73.11 61.33 72.48 14.33 31.00 65.00 73.77 128 AKS 82.56 74.67 62.78 73.33 15.50 32.47 67.61 74.88 128 WFS-SB 82.56 75.11 62.44 73.37 15.71 33.16 68.06 75.85 
+
+128 MEC (ours) 82.56 75.89 62.78 73.74 15.42 33.00 68.36 75.85 
+
+256 Uniform 82.33 74.33 64.44 73.70 15.78 32.75 66.87 76.01 256 AKS 82.67 75.89 64.44 74.33 16.31 33.75 68.21 76.19 256 WFS-SB 82.67 76.11 64.00 74.26 16.81 34.56 69.78 77.01 
+
+256 MEC (ours) 83.11 75.56 65.22 74.63 17.08 34.63 68.51 76.65 
+
+Table 1. Comparison with state-of-the-art frame selectors using Qwen3.5-9B. All values are percentages. Video-MME-v2 reports the nonlinear group score (Non-Lin.) and micro accuracy (Micro Acc.); LVB abbreviates LongVideoBench, and MLVU reports macro accuracy. Best results within each budget are bold. 
+
+Here, w+ 
+
+> e
+
+and w− 
+
+> e
+
+specify the upper and lower evidence-weight references, and γ > 0 controls the transition rate. The remaining adaptive weight is assigned to temporal coverage, wc(k)=1 − we(k) − wd, while wd remains fixed for visual diversity. We use w+ 
+
+> e
+
+=0.6, w− 
+
+> e
+
+=0.2, γ=1, and wd=0.2. Consequently, evidence dominates the early ranks, coverage gains influence as the ranking grows, and diversity is maintained throughout. 
+
+Greedy Matryoshka Ranking. At position k, each remaining candidate n is assigned a position-conditioned surrogate selection score: 
+
+uk(n) = we(k)En(q) + wc(k)Hn(k) + wdDn(k). (12) This score estimates the contribution of placing candidate n at position k, combining its query-conditioned evidence with its temporal and visual complementarity to the current prefix. It serves as a tractable candidate-level surrogate for the prefix-level task utility QK in Equation (3). The ranking starts from the highest-evidence candidate and then greedily appends the remaining candidate with the largest surrogate utility. Previously selected frames are never replaced, so every shorter ranking is an exact prefix of every longer one. The complete procedure is provided in Algorithm 1. For any budget K ≤ M , MEC chronologically sorts R:K =(r1, . . . , r K ) before sending it to the LMMs. 
+
+# 4 Experiments 
+
+4.1 Experimental Settings 
+
+Benchmarks. We evaluate on four complementary long-video benchmarks. Video-MME contains 900 videos and 2,700 multiple-choice questions across short-, medium-, and long-duration groups [13]. Video-MME-v2 contains         
+
+> 6MAC-AutoML Uniform Codec MEC (Ours) Advantage region VideoMME (Uniform) VideoMME (MEC gain) LVB (Uniform) LVB (MEC gain)
+> 816 32 64 128
+> Input Budget
+> 56 58 60 62 64 66 68 70 72
+> VideoMME Overall Accuracy (%)
+> (a) LLaVA-OneVision-2-8B-Instruct 816 32 64 128
+> Input Budget
+> 50 52 54 56 58 60 62 64 66 68 70
+> Accuracy (%)
+> 59.7 +2.6 62.2 +2.9 64.8 +1.6 66.3 +0.3 65.2 +1.5 56.1 +5.5 58.9 +3.4 59.5 +5.1 63.0 +1.6 61.7 +1.2 (b) InternVL3.5-8B-Instruct
+
+Figure 3. Generalization across downstream LMMs and input budgets K ∈ { 8, 16 , 32 , 64 , 128 }. (a) Video-MME Overall with LLaVA-OneVision-2-8B-Instruct, comparing uniform frames, native codec-stream input, and MEC. (b) Uniform accuracy and the corresponding MEC gain on Video-MME and LongVideoBench (LVB) with InternVL3.5-8B-Instruct. 
+
+800 videos and 3,200 questions organized around information aggregation, temporal dynamics, and complex rea-soning; in addition to micro accuracy, its nonlinear group score measures consistency across related questions [14]. LongVideoBench contains 3,763 videos and 6,678 questions that emphasize long-context referring and temporal reasoning [28]. MLVU contains 1,730 videos, 3,102 question–answer pairs, and nine tasks spanning global and local understanding [35]. Section B.1 provides additional benchmark scope and task details. 
+
+Implementation Details. We use LMMs-Eval [31] and run evaluation on 8 NVIDIA H20 GPUs. The downstream LMMs are Qwen3.5-9B, LLaVA-OneVision-2-8B-Instruct, and InternVL3.5-8B-Instruct. We compare with uniform sampling, AKS [26], and WFS-SB [6]. All methods use the same question text, downstream prompt and dataset-specific scoring protocol. Every MEC experiment uses one shared configuration across all benchmarks, downstream LMMs, and frame budgets, without model-, dataset-, or budget-specific tuning. We set M =256 , (λr , λ ∆, λ o)=(0 .7, 0.2, 0.1) ,and (w+ 
+
+> e
+
+, w − 
+
+> e
+
+, w d, γ )=(0 .6, 0.2, 0.2, 1) . Baselines follow their released procedures and default settings. The complete configuration is reported in Table 5. 
+
+4.2 Main Results 
+
+Comparison with State-of-the-Art. We first compare MEC with training-free frame selectors using Qwen3.5-9B over six budgets. Table 1 shows that the benefit of MEC extends across datasets and budgets. Averaging Video-MME Overall, Video-MME-v2 micro accuracy, LongVideoBench accuracy, and MLVU accuracy over all six budgets, MEC improves uniform sampling by 3.77 pp. The advantage is especially pronounced for tight prefixes: at K=8, the gains over uniform sampling are 8.30 pp on LongVideoBench and 12 .06 pp on MLVU. Against stronger selectors, MEC obtains the best Video-MME Overall result at every budget, including 66 .52 versus 65 .78 at K=16 . WFS-SB remains strongest in several Video-MME-v2, LongVideoBench, and MLVU settings, but MEC stays competitive while uniquely serving all budgets with one shared ranking. 
+
+Generalization Across LMMs. We next test whether the same selector configuration transfers across architectures and input representations. With LLaVA-OneVision-2, MEC outperforms uniform frames and codec-stream input at every budget. Codec leads uniform sampling at K=8 and 16 , but falls behind from K=32 . This crossover reflects comple-mentary biases: codec-stream tokenization follows bit-cost dynamics and motion-residual cues to concentrate capacity on event-bearing intervals, which is particularly useful when sparse motion-relevant evidence must be recovered from a constrained budget; decoded frames better preserve local texture, fine-grained static evidence, and continuous trajec-tories, so their relative strength varies with task and budget [2]. MEC remains strongest across the crossover, showing that query-conditioned evidence discovery and evidence-to-context organization improve over model-specific input al-location while retaining original-frame evidence. The InternVL3.5 results in Figure 3(b) provide a complementary test. MEC improves over uniform sampling at all five budgets on both Video-MME and LongVideoBench, despite using exactly the same configuration as the other experiments. The gains transfer across downstream architecture, benchmark, and context size rather than being tied to Qwen3.5-9B or a single evaluation set.                
+
+> 7MAC-AutoML 812 16 24 32 48 64 96 128 192 256
+> Input Budget
+> 56 58 60 62 64 66 68 70 72 74 76
+> VideoMME Overall Accuracy (%)
+> Uniform MEC (Ours) Advantage region
+> 816 32 64 128
+> Input Budget
+> 56 58 60 62 64 66 68 70 72 74 76 78 80
+> VideoMME Overall Accuracy (%)  Uniform MEC (Ours)
+> 58.48 63.26 67.63 71.19 75.15 64.04 67.37 70.41 73.48 77.19
+
+Figure 4. Fine-grained budget behavior and thinking-mode evaluation on Video-MME Overall with Qwen3.5-9B. The left panel evaluates Uniform and MEC over 11 input budgets; the shaded region marks the advantage of MEC. The right panel compares the two selectors at five budgets with Qwen3.5-9B thinking mode enabled. Variant Low Med. High Avg. Uniform 60.80 67.81 73.09 67.23 
+
+MEC 65.19 70.46 74.19 69.94 
+
+Static weights 64.89 70.09 73.56 69.51 Evidence only 61.37 67.54 73.19 67.36 w/o coverage 61.69 68.13 73.63 67.81 w/o diversity 64.63 70.06 73.72 69.47 w/o local zoom 64.26 69.94 73.91 69.37 w/o visual change 64.11 69.59 73.85 69.19 w/o observability 64.44 70.26 74.04 69.58 
+
+Table 2. Component ablation on Video-MME Overall accuracy. Low, Med., and High average K={8, 16 }, {32 , 64 }, and 
+
+{128 , 256 }, respectively; Avg. covers all six budgets. 
+
+4.3 Further Quantitative Analyses 
+
+Fine-Grained Budget Behavior. We evaluate eleven budgets to determine whether the gains persist between the six operating points used in Table 1. Figure 4 shows a positive gain at every budget from K=8 to K=256 , including five intermediate values absent from Table 1. The margin is largest at K=8 (+4 .89 pp) and remains positive at K=256 
+
+(+0 .93 pp). Although the gap is not strictly monotonic, it generally narrows as the input grows: tight prefixes benefit most from concentrating diagnostic evidence, whereas larger inputs allow uniform sampling to recover more context. The persistent residual gain indicates that the later ranks of MEC continue to organize context more effectively rather than merely exploiting a few favorable budget choices. 
+
+Thinking-Mode Evaluation. Qwen3.5 performs reasoning before its final response by default, while its official in-terface also supports a direct-response mode with thinking disabled [24]. We use the latter throughout the standard evaluation and enable thinking only for the controlled comparison in the right panel of Figure 4. Under thinking mode, MEC outperforms Uniform at all five tested budgets: the gains are 5.56 , 4.11 , 2.78 , 2.29 , and 2.04 pp for 
+
+K ∈ { 8, 16 , 32 , 64 , 128 }, respectively. The advantage generally narrows as more frames are supplied but remains positive at K = 128 . Thus, additional downstream reasoning does not eliminate the importance of which visual evi-dence enters the context; within this evaluation, stronger inference and query-conditioned frame organization provide complementary benefits. 
+
+Component Ablation. We isolate how the position schedule and the evidence, coverage, diversity, and discovery com-ponents contribute across low, medium, and high budget regimes. Table 2 first validates the position-adaptive schedule. Replacing it with static weights reduces the six-budget average by 0.43 pp, with the gap increasing from 0.30 pp under low budgets to 0.63 pp under high budgets. This pattern matches the intended ranking semantics: later positions benefit 
+
+8MAC-AutoML                                                                     
+
+> M\K816 32 64 128 256 862.44 –––––16 63.48 66.70 ––––32 64.04 65.78 68.26 –––64 63.89 66.11 69.22 71.04 ––128 63.52 66.00 68.52 71.70 73.26 –
+> 256 63.85 66.52 69.11 71.81 73.74 74.63
+> Table 3. Effect of ranking horizon Mon Video-MME Overall accuracy at inference budget K. A dash denotes an unavailable prefix for K > M ; column bests are bold. Method Candidates Preprocessing Selection End-to-End
+> MEC 635.40 5.48 7.89 23.09
+> AKS 2,466.82 12.09 22.06 43.87 WFS-SB 2,466.82 12.09 25.50 47.31
+> Table 4. Selector efficiency on Video-MME Long, averaged over six frame budgets with reusable caches available. Candidates reports the mean number of frames evaluated by each selector. Preprocessing, Selection, and End-to-End are measured in seconds per query; End-to-End includes 9.72 seconds of mean Qwen3.5-9B inference.
+
+increasingly from shifting weight toward temporal coverage rather than applying the same evidence–context trade-off throughout the sequence. More importantly, Evidence only is nearly indistinguishable from uniform sampling ( 67 .36 
+
+versus 67 .23 ), whereas the full method exceeds Evidence only and w/o coverage by 2.58 and 2.13 pp, respectively. The primary gain therefore comes from organizing concentrated evidence together with complementary temporal cover-age, not from relevance scoring alone. Removing diversity, local zoom, visual change ∆n, or observability On causes additional drops of 0.47 , 0.57 , 0.75 , and 0.36 pp, confirming that these cues make complementary contributions. 
+
+Effect of Ranking Horizon. We vary the maximum ranking length M while evaluating all supported prefixes K ≤ M .Table 3 treats M as the evidence-to-context transition horizon: M =K compresses the transition into the target budget, whereas a longer horizon keeps small-K prefixes evidence-focused and reserves later ranks for context expansion. Rela-tive to M =K, the shared M =256 ranking improves K=8, 32 , 64 , and 128 by 1.41 , 0.85 , 0.77 , and 0.48 pp, respectively, while trailing by 0.18 pp at K=16 . It is best at K=64 and 128 and remains within 0.19 pp of the column best at every other comparable budget. Although results are nonmonotonic in M , the long reusable ranking preserves competitive short prefixes and serves all budgets from one sequence without per-budget termination. 
+
+Selector Efficiency. Finally, we evaluate cached selector cost on Video-MME Long. As summarized over six frame budgets in Table 4, MEC processes 635 .40 candidates on average, 74 .24 % fewer than both AKS and WFS-SB, and reduces preprocessing time from 12 .09 to 5.48 seconds. Its selection time is 7.89 seconds, compared with 22 .06 seconds for AKS and 25 .50 seconds for WFS-SB, corresponding to reductions of 64 .23 % and 69 .06 %. Consequently, MEC lowers end-to-end latency from 43 .87 to 23 .09 seconds relative to AKS and from 47 .31 to 23 .09 seconds relative to WFS-SB, reductions of 47 .37 % and 51 .19 %, respectively. Figure 1b, also evaluated on Video-MME Long, complements this cost breakdown with the accuracy–latency trade-off. Uniform sampling remains the lowest-cost option, while MEC provides a more favorable balance than the stronger selectors. 
+
+4.4 Qualitative Analysis 
+
+Figure 5 visualizes MEC’s evidence-to-context schedule. At K = 8 , the prefix concentrates on the furnace, painted ceramic surfaces, and finished objects, which support the answer that the blogger painted the products after firing. Increasing the budget to K = 16 retains this evidence while adding pigment and complementary product views. At 
+
+K = 32 , new frames extend into raw-clay preparation and shaping, completing a broader manufacturing trajectory without displacing the core evidence. Thus, one reusable ranking progresses from compact answer support to fuller temporal context. 
+
+> 9MAC-AutoML
+
+Query: According to what is shown in the video, what did the blogger do to these ceramic products after they were put into the furnace and burned? 
+
+Answer: She painted designs on the ceramic products after they were fired. 
+
+1 Video timeline with representative events 
+
+> 02:43 Prepare raw clay
+> 08:39 Shape the clay
+> 20:54 Fire in furnace
+> 25:58 Paint products
+> 32:59 Finished ceramics
+> Video timeline
+
+2 Matryoshka ranking on the video timeline   
+
+> K=8
+> K=16
+> K=32
+> Ranks 1–8 (Core evidence) Ranks 9–16 (Complementary) Ranks 17–32 (More context)
+
+Figure 5. Evidence-to-context expansion from a single MEC ranking for a ceramic-making question. The upper timeline summarizes raw-clay preparation, shaping, firing, painting, and the finished products. Colors mark frames introduced at ranks 1–8, 9–16, and 17–32. The K = 8 prefix captures answer-critical post-firing evidence; K = 16 preserves it and adds complementary views; and K = 32 extends coverage to earlier preparation and shaping. Each budget is an exact prefix of the same ranking, reordered chronologically for the LMM. 
+
+# 5 Conclusion 
+
+In this paper, we formulate long-video frame selection as a Matryoshka ranking problem, where one query-conditioned sequence serves multiple frame budgets by concentrating evidence in short prefixes and progressively expanding context. We introduce MEC, a training-free framework that combines reusable sparse indexing, query-conditioned evidence discovery, and position-adaptive ranking to construct this sequence efficiently. Experiments across four benchmarks, three downstream LMMs, and six frame budgets validate its effectiveness, generalization, and favorable accuracy– latency trade-off. By decoupling frame selection from the target budget, MEC offers a practical foundation for long-video systems that must adapt their visual context to changing deployment constraints. 
+
+10 MAC-AutoML 
+
+# References 
+
+[1] Saeed Ranjbar Alvar, Gursimran Singh, Mohammad Akbari, and Yong Zhang. DivPrune: Diversity-based visual token pruning for large multimodal models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9392–9401, 2025. doi: 10.1109/CVPR52734.2025.00877. URL https://arxiv.org/abs/2503.02175. [2] Xiang An, Yin Xie, Feilong Tang, Yunyao Yan, Huajie Tan, Didi Zhu, Changrui Chen, Xiuwei Zhao, Bin Qin, Kaicheng Yang, Yifei Shen, Yuanhan Zhang, Kaichen Zhang, Wenkang Zhang, Zheng Cheng, Nansen Zhang, Chunsheng Wu, Chunjiang Ge, Zimin Ran, Dehua Song, Chunyuan Li, Shikun Feng, Ming Hu, Zhangquan Chen, Junbo Niu, Bo Li, Ziyong Feng, Ziwei Liu, Zongyuan Ge, and Jiankang Deng. LLaVA-OneVision-2: Towards next-generation perceptual intelligence, 2026. URL https://arxiv.org/abs/2605.25979. [3] Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Rui Men, Lingchen Meng, Xuancheng Ren, Xingzhang Ren, Sibo Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang, Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong, Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-VL technical report, 2025. URL https://arxiv.org/abs/2511.21631. [4] Mu Cai, Jianwei Yang, Jianfeng Gao, and Yong Jae Lee. Matryoshka multimodal models. In International Conference on Learning Representations , 2025. URL https://arxiv.org/abs/2405.17430. [5] Wang Chen, Yongdong Luo, Yuhui Zeng, Luojun Lin, Tianyu Xie, Fei Chao, Rongrong Ji, and Xiawu Zheng. Event-anchored frame selection for effective long-video understanding, 2026. URL https://arxiv.org/abs/2603.00983. [6] Wang Chen, Yuhui Zeng, Yongdong Luo, Tianyu Xie, Luojun Lin, Jiayi Ji, Yan Zhang, and Xiawu Zheng. Wavelet-based frame selection by detecting semantic boundary for long video understanding, 2026. URL https://arxiv.org/abs/2603.00512. [7] Christopher Clark, Jieyu Zhang, Zixian Ma, Jae Sung Park, Mohammadreza Salehi, Rohun Tripathi, Sangho Lee, Zhongzheng Ren, Chris Dongjoo Kim, Yinuo Yang, Vincent Shao, Yue Yang, Weikai Huang, Ziqi Gao, Taira Anderson, Jianrui Zhang, Jitesh Jain, George Stoica, Winson Han, Ali Farhadi, and Ranjay Krishna. Molmo2: Open weights and data for vision-language models with video understanding and grounding, 2026. URL https://arxiv.org/abs/2601.10611. [8] Frédérique Crété-Roffet, Thierry Dolmière, Patricia Ladret, and Marina Nicolas. The blur effect: Perception and estimation with a new no-reference perceptual blur metric. In Human Vision and Electronic Imaging XII , volume 6492, page 64920I. SPIE, 2007. doi: 10.1117/12.702790. [9] Devvrit, Sneha Kudugunta, Aditya Kusupati, Tim Dettmers, Kaifeng Chen, Inderjit Dhillon, Yulia Tsvetkov, Hannaneh Ha-jishirzi, Sham Kakade, Ali Farhadi, and Prateek Jain. MatFormer: Nested transformer for elastic inference, 2023. URL https://arxiv.org/abs/2310.07707. [10] Sunqi Fan, Meng-Hao Guo, and Shuojin Yang. Agentic keyframe search for video question answering, 2025. URL https: //arxiv.org/abs/2503.16032. [11] Bo Fang, Wenhao Wu, Qiangqiang Wu, Yuxin Song, and Antoni B. Chan. Threading keyframe with narratives: MLLMs as strong long video comprehenders, 2025. URL https://arxiv.org/abs/2505.24158. [12] Gabriel Fiastre, Antoine Yang, and Cordelia Schmid. CaptionFormer: Unified segmentation, tracking, and captioning for spatio-temporal objects. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 39518–39528, 2026. URL https://openaccess.thecvf.com/content/CVPR2026/html/Fiastre_CaptionFormer_Unified_Segmen tation_Tracking_and_Captioning_for_Spatio-Temporal_Objects_CVPR_2026_paper.html. [13] Chaoyou Fu, Yuhan Dai, Yongdong Luo, Lei Li, Shuhuai Ren, Renrui Zhang, Zihan Wang, Chenyu Zhou, Yunhang Shen, Mengdan Zhang, Peixian Chen, Yanwei Li, Shaohui Lin, Sirui Zhao, Ke Li, Tong Xu, Xiawu Zheng, Enhong Chen, Caifeng Shan, Ran He, and Xing Sun. Video-MME: The first-ever comprehensive evaluation benchmark of multi-modal LLMs in video analysis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 24108–24118, 2025. [14] Chaoyou Fu, Haozhi Yuan, Yuhao Dong, Yi-Fan Zhang, Yunhang Shen, Xiaoxing Hu, Xueying Li, Jinsen Su, Chengwu Long, Xiaoyao Xie, Yongkang Xie, Xiawu Zheng, Xue Yang, Haoyu Cao, Yunsheng Wu, Ziwei Liu, Xing Sun, Caifeng Shan, and Ran He. Video-MME-v2: Towards the next stage in benchmarks for comprehensive video understanding, 2026. URL https: //arxiv.org/abs/2604.05015. 
+
+> 11 MAC-AutoML
+
+[15] Tianyu Fu, Tengxuan Liu, Qinghao Han, Guohao Dai, Shengen Yan, Huazhong Yang, Xuefei Ning, and Yu Wang. FrameFu-sion: Combining similarity and importance for video token reduction on large vision language models. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 22654–22663, 2025. doi: 10.1109/ICCV51701.2025.02103. URL https://arxiv.org/abs/2501.01986. [16] Wenbo Hu, Zi-Yi Dou, Liunian Harold Li, Amita Kamath, Nanyun Peng, and Kai-Wei Chang. Matryoshka query transformer for large vision-language models, 2024. URL https://arxiv.org/abs/2405.19315. [17] Aditya Kusupati, Gantavya Bhatt, Aniket Rege, Matthew Wallingford, Aditya Sinha, Vivek Ramanujan, William Howard-Snyder, Kaifeng Chen, Sham Kakade, Prateek Jain, and Ali Farhadi. Matryoshka representation learning. In Advances in Neural Information Processing Systems , volume 35, pages 30233–30249, 2022. URL https://proceedings.neurips.cc/paper_fil es/paper/2022/hash/c32319f4868da7613d78af9993100e42-Abstract-Conference.html. [18] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. BLIP-2: Bootstrapping language-image pre-training with frozen image encoders and large language models, 2023. URL https://arxiv.org/abs/2301.12597. [19] Xinhao Li, Yi Wang, Jiashuo Yu, Xiangyu Zeng, Yuhan Zhu, Haian Huang, Jianfei Gao, Kunchang Li, Yinan He, Chenting Wang, Yu Qiao, Yali Wang, and Limin Wang. VideoChat-Flash: Hierarchical compression for long-context video modeling, 2025. URL https://arxiv.org/abs/2501.00574. [20] Shuming Liu, Chen Zhao, Tianqi Xu, and Bernard Ghanem. BOLT: Boost large vision-language model without training for long-form video understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 3318–3327, 2025. URL https://openaccess.thecvf.com/content/CVPR2025/html/Liu_BOLT_Boost_Large_Vision-Lan guage_Model_Without_Training_for_Long-form_Video_CVPR_2025_paper.html. [21] Yudong Liu, Jingwei Sun, Yueqian Lin, Jianyi Zhang, Jingyang Zhang, Ming Yin, Qinsi Wang, Hai Li, and Yiran Chen. Keyframe-oriented vision token pruning: Enhancing efficiency of large vision language models on long-form video pro-cessing. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20802–20811, 2025. URL https://openaccess.thecvf.com/content/ICCV2025/html/Liu_Keyframe-oriented_Vision_Token_Pruning_Enhancing_Efficie ncy_of_Large_Vision_Language_ICCV_2025_paper.html. [22] Yongdong Luo, Wang Chen, Xiawu Zheng, Weizhong Huang, Shukang Yin, Haojia Lin, Chaoyou Fu, Jinfa Huang, Jiayi Ji, Jiebo Luo, and Rongrong Ji. QuoTA: Query-oriented token assignment via CoT query decouple for long video comprehension, 2025. URL https://arxiv.org/abs/2503.08689. [23] Tom Mertens, Jan Kautz, and Frank Van Reeth. Exposure fusion. In 15th Pacific Conference on Computer Graphics and Applications , pages 382–390. IEEE, 2007. doi: 10.1109/PG.2007.17. [24] Qwen Team. Qwen3.5: Towards native multimodal agents, February 2026. URL https://qwen.ai/blog?id=qwen3.5. [25] Shaden Shaar, Bradon Thymes, Sirawut Chaixanien, Claire Cardie, and Bharath Hariharan. MovieRecapsQA: A multimodal open-ended video question-answering benchmark. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4537–4546, 2026. URL https://openaccess.thecvf.com/content/CVPR2026/html/Shaar_MovieRec apsQA_A_Multimodal_Open-Ended_Video_Question-Answering_Benchmark_CVPR_2026_paper.html. [26] Xi Tang, Jihao Qiu, Lingxi Xie, Yunjie Tian, Jianbin Jiao, and Qixiang Ye. Adaptive keyframe sampling for long video un-derstanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 29118–29128, 2025. doi: 10.1109/CVPR52734.2025.02711. URL https://arxiv.org/abs/2502.21271. [27] Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang Liu, Linglin Jing, Shenglong Ye, Jie Shao, Zhaokai Wang, Zhe Chen, Hongjie Zhang, Ganlin Yang, Haomin Wang, Qi Wei, Jinhui Yin, Wenhao Li, Erfei Cui, Guanzhou Chen, Zichen Ding, Changyao Tian, Zhenyu Wu, Jingjing Xie, Zehao Li, Bowen Yang, Yuchen Duan, Xuehui Wang, Zhi Hou, Haoran Hao, Tianyi Zhang, Songze Li, Xiangyu Zhao, Haodong Duan, Nianchen Deng, Bin Fu, Yinan He, Yi Wang, Conghui He, Botian Shi, Junjun He, Yingtong Xiong, Han Lv, Lijun Wu, Wenqi Shao, Kaipeng Zhang, Huipeng Deng, Biqing Qi, Jiaye Ge, Qipeng Guo, Wenwei Zhang, Songyang Zhang, Maosong Cao, Junyao Lin, Kexian Tang, Jianfei Gao, Haian Huang, Yuzhe Gu, Chengqi Lyu, Huanze Tang, Rui Wang, Haijun Lv, Wanli Ouyang, Limin Wang, Min Dou, Xizhou Zhu, Tong Lu, Dahua Lin, Jifeng Dai, Weijie Su, Bowen Zhou, Kai Chen, Yu Qiao, Wenhai Wang, and Gen Luo. InternVL3.5: Advancing open-source multimodal models in versatility, reasoning, and efficiency, 2025. URL https://arxiv.org/abs/2508.18265. [28] Haoning Wu, Dongxu Li, Bei Chen, and Junnan Li. LongVideoBench: A benchmark for long-context interleaved video-language understanding, 2024. URL https://arxiv.org/abs/2407.15754. [29] Yuhui Zeng, Wang Chen, Jinfa Huang, Tianyu Xie, Yongdong Luo, Jiayi Ji, Xiawu Zheng, and Jiebo Luo. WaveZip: Wavelet-driven space-time decoupling for video token condensation, 2026. URL https://arxiv.org/abs/2607.23265. 
+
+> 12 MAC-AutoML
+
+[30] Jun Zhang, Teng Wang, Yuying Ge, Yixiao Ge, Xinhao Li, and Limin Wang. TimeLens: Rethinking video temporal grounding with multimodal LLMs. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10419–10429, 2026. URL https://openaccess.thecvf.com/content/CVPR2026/html/Zhang_TimeLens_Rethinking_Video_Te mporal_Grounding_with_Multimodal_LLMs_CVPR_2026_paper.html. [31] Kaichen Zhang, Bo Li, Peiyuan Zhang, Fanyi Pu, Joshua Adrian Cahyono, Kairui Hu, Shuai Liu, Yuanhan Zhang, Jingkang Yang, Chunyuan Li, and Ziwei Liu. LMMs-Eval: Reality check on the evaluation of large multimodal models, 2024. URL https://arxiv.org/abs/2407.12772. [32] Shaojie Zhang, Jiahui Yang, Jianqin Yin, Zhenbo Luo, and Jian Luan. Q-Frame: Query-aware frame selection and multi-resolution adaptation for video-llms. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 22056–22065, 2025. doi: 10.1109/ICCV51701.2025.02048. URL https://arxiv.org/abs/2506.22139. [33] Xiaoyi Zhang, Zhaoyang Jia, Zongyu Guo, Jiahao Li, Bin Li, Houqiang Li, and Yan Lu. Deep video discovery: Agentic search with tool use for long-form video understanding. In Advances in Neural Information Processing Systems , 2025. URL https://arxiv.org/abs/2505.18079. [34] Mengyu Zhao, Di Fu, Yongyu Xie, Jiaxing Zhang, Zhigang Yuan, Shirin Jalali, and Yong Cao. Shot-aware frame sampling for video understanding, 2026. URL https://arxiv.org/abs/2603.17374. [35] Junjie Zhou, Yan Shu, Bo Zhao, Boya Wu, Zhengyang Liang, Shitao Xiao, Minghao Qin, Xi Yang, Yongping Xiong, Bo Zhang, Tiejun Huang, and Zheng Liu. MLVU: Benchmarking multi-task long video understanding, 2024. URL https://arxiv.org/abs/ 2406.04264. [36] Yuanhao Zou, Shengji Jin, Andong Deng, Youpeng Zhao, Jun Wang, and Chen Chen. A.I.R.: Enabling adaptive, iterative, and reasoning-based frame selection for video question answering. In International Conference on Learning Representations ,2026. URL https://arxiv.org/abs/2510.04428. 
+
+> 13 MAC-AutoML
+
+Appendix overview. The supplementary material is organized as follows: • Section A reviews additional literature on Matryoshka representations and visual-token compression. • Section B details the four benchmarks, three downstream models, two comparison methods, and the complete experimental configuration. • Section C specifies the observability estimator and greedy ranking algorithm in direct correspondence with the main method. • Section D discusses three limitations arising from sparse discovery, lightweight evidence cues, and greedy opti-mization. • Section E reports schedule and model-scale analyses together with qualitative success and failure cases. 
+
+# A Additional Related Work 
+
+Matryoshka Representations. Matryoshka Representation Learning organizes a single embedding so that nested di-mensional prefixes retain progressively finer information, and MatFormer extends nested computation to elastic Trans-former subnetworks [9, 17]. In multimodal modeling, the Matryoshka Multimodal Models framework learns nested coarse-to-fine visual-token sets, while the Matryoshka Query Transformer orders latent queries so that their prefixes produce different visual-token budgets [4, 16]. MEC draws on the same principle—one ordered structure can serve multiple deployment budgets—but applies it to a different object: a query-conditioned permutation of original video-frame indices constructed at inference time. The ranks also serve distinct purposes, with early positions concentrating answer-bearing evidence and later positions expanding temporal and visual context. 
+
+Visual-Token Compression. Visual-token compression shortens an LMM’s input through temporal aggregation, similarity-based merging, token pruning, or adaptive budget allocation. Representative approaches include hierarchical clip-to-video compression, joint similarity–importance reduction, diversity-based pruning, and query-oriented token assignment [1, 15, 19, 22, 29]. Such methods operate inside or immediately around the visual-token pipeline and can exploit representations unavailable through a frame-only or black-box interface. MEC instead selects a reusable nested sequence of original frames and leaves tokenization to the downstream model. It therefore preserves the selected frames at their original fidelity until downstream tokenization, whereas aggressive token reduction can irreversibly remove fine details that later prove relevant. 
+
+# B Additional Experimental Details 
+
+B.1 Benchmarks 
+
+Video-MME. Video-MME contains 900 videos and 2,700 manually annotated multiple-choice questions, with three questions per video. Its videos span six primary domains and 30 subfields, and their durations range from 11 seconds to one hour. The official short, medium, and long splits make it possible to examine the effect of temporal extent in addition to aggregate performance [13]. We report accuracy for each duration split and Overall accuracy, as in Table 1. Video-MME tests both broad visual coverage and the recovery of sparse evidence across substantially different video lengths. 
+
+Video-MME-v2. Video-MME-v2 contains 800 videos and 3,200 questions constructed as correlated groups. Its pro-gressive three-level hierarchy moves from multi-point visual information aggregation, through temporal-dynamics mod-eling, to complex multimodal reasoning [14]. We report both micro accuracy over individual questions and the official group-based nonlinear score. The latter gives credit to coherent correctness within a related group and penalizes frag-mented success, so it probes whether a selected prefix preserves the chain of observations needed for a higher-level answer rather than only one isolated clue. 
+
+LongVideoBench. LongVideoBench contains 3,763 videos and 6,678 human-authored multiple-choice questions in 17 fine-grained categories. It interleaves subtitle context with videos drawn from movies, news, daily life, and knowledge-oriented content, and covers four duration regimes from roughly ten seconds to one hour [28]. Its referring-reasoning formulation requires a model to locate a referenced context and then reason about the relevant details. We use the official question-level accuracy. The combination of explicit referring cues, temporally distant evidence, and distractor choices makes the benchmark particularly sensitive to both early evidence concentration and later context expansion. 
+
+> 14 MAC-AutoML
+
+MLVU. MLVU contains 1,730 videos and 3,102 question–answer pairs across nine tasks. The videos range from three minutes to two hours, average approximately 15 minutes in duration, and span genres including movies, surveillance footage, egocentric recordings, cartoons, and games [35]. The task set combines global understanding with localized and fine-grained reasoning and includes both multiple-choice and open-ended formats. We report macro accuracy under the adopted evaluation protocol, so each evaluated task contributes equally rather than in proportion to its number of questions. This task diversity complements the exclusively multiple-choice design of the other three benchmarks. 
+
+B.2 Downstream Large Multimodal Models 
+
+Qwen3.5-9B. Qwen3.5-9B is a post-trained, 9-billion-parameter member of the Qwen3.5 family with a unified image/video–text interface. Its official release describes early-fusion multimodal training, a causal language model with a vision encoder, a hybrid Gated DeltaNet–attention backbone, and a native context length of 262,144 tokens [24]. The model uses thinking mode by default and can instead return a direct response when thinking is disabled through its official interface. We use direct-response mode for the complete four-benchmark, six-budget comparison, component and schedule ablations, and selector-efficiency analysis; the right panel of Figure 4 separately evaluates thinking mode. The selected frames are provided as visual inputs; MEC neither accesses nor modifies the model’s internal visual tokens. 
+
+LLaVA-OneVision-2-8B-Instruct. LLaVA-OneVision-2 combines a native OneVision encoder with windowed atten-tion and a shared 3D rotary position encoding for images, sampled frames, and codec-derived canvases. Its codec-stream pathway groups temporal content using bit-cost dynamics and uses motion-residual cues to retain spatial evidence under a visual-token budget [2]. Our standard Uniform and MEC conditions use decoded frames, while the additional compar-ison in Figure 3(a) also reports the model’s native codec-stream input. This separates the benefit of query-conditioned frame ranking from the backbone’s own compressed-video representation. 
+
+InternVL3.5-8B-Instruct. InternVL3.5 advances the InternVL family through cascade reinforcement learning and a Visual Resolution Router that adjusts the resolution of visual tokens. Its release also proposes decoupled vision– language deployment for balancing the visual encoder and language model across devices [27]. We use the 8B instruction-tuned checkpoint as an architecture-transfer test. Figure 3(b) evaluates the same MEC configuration on Video-MME and LongVideoBench without model-specific selector tuning. 
+
+B.3 Comparison Methods 
+
+Adaptive Keyframe Sampling (AKS). AKS formulates fixed-budget keyframe selection as a trade-off between query relevance and temporal coverage [26]. A lightweight vision–language scorer estimates prompt–frame relevance, while recursively partitioned temporal bins quantify how evenly the selected set covers the video. Its adaptive procedure interpolates between choosing only the highest-relevance frames and enforcing increasingly uniform coverage. Because the target number of frames is part of the optimization, AKS is rerun for each requested K. We use its released procedure and default settings at exactly the same target budgets as MEC. 
+
+Wavelet-based Frame Selection by Detecting Semantic Boundary (WFS-SB). WFS-SB starts from a temporal query– frame relevance signal and applies multi-resolution wavelet analysis to suppress high-frequency noise and identify semantic boundaries at a coarse scale [6]. The resulting coherent clips receive an adaptive portion of the target frame budget according to segment importance; within each clip, maximal marginal relevance balances query relevance and diversity. WFS-SB therefore provides a strong structure-aware, training-free baseline, but its budget allocation and intra-clip selection remain conditioned on a prescribed K. We follow its released procedure and default settings without dataset- or budget-specific retuning. 
+
+B.4 Complete Experimental Configuration 
+
+All evaluations are implemented through LMMs-Eval [31]. Unless a result is explicitly identified as an ablation, every MEC run uses the single configuration in Table 5 across all benchmarks, downstream LMMs, and frame budgets. In particular, the candidate pool and length-M ranking are constructed without access to the target inference budget K.
+
+> 15 MAC-AutoML
+
+Component Shared setting Hardware 8 NVIDIA H20 GPUs; Intel Xeon Platinum 8575C, 192 cores Video decoding Decord with DECORD_THREADS=16 
+
+Evaluation input Decoded frames and question text; no subtitles; thinking disabled except for Fig-ure 4 (right) Ranking and budgets M = 256 ; K ∈ { 8, 16 , 32 , 64 , 128 , 256 }
+
+Sparse probes P0 = P1 = 256 ; τp = 1800 sTemporal segments L = 4 probe intervals Appearance encoding Short side d = 32 , grayscale, ℓ2 normalization Evidence scorer BLIP-2 ITM [18] Evidence mixture (λr , λ ∆, λ o) = (0 .7, 0.2, 0.1) 
+
+Segment activation η = 0 .25 
+
+Local zoom Lz = 2 interior frames on each available side Ranking schedule (w+ 
+
+> e
+
+, w − 
+
+> e
+
+, w d, γ ) = (0 .6, 0.2, 0.2, 1) 
+
+Sharpness One-dimensional mean reblurring kernel, Lb = 9 
+
+Well-exposedness (μ, σ ) = (0 .5, 0.2) 
+
+Table 5. Complete shared configuration for the main MEC experiments. 
+
+For the reported multiple-choice evaluations, the original question and choices are followed by the same post-prompt for every selector and downstream model: 
+
+Answer with the option's letter from the given choices directly. 
+
+The post-prompt constrains answer formatting but provides no task-specific hints. Dataset scoring, answer normaliza-tion, and all remaining model-side evaluation procedures follow the corresponding LMMs-Eval task implementation. Subtitle inputs are not used, and thinking mode is disabled except for the explicit thinking-mode evaluation in the right panel of Figure 4. We make no unreported model-, dataset-, or budget-specific decoding adjustments. 
+
+# C Additional Method Details 
+
+C.1 Observability Measures 
+
+The sparse index uses a query-independent observability prior rather than a semantic image-quality score. Let Ωn be the pixel domain after resizing frame xn to short side d = 32 , and let Yn : Ω n → [0 , 1] be the grayscale intensity. For direction δ ∈ { h, v}, let Ωδn contain pixels with a valid forward neighbor and let ∇δ be the corresponding finite difference. We reblur Yn along direction δ with a one-dimensional mean kernel of length Lb = 9 , producing Bδn. The original variation, reblurred variation, and nonnegative attenuation are 
+
+∆δY,n (u) = |∇ δ Yn(u)|, (13) 
+
+∆δB,n (u) = |∇ δ Bδn(u)|, (14) 
+
+Ξδn(u) = max (0, ∆δY,n (u) − ∆δB,n (u)) . (15) These pixelwise quantities are local to the blur estimator and should not be confused with the frame-level visual-change cue ∆n in Equation (6). Following the no-reference perceptual blur metric of Crété-Roffet et al. [2007], the directional blur estimate and frame sharpness are 
+
+βδn =
+
+∑ 
+
+> u∈Ωδn
+
+∆δY,n (u) − ∑ 
+
+> u∈Ωδn
+
+Ξδn(u)
+
+∑
+
+> u∈Ωδn
+
+∆δY,n (u) , (16) 
+
+ssharp  
+
+> n
+
+= 1 − max 
+
+> δ∈{ h,v}
+
+βδn. (17) If a direction has no measurable original variation, its denominator is zero and we set βδn = 1 . Thus a flat image is not treated as sharp merely because reblurring leaves it unchanged. 
+
+> 16 MAC-AutoML
+
+For exposure, let In,c (u) ∈ [0 , 1] denote color channel c at pixel u of the resized color thumbnail. Following the well-exposedness term of Mertens et al. [2007], we compute 
+
+Wn(u) = ∏
+
+> c∈{ R,G,B }
+
+exp 
+
+(
+
+− (In,c (u) − μ)2
+
+2σ2
+
+)
+
+, (18) 
+
+ℓlight  
+
+> n
+
+= 1
+
+|Ωn|
+
+∑
+
+> u∈Ωn
+
+Wn(u), (19) with μ = 0 .5 and σ = 0 .2. The product across channels downweights pixels that are far from mid-range in any channel, while the spatial mean yields a continuous frame-level score. Finally, 
+
+On = ssharp  
+
+> n
+
+ℓlight  
+
+> n
+
+. (20) No frame is removed by a hard observability threshold. The product is used only as the λoOn term in Equation (7), so it suppresses severely blurred or poorly exposed observations without being interpreted as query relevance or semantic information content. 
+
+C.2 Greedy Matryoshka Ranking Algorithm 
+
+Algorithm 1 instantiates the position-dependent surrogate in Section 3.4. It receives the budget-independent candidate pool and never replaces a selected frame. Therefore, every intermediate sequence is an exact prefix of the final ranking. 
+
+Algorithm 1 Greedy construction of the Matryoshka ranking                                                                
+
+> Input :C(q)with En(q)and fn; video length N
+> Parameters :M, w +
+> e, w −
+> e, w d, γ
+> Output : Shared ranking R
+> 1: r1←arg max n∈C (q)En(q)
+> 2: R ← (r1);S ← { r1}
+> 3: for k= 2 , . . . , M do
+> 4: Compute we(k)using Equation (11)
+> 5: wc(k)←1−we(k)−wd
+> 6: for each n∈ C (q)\ S do
+> 7: Compute Hn(k)and Dn(k)using Equations (9)–(10)
+> 8: uk(n)←we(k)En(q) + wc(k)Hn(k) + wdDn(k)
+> 9: end for
+> 10: rk←arg max n∈C (q)\S uk(n)
+> 11: Append rkto R
+> 12: S ← S ∪ { rk}
+> 13: end for
+> 14: return R
+
+For a requested budget K ≤ M , inference takes R:K without rerunning the algorithm, then sorts those K frame indices by their original timestamps before constructing the LMM input. The priority order is consequently used for prefix membership, not as a replacement for the video’s chronological order. 
+
+# D Limitations 
+
+Sparse-discovery blind spots. MEC evaluates the question on a duration-adaptive but sparse global grid, retains only the highest-scoring temporal segments, and zooms around one anchor within each retained segment. This design bounds selection cost but also limits recall before ranking begins. A brief, visually isolated event may fall between probes, and low scores at neighboring probes may be further diluted by segment averaging, leaving the relevant segment inactive. Because local zoom is restricted to active segments and the ranker sees only the resulting candidate pool, later coverage and diversity cannot recover evidence omitted at this stage. This risk is greatest for very long videos, single-frame state changes, and events with little visual continuity across neighboring timestamps. Denser probing, shorter segments, larger activation ratios, or multiple anchors could improve recall, but would increase decoding and query-scoring costs and reduce the efficiency gained from the sparse index. Adaptive boundary proposals or uncertainty-triggered refinement may offer a better recall–latency trade-off. 
+
+> 17 MAC-AutoML
+
+Approximate evidence cues. Evidence discovery relies on lightweight proxies rather than direct estimates of down-stream utility. BLIP-2 ITM scores the question against individual frames, so it may miss evidence that emerges only from ordered pairs, long temporal dependencies, or interactions among observations. The 32 -pixel grayscale descriptor makes change and redundancy inexpensive to estimate, but discards color and fine detail; it may respond strongly to cuts, camera motion, or illumination changes while overlooking small semantic transitions. Sharpness and exposure measure observability rather than informativeness and can downweight a blurred, dark, or saturated frame even when it is indispensable. These mismatches affect both segment activation and early ranking, and the fixed evidence mixture cannot adjust cue weights to the requirements of each question. Stronger temporal scorers, higher-resolution descrip-tors, or learned cue calibration could reduce such errors, but would add training, memory, or per-query computation and thereby compromise the lightweight, training-free design. 
+
+Greedy surrogate rather than global optimization. Equation (3) defines a combinatorial objective over several prefix utilities, whereas the implemented score evaluates one candidate at a time relative to the current prefix. The greedy construction is tractable and guarantees exact nesting, but it does not guarantee global optimality for any individual budget or for their weighted aggregate. A frame with strong standalone evidence may enter early even when a different combination would be more complementary. Once selected, it is never replaced, so coverage and diversity can only shape subsequent choices. The hand-designed schedule is likewise a generic surrogate for the unknown QK and does not explicitly optimize deployment weights πK ; deployments concentrated at particular budgets may therefore favor different transitions, despite the robustness observed in our ablations. Beam search, local swaps, or joint prefix opti-mization could provide lookahead and revision, but would require evaluating many more partial sequences and could erode the intended one-pass efficiency. 
+
+# E Additional Experiments 
+
+E.1 Hyperparameter Schedule Ablation 
+
+Table 6 extends the main component ablation with alternative evidence–coverage schedules. Low, Medium, and High report mean Video-MME Overall accuracy over K = {8, 16 }, {32 , 64 }, and {128 , 256 }, respectively. All non-Uniform rows use the same sparse probes, local zoom, evidence mixture, candidate pool, BLIP-2 scorer, evaluation protocol, and downstream model; only the weights in the final greedy ranking differ.                                                                                                            
+
+> Strategy Low Med. High Avg. Uniform sampling 60.80 67.81 73.09 67.23 MEC default: w+
+> e=.6,w−
+> e=.2,γ= 1 65.19 70.46 74.19 69.94
+> Static evidence-heavy: (e, c, d ) = ( .6, . 2, . 2) 64.89 70.09 73.56 69.51 Static coverage-heavy: (e, c, d ) = ( .2, . 6, . 2) 63.44 69.46 74.06 68.99 Static balanced: (e, c, d ) = ( .4, . 4, . 2) 64.66 70.15 73.82 69.54 Back-loaded: w+
+> e=.6,w−
+> e=.2,γ= 1 .564.70 70.61 74.22 69.85 Front-loaded: w+
+> e=.6,w−
+> e=.2,γ= 2/3 64.49 70.22 73.89 69.60 Reverse linear: we:.2→.6,wd=.263.19 69.52 74.28 69.00 High-to-mid: we:.7→.3,wd=.263.80 70.17 74.48 69.48 Mid-to-low: we:.5→.1,wd=.265.00 70.59 73.67 69.75
+> Table 6. Ablation of ranking-weight schedules on Video-MME Overall with Qwen3.5-9B. Here (e, c, d )denote evidence, coverage, and diversity weights; position-dependent rows use wd=.2and wc(k) = 1 −we(k)−wd. Column bests are bold.
+
+The default uses we(k) = 0 .6 − 0.4( k/256) with wd = 0 .2 and assigns the remaining weight to temporal coverage. Relative to Uniform sampling, it improves Low, Medium, and High by 4.39 , 2.65 , and 1.10 points, respectively. The margin narrows as the budget grows. This pattern is consistent with the proposed mechanism: evidence concentration is especially valuable when only a short prefix is available, whereas broader context becomes available to both selectors at larger budgets. The positive High gain further indicates that the coverage-oriented tail remains useful after exact nesting has retained the early frames. The static schedules test whether a single fixed mixture can account for the result. Evidence-heavy weighting, (e, c, d ) = 
+
+> 18 MAC-AutoML
+
+(0 .6, 0.2, 0.2) , trails the default by only 0.30 points at Low but by 0.63 at High. The wider High gap is consistent with an evidence-heavy rule continuing to favor already well-represented regions rather than filling temporal gaps. Coverage-heavy weighting, (0 .2, 0.6, 0.2) , shows the complementary pattern: its deficit is 1.75 points at Low but only 0.13 at High, suggesting that broadening the selection before establishing a compact answer-bearing core is particularly costly under tight budgets. Static balanced weighting, (0 .4, 0.4, 0.2) , is more competitive but still trails by 0.53 , 0.31 , and 0.37 
+
+points across the three regimes. Among the tested schedules, varying the trade-off by rank is therefore more effective than using any one fixed mixture throughout the sequence. The nonlinear schedules test how quickly this trade-off should change. With γ = 1 .5, back-loaded evidence decay maintains a larger evidence weight deeper into the ranking. It gains 0.15 and 0.03 points at Medium and High but loses 
+
+0.49 at Low, leaving its overall average 0.09 points below the default. Front-loaded decay, with γ = 2/3 , shifts weight to coverage earlier and trails by 0.70 , 0.24 , and 0.30 points in the three regimes. These results do not identify a sharp optimum—the back-loaded variant is very close overall—but they do show that transition timing changes the quality of the resulting prefixes, not only the endpoint of the full ranking. The direction and endpoints of the schedule also matter. Reversing the intended transition so that evidence weight rises from 0.2 to 0.6 reduces the average by 0.94 points: the default is better by 2.00 and 0.94 points at Low and Medium, while the reverse schedule is only 0.09 higher at High. A high-to-mid decay, from (0 .7, 0.1, 0.2) to (0 .3, 0.5, 0.2) , yields the strongest High score ( 74 .48 ) but is 1.39 points worse at Low and 0.46 points worse on average. A mid-to-low decay, from (0 .5, 0.3, 0.2) to (0 .1, 0.7, 0.2) , remains close overall ( −0.19 ) but trails by 0.52 at High, suggesting that an overly strong late emphasis on coverage may underweight useful evidence or complementary visual content. No alternative dominates across all three regimes. We retain the default linear schedule because it achieves the best six-budget average and the strongest Low score while remaining competitive for long prefixes. 
+
+E.2 Generalization Across Qwen3.5 Model Scales                                                   
+
+> Size Selector 816 32 64 128 256 4B Uniform 56.19 60.04 62.93 65.30 67.15 68.70 4B MEC 60.52 62.74 65.89 67.04 68.59 69.37
+> 9B Uniform 58.96 62.63 66.15 69.48 72.48 73.70 9B MEC 63.85 66.52 69.11 71.81 73.74 74.63
+> 35B-A3B Uniform 61.85 65.44 69.33 72.67 74.93 76.59 35B-A3B MEC 65.59 69.11 72.56 75.37 76.07 77.30
+> Table 7. Video-MME Overall accuracy across Qwen3.5 model scales and frame budgets. All models use the same configuration.
+
+Table 7 separates the effect of downstream model capacity from that of frame selection. Increasing model size raises the six-budget mean under Uniform sampling from 63 .39 (4B) to 67 .23 (9B) and 70 .14 (35B-A3B); under MEC, the corresponding means are 65 .69 , 69 .94 , and 72 .67 . Larger models improve absolute accuracy with either selector, but the advantage of query-conditioned frame allocation remains. MEC improves all 18 model–budget pairs, with six-budget gains of 2.31 , 2.71 , and 2.53 points at the three scales. At 
+
+K = 8 , the corresponding margins are 4.33 , 4.89 , and 3.74 points. These gains show that early evidence concentration remains valuable across model capacities: stronger reasoning cannot recover decisive visual evidence if it is absent from a short input. At K = 32 and 64 , the 35B-A3B model still gains 3.23 and 2.70 points, indicating that greater model capacity and better evidence organization are complementary rather than interchangeable. The gains narrow at K = 256 to 0.67 , 0.93 , and 0.71 points, when both selectors expose substantially more of the timeline. The remaining positive margins are consistent with the Matryoshka design: later ranks extend context while exact nesting retains the high-priority evidence present in shorter prefixes. 
+
+E.3 Qualitative Success and Failure Cases 
+
+Success: ordering events across the video. The query in Figure 6 depends on the relative order of four introductions spread across the video, rather than on a single localized cue. With only eight frames, MEC places selections near each           
+
+> 19 MAC-AutoML Query: In which order are the following steps introduced in this video?
+> Answer: Cardboard MacBook → cardboard iPad → cardboard Apple Watch → cardboard iPhone 13.
+> 1Video timeline with representative events
+> 04:30 MacBook
+> 10:42 iPad
+> 21:41 Apple Watch
+> 25:25 iPhone 13
+> Video timeline
+> 2Matryoshka ranking on the video timeline
+> K=8
+> K=16
+> K=32
+> Ranks 1–8 (Core evidence) Ranks 9–16 (Complementary) Ranks 17–32 (More context)
+> Figure 6. Successful example of procedural ordering. The query asks for the order in which four cardboard devices are introduced: MacBook (04:30), iPad (10:42), Apple Watch (21:41), and iPhone 13 (25:25). Red, orange, and blue mark frames entering the shared ranking at positions 1–8, 9–16, and 17–32, respectively. The K= 8 prefix spans the four relevant portions of the video; the longer prefixes retain these frames and add construction, overview, and demonstration views. Each prefix is displayed in the chronological order used for LMM inference.
+
+introduction instead of densely sampling any one construction sequence. After these frames are sorted by timestamp, the LMM receives the MacBook, iPad, Apple Watch, and iPhone observations in the required order and answers correctly. In this case, evidence concentration produces a compact set spanning several relevant intervals rather than a cluster around one moment. The K = 16 prefix keeps all eight earlier selections and adds intermediate views from the MacBook and iPhone construction segments. At K = 32 , further additions include an opening overview of several devices, another Apple Watch view, and a later iPhone demonstration. The three rows thus make the nesting property directly visible: increasing the budget extends temporal and visual coverage without changing the membership of the shorter prefixes. Marker colors indicate when a frame enters the ranking, whereas horizontal position indicates the chronological order presented to the LMM. This example illustrates the intended evidence-to-context progression, but it does not establish that every added frame is necessary for the prediction. 
+
+Failure: sparse probes miss the final completed state. The query in Figure 7 requires the model to compare two completed objects separated by more than 45 minutes. The sparse probe grid recovers the first planter and several intermediate products, and it includes observations near the end of the video, but it skips the short interval that clearly shows the last completed planter. Because evidence-guided refinement operates only around anchors in activated probe segments, this missed endpoint does not trigger local zooming and no diagnostic view of the final state enters C(q). The failure therefore originates in sparse discovery: the required observation is absent before Matryoshka ranking begins. Increasing the frame budget cannot repair this omission. Every prefix is drawn from the same candidate pool, so later ranks can improve temporal coverage and visual diversity only among frames that sparse probing and local zooming have already discovered. The coverage term Hn(k) and diversity term Dn(k) therefore cannot recover the unseen endpoint  
+
+> 20 MAC-AutoML 1
+
+Query: What do the first and last made planters have in common? 
+
+Answer: They both have black and brown bodies. 
+
+1 Video timeline with representative events 
+
+> 02:45 First: black + brown
+> 17:56 Intermediate planter
+> 42:17 Late intermediate
+> 47:52 Last: black + brown
+> Video timeline
+
+2 Matryoshka ranking on the video timeline   
+
+> K=8
+> K=16
+> K=32
+> Ranks 1–8 (Core evidence) Ranks 9–16 (Complementary) Ranks 17–32 (More context)
+
+Figure 7. Failure on a comparison between the first and last objects in a 48.3-minute video. The answer requires comparing the first completed planter at 164.6 s with the last at 2871.7 s; both have black-and-brown bodies. Although the selected prefixes contain the first planter, several intermediate planters, and frames near the end of the video, the sparse probes do not capture a clear view of the last completed planter. Consequently, this decisive endpoint evidence never enters the discovered candidate pool. The downstream LMM answers incorrectly with MEC-selected frames at all six evaluated budgets, but correctly with Uniform sampling from K = 32 onward. Marker colors follow Figure 6. 
+
+evidence, even at the largest evaluated budget. This case directly illustrates the sparse-discovery blind spot discussed in Section D: bounding the number of probes improves efficiency, but a brief answer-critical state may remain unexplored and make all subsequent prefixes insufficient for the question. 
+
+21

@@ -1,0 +1,828 @@
+Title: Rethinking Modality Reliability in Multimodal Sentiment Analysis with Incomplete Observations
+
+URL Source: https://arxiv.org/pdf/2608.03611v1
+
+Published Time: Wed, 05 Aug 2026 01:19:36 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Rethinking Modality Reliability in Multimodal Sentiment Analysis with Incomplete Observations 
+
+# Chunlei Meng 1∗
+
+# Jacqueline J. Pang 2, Pengbin Feng 3, Zhenyu Yu 4
+
+# Chun Ouyang 1†, Zhongxue Gan 1
+
+> 1
+
+The College of Intelligent Robotics and Advanced Manufacturing (CIRAM), Fudan University 
+
+> 2
+
+J.P. Morgan Chase, 3University of Southern California (USC) 
+
+> 4
+
+The College of Computer Science and Artificial Intelligence, Fudan University 
+
+Abstract 
+
+Multimodal Sentiment Analysis (MSA) integrates text, audio, and vision to infer human affect, yet real-world multimodal observations are often incomplete. Existing methods for incomplete-observation MSA mainly follow two paradigms. Reconstruction-based methods recover missing information from observed modalities, while joint-representation meth-ods learn directly from incomplete inputs. Although effective, these methods usually treat modality reliability only implic-itly within representation learning or fusion design rather than modeling it explicitly. We argue that modality reliability is a central variable in incomplete-observation settings. Failure to model it explicitly gives rise to two related issues. The first is reliability mismatch, in which the affective evidence retained by each modality varies across samples and missing rates. The second is reliability propagation bias, in which messages from degraded modalities may adversely affect cross-modal interaction and predictive performance. To address these is-sues, we propose MRCF, a Modality Reliability-Calibrated Framework for MSA with incomplete observations. MRCF contains a Reliability-Aware Branch that estimates sample-specific modality reliability from intramodal quality cues and cross-modal semantic consistency, a Reliability-Guided Inter-action Branch that uses the estimated scores to modulate cross-modal information flow, and a Reliability-Calibrated Fusion Module that integrates reliability and semantic cues for final prediction. Experiments on CMU-MOSI, CMU-MOSEI, and CH-SIMS show that MRCF achieves strong performance un-der standard incomplete-observation protocols. Further anal-yses provide evidence that explicit reliability modeling helps mitigate reliability mismatch and reliability propagation bias during interaction and fusion. 
+
+# 1 Introduction 
+
+Multimodal Sentiment Analysis (MSA) aims to infer human sentiment by integrating complementary cues from text, au-dio, and vision (Meng et al. 2026b,e,a). Its effectiveness relies on the fact that different modalities provide heterogeneous yet mutually informative evidence for affect understanding (Haz-arika, Zimmermann, and Poria 2020; Meng et al. 2026c,d). In real-world applications, multimodal observations are of-ten incomplete due to sensor failures, occlusion, noise, pri-vacy constraints, and transcription errors (Zhang, Wang, and Yu 2024; Zhu et al. 2025). Under such conditions, mod-els must infer sentiment reliably from partial evidence (Li 
+
+> ∗
+
+clmeng23@m.fudan.edu.cn 
+
+> †
+
+Corresponding author. Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+Figure 1: Diagnosis of modality reliability under incom-plete observations. (a) Reliability declines differently across modalities as the missing rate increases, so the least-reliable modality changes across stages. (b) Dropping the least-reliable modality yields ∆F1 = F1 drop − F1 all ; negative values indicate performance degradation, whereas positive values indicate improvement and suggest negative transfer. et al. 2025), making incomplete-observation MSA increas-ingly important in practice. Existing studies mainly address this problem through two paradigms: reconstruction-based learning and joint-representation learning. These paradigms differ primarily in whether missing information is explicitly recovered before downstream prediction. Reconstruction-based methods at-tempt to recover missing information from observed modal-ities before performing downstream prediction (Yuan et al. 2024). Representative methods include TFR-Net (Yuan et al. 2021), which employs attention-based extractors and a recon-struction module to recover missing semantics in unaligned multimodal sequences, and DAR (Yang et al. 2025), which decouples modality-common and modality-specific seman-tics and reconstructs them before fusion. Joint-representation methods learn robust multimodal representations directly from incomplete inputs via distillation, dominant-modality preservation, proxy modeling, or fusion redesign (Sun et al. 2024b). CoKD (Li et al. 2024) uses correlation-decoupled distillation for uncertain missing patterns, LNLN (Zhang, Wang, and Yu 2024) preserves the dominant language modal-ity, and P-RMF (Zhu et al. 2025) models proxy modalities and uncertainty in a Gaussian latent space. Although designed for complete observations, ALMT (Zhang et al. 2023) of-fers related insight through language-guided suppression of disruptive auxiliary cues. See Appendix A for details. Despite these advances, existing methods do not explic-itly and systematically model modality reliability under arXiv:2608.03611v1 [cs.AI] 4 Aug 2026 Figure 2: Overview of MRCF. Given incomplete inputs, modality-specific encoders first extract unimodal features. The Reliability-Aware Branch estimates modality reliability using intramodal quality and cross-modal consistency cues. Guided by these scores, the Reliability-Guided Interaction Branch modulates cross-modal message passing according to estimated reliability. Finally, the Reliability-Calibrated Fusion Module integrates semantic and reliability cues for sentiment prediction. Paired complete observations are used only during training for proxy supervision and fusion calibration incomplete observations. Instead, their focus on missing-information recovery or representation fusion leaves relia-bility implicit rather than treating it as a sample-specific variable. Fig. 1 provides two diagnostic analyses of this is-sue. In Fig. 1(a), we use the agreement between a modality-specific prediction and the corresponding full-observation prediction at each missing rate as a proxy for modality reli-ability. The resulting curves show that this reliability proxy is neither uniform across modalities nor static across miss-ing rates. As the missing rate increases, the proxy scores of different modalities decrease at different rates. In particu-lar, while text remains the highest-scoring modality overall, audio and vision alternate as the lowest-scoring modality at different missing stages, revealing a clear reliability mis-match across modalities. This indicates that the affective evidence retained under incomplete observations varies dy-namically across modalities and corruption levels, whereas current methods do not generally expose this variation as an explicit sample-specific quantity. Figure 1(b) further ex-amines the predictive effect of removing the lowest-scoring modality at each missing rate. The comparison shows a sys-tematic transition as missingness increases. At low missing rates, dropping the lowest-scoring modality leads to a no-ticeable performance decrease, suggesting that even a rela-tively low-scoring modality may retain weak but useful com-plementary cues. As the missing rate increases further, the performance gap gradually shrinks and eventually becomes slightly positive, indicating that evidence from the lowest-scoring modality becomes increasingly likely to disrupt in-teraction and fusion rather than provide useful support. This pattern is consistent with reliability propagation bias: errors introduced by degraded evidence may spread through cross-modal interaction and adversely affect the joint representa-tion. This interpretation is also consistent with several recent findings. LNLN (Zhang, Wang, and Yu 2024) identifies tem-poral information corruption and modality laziness under random missingness, P-RMF (Zhu et al. 2025) highlights unequal modality contributions, cross-modal discrepancies, and uncertainty, and CMAD (Zhuang et al. 2025) reveals that uncontrolled interaction causes representation inconsis-tency and optimization instability. These findings motivate explicitly modeling sample-specific modality reliability un-der incomplete observations. Motivated by these, we propose the Modality Reliability-Calibrated Framework (MRCF) for MSA with incomplete observations. MRCF contains two complementary branches and a reliability-calibrated fusion module. First, a Reliability-Aware Branch explicitly estimates sample-specific modality reliability by jointly modeling intramodal quality cues and cross-modal semantic consistency and is designed to ad-dress reliability mismatch. Second, a Reliability-Guided In-teraction Branch uses the estimated reliability to regulate cross-modal information flow, assigning relatively greater influence to messages from higher-scoring modalities and reducing the influence of lower-scoring ones, thereby target-ing reliability propagation bias during interaction. Finally, a Reliability-Calibrated Fusion Module integrates semantic and reliability cues for final prediction and uses complete ob-servations as training-time anchors for proxy reliability su-pervision and fusion calibration. In contrast to methods that focus mainly on processing incomplete inputs, our frame-work emphasizes estimating modality reliability, using it during interaction, and calibrating the final fusion decision. The contributions are: 1. We characterize dynamic modal-ity reliability in incomplete-observation MSA and propose the Modality Reliability-Calibrated Framework (MRCF) to address reliability mismatch and propagation bias. 2. We de-sign a Reliability-Aware Branch (RAB) to estimate sample-specific modality reliability from intra- and cross-modal cues, and a Reliability-Guided Interaction Branch (RGIB) to suppress unreliable cross-modal messages. 3. We intro-duce a Reliability-Calibrated Fusion Module (RCFM) that jointly models semantic and reliability information and uses a complete-observation semantic anchor to calibrate fusion, yielding stable representations and improved prediction. 2 Methodology 
+
+2.1 Overview 
+
+We study MSA with incomplete observations. Given an in-put sample, one or more modalities may be partially missing, making the remaining affective evidence both incomplete and unevenly reliable across modalities. To reduce the influence of degraded evidence on cross-modal interaction, we propose the Modality Reliability-Calibrated Framework (MRCF). As shown in Fig. 2, MRCF contains three tightly coupled com-ponents. First, a Reliability-Aware Branch estimates sample-specific modality reliability from intramodal quality cues and cross-modal semantic consistency. Second, a Reliability-Guided Interaction Branch uses the estimated reliability to modulate cross-modal information flow, assigning relatively greater influence to messages from higher-scoring modali-ties. Third, a Reliability-Calibrated Fusion Module integrates semantic and reliability cues for final prediction and aligns incomplete-observation fusion with a complete-observation semantic anchor during training. A key property of MRCF is that modality reliability is treated as an explicitly estimated quantity rather than an implicit by-product of feature learn-ing. Accordingly, the framework is optimized for two coupled goals: estimating modality reliability under incomplete ob-servations and using it to reduce reliability propagation bias during interaction and fusion. 
+
+2.2 Feature Extraction 
+
+Let M = {t, a, v } denote the modality set, where t, a,and v represent text, audio, and vision, respectively. Given a training set D = {(Xi, y i)}Ni=1 , the complete multimodal input of the i-th sample is written as Xi = {X(m) 
+
+> i
+
+}m∈M ,where X(m) 
+
+> i
+
+∈ RL(m)  
+
+> i×dm
+
+is the modality-specific sequence, 
+
+L(m) 
+
+> i
+
+is the sequence length, and dm is the feature dimen-sion. The sentiment label is yi ∈ R. Following the standard incomplete-observation protocol, we construct an incom-plete counterpart eXi = { eX(m) 
+
+> i
+
+}m∈M by applying eX(m) 
+
+> i
+
+=
+
+C
+
+
+
+X(m) 
+
+> i
+
+, B (m)
+
+> i
+
+
+
+, where B(m) 
+
+> i
+
+∈ { 0, 1}L(m) 
+
+> i
+
+is a binary ob-servation mask, B(m) 
+
+> ij
+
+= 1 denotes an observed temporal position, and C(·) is the corruption operator. We define the observed ratio of modality m as γ(m) 
+
+> i
+
+= 1
+
+> L(m)
+> i
+
+PL(m) 
+
+> i
+> j=1
+
+B(m) 
+
+> ij
+
+.
+
+This input construction is standard and not our primary contribution. Unlike existing incomplete-observation MSA methods that directly reconstruct, distill, or fuse masked in-puts, we explicitly model modality reliability as a sample-specific quantity. Since the affective evidence retained by each modality varies across samples and missing rates, the model should first assess what information remains and how reliable it is before cross-modal interaction. For each modality m ∈ M , a modality-specific encoder 
+
+Em maps the incomplete input to a hidden sequence H(m) 
+
+> i
+
+=
+
+Em
+
+ eX(m)
+
+> i
+
+
+
+, with H(m) 
+
+> i
+
+∈ RL(m) 
+
+> i×d
+
+, where d is the shared hidden dimension. A pooling layer then produces a com-pact modality representation h(m) 
+
+> i
+
+= Pool 
+
+
+
+H(m)
+
+> i
+
+
+
+∈ Rd.During training, we additionally encode the complete obser-vations using the same encoders: H(m) 
+
+> i,c
+
+= Em
+
+
+
+X(m)
+
+> i
+
+
+
+and 
+
+h(m) 
+
+> i,c
+
+= Pool 
+
+
+
+H(m)
+
+> i,c
+
+
+
+. These complete-observation features are used only as training-time anchors for reliability super-vision and fusion calibration, and are not required during inference. 
+
+2.3 Reliability-Aware Branch 
+
+The first component of MRCF estimates how trustworthy each modality is for the current sample under incomplete ob-servations. This branch is motivated by the fact that modality reliability should not be treated as a static prior, because it de-pends jointly on what remains observable within the modality and whether the retained semantics agree with those of other modalities. To this end, we use two complementary cues. 
+
+Intramodal quality cue. We first characterize the internal quality of the observed modality itself. The pooled modality representation is combined with its observed ratio to obtain an intramodal quality feature q(m) 
+
+> i
+
+= ϕ(m)
+
+> q
+
+
+
+[h(m) 
+
+> i
+
+; γ(m) 
+
+> i
+
+]
+
+
+
+∈
+
+Rdq , where ϕ(m) 
+
+> q
+
+(·) is a modality-specific projection network and [·; ·] denotes concatenation. 
+
+Cross-modal semantic consistency cue. We then evalu-ate whether modality m remains semantically consistent with the other modalities. If it still preserves useful affective evi-dence, its representation should be more compatible with the representations derived from the others. We therefore define the semantic consistency score of modality m as 
+
+s(m) 
+
+> i
+
+= 1
+
+|M| − 1
+
+X
+
+> n∈M
+> n̸=m
+
+cos 
+
+
+
+W (m) 
+
+> s
+
+h(m) 
+
+> i
+
+, W (n) 
+
+> s
+
+h(n)
+
+> i
+
+
+
+, (1) where W (m) 
+
+> s
+
+∈ Rd×d is a learnable projection matrix and 
+
+cos( ·, ·) is cosine similarity. 
+
+Reliability estimation. Modality reliability is estimated by combining the two cues through a nonlinear mapping: 
+
+ρ(m) 
+
+> i
+
+= σ
+
+
+
+w⊤ 
+
+> r
+
+tanh 
+
+
+
+Wr [q(m) 
+
+> i
+
+; s(m) 
+
+> i
+
+] + br
+
+ 
+
+. (2) Here Wr ∈ Rdr ×(dq +1) and wr , br ∈ Rdr are learnable parameters, and the sigmoid gives ρ(m) 
+
+> i
+
+∈ (0 , 1) . A larger 
+
+ρ(m) 
+
+> i
+
+means that modality m is estimated to provide more trustworthy affective evidence for sample i.
+
+Proxy reliability supervision. Since complete obser-vations are available during training, we construct atraining-time proxy target from the agreement between the incomplete unimodal prediction and the complete-observation prediction. For modality m, we first obtain a unimodal prediction ˆy(m) 
+
+> i
+
+= gm
+
+
+
+h(m)
+
+> i
+
+
+
+. The complete-observation prediction ˆyci is obtained from the complete-observation fusion anchor defined in Sec. 2.5. We then define 
+
+¯ρ(m) 
+
+> i
+
+= exp 
+
+
+
+− ˆy(m) 
+
+> i
+
+− sg(ˆ yci )
+
+
+
+, where sg( ·) stops gradi-ents through the complete-observation prediction. This target is a model-derived training proxy, not a ground-truth relia-bility label; it reflects how closely an incomplete unimodal prediction agrees with the complete-observation prediction. The reliability regression loss is: 
+
+Lrel = 1
+
+N |M| 
+
+> N
+
+X
+
+> i=1
+
+X
+
+> m∈M
+
+SL1 
+
+
+
+ρ(m) 
+
+> i
+
+, ¯ρ(m)
+
+> i
+
+
+
+, (3) where SL1( ·, ·) denotes the smooth-L1 loss. To encourage the ordering induced by the proxy targets, we use the pairwise ranking term 
+
+Lrank = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1max {1, |P i|} 
+
+X
+
+> (m,n )∈P i
+
+log 
+
+
+
+1 + exp 
+
+
+
+ρ(n) 
+
+> i
+
+− ρ(m)
+
+> i
+
+ 
+
+,
+
+(4) where Pi =
+
+n
+
+(m, n ) | ¯ρ(m) 
+
+> i
+
+> ¯ρ(n)
+
+> i
+
+o
+
+; the inner sum is zero when Pi is empty. The overall objective of the Reliability-Aware Branch is Laware = Lrel + λr Lrank where λr is a balancing coefficient. 
+
+2.4 Reliability-Guided Interaction Branch 
+
+Estimating reliability alone is not sufficient. The crucial ques-tion is how to use reliability once it has been estimated. This motivates our Reliability-Guided Interaction Branch. The need for this design follows from the second phe-nomenon discussed in the introduction. When representa-tions from low-reliability modalities enter cross-modal inter-action without explicit reweighting, their distorted evidence is no longer confined to their original streams. Instead, its er-rors may propagate into other modalities and affect the joint representation. Therefore, reliability should not be used only to assign a higher or lower fusion weight at the end. It should also affect the earlier stage at which cross-modal messages are generated and routed. For each ordered modality pair (m, n ) with m̸ = n,we define a cross-modal message from source modal-ity n to target modality m. We first compute Q(m) 
+
+> i
+
+=
+
+H(m) 
+
+> i
+
+W (m) 
+
+> Q
+
+, K (n) 
+
+> i
+
+= H(n) 
+
+> i
+
+W (n) 
+
+> K
+
+, V (n) 
+
+> i
+
+= H(n) 
+
+> i
+
+W (n) 
+
+> V
+
+, where 
+
+W (m) 
+
+> Q
+
+, W (n) 
+
+> K
+
+, W (n) 
+
+> V
+
+∈ Rd×d are learnable projection ma-trices. The pairwise attention matrix is then Am←ni =Softmax 
+
+ Q(m)  
+
+> i(K(n)
+> i)⊤
+> √d
+
+
+
+and the corresponding message is 
+
+Um←ni = Am←ni V (n) 
+
+> i
+
+, where Softmax( ·) is applied row-wise, so that Am←ni ∈ RL(m)  
+
+> i×L(n)
+> i
+
+and Um←ni ∈ RL(m) 
+
+> i×d
+
+.A conventional interaction module would directly aggre-gate these pairwise messages. In contrast, MRCF explicitly regulates them according to modality reliability. We define the source-side routing weight as αm←ni = exp   
+
+> 
+> ρ(n)
+> i
+> P
+> j∈M
+> j̸=m
+> exp
+> 
+> ρ(j)
+> i
+> 
+
+.
+
+The updated representation of modality m is then computed by eH(m) 
+
+> i
+
+= H(m) 
+
+> i
+
++ (1 − ρ(m) 
+
+> i
+
+) Pn∈M 
+
+> n̸=m
+
+αm←ni Um←ni .This design reflects the intended interaction logic. If tar-get modality m has a high reliability score, then 1 − ρ(m) 
+
+> i
+
+is small and its update is reduced. If target modality m has a lower score, the update is larger, with relatively more weight assigned to higher-scoring source modalities. Thus, reliabil-ity affects both the direction and magnitude of cross-modal information flow. The proposed interaction mechanism is intended to pre-serve high-scoring modalities rather than overwrite them unnecessarily. It also turns cross-modal interaction into a reliability-aware process rather than uniform semantic mix-ing. To reduce the energy of outgoing messages from low-scoring source modalities, we use the following regularizer: 
+
+Lprop = 1
+
+N |M| (|M| − 1) 
+
+> N
+
+X
+
+> i=1
+
+X
+
+> m,n ∈M
+> m̸=n
+
+
+
+1 − ¯ρ(n)
+
+> i
+
+
+
+∥αm←ni Um←ni ∥2 
+
+> F
+
+.
+
+(5) This term penalizes the squared Frobenius norm of routed messages more strongly when the source has a low proxy-reliability score; it is therefore a reliability-weighted message-energy regularizer. 
+
+2.5 Reliability-Calibrated Fusion Module 
+
+After reliability-guided interaction, the model still needs to produce a final joint representation for sentiment prediction. A standard fusion strategy would pool the updated modality features and weight them through a learned attention mecha-nism. However, this strategy does not explicitly condition its modality weights on the estimated reliability scores. Fusion under incomplete observations should satisfy two requirements simultaneously. It should preserve modality complementarity, because a modality with lower reliability may still retain partial but useful affective cues. It should also reduce the influence of low-reliability evidence on the final decision. A semantic-only attention mechanism does not ex-plicitly address the second requirement. This motivates the Reliability-Calibrated Fusion Module. We first pool each updated modality sequence eh(m) 
+
+> i
+
+=Pool 
+
+ eH(m)
+
+> i
+
+
+
+. The fusion weight of modality m is then de-fined by jointly considering its semantic representation and estimated reliability: 
+
+β(m) 
+
+> i
+
+=exp 
+
+
+
+w⊤ 
+
+> f
+
+[eh(m) 
+
+> i
+
+; ρ(m) 
+
+> i
+
+]
+
+P
+
+> n∈M
+
+exp 
+
+
+
+w⊤ 
+
+> f
+
+[eh(n) 
+
+> i
+
+; ρ(n) 
+
+> i
+
+]
+
+ , (6) where wf ∈ Rd+1 is a learnable parameter vector. Unlike a semantic-only fusion logit, the proposed logit also receives the estimated reliability score. The final contribution of a modality can therefore depend jointly on its semantic evi-dence and its estimated reliability under the current incom-plete observation. In this way, reliability can influence the final representation rather than only an auxiliary loss. The final fused representation is zi = P 
+
+> m∈M
+
+β(m) 
+
+> i
+
+eh(m) 
+
+> i
+
+,and the sentiment prediction is ˆyi = gf (zi), where gf (·) is the prediction head. To further stabilize fusion under incom-plete observations, we introduce a complete-observation fu-sion anchor during training. Using the complete-observation CMU-MOSI CMU-MOSEI Model Acc-2 F1 Acc-5 Acc-7 MAE ( ↓) Corr Acc-2 F1 Acc-5 Acc-7 MAE ( ↓) Corr MISA 70.33/71.49 70.00/71.28 33.08 29.85 1.085 0.524 75.82/71.27 68.73/63.85 39.39 40.84 0.780 0.503 S-MM 69.26/70.51 67.54/66.60 34.67 29.55 1.070 0.512 77.42/73.89 72.31/68.92 45.38 44.70 0.695 0.498 MMIM 67.06/69.14 64.04/66.65 33.77 31.30 1.077 0.507 75.89/73.32 70.32/68.72 41.74 40.75 0.739 0.489 CENET 67.73/71.46 64.85/68.41 33.62 30.38 1.080 0.504 77.34/74.67 74.08/70.68 47.83 47.18 0.685 0.535 TFR-Net 66.35/68.15 60.06/61.73 34.67 29.54 1.200 0.459 77.23/73.62 71.99/68.80 34.67 46.83 0.697 0.489 ALMT 68.39/70.40 71.80/72.57 33.42 30.30 1.083 0.498 77.54/76.64 78.03/77.14 41.64 40.92 0.674 0.481 LNLN 70.94/72.55 71.25/72.73 38.27 34.26 1.046 0.527 78.19/76.30 79.95/77.77 46.17 45.42 0.692 0.530 P-RMF 71.53/72.81 71.69/72.93 38.50 34.19 1.038 0.525 78.83/78.14 80.39/79.33 45.87 44.63 0.658 0.589 DAR 71.60/73.18 71.51/73.15 38.65 34.47 1.069 0.520 77.48/78.14 77.44/77.51 48.01 47.02 0.666 0.583 MIG-HCL 72.62 72.17 - 34.4 0.993 0.508 77.73 76.72 - 48.32 0.646 0.557           
+
+> MRCF 73.17/74.26 73.31/74.39 39.87 35.79 0.986 0.552 79.38/80.07 80.27/80.39 48.87 48.66 0.642 0.606
+
+Table 1: Results on CMU-MOSI and CMU-MOSEI under intra-modal missingness (IMM). Following the original evaluation protocol, results are averaged over the ten-rate grid r ∈ { 0.0, 0.1, . . . , 0.9}. For Acc-2 and F1, a/b denotes the negative-versus-non-negative and negative-versus-positive label partitions, respectively. features {h(m) 
+
+> i,c
+
+}m∈M , we obtain zci = P 
+
+> m∈M
+
+β(m) 
+
+> i,c
+
+h(m) 
+
+> i,c
+
+,where β(m) 
+
+> i,c
+
+is computed by the same fusion head. The cor-responding complete-observation prediction is ˆyci = gf (zci ).We then calibrate the incomplete-observation fused repre-sentation toward this complete-observation semantic anchor: 
+
+Lcal = 1
+
+> N
+
+PNi=1 ∥zi − sg( zci )∥22.This calibration serves two purposes. It is intended to discourage the fusion module from over-pruning low-reliability modalities and discarding useful complementary evidence. It also discourages excessive deviation between paired incomplete- and complete-observation fused repre-sentations, thereby encouraging representation stability. 
+
+2.6 Training Objective 
+
+The main sentiment regression objective is Ltask =
+
+> 1
+> N
+
+PNi=1 |ˆyi − yi| . The final objective of MRCF is L =
+
+Ltask + λ1Laware + λ2Lprop + λ3Lcal , where λ1, λ 2, λ 3 are hyperparameters. During inference, MRCF operates on the available observations and does not require the complete-observation branch. The complete-observation branch and proxy reliability targets are used only during training. 
+
+# 3 Experiments 
+
+3.1 Experimental Settings 
+
+Benchmarks. We evaluate MRCF on widely standard MSA benchmarks, namely MOSI (Zadeh et al. 2016), MO-SEI (Bagher Zadeh et al. 2018), and CH-SIMS (Yu et al. 2020). Evaluation Metrics. We evaluate MOSI and MOSEI using MAE, Corr, F1, Acc-2, Acc-5, and Acc-7, with Acc-2 and F1 reported under both negative–non-negative and neg-ative–positive partitions, and CH-SIMS using MAE, Corr, F1, Acc-2, Acc-3, and Acc-5. Implementation Details. All experiments are conducted in PyTorch on an NVIDIA A100 GPU. We train for 100 epochs using Adam with a learning rate of 10 −4 and a batch size of 32. BERT (Devlin et al. 2019) is used as the language backbone, and the audio and visual feature extraction pipelines follow established baselines (Li et al. 2025; Zhu et al. 2025). All reported results are aver-aged over three random seeds. Detailed provided in Appendix B. Baseline references. MISA (Hazarika, Zimmermann, and Poria 2020), S-MM (Yu et al. 2021), MMIM (Han, Chen, and Poria 2021), CENet (Wang et al. 2023), TFR-Net (Yuan et al. 2021), ALMT (Zhang et al. 2023), LNLN (Zhang, Wang, and Yu 2024), P-RMF (Zhu et al. 2025), DAR (Yang et al. 2025), MIG-HCL (Gong et al. 2026), DCCAE(DE) (Wang et al. 2015), DMD (Li, Wang, and Cui 2023), NIAT (Yuan et al. 2024), GCNet (Lian et al. 2023), IMDer (Wang, Li, and Cui 2023), EMT (Sun et al. 2024a), GMD (Wang et al. 2024), CoKD (Li et al. 2024), and ROSA (Li et al. 2025). 
+
+3.2 Training Protocol 
+
+We follow the two protocols used in prior incomplete-observation MSA (Li et al. 2025; Zhu et al. 2025). Un-der intra-modal missingness (IMM), we erase a fraction 
+
+r ∈ { 0.0, 0.1, . . . , 0.9} of temporal positions. Missing-aware methods, including MRCF, P-RMF, LNLN, and ROSA, are trained and evaluated at the same target missing rate; methods requiring complete training inputs, such as MISA and S-MM, are trained on complete observations. All methods are eval-uated with the same test corruption masks and operator at each r, and the main evaluation protocol reports mean per-formance across all ten missing rates. Under fixed-modality missingness (FMM), all methods are trained on complete observations and evaluated with one or two modalities un-available. MRCF’s paired complete-observation branch is used only during training and is absent at inference. Further corruption and input-handling details in Appendix B. 
+
+3.3 Results under Intra-Modal Missingness 
+
+We evaluate robustness to random temporal erasure on CMU-MOSI, CMU-MOSEI, and CH-SIMS. As shown in Tables 1 and 2, MRCF achieves the best or tied-best results on CMU-MOSI and CMU-MOSEI, while reaching 75.16% Acc-2 and 79.71% F1 on CH-SIMS, substantially outperforming P-RMF. It also obtains Corr scores of 0.552 and 0.606 on CMU-MOSI and CMU-MOSEI, respectively, demonstrat-ing stronger consistency with continuous ground-truth senti-ment under temporal corruption. Per-rate results are reported in Appendix B. Random sequence erasure disrupts local temporal continuity and induces reliability mismatch across modalities. Conventional fusion mechanisms may integrate corrupted streams without explicitly accounting for their unequal reliability, leading to reliability propagation bias. MRCF is designed to mitigate this issue. The Reliability-Aware Branch evaluates the internal quality of corrupted sequences and their cross-modal consistency. Guided by these estimates, the Reliability-Guided Interaction Branch reweights source messages and scales target-side updates ac-cording to estimated reliability. The resulting interaction is intended to reduce the influence of degraded streams at high missing rates. 
+
+Model Acc-2 F1 Acc-3 Acc-5 MAE (↓) Corr 
+
+MISA 72.71 66.30 56.87 31.53 0.539 0.348 S-MM 72.81 68.43 56.75 32.28 0.508 0.376 MMIM 69.86 66.21 52.76 31.81 0.544 0.339 CENET 68.13 57.90 53.17 22.29 0.589 0.107 TFR-Net 68.13 58.70 52.89 26.52 0.661 0.169 P-RMF 73.64 74.65 54.75 34.83 0.500 0.414 LNLN 72.73 79.43 57.14 34.64 0.514 0.397 
+
+MRCF 75.16 79.71 57.97 35.44 0.481 0.435 
+
+Table 2: Robustness comparison on SIMS under intra-modal missingness. Results are averaged over r ∈ { 0.0, . . . , 0.9}.
+
+3.4 Results under Fixed-Modality Missingness 
+
+We further evaluate the framework under severe degra-dation, where one or two entire modalities are unavail-able during inference. Table 3 presents performance under the fixed-modality-missingness conditions on CMU-MOSI and CMU-MOSEI. MRCF achieves the highest average F1 score of 81.65% on both datasets. It also remains effective when the dominant language modality is removed. When only vision and audio are available, MRCF reaches an F1 score of 84.47% on CMU-MOSI, exceeding the uncertainty-aware baseline ROSA by 0.66%. Fixed-modality missing-ness removes entire semantic sources, making simple fea-ture downweighting insufficient. Although existing meth-ods may quantify uncertainty, constructing robust repre-sentations remains difficult when the primary semantic an-chor is unavailable. MRCF addresses this representation gap through its Reliability-Calibrated Fusion Module. By anchor-ing incomplete-observation fusion to a complete-observation semantic target during training, the framework encourages the remaining modalities to retain generalizable affective cues. The Reliability-Guided Interaction Branch also enables reliability-dependent routing among the available modalities while reducing the influence of placeholder inputs. Together, these components contribute to robust sentiment prediction under severely incomplete inputs. 
+
+3.5 Ablation Studies 
+
+Table 4 presents the ablation studies on CMU-MOSI, CMU-MOSEI, and CH-SIMS under intra-modal missingness. The                    
+
+> Model Available Modalities (F1, %)
+> {l, v, a }{l, v }{l, a }{v, a }{l}{v}{a}
+> Average CMU-MOSI
+> S-MM 84.64 74.97 69.81 47.12 67.80 38.52 40.95 60.54 DE 66.76 65.43 62.25 42.39 61.78 41.45 41.30 54.48 DMD 84.50 68.45 70.51 50.47 68.97 42.26 43.33 61.21 NIAT 83.16 81.75 82.03 43.58 80.72 42.79 42.10 65.16 GCNet 83.20 83.58 84.73 70.02 81.12 59.67 68.07 75.77 IMDer 84.71 81.67 82.53 57.30 81.40 56.71 55.29 71.37 EMT 82.43 83.30 82.64 55.90 80.37 53.63 51.50 69.97 GMD 85.70 84.39 83.53 54.60 81.74 52.88 51.24 70.58 CoKD 83.94 82.41 82.36 73.74 81.20 60.72 66.52 75.84 P-RMF 84.37 81.94 82.10 73.11 81.36 70.32 71.44 77.81 ROSA 86.30 85.39 85.13 83.81 83.64 56.79 81.91 80.42
+> MRCF 86.79 86.08 85.85 84.47 84.34 61.67 82.35 81.65 CMU-MOSEI
+> S-MM 83.69 74.62 75.91 49.52 71.53 37.61 43.57 62.35 DE 75.70 73.16 73.82 45.03 71.19 43.84 41.47 60.60 DMD 84.78 72.45 74.78 52.70 70.26 39.84 46.18 63.00 NIAT 86.35 85.31 85.10 48.57 83.29 45.76 44.43 68.40 GCNet 82.35 81.15 81.96 69.21 80.52 61.83 66.54 74.79 IMDer 84.71 82.39 83.41 53.30 82.77 51.83 50.47 69.84 EMT 85.17 84.45 83.81 52.39 83.04 50.79 51.28 70.13 GMD 87.07 85.52 83.10 52.67 81.45 49.96 50.39 70.02 CoKD 82.16 81.28 81.74 71.92 80.76 62.30 66.09 75.18 P-RMF 85.48 85.17 84.61 76.88 81.91 73.19 75.91 80.45 ROSA 89.56 87.32 86.64 84.19 84.42 54.38 79.04 80.79
+> MRCF 89.92 87.68 87.15 85.72 84.80 56.77 79.54 81.65
+
+Table 3: Results on CMU-MOSI and CMU-MOSEI under fixed-modality missingness (FMM). Here l, v, and a denote the available language, visual, and acoustic modalities. reported F1 and MAE values are averaged over missing rates from 0.1 to 0.9. Importance of Core Components. Remov-ing both the Reliability-Aware Branch and the Reliability-Guided Interaction Branch causes the largest component-level degradation (e.g., CMU-MOSI F1 decreases from 73.31% to 69.90%), suggesting that their contributions are complementary. Removing only the interaction branch causes a larger decrease than removing the Reliability-Aware Branch alone. This indicates that estimating reliability is most useful when the estimates also regulate cross-modal message passing. Omitting the Reliability-Calibrated Fusion Module also reduces performance, supporting the impor-tance of reliability integration at the final decision stage. 
+
+Figure 3: Alignment of modality reliability with a prediction-agreement diagnostic. (a) Monotonic alignment on CMU-MOSI and CMU-MOSEI.(b) Spearman correlation across missing rates. Positive correlations indicate consistency with this model-derived diagnostic, not ground-truth reliability. Variant CMU-MOSI CMU-MOSEI CH-SIMS F1 ↑ MAE ↓ F1 ↑ MAE ↓ F1 ↑ MAE ↓                                                                                                   
+
+> MRCF 73.31 0.986 80.27 0.642 79.71 0.481 (1) Core Components
+> w/o RAB 72.09 1.017 79.09 0.666 78.25 0.504
+> w/o RGIB 71.86 1.024 78.95 0.672 77.96 0.510
+> w/o (R,G) 69.90 1.063 77.42 0.694 76.35 0.535
+> w/o RCFM 72.36 1.009 79.36 0.656 78.63 0.494
+> (2) Reliability Estimation
+> w/o Intra-Q 72.46 1.001 79.56 0.654 78.86 0.492
+> w/o Cross-Cons. 71.98 1.015 79.02 0.668 78.15 0.506
+> w/o Lrank 72.76 0.997 79.74 0.650 79.02 0.489
+> (3) Interaction/Fusion Variants
+> Uniform Inter. 71.22 1.033 78.53 0.676 77.54 0.514 Late Rel. 71.59 1.026 78.74 0.670 77.81 0.509 Addition 70.46 1.048 77.88 0.689 76.95 0.522 Concat+MLP 70.85 1.041 78.10 0.684 77.13 0.517
+> (4) Training Objectives
+> w/o Lrel 71.95 1.015 78.96 0.668 78.01 0.507
+> w/o Lprop 72.28 1.010 79.31 0.660 78.46 0.499
+> w/o Lcal 72.62 0.999 79.58 0.651 78.87 0.492
+
+Table 4: Ablation studies of MRCF under intra-modal miss-ingness. w/o (R,G) means w/o (RAB+RGIB). F1 (%). 
+
+Effectiveness of Reliability Estimation. Within the esti-mation strategy, removing cross-modal consistency causes a larger decline than removing the intramodal quality cue. This result suggests that semantic compatibility across modali-ties is an important component of the estimated reliability under incomplete observations. Removing the ranking loss also reduces performance. Interaction and Fusion Vari-ants. MRCF outperforms Uniform Interaction, indicating that reliability-aware message passing is useful relative to modality-agnostic interaction. Late-Reliability fusion also performs worse, supporting the use of reliability during in-teraction rather than only at final fusion. Addition and Con-cat+MLP yield lower results than the full model, further sup-porting the coupled interaction-fusion design. Evaluation of Training Objectives. Removing Lrel causes the largest decrease among the loss-term ablations. Omitting Lprop 
+
+or Lcal also consistently reduces performance, supporting their respective roles in message-energy regularization and complete-observation calibration. 
+
+3.6 Further Analysis 
+
+Alignment with the Reliability Proxy. We examine whether the estimated score is aligned with the intended prediction-agreement criterion. For sample i, modality m,and missing rate r, we define the diagnostic q(m) 
+
+> i
+
+(r) = exp 
+
+
+
+− ˆy(m,r ) 
+
+> i
+
+− ˆyci
+
+
+
+, where ˆy(m,r ) 
+
+> i
+
+is the modality-m pre-diction at missing rate r, and ˆyci is the complete-observation prediction defined in Sec. 2.5. A larger q(m) 
+
+> i
+
+(r) indicates closer prediction agreement. As shown in Fig. 3, the es-timated reliability ρ(m) 
+
+> i
+
+is positively rank-correlated with 
+
+q(m) 
+
+> i
+
+(r) across CMU-MOSI and CMU-MOSEI. Further-more, the same diagnostic shows that MRCF identifies the highest-scoring modality for most samples. Because q(m) 
+
+> i
+
+(r)
+
+follows the same agreement principle as the training proxy, this analysis measures alignment with the intended criterion rather than independently validating actual modality trust-worthiness. This result is also consistent with the ablation in Table 4, where removing cross-modal consistency has a larger effect than removing the intramodal cue. 
+
+Figure 4: Reliability-guided cross-modal interaction. (a) In-teraction ratios across missing rates on three datasets. (b) CMU-MOSI routing at r = 0 .2 and 0.8.
+
+Behavior of Reliability-Guided Interaction. To exam-ine how estimated reliability affects cross-modal interac-tion, we define the effective message strength as Sm←ni =(1 − ρ(m) 
+
+> i
+
+)αm←ni ∥Um←ni ∥F and compute the ratio of inter-action from higher- to lower-scoring modalities to interac-tion in the reverse direction. As shown in Fig. 4(a), MRCF consistently yields higher directional interaction ratios than Uniform Interaction (near 1.0), increasing from 1.17 to 1.43 
+
+on MOSI as missingness grows. Figure 4(b) further shows stronger routing from higher- to lower-scoring modalities un-der severe missingness, supporting reliability-aware rather than uniform semantic interaction. 
+
+Figure 5: Statistical stability on MOSI. Plots show F1 and MAE distributions across missing rates and three seeds; box plots indicate the median and interquartile range (IQR). 
+
+Statistical Stability Analysis. Across missing rates and three seeds, MRCF achieves a mean F1 of 73 .31 and an MAE of 0.986 , with tighter distributions than LNLN and P-RMF (Fig. 5), indicating stable performance under random modality missingness. Branch-weight Visualizations, Hyperparameter Sensitiv-ity and Efficiency Comparisons are in Appendix C, D, E. 4 Conclusion 
+
+We study dynamic modality reliability in incomplete-observation MSA and propose Modality Reliability-Calibrated Framework (MRCF) to address reliability mis-match and propagation bias. MRCF estimates sample-specific reliability from intramodal quality and cross-modal consistency, guides cross-modal interaction, and calibrates fusion against complete-observation training anchors. Re-sults on CMU-MOSI, CMU-MOSEI, and CH-SIMS support explicit reliability modeling across the evaluated missingness settings. 
+
+# References 
+
+Bagher Zadeh, A.; Liang, P. P.; Poria, S.; Cambria, E.; and Morency, L.-P. 2018. Multimodal Language Analysis in the Wild: CMU-MOSEI Dataset and Interpretable Dynamic Fusion Graph. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , 2236–2246. Association for Computational Linguistics. Devlin, J.; Chang, M.-W.; Lee, K.; and Toutanova, K. 2019. BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. In Proceedings of NAACL-HLT 2019, Volume 1 (Long and Short Papers) , 4171–4186. Asso-ciation for Computational Linguistics. Gong, P.; Liu, J.; Zhang, X.; Li, X.; Wei, L.; and He, H. 2026. Towards robust sentiment analysis with multimodal interaction graph and hybrid contrastive learning. Pattern Recognition , 169: 111870. Han, W.; Chen, H.; and Poria, S. 2021. Improving Multi-modal Fusion with Hierarchical Mutual Information Maxi-mization for Multimodal Sentiment Analysis. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP) , 9180–9192. Hazarika, D.; Zimmermann, R.; and Poria, S. 2020. MISA: Modality-Invariant and -Specific Representations for Multi-modal Sentiment Analysis. In Proceedings of the 28th ACM International Conference on Multimedia (ACM MM) , 1122– 1131. Li, M.; Yang, D.; Zhao, X.; Wang, S.; Wang, Y.; Yang, K.; Sun, M.; Kou, D.; Qian, Z.; and Zhang, L. 2024. Correlation-decoupled knowledge distillation for multimodal sentiment analysis with incomplete modalities. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 12458–12468. IEEE. Li, Y.; Wang, Y.; and Cui, Z. 2023. Decoupled Multi-modal Distilling for Emotion Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 6631–6640. IEEE. Li, Z.; Liu, Y.; Yang, C.; Zhou, Y.; and Hu, S. 2025. ROSA: A Robust Self-Adaptive Model for Multimodal Emo-tion Recognition With Uncertain Missing Modalities. IEEE Transactions on Multimedia , 27: 6766–6779. Lian, Z.; Chen, L.; Sun, L.; Liu, B.; and Tao, J. 2023. GC-Net: Graph Completion Network for Incomplete Multimodal Learning in Conversation. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(7): 8419–8432. Meng, C.; Feng, P.; Fu, R.; Lee, H. L.; Du, X.; Kang, Z.; Zhang, Z.; Zhou, W.; Ouyang, C.; and Gan, Z. 2026a. Group Cognition Learning: Making Everything Better Through Governed Two-Stage Agents Collaboration. arXiv preprint arXiv:2605.00370 .Meng, C.; Huang, G.; Fu, R.; Jian, R.; Gan, Z.; and Ouyang, C. 2026b. CLCR: Cross-Level Semantic Collaborative Rep-resentation for Multimodal Learning. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , 1606–1615. Meng, C.; Luo, J.; Feng, P.; Yan, Z.; Hu, C.; Gan, Z.; and Ouyang, C. 2026c. Mitigating Shared-Private Branch Im-balance via Dual-Branch Rebalancing for Multimodal Sen-timent Analysis. arXiv preprint arXiv:2604.25179 .Meng, C.; Luo, J.; Yan, Z.; Yu, Z.; Fu, R.; Gan, Z.; and Ouyang, C. 2026d. Tri-Subspaces Disentanglement for Multimodal Sentiment Analysis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 8791–8800. Meng, C.; Zhou, Z.; He, L.; Du, X.; Ouyang, C.; and Gan, Z. 2026e. Temporal-Spatial Decouple Before Act: Disentangled Representation Learning for Multimodal Sentiment Analy-sis. In ICASSP 2026 – 2026 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE. Sun, L.; Lian, Z.; Liu, B.; and Tao, J. 2024a. Efficient Multi-modal Transformer With Dual-Level Feature Restoration for Robust Multimodal Sentiment Analysis. IEEE Transactions on Affective Computing , 15(1): 309–325. Sun, T.; Wei, Y.; Ni, J.; Liu, Z.; Song, X.; Wang, Y.; and Nie, L. 2024b. Muti-modal emotion recognition via hierarchical knowledge distillation. IEEE Transactions on Multimedia ,26: 9036–9046. Wang, D.; Liu, S.; Wang, Q.; Tian, Y.; He, L.; and Gao, X. 2023. Cross-modal enhancement network for multimodal sentiment analysis. IEEE Transactions on Multimedia , 25: 4909–4921. Wang, H.; Luo, S.; Hu, G.; and Zhang, J. 2024. Gradient-guided modality decoupling for missing-modality robust-ness. In Proceedings of the Thirty-Eighth AAAI Confer-ence on Artificial Intelligence and Thirty-Sixth Conference on Innovative Applications of Artificial Intelligence and Four-teenth Symposium on Educational Advances in Artificial In-telligence .Wang, W.; Arora, R.; Livescu, K.; and Bilmes, J. 2015. On Deep Multi-View Representation Learning. In Proceedings of the 32nd International Conference on Machine Learning ,volume 37, 1083–1092. Wang, Y.; Li, Y.; and Cui, Z. 2023. Incomplete Multimodality-Diffused Emotion Recognition. In Advances in Neural Information Processing Systems , volume 36, 17117–17128. Yang, M.; Zhang, K.; Ye, Y.; Zhang, Y.; Yu, R.; and Hou, M. 2025. Decoupling and Reconstructing: A Multimodal Senti-ment Analysis Framework Towards Robustness. In Proceed-ings of the Thirty-Fourth International Joint Conference on Artificial Intelligence , 6803–6811. Yu, W.; Xu, H.; Meng, F.; Zhu, Y.; Ma, Y.; Wu, J.; Zou, J.; and Yang, K. 2020. CH-SIMS: A Chinese Multimodal Sentiment Analysis Dataset with Fine-grained Annotation of Modality. In Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics (ACL) , 3718– 3727. Association for Computational Linguistics. Yu, W.; Xu, H.; Yuan, Z.; and Wu, J. 2021. Learning modality-specific representations with self-supervised multi-task learning for multimodal sentiment analysis. In Proceed-ings of the AAAI Conference on Artificial Intelligence (AAAI) ,10790–10797. Yuan, Z.; Li, W.; Xu, H.; and Yu, W. 2021. Transformer-based feature reconstruction network for robust multimodal sentiment analysis. In Proceedings of the 29th ACM interna-tional conference on multimedia , 4400–4407. Yuan, Z.; Liu, Y.; Xu, H.; and Gao, K. 2024. Noise imitation based adversarial training for robust multimodal sentiment analysis. IEEE Transactions on Multimedia , 26: 529–539. Zadeh, A.; Zellers, R.; Pincus, E.; and Morency, L.-P. 2016. Multimodal sentiment intensity analysis in videos: Facial gestures and verbal messages. IEEE Intelligent Systems ,31(6): 82–88. Zhang, H.; Wang, W.; and Yu, T. 2024. Towards Robust Multimodal Sentiment Analysis with Incomplete Data. In 
+
+Proceedings of the Advances in Neural Information Process-ing Systems (NeurIPS) , volume 37, 55943–55974. Zhang, H.; Wang, Y.; Yin, G.; Liu, K.; Liu, Y.; and Yu, T. 2023. Learning language-guided adaptive hyper-modality representation for multimodal sentiment analysis. In Pro-ceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (EMNLP) , 756–767. Zhu, A.; Hu, M.; Wang, X.; Yang, J.; Tang, Y.; and An, N. 2025. Proxy-Driven Robust Multimodal Sentiment Analysis with Incomplete Data. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) (ACL) , 22123–22138. Association for Computational Linguistics. Zhuang, Y.; Liu, M.; Bai, W.; Zhang, Y.; Zhang, X.; Deng, J.; and Ren, F. 2025. CMAD: Correlation-Aware and Modalities-Aware Distillation for Multimodal Sentiment Analysis with Missing Modalities. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,4626–4636.

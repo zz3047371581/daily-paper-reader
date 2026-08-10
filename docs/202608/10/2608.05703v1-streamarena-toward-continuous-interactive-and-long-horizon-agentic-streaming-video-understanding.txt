@@ -1,0 +1,769 @@
+Title: StreamArena: Toward Continuous, Interactive, and Long-Horizon Agentic Streaming Video Understanding
+
+URL Source: https://arxiv.org/pdf/2608.05703v1
+
+Published Time: Fri, 07 Aug 2026 00:45:53 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# StreamArena: Toward Continuous, Interactive, and Long-Horizon Agentic Streaming Video Understanding 
+
+Xichen Zhang 1,2, ∗,‡, Guankai Li 2, ∗, Yinghao Zhu 3, Shijian Wang 2, Sitong Wu 4, Shaozuo Yu 4, Meng Chu 1, Yuan Lu 2, Jiaya Jia 1, †
+
+> 1
+
+The Hong Kong University of Science and Technology 
+
+> 2
+
+Xiaohongshu Inc. 
+
+> 3
+
+The University of Hong Kong 
+
+> 4
+
+The Chinese University of Hong Kong 
+
+Abstract: Deploying autonomous multimodal agents in continuous, real-world environments requires them to ingest unbounded audio-visual streams and maintain hour-scale memory. However, current evaluations predominantly rely on brief clips and multiple-choice formats. This design allows minimal baselines that process only the last four frames to match or surpass complex streaming models, while answer options also expose language shortcuts. We introduce StreamArena , a benchmark for hour-scale, interactive streaming video understanding. StreamArena contains 243 full-length videos averaging 88.8 minutes and 3,646 rigorously annotated, open-ended question-answer pairs that evaluate real-time perception, historical retrospection, proactive interaction, and multimodal tool utilization. Evaluation across diverse systems exposes a tension between continuous interaction and long-horizon multimodal comprehension. Methods that retain only recent frames cannot recover distant events, methods that convert past observations into text lose visual evidence, and methods that repeatedly compress visual memory struggle to preserve fine-grained details over time. We address this tension with StreamMind , a two-tier architecture that assigns latency-critical interaction and proactive monitoring to independently scheduled frontend workers, while backend workers asynchronously construct persistent multimodal memory and perform historical recall and external search. StreamMind outperforms existing streaming baselines across all four capabilities and reduces query-to-answer latency by reusing persistent state. 
+
+Keywords: multimodal agents, streaming video understanding, long-horizon memory 
+
+ Website § Code õ Benchmark 
+
+# 1 Introduction 
+
+As artificial intelligence integrates into continuous real-world environments like embodied robotics and wearable devices [2, 3, 4, 5, 6], agents are expected to maintain always-on, hour-scale multimodal comprehension. However, traditional turn-based models [7, 8, 9, 10] struggle in these dynamic settings. By design, they process pre-segmented video clips and passively wait for user prompts, which disrupts the causal continuity of real-world observations. Physical events rarely align with predefined temporal boundaries or user-initiated triggers. Consequently, turn-based agents often miss fleeting cues and fail to intervene autonomously when immediate action is required. Even low-latency systems like Doubao and GPT-Realtime-2 [11, 12] remain trapped in this passive prompt-response loop, lacking vigilance to self-initiate interactions. Genuine deployment therefore demands a paradigm shift toward interactive streaming architectures [13, 14, 15, 16]. These systems continuously ingest unbounded audio-visual streams, autonomously consolidate historical memory, and proactively determine when to speak, utilize tools, or remain silent without explicit human intervention. Toward continuous, interactive, and long-horizon agentic streaming video understanding, we seek to establish an evaluation framework that exposes current limitations and guides future model development. However, existing evaluations have not kept pace with the expanding scope of streaming systems. Existing benchmarks provide valuable tests of long-video comprehension, online perception, or proactive response [17, 18, 19], but generally assess these capabilities in isolation. Moreover, many streaming-video benchmarks use short clips and multiple-choice questions, making performance susceptible to language priors and recency shortcuts. Recent analysis shows that a baseline using only the last four frames can match substantially more complex streaming                                                                                                                                      
+
+> ∗Equal contribution. ‡Work done during an internship at Xiaohongshu Inc.
+> †Corresponding author: Jiaya Jia ( jia@cse.ust.hk ). arXiv:2608.05703v1 [cs.CV] 6 Aug 2026 Benchmark Venue Anno. Ans. Q/Vid Dur Long Str. Omni MT Pro. Tool
+> (A) Offline long / omni-modal video benchmarks
+> Video-MME CVPR’25 Manual MC 317.0 ✓✗✓✗✗✗
+> LongVideoBench NeurIPS’24 Manual MC 27.9 ✓✗✗✗✗✗
+> MLVU CVPR’25 Manual Mixed 215.5 ✓✗✗✗✗✗
+> (B) Online / streaming video benchmarks
+> StreamingBench ‡ICLR’25 Hybrid MC 59.7 ✗✓✓✓✓§✗
+> OVO-Bench ‡CVPR’25 Hybrid Mixed 43.5 ✗✓✗✗✓§✗
+> OVBench CVPR’25 Hybrid MC 11 5.5 ✗✓✗✓✗✗
+> RTV-Bench NeurIPS’25 Hybrid MC 818.2 ✗✓✗✗✗✗
+> OST-Bench NeurIPS’25 Hybrid Mixed 7N/A ✗✓✗✗✗✗
+> (C) Proactive / duplex streaming benchmarks
+> OmniMMI CVPR’25 Manual Mixed 25.4 ✗✓✓✓✓✗
+> QIVD (Qualcomm) ICLR’26 Manual Open 10.09 ✗✓✓✗✓✗
+> Ours —Manual Open ∼15 88.8 ✓✓✓✓✓✓
+
+Table 1. Properties of video understanding benchmarks. Anno. and Ans. denote annotation and answer formats; Q/Vid and Dur denote mean questions per video and mean duration in minutes. Capability columns cover long videos, causal streaming, joint video and audio, multi-turn dialogue, proactive triggering, and external tools. ‡ marks documented recency shortcuts [1]; § marks separate queries before and at the target event rather than continuous monitoring. 
+
+methods on such evaluations [1]. High benchmark scores therefore do not necessarily establish sustained, causal understanding of an hour-scale stream. To close these evaluation gaps, we introduce StreamArena and design its annotation protocol around the requirements of continuous deployment. First, 243 full-length videos with an average duration of 88.8 minutes expose models to genuinely long temporal horizons rather than isolated clips. Second, all questions require open-ended generation, removing answer-option cues that can mask failures in audio-visual grounding. Third, annotators assign separate timestamps to each query and every supporting evidence segment. This dual temporal grounding enforces causal access, measures the evidence-to-query gap, and specifies when a proactive response should occur. Questions within each video also preserve conversational continuity, enabling multi-turn evaluation over a shared stream. Quality control directly targets answerability and temporal correctness: two independent annotators answer each draft solely from the video and correct factual, linguistic, or timestamp errors, after which a third annotator conducts a blind audit. The pipeline removes approximately 27% of the drafts and yields 3,646 validated tasks. These tasks measure four deployment capabilities: (1) real-time perception of unfolding events, (2) historical retrospection over distant evidence, (3) proactive interaction without a new user prompt, and (4) multimodal tool utilization grounded in the observed stream. Across these four capabilities, existing systems reveal clear trade-offs. Turn-based MLLMs can reason over rich video evidence, but only after a query, and do not target proactive responses. AURA [13] and MiniCPM-o [20] keep only recent observations, enabling prompt responses but limiting memory; AURA drops from 25.4% historical accuracy within five minutes to 10.5% beyond thirty minutes. VST [21] replaces past visual evidence with a text summary, achieving 21.2% on retrospection, but does not target Proactive or tool use. StreamForest [22] and ThinkStream [23] process video continuously, although their results indicate room for improvement: StreamForest obtains 14.4% on retrospection, while ThinkStream scores 8.0%, 7.5%, 1.2%, and 1.8% across perception, retrospection, Proactive, and tool use. These results highlight the complementary strengths of existing approaches while showing that strong performance across all four capabilities remains challenging. To address these limitations, we introduce StreamMind , a simple yet effective two-tier architecture with independently scheduled, function-specific workers. A Front Worker dispatches requests, and Monitor Workers track future conditions without blocking interaction. Asynchronously, a Memory Writer stores hierarchical events, entity relations, and key frames, while Router, Recall, and Search Workers perform evidence-driven retrieval. This separation preserves visual evidence while moving memory construction and multistep reasoning off the response-critical path. StreamMind improves over the strongest streaming baseline for each capability by 58.4% on real-time perception, 53.7% on historical retrospection, 228.1% on tool use, and 54.7% on proactive interaction. With the same Qwen3.5-397B-A17B backbone, it reduces pooled query-to-answer latency by 266.2%. Our main contributions are summarized as follows: • We introduce StreamArena , the first benchmark to jointly evaluate four capabilities over continuous audio-visual streams. It contains 243 full-length videos averaging 88.8 minutes and 3,646 manually validated, open-ended tasks with causal query and evidence timestamps. • Extensive experiments across five classes of systems show that existing designs support perception, retro-spection, Proactive, and tool use only partially or perform poorly when covering them jointly, revealing the conditions under which each design fails. • We propose StreamMind , a simple yet effective two-tier architecture that decouples interaction from memory and retrieval. It ranks first among streaming systems on all four capabilities, improving over the strongest corresponding baselines by 53.7% to 228.1% while reducing pooled response latency by 66.2% under a shared backbone. 
+
+# 2 Methodology 
+
+This section introduces StreamArena, an hour-scale causal benchmark, and StreamMind, an architecture decoupling responsive interaction from long-horizon memory. 
+
+## 2.1 The StreamArena Benchmark 
+
+Unlike existing datasets that evaluate passive memory retention on offline clips, StreamArena provides a testbed for always-on streaming assistants. We outline its data curation protocol, statistical insights, and evaluation metrics below. 
+
+Dataset Construction and Annotation Video sourcing. We source YouTube videos from seven domains. Each video lasts at least 60 minutes, has a resolution of at least 1080p, and includes English or Chinese audio. We exclude sensitive, inappropriate, and political content. 
+
+Annotation protocol and question design. Thirty PhD-level annotators draft approximately 20 multi-turn question-answer pairs per video. Two independent cross-validators then answer and correct each draft, and a third independent annotator audits its question, answer, evidence, and timestamps. Answers are concise and objective, and every query and supporting evidence segment has an explicit timestamp. Questions from the same video preserve conversational continuity. Figure 1 illustrates the four capabilities: (1) real-time multimodal perception requires joint reasoning over synchronized audio and video; (2) historical retrospection queries past events; (3) multimodal tool utilization requires Google Search for information unavailable from the stream or parametric memory; and (4) proactive interaction requires autonomous monitoring and alerting. This three-stage process retains approximately 73% of drafts, yielding about 15 finalized pairs per video and 3,646 pairs in total. 
+
+Dataset Statistics Scale and composition. Figure 1(a-d) summarizes StreamArena’s 243 videos and 3,646 question-answer pairs across seven domains. Videos span 60 to 134.2 minutes (88.8 on average), with 263 perception, 877 retrospection, 1,732 tool-use, and 774 proactive tasks. 
+
+Temporal and evidence statistics. Historical-retrospection questions have a median evidence-to-query gap of 12.1 minutes, with an interquartile range of 5.7 to 25.7 minutes, and 49 questions place the nearest annotated evidence more than one hour before the query. Moreover, 189 questions (21.6%) require joint attention to at least two distinct evidence segments, with the most demanding question spanning 15 segments. Table 2 aligns the temporal distribution with the strata used in Table 3: 20.6% of HR questions fall beyond 30 minutes, while 12.0% of proactive tasks require monitoring for more than 4 minutes. 3Real -Time Multimodal Perception  
+
+> What‘s your apartment number? … 521
+
+Q: What is the room number that the on-screen actress mentioned? 
+
+> Query Time
+
+A: 521 
+
+Proactive Interaction 
+
+Q: When the song " Les Mouchoirs Blancs " starts playing, describe what Wang Tiemei is doing .
+
+A: Wang Tiemei is vacuuming 
+
+> Query Time
+> …. Enfant quand on se couche … I think being in the audience is great…
+> Answer Time
+
+Historical Retrospection 
+
+Q: Count how many unique scenes appeared in the last 5 minutes ? 
+
+> Home Query Time
+> Car
+
+What are the nationalities of actor An Dong's parents? 
+
+Multimodal Tool Utilization 
+
+Q: What are the nationalities of the parents of the on-screen boy actor ? 
+
+> Query Time
+> image Search Actor Anton
+
+A: Father – German; Mother – Chinese. A: 5  
+
+> Text Search Text Query:
+> What nationalities are actor Anton's parents?
+
+Dataset Statistics        
+
+> (a). Source Domain Distribution (b). Question Type Distribution (c). Time Duration Distribution (d). Evidence Time-Span Distribution
+> Instant Omni-Joint Reasoning !!!
+> Long-Horizon Memory Recall !!!
+> Autonomous Event Triggering !!!
+> Beyond-Memory Tool Use !!!
+
+Figure 1. Overview of StreamArena . The top row summarizes (a) source domains, (b) task types, (c) video durations, and (d) temporal gaps between queries and supporting evidence. The remaining panels show one example of each evaluated capability. Red boxes mark the audio-visual evidence required to answer a question, while dark-blue boxes mark the query time and, for proactive tasks, the expected response time. 
+
+Capability Layer Horizon #Questions 
+
+HR L1 ≤ 5 min 181 (20.6%) L2 5 to 15 min 330 (37.6%) L3 15 to 30 min 185 (21.1%) L4 > 30 min 181 (20.6%) Pro. L1 ≤ 30 s 259 (33.5%) L2 30 s to 4 min 422 (54.5%) L3 > 4 min 93 (12.0%) 
+
+Table 2. Temporal strata for historical retrospection (HR) and proactive interaction (Pro.). 
+
+Evaluation Metrics 
+
+Because StreamArena adopts open-ended question, exact-match accuracy is insufficient. Gemini 3.1 Pro serves as the LLM judge and makes a strict binary decision on whether each response contains the factual core of its ground truth. Let Q represent the set of queries, with N = |Q| . For a given query qi ∈ Q , let ˆai be the agent’s generated response and a∗
+
+i denote the ground truth. We formulate our evaluation across two primary dimensions. 
+
+Response accuracy and tool-enabled performance. For explicitly triggered tasks (e.g., historical retrospection, multimodal tool utilization), the primary objective is factual correctness. We define the accuracy (Acc) as: Acc = 1
+
+N
+
+NX
+
+i=1 
+
+I
+
+
+
+Judge (ˆ ai, a ∗
+
+i ) = 1 
+
+
+
+, (1) where the indicator function I(·) yields 1 if the LLM judge verifies that ˆai strictly encapsulates the factual core of a∗
+
+i , and 0 otherwise. For tool-utilization tasks, this is a tool-enabled end-to-end answer metric; answer correctness alone does not establish whether or how a tool was invoked. 4Streaming Video & Audio Input 
+
+Audio Frames 
+
+Memory Writer 
+
+> Speech-To-Text MLLM
+> ～30 frames
+> Previous Events & Entities Retrieve Events & Entities Update/Add Entities Create/ Aggregate Events
+
+Audio Frames 
+
+Front Worker 
+
+> Speech-To-Text
+> ～12 frames MLLM
+
+User Prompt 
+
+Router Worker            
+
+> Example Mission :Find the room number that
+> Xiaoye mentioned and find the Birthday of the actor who lives in that room.
+> Search & Recall Mission
+> Real Time Mission Monitor Mission
+> Answer Directly !!!
+> Delegate !!!
+> Delegate !!!
+> MLLM Recall - Room & Resident
+> Planning !!!
+> Search – Name of Actor
+
+Recall Worker 
+
+Memory Bank Entities Relation Graph Event Metadata      
+
+> XiaoYe
+> TieMei
+> MoLi
+> XiaoHu
+> XiaoMa
+> QianFu
+> BaoAn
+> Ex-couple Mom Dad Crush neighbor bandmate lobby guard neighbor
+> Hierarchical Event Layer
+> Super Event
+> Macro Event
+> Micro Event
+> Aggregate by Threshold
+> Key Frames Key Entities Descriptions: XiaoYe went to 521 for her crush XiaoHu but was stopped by Security at the front desk.
+> Retrieve Events & Entities
+> Recall Tool
+> 1. Search By Entity --XiaoYe went to 521…
+> 2. Get Event Details --Visiting !!!
+> 3. Get Key Frames --Actor Information
+
+Search Worker  
+
+> Search Tool
+> 1. Image Crop & Search
+> Ren Bin
+> 2. Text Search --Ren Bin’s Birthday
+> 1989.11.14
+
+Monitor Worker      
+
+> Example Mission :. Tell me "start" when XiaoYe takes
+> Moli out for ice cream
+
+Audio Frames   
+
+> Wake Up Per Second !!!
+> <Silent> <Silent>
+> Start !!!
+> All Kinds Events
+> Frontend Tier
+> Backend Tier Event-driven Flow Continuous Stream
+
+Figure 2. Overview of StreamMind . The frontend handles interaction and monitoring; the backend maintains memory and performs retrieval. The Memory Bank combines hierarchical events, entity relations, and key frames. 
+
+Temporal latency and triggering accuracy. For reactive tasks, we measure query-to-answer response latency as L = tresp − tquery . This interval includes every operation triggered by the query, including routing, recall, external search, and model inference, while excluding continuous stream processing completed before the query arrives. For proactive tasks, the user first registers a monitoring instruction, after which the agent alerts autonomously when the target event occurs, without receiving another prompt at that moment. Let tpred be the video timestamp of the observation that triggers the alert and tgt the annotated event timestamp. We exclude subsequent response-generation latency from tpred so that the metric evaluates temporal vigilance rather than decoding speed. A proactive response is correct only if its content and trigger time are both valid: Proactive-Acc = 1
+
+Npro 
+
+Npro 
+
+X
+
+i=1 
+
+I[Judge (ˆ ai, a ∗
+
+i ) = 1] I
+
+h
+
+TimeOK( tpred 
+
+i , t gt 
+
+i ) = 1 
+
+i
+
+, (2) where Npro is the number of proactive tasks and TimeOK accepts −0.5 s ≤ tpred 
+
+i −tgt 
+
+i ≤ 2.0 s. This formulation requires the agent to detect the event at the correct point in the stream regardless of its subsequent text generation speed. 
+
+## 2.2 The StreamMind Architecture 
+
+StreamMind decouples latency-sensitive interaction from long-horizon cognition through the two-tier architecture in Figure 2. The frontend interfaces with users and performs task dispatch, whereas the backend maintains persistent memory and executes retrieval-intensive reasoning. Function-specific workers communicate through on-demand requests while sharing memory updated only with observations available so far. This design lets the frontend respond immediately and access long-horizon evidence when needed. 
+
+Frontend interaction and dispatch. The Front Worker is the interaction gateway and high-level dispatcher. Given the user turn, recent causal observations, and conversation state, it selects among three paths. It answers immediately when context is sufficient, formulates a retrieval brief for the backend when the request requires historical or external evidence, or instantiates a Monitor Worker when the user asks the system to watch for a 5future condition. Each Monitor Worker maintains an independent lifecycle for its assigned condition and notifies the frontend only when that condition is satisfied. Consequently, persistent vigilance does not occupy the Front Worker or delay unrelated interactions. 
+
+Asynchronous memory construction. In parallel with frontend interaction, the Memory Writer contin-uously transforms incoming frames and speech observations into the Memory Bank shown in Figure 2. Its hierarchical event layer organizes local actions into micro events and progressively aggregates them into macro and super events. The complementary entity relation graph links recurring people, objects, locations, and their relations across time. Events retain key entities, temporal boundaries, textual descriptions, and representative frames, preserving both compact semantic structure and retrievable visual evidence. Memory construction is independent of user queries, so the stream is consolidated before a later question reveals which evidence will be needed. 
+
+Backend retrieval and coordination. When the Front Worker delegates a mission, the Router Worker becomes the coordinator. It decomposes the request into Recall and Search subtasks, executes independent subtasks concurrently, inspects their returned evidence, and either issues another round of retrieval or synthesizes the final response. The Recall Worker performs content-addressable retrieval over the event hierarchy and entity graph, returning relevant descriptions, relations, and historical key frames. The Search Worker grounds visible entities through image retrieval and acquires information unavailable from the stream through external text search. Their composition supports multistage requests: the Router can first recover an earlier event and its key frame through Recall, then use that frame as the visual anchor for Search. Recall and Search therefore remain specialized and need not communicate directly; the Router mediates their evidence exchange and global reasoning state. 
+
+Decoupled execution. The solid and dashed flows in Figure 2 summarize two execution modes. Continuous ingestion drives monitoring and memory construction, while event-driven messages create Monitors or activate backend recall or external search only when required. Every query-driven memory read is bounded by the corresponding query time, preserving causal access to the stream. By pairing a non-thinking Front Worker with thinking-enabled backend workers, StreamMind supports low-latency interaction, proactive monitoring, historical recall, and external tool use. 
+
+# 3 Experiments 
+
+## 3.1 Experimental Setups 
+
+We evaluate five architecture groups on StreamArena: (A) offline turn-based MLLMs, including Qwen3.5-397B-A17B, MiMo-V2.5, Kimi-K2.6, Gemini 3.5 Flash, and Qwen3.5-Omni; (B) recent-window methods, namely AURA [13] and MiniCPM-o-4.5 [20]; (C) the text-summary method VST [21]; (D) model-internal compression methods, namely StreamForest [22] and ThinkStream [23]; and (E) our StreamMind. Gemini 3.1 Pro scores every supported output using the same strict factual-core decision, and systems with proactive support share the same timing rule. To reflect each system’s design, we retain its native inference mechanism rather than forcing all methods into continuous ingestion. Although several baselines are architecturally designed for streaming input, their released evaluation interfaces reconstruct a method-specific causal prefix or recent window when a query or monitoring task arrives and preserve no hidden video state across tasks. We use these interfaces for capability comparison while distinguishing query-triggered evaluation from continuous, stateful ingestion. StreamMind ingests frames sequentially from t = 0 at 2 fps while memory construction and monitoring continue between user turns. 
+
+Evaluation protocols. Offline models uniformly sample up to 128 frames from each causal prefix. AURA and MiniCPM-o use the latest 30 seconds, while VST summarizes at most 384 causal-prefix frames. StreamForest and ThinkStream reconstruct causal prefixes using up to 2,048 frames and 120 two-frame chunks, respectively. StreamMind continuously ingests at 2 fps and preserves state. Reactive inputs never contain frames after the query time, and dialogue history is preserved within each video. 6Method Backbone ASR RTP ↑ HR ↑ Tool ↑ Pro. ↑                                                                                                                                                                        
+
+> Avg. L1 L2 L3 L4 Avg. L1 L2 L3 Human §––91.8 80 .7⟲84.2 82.1 79.5 75.8 95.2 91.5 94.6 91.3 83.4
+> 63 .4→78.6 68.9 56.4 45.1
+> (A) Offline turn-based MLLMs
+> Qwen3.5-397B-A17B –✓44.1 41.5 44.2 47.3 39.5 30.4 62.2 ––––MiMo-V2.5 –✗38.0 35.8 29.3 45.5 31.9 28.7 47.9 ––––Kimi-K2.6 –✓47.9 43.8 42.5 53.3 38.4 33.1 60.9 ––––Gemini 3.5 Flash †–✗51.3 51.4 45.8 57.8 51.4 45.3 70.8 ––––Qwen3.5-Omni †–✗41.8 35.8 31.5 44.8 34.1 25.4 49.4 ––––
+> (B) Recent-window methods
+> AURA ‡Qwen3-VL-8B-Instruct ✓28.1 22.7 25.4 27.0 24.3 10.5 –3.7 8.9 1.4 0.0 MiniCPM-o-4.5 ‡Qwen3-8B ✗22.1 9.8 10.5 13.3 7.6 5.0 17.1 7.5 7.3 8.1 5.4
+> (C) Text-summary methods
+> VST ‡Qwen2.5-VL-Instruct ✓24.0 21.2 22.1 24.8 23.2 11.6 –––––
+> (D) Model-internal compression methods
+> StreamForest Qwen2-7B ✓17.9 14.4 19.3 13.6 14.1 11.0 –––––ThinkStream Qwen2.5- VL-3B ✓8.0 7.5 12.2 7.9 5.4 4.4 1.8 1.2 2.7 0.5 0.0
+> (E) Ours
+> StreamMind (Ours) Qwen3.5-397B-A17B ✓44.5 34.9 31.5 46.7 34.6 17.1 56.1 11.6 16.6 9.5 7.5
+
+Table 3. Accuracy (%) on StreamArena . HR levels denote evidence-to-query gaps of ≤ 5, 5 to 15, 15 to 30, and > 30 
+
+minutes; Pro. levels denote monitoring horizons of ≤ 30 seconds, 30 seconds to 4 minutes, and > 4 minutes. Avg. is question-weighted. ASR indicates explicit transcript input. For Human §, ⟲ and → denote HR with and without rewatching, corresponding to offline and streaming conditions, respectively. † denotes a closed-source model, ‡ an author-finetuned backbone, and – not applicable or an unsupported capability. 
+
+## 3.2 Main Results 
+
+Table 3 compares five architecture groups across the four target capabilities and four HR horizons. StreamMind ranks first among streaming systems in every capability, while the temporal breakdown reveals how alternative memory designs degrade as evidence becomes more distant. 
+
+Unified capability coverage. The human reference reaches 91.8% on RTP, 95.2% on Tool, and 91.5% on Proactive. On HR, human accuracy decreases from 80.7% with rewatching to 63.4% without it, illustrating the difficulty of retaining hour-scale evidence under streaming access. Offline turn-based MLLMs provide strong reactive references, but they do not support proactive interaction and do not maintain state as the video unfolds. Other systems cover only part of the target capability space: recent windows favor recent perception, text summaries sacrifice visual evidence, and model-internal compression remains weak on open-ended long-horizon questions. StreamMind is the only evaluated system that combines continuous ingestion with support for all four capabilities. Relative to the strongest streaming baseline that supports each capability, it improves RTP by 58.4%, HR by 53.7%, Tool by 228.1%, and Proactive by 54.7% relatively. These results show that persistent memory, proactive monitoring, and retrieval are complementary components rather than interchangeable forms of temporal context. 
+
+Long-horizon comprehension. StreamMind improves every HR gap bucket over the strongest streaming baseline for that bucket, with relative gains ranging from 24.0% to 73.0%. Recent-window methods lose observations outside their recent context, whereas text-summary and model-internal compression methods retain broader temporal coverage at the cost of fine-grained evidence. StreamMind instead retrieves both structured event descriptions and associated key frames from persistent memory. Its advantage across all four gap ranges indicates that long-horizon streaming benefits from preserving retrievable multimodal evidence rather than relying on a single transient context or textual summary. 7(c). Reasoning mode (b). Resolution (a). Frame budget Figure 3. Accuracy (%) on the diagnostic subset under changes to (a) frame count, (b) resolution, and (c) reasoning mode.                               
+
+> Method ACC ↑Mean latency (s) ↓
+> A (RTP) B (HR) D (T OOL )Gemini 3.5 Flash †63.1 86.9 123.9 139.5 Kimi-K2.6 54.5 162.8 187.9 128.2 Qwen3.5-397B-A17B 54.2 83.8 117.4 62.8 Qwen3.5-Omni †44.6 50.8 56.4 103.7 MiMo-V2.5 43.3 224.5 266.5 187.4
+> StreamMind (Ours) 48.6 12.9 30.7 28.1
+
+Table 4. Mean query-to-answer latency in seconds and pooled accuracy (%) on RTP, HR, and Tool questions. † denotes a closed-source model. 
+
+Tool use and proactive interaction. Tool questions require the system to ground visual referent, identify information gap, invoke an appropriate retrieval operation, and integrate external evidence. StreamMind’s relative improvement of 228.1% over the strongest streaming baseline on Tool reflects the value of explicit coordination among Router, Recall, and Search Workers. Proactive interaction presents a different challenge because the system receives no new prompt when the target event occurs. StreamMind obtains a relative improvement of 54.7% through independently scheduled Monitor Workers, showing that persistent vigilance and reactive question answering require distinct execution paths. 
+
+## 3.3 Online Response Latency 
+
+Table 4 reports the wall-clock interval from query arrival to final-answer generation. The most controlled comparison uses Qwen3.5-397B-A17B as the shared backbone. Relative to query-triggered offline inference, StreamMind reduces response latency by 84.6% on RTP, 73.9% on HR, and 55.3% on Tool. Weighting the three categories by their numbers of questions gives a 66.2% relative reduction, from 81.4 to 27.5 seconds, while StreamMind retains 89.7% of the pooled accuracy. Comparisons with other backbones provide practical system references, but their latency also reflects differences in model scale and serving infrastructure. The reduction arises from state reuse rather than free computation. Offline models sample and encode a visual context independently for every question. StreamMind continuously constructs memory before a query arrives, then retrieves task-relevant events and key frames on demand. It therefore moves persistent perception and memory construction away from the response-critical path while including all query-triggered routing, recall, search, and inference in the reported latency. 
+
+## 3.4 Benchmark Diagnostic Analysis 
+
+We further audit common input shortcuts on a 616-question subset of StreamArena, comprising 71 real-time perception, 180 historical retrospection, and 365 tool-utilization questions. All diagnostics use Qwen3.5-397B-A17B with the same scoring protocol. Unless varied, the model receives 128 frames at 720p with ASR and uses thinking mode. 8Available input RTP HR Tool Overall              
+
+> ASR only 4.2 16.7 42.5 30.5 Visual only (128 frames) 26.8 37.8 60.5 50.0 Visual + ASR (128 frames) 32.4 41.1 60.0 51.3
+> Table 5. Accuracy (%) by input modality on the diagnostic subset. Visual conditions use 128 frames.
+
+Modality availability. Table 5 highlights the multimodal nature of RTP questions. ASR-only input achieves 4.2% accuracy, while visual-only input reaches 26.8%. Combining visual input with ASR further improves accuracy to 32.4%, a gain of 5.6 percentage points over visual input alone. This result shows that visual evidence is essential for real-time perception, while speech provides complementary information that cannot be recovered from sampled frames alone. 
+
+Evidence budgets and reasoning mode. Figure 3 examines temporal coverage, spatial fidelity, and reasoning mode. Increasing the frame budget primarily benefits HR, while higher resolution improves all three tasks. Thinking further improves HR and Tool but slightly reduces RTP, suggesting that extended reasoning aids evidence integration at the cost of immediate perceptual precision. These trends support StreamMind’s role-specific reasoning configuration. 
+
+# 4 Discussion and Future Work 
+
+Long-horizon memory requires future-aware retention. StreamMind improves HR across temporal strata, but its 63.4% decrease from L2 to L4 shows that long-horizon memory is not a capacity problem. Since future queries are unknown during ingestion, future work should learn from retrieval outcomes to estimate evidence utility and preserve uncertain multimodal details at adaptive fidelity. 
+
+Backbone scale and comparison scope. StreamMind uses Qwen3.5-397B-A17B because its workers require reliable instruction following for structured memory construction, tool routing, and condition monitoring. Since several streaming baselines use smaller backbones, their comparison with StreamMind reflects both model capacity and system design. We therefore do not attribute every accuracy gain to the architecture alone. Instead, the same-backbone offline Qwen3.5-397B-A17B comparison isolates the system-level trade-off: StreamMind retains 89.7% of pooled accuracy while reducing response latency by 66.2% through persistent state reuse. Proactive interaction has no direct offline counterpart because it requires continuous monitoring without a new user query. Evaluating smaller backbones and individual architectural components remains important future work. 
+
+# 5 Conclusion 
+
+We introduce StreamArena, an hour-scale benchmark that jointly evaluates real-time multimodal perception, historical retrospection, multimodal tool utilization, and proactive interaction under causal access. Its open-ended questions, timestamped evidence, and continuous protocol expose shortcuts that remain hidden in short-clip or multiple-choice evaluation. Experiments reveal a central tension between responsive interaction and persistent multimodal understanding. StreamMind addresses this tension through a decoupled architecture that combines frontend interaction with asynchronous memory construction, historical recall, and external search. It improves all four capabilities over existing streaming baselines and reduces query-to-answer latency by reusing state accumulated before each query. The remaining gaps in hour-scale recall, proactive monitoring, and continuous processing efficiency identify concrete directions toward practical always-on multimodal agents. 9References 
+
+[1] Yujiao Shen, Shulin Tian, Jingkang Yang, and Ziwei Liu. A simple baseline for streaming video under-standing. arXiv preprint arXiv:2604.02317 , 2026. [2] Michele Cournan, Benjamin Fusco-Gessick, and Laura Wright. Improving patient safety through video monitoring. Rehabilitation Nursing , 2016. [3] Jungmo Ahn, JaeYeon Park, Sung Sik Lee, Kyu-Hyuk Lee, Heesung Do, and JeongGil Ko. Safefac: Video-based smart safety monitoring for preventing industrial work accidents. Expert Systems with Applications ,215:119397, 2023. [4] Ruixuan Zhang, Beichen Wang, Juexiao Zhang, Zilin Bian, Chen Feng, and Kaan Ozbay. When language and vision meet road safety: leveraging multimodal large language models for video-based traffic accident analysis. Accident Analysis & Prevention , 219:108077, 2025. [5] Corey Lynch, Ayzaan Wahid, Jonathan Tompson, Tianli Ding, James Betker, Robert Baruch, Travis Armstrong, and Pete Florence. Interactive language: Talking to robots in real time. IEEE Robotics and Automation Letters , 2023. [6] Huang Fang, Mengxi Zhang, Heng Dong, Wei Li, Zixuan Wang, Qifeng Zhang, Xueyun Tian, Yucheng Hu, and Hang Li. Robix: A unified model for robot interaction, reasoning and planning. arXiv preprint arXiv:2509.01106 , 2025. [7] Hang Zhang, Xin Li, and Lidong Bing. Video-llama: An instruction-tuned audio-visual language model for video understanding. In Proceedings of the 2023 conference on empirical methods in natural language processing: system demonstrations , pages 543–553, 2023. [8] Bin Lin, Yang Ye, Bin Zhu, Jiaxi Cui, Munan Ning, Peng Jin, and Li Yuan. Video-llava: Learning united visual representation by alignment before projection. In Proceedings of the 2024 conference on empirical methods in natural language processing , pages 5971–5984, 2024. [9] Muhammad Maaz, Hanoona Rasheed, Salman Khan, and Fahad Khan. Video-chatgpt: Towards detailed video understanding via large vision and language models. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 12585–12602, 2024. [10] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Ziwei Liu, et al. Llava-onevision: Easy visual task transfer. arXiv preprint arXiv:2408.03326 ,2024. [11] Bytedance Seed. Seed2. 0 model card: Towards intelligence frontier for real-world complexity. arXiv preprint arXiv:2607.00248 , 2026. [12] OpenAI. GPT-Realtime-2: A multimodal speech-to-speech large language model. https://openai. com , 2026. Accessed: 2026-07-15. [13] Xudong Lu, Yang Bo, Jinpeng Chen, Shuhan Li, Xintong Guo, Huankang Guan, Fang Liu, Dunyuan Xu, Peiwen Sun, Heyang Sun, et al. Aura: Always-on understanding and real-time assistance via video streams. 
+
+arXiv preprint arXiv:2604.04184 , 2026. [14] Thinking Machines Lab. Interaction models: A scalable approach to human-ai collaboration. Thinking Machines Lab: Connectionism , May 2026. https://thinkingmachines.ai/blog/interaction-models/. [15] Joya Chen, Zhaoyang Lv, Shiwei Wu, Kevin Qinghong Lin, Chenan Song, Difei Gao, Jia-Wei Liu, Ziteng Gao, Dongxing Mao, and Mike Zheng Shou. Videollm-online: Online video large language model for streaming video. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 18407–18418, 2024. 10 [16] Rui Qian, Shuangrui Ding, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Yuhang Cao, Dahua Lin, and Jiaqi Wang. Dispider: Enabling video llms with active real-time interaction via disentangled perception, decision, and reaction. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 24045–24055, 2025. [17] Chaoyou Fu, Yuhan Dai, Yongdong Luo, Lei Li, Shuhuai Ren, Renrui Zhang, Zihan Wang, Chenyu Zhou, Yunhang Shen, Mengdan Zhang, et al. Video-mme: The first-ever comprehensive evaluation benchmark of multi-modal llms in video analysis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24108–24118, 2025. [18] Junming Lin, Zheng Fang, Chi Chen, Haoxuan Cheng, Zihao Wan, Fuwen Luo, Ziyue Wang, Peng Li, Yang Liu, and Maosong Sun. Streamingbench: Assessing the gap for mllms to achieve streaming video understanding. In ICASSP 2026-2026 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pages 12147–12151. IEEE, 2026. [19] Yuxuan Wang, Yueqian Wang, Bo Chen, Tong Wu, Dongyan Zhao, and Zilong Zheng. Omnimmi: A comprehensive multi-modal interaction benchmark in streaming video contexts. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 18925–18935, 2025. [20] Junbo Cui, Bokai Xu, Chongyi Wang, Tianyu Yu, Weiyue Sun, Yingjing Xu, Tianran Wang, Zhihui He, Wenshuo Ma, Tianchi Cai, et al. Minicpm-o 4.5: Towards real-time full-duplex omni-modal interaction. 
+
+arXiv preprint arXiv:2604.27393 , 2026. [21] Yiran Guan, Liang Yin, Dingkang Liang, Jianzhong Ju, Zhenbo Luo, Jian Luan, Yuliang Liu, and Xiang Bai. Video streaming thinking: Videollms can watch and think simultaneously. arXiv preprint arXiv:2603.12262 ,2026. [22] Xiangyu Zeng, Kefan Qiu, Qingyu Zhang, Xinhao Li, Jing Wang, Jiaxin Li, Ziang Yan, Kun Tian, Meng Tian, Xinhai Zhao, et al. Streamforest: Efficient online video understanding with persistent event memory. 
+
+Advances in Neural Information Processing Systems , 38:75804–75835, 2026. [23] Zikang Liu, Longteng Guo, Handong Li, Ru Zhen, Xingjian He, Ruyi Ji, Xiaoming Ren, Yanhao Zhang, Haonan Lu, and Jing Liu. Thinking in streaming video. arXiv preprint arXiv:2603.12938 , 2026. [24] Cong Chen, Guo Gan, Kaixiang Ji, ChaoYang Zhang, Zhen Yang, Guangming Yao, Hao Chen, Jingdong Chen, Yi Yuan, and Chunhua Shen. Memdreamer: Decoupling perception and reasoning for long video understanding via hierarchical graph memory and agentic retrieval mechanism. arXiv preprint arXiv:2606.07512 , 2026. [25] Lin Long, Yichen He, Wentao Ye, Yiyuan Pan, Yuan Lin, Hang Li, Junbo Zhao, and Wei Li. Seeing, listening, remembering, and reasoning: A multimodal agent with long-term memory. arXiv preprint arXiv:2508.09736 , 2025. [26] Jingkang Yang, Shuai Liu, Hongming Guo, Yuhao Dong, Xiamengwei Zhang, Sicheng Zhang, Pengyun Wang, Zitang Zhou, Binzhu Xie, Ziyue Wang, et al. Egolife: Towards egocentric life assistant. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference , pages 28885–28900, 2025. [27] Aniket Rege, Arka Sadhu, Yuliang Li, Kejie Li, Ramya Korlakai Vinayak, Yuning Chai, Yong Jae Lee, and Hyo Jin Kim. Agentic very long video understanding. arXiv preprint arXiv:2601.18157 , 2026. [28] Haoning Wu, Dongxu Li, Bei Chen, and Junnan Li. Longvideobench: A benchmark for long-context interleaved video-language understanding. Advances in Neural Information Processing Systems , 37:28828– 28857, 2024. [29] Junjie Zhou, Yan Shu, Bo Zhao, Boya Wu, Zhengyang Liang, Shitao Xiao, Minghao Qin, Xi Yang, Yongping Xiong, Bo Zhang, et al. Mlvu: Benchmarking multi-task long video understanding. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 13691– 13701, 2025. 11 [30] Junbo Niu, Yifei Li, Ziyang Miao, Chunjiang Ge, Yuanhang Zhou, Qihao He, Xiaoyi Dong, Haodong Duan, Shuangrui Ding, Rui Qian, et al. Ovo-bench: How far is your video-llms from real-world online video understanding? In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 18902–18913, 2025. [31] Zhenpeng Huang, Xinhao Li, Jiaqi Li, Jing Wang, Xiangyu Zeng, Cheng Liang, Tao Wu, Xi Chen, Liang Li, and Limin Wang. Online video understanding: Ovbench and videochat-online. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 3328–3338, 2025. [32] Shuhang Xun, Sicheng Tao, Jungang Li, Yibo Shi, Zhixin Lin, Zhanhui Zhu, Yibo Yan, Hanqian Li, Linghao Zhang, Shikang Wang, et al. Rtv-bench: Benchmarking mllm continuous perception, understanding and reasoning through real-time video. Advances in Neural Information Processing Systems , 38, 2026. [33] Jingli Lin, Chenming Zhu, Runsen Xu, Xiaohan Mao, Xihui Liu, Tai Wang, and Jiangmiao Pang. Ost-bench: Evaluating the capabilities of mllms in online spatio-temporal scene understanding. Advances in Neural Information Processing Systems , 38, 2026. [34] Reza Pourreza, Rishit Dagli, Apratim Bhattacharyya, Sunny Panchal, Guillaume Berger, and Roland Memisevic. Can vision-language models answer face to face questions in the real-world? arXiv preprint arXiv:2503.19356 , 2025. [35] Guankai Li, Jiabin Chen, Yi Xu, Xichen Zhang, and Yuan Lu. Hypereyes: Dual-grained efficiency-aware reinforcement learning for parallel multimodal search agents. arXiv preprint arXiv:2605.07177 , 2026. 12 A Related work 
+
+Interactive streaming video understanding. Traditional video language models target offline, turn-based question answering over pre-segmented clips [7, 8, 9]. To extend comprehension to longer recordings, MemDreamer [24], M3-Agent [25], EgoRAG [26], and EGAgent [27] organize visual evidence into hierarchical summaries, episodic and semantic memories, or entity-centric graphs for subsequent retrieval. These methods primarily study memory representation and retrieval after video processing, with less attention to interleaving memory construction and user queries under strict causal and latency constraints. Interactive streaming instead requires a query at time t to access only observations up to t. Streaming architectures support this causal, unbounded setting through hierarchical memory or selective token retention [22], but passive compression alone cannot determine when to speak, interrupt, or remain silent. Recent frameworks add triggering modules or dual-model systems for proactive interaction [14, 13], while StreamMind further decouples asynchronous memory construction from the real-time interaction path. 
+
+Video understanding benchmarks. Video-MME [17], LongVideoBench [28], and MLVU [29] test offline comprehension of long videos but omit causal, real-time constraints. StreamingBench [18], OVO-Bench [30], OVBench [31], RTV-Bench [32], and OST-Bench [33] study online understanding, yet short clips and multiple-choice questions introduce recency bias and language priors. Minimal baselines can consequently perform well without long-horizon reasoning [1]. OmniMMI [19] and QIVD (Qualcomm) [34] assess real-time multimodal interaction, but their short videos cannot measure sustained operation. StreamArena combines hour-scale videos, open-ended human-validated questions, proactive behavior, and external tool use. 
+
+# B StreamArena details 
+
+## B.1 Data collection and annotation pipeline 
+
+We use a three-stage annotation pipeline with 30 PhD-level annotators. 
+
+Video sourcing and filtering. Annotators collect YouTube videos from seven domains. Each video lasts at least 60 minutes and has a resolution of at least 1080p. Screening excludes sensitive, inappropriate, and political content. 
+
+Initial generation. Annotators draft approximately 20 question-answer pairs per video. Each task contains the question, query timestamp, reference answer, and timestamped audio-visual evidence. The two quality-control stages retain approximately 73% of drafts, producing about 15 finalized pairs per video and 3,646 pairs over 243 videos. 
+
+First-round cross-validation. Two annotators who do not participate in drafting independently answer each question from the video. They correct factual errors, ambiguous wording, and temporal misalignment. 
+
+Second-round independent audit. A third annotator, independent of drafting and cross-validation, audits each revised question, answer, and timestamp for consistency with the annotation guidelines. The final retention rate is approximately 73%. 
+
+## B.2 Task taxonomy 
+
+Every question in StreamArena belongs to one of four capabilities, each targeting a distinct axis of streaming competence. Below we give the operational definition, canonical query template, evidence structure, and scoring rule of every capability. Throughout this subsection we denote the video stream by S = {st}Tt=0 , where st is the audio-visual frame available at time t, and write Sa:b = {st}bt=a for the causal prefix or window of interest. A question is a tuple (qi, t qi , a ∗ 
+
+> i
+
+, Ei) that specifies the query text qi, its query time tqi , the ground-truth answer a∗ 
+
+> i
+
+,and the annotated evidence set Ei. The agent implements a policy f that emits a response ˆai; concrete signatures for f are given below. Every capability reuses the LLM-judge accuracy of Eq. (1) unless noted otherwise, and concrete examples are shown in Figure 1. 13 Real-time multimodal perception (RTP). RTP questions probe the ability of the agent to answer a query using audio-visual evidence in a short window around the query time. A typical question refers to an on-screen object, a person’s action, an ambient sound, or a spoken utterance whose grounding cue is visible or audible within a few seconds of tqi . Formally, the evidence set is a short window 
+
+ERTP  
+
+> i
+
+⊂ S tqi −δ : tqi +δ , δ ≤ 10 s, (3) and the agent produces a response 
+
+ˆai = fRTP 
+
+ qi, S0: tqi
+
+. (4) Scoring uses the accuracy in Eq. (1). This capability isolates joint audio-visual grounding over a short causal context : an agent that ignores the audio track, undersamples the stream, or fails to preserve transient cross-modal cues cannot recover the required evidence. 
+
+Historical retrospection (HR). HR questions require the agent to recall factual information from earlier in the stream. Each question is grounded in one or more timestamped supporting evidence segments 
+
+EHR  
+
+> i
+
+= {(tei,k , ψ i,k )}Ki
+
+> k=1
+
+, tei,k < t qi , (5) where ψi,k is an annotation that briefly describes the supporting cue at time tei,k and Ki ≥ 1. These descriptions are used only to identify and audit the supporting evidence and are not provided to the evaluated agent. The evidence-to-query gap 
+
+∆HR  
+
+> i
+
+= tqi − max  
+
+> k
+
+tei,k (6) can exceed one hour (Table 2), and the agent produces ˆai = fHR (qi, S0: tqi ) scored by Eq. (1). HR is designed to stress long-horizon memory : the agent needs to persist observations, index them by content, and retrieve them under an open-ended query. We further label every HR question with a reasoning pattern ri that specifies how the agent combines the 
+
+Ki evidence segments: (i) Single point (Ki = 1 ): a single evidence segment is sufficient (e.g., “what room number did the actress mention?”). (ii) Multi-point count (a∗ 
+
+> i
+
+∈ N): the agent counts the number of times an event or object occurs across multiple segments (e.g., “how many unique scenes appeared in the last five minutes?”). (iii) Multi-point recall (a∗ 
+
+> i
+
+= {ψi,k }k): multiple evidence segments each contribute a fact that jointly forms the answer. (iv) Multi-point compare : the agent compares quantities or attributes across two or more evidence segments (e.g., which of two prices was higher). (v) Temporal range : the answer summarizes a continuous interval [tei, 1, t ei,K i ] ⊂ [0 , t qi ] rather than a set of isolated points. 
+
+Multimodal tool utilization (Tool). Tool questions ask about entities, facts, or attributes that are not observable from the video stream itself. The evaluation protocol therefore equips the agent with external image and text search, represented by an operator π : X → Y ; the agent’s response follows 
+
+ˆai = fTool 
+
+ qi, S0: tqi , {π(xj )}j
+
+, (7) where {xj }j are search queries selected by the agent and {π(xj )}j are the returned external observations. As illustrated in Figure 1, the canonical workflow first grounds a visual referent (e.g., a person on screen at tqi ), then applies image search to obtain a textual handle (e.g., the actor’s name), and finally issues a text query to retrieve the requested attribute. Scoring uses Eq. (1). We therefore report Tool accuracy as tool-enabled end-to-end answer accuracy, rather than treating a correct final answer alone as proof that a particular tool was invoked. 14 Proactive interaction (Pro). The user issues a monitoring instruction qi at time tqi , before a target event annotated at time tgt  
+
+> i
+
+. No additional prompt is provided when the event occurs. After registering the instruction, the agent continuously monitors the subsequent stream and autonomously emits an alert; formally, 
+
+{(t, o i,t )}t≥tqi = fPro (qi, S0: t), oi,t ∈ { ∅} ∪ V alert , (8) where oi,t = ∅ denotes no alert and oi,t ∈ V alert an autonomous notification associated with the registered task. The immediate acknowledgment of qi, if any, is not an alert and is excluded from this output stream. We define tpred  
+
+> i
+
+= min {t ≥ tqi : oi,t ̸ = ∅}, with tpred  
+
+> i
+
+= + ∞ if no alert is produced. Because event annotations and sampled observations have finite temporal granularity, the timing rule allows a small lead while imposing a strict delay bound: 
+
+TimeOK( tpred  
+
+> i
+
+, t gt  
+
+> i
+
+) = I  − 0.5 s ≤ tpred  
+
+> i
+
+− tgt  
+
+> i
+
+≤ 2.0 s. (9) The metric is Proactive-Acc in Eq. (2). This capability isolates always-on temporal vigilance : an agent that only reasons when explicitly prompted cannot receive any credit. 
+
+## B.3 Complete dataset statistics 
+
+Video-level metadata. All 243 videos have a duration of ≥ 60 minutes, with a mean of 88.8 minutes and a maximum of 134.2 minutes. The audio-visual content is dominated by Mandarin: 189 videos carry a Chinese audio track, 25 are in English, 26 mix Chinese and English, and 3 are in another language. 17 of the 243 videos are recorded live streams, while the remaining 226 are non-live long-form recordings. Per-domain video counts and mean durations are reported in Table 6, and the per-domain distribution of the finer L2 sub-categories is reported in Table 7. 
+
+Per-domain composition. Table 6 lists, for each of the seven source domains, the number of videos, the mean video duration, and the number of question-answer pairs of each capability. The four capabilities are abbreviated as RTP (real-time multimodal perception), HR (historical retrospection), Tool (multimodal tool utilization), and Pro. (proactive interaction). Film & TV and Tutorial together account for roughly half of the videos, while every remaining domain contributes at least 17 videos and 262 questions, providing sufficient statistical mass for per-domain analysis. Table 7 refines this view by reporting the L2 sub-categories inside each domain.                                                                 
+
+> Domain #Videos Mean Dur. (min) RTP HR Tool Pro. Total Q Film & TV 66 90.0 66 239 438 207 950 Tutorial 57 86.4 77 210 413 201 901 Press Conference 43 82.5 36 153 312 123 624 E-commerce Live 21 91.8 20 85 128 66 299 Egocentric 20 87.7 22 57 146 49 274 Sports 19 97.8 26 67 171 72 336 Meeting & Interview 17 96.0 16 66 124 56 262 Total 243 88.8 263 877 1,732 774 3,646
+> Table 6. Per-domain video count, mean duration, and per-capability question counts on StreamArena.
+
+Historical-retrospection evidence complexity. For every HR question, annotators mark the video segments that supply the answer and tag the reasoning pattern (defined in Section B.2). Table 8 reports the pattern distribution over all 877 HR questions, and Table 9 reports the number of distinct evidence segments per question. The two views are complementary but not identical: while 312 questions ( 877 − 565 ) follow a multi-point or temporal-range reasoning pattern, 189 (21.6%) require the agent to jointly attend to at least two distinct evidence segments. Some multi-point-count and temporal-range questions can be resolved from a single internally structured segment, such as a continuous statistics panel or a time-lapse shot. The hardest examples span up to 15 segments, ruling out any purely single-shot solution. 15 Domain Sub-category (#videos) Film/TV Movie (40); Anime (16); TV series (10) Tutorial Programming / software tutorial (47); K-12 or academic subjects (6); Arts and crafts (3); Game walkthrough (1) Press Conference Film or game launch (22); Consumer tech launch (16); Automotive launch (5) E-commerce Live General livestream selling (19); Food and groceries (1); Cosmetics (1) Egocentric Travel vlog (16); Daily-life vlog (2); Retail or office surveillance (1); Game streaming (1) Sports Basketball (15); Other ball sports (4) Meeting/Interview Academic lecture (6); Celebrity interview or podcast (5); Live news broadcast (5); Politics or economics forum (1) 
+
+Table 7. L2 sub-category distribution inside each StreamArena source domain. Numbers in parentheses report the video count of the sub-category. Reasoning pattern #Questions Single point 565 Multi-point count 174 Multi-point recall 51 Multi-point compare 14 Temporal range 73 
+
+Table 8. Reasoning-pattern distribution over all 877 historical-retrospection questions. 
+
+# C Detailed experimental setups 
+
+To ensure reproducibility and a fair cross-paradigm comparison, we document the evaluation protocol for every system in Table 3. Appendix C.1 distinguishes the evaluation harness from model design. Appendix C.2 details Group (A), Appendix C.3 details Groups (B) and (C), and Appendix C.4 details Group (D). Appendix C.5 presents the full configuration of StreamMind, and Appendix C.6 records computing infrastructure and repro-ducibility notes. 
+
+## C.1 Evaluation harness and model design 
+
+A key axis of StreamArena is whether a system truly ingests the video as an unbounded causal stream or merely simulates streaming through query-triggered replay. We formalize this distinction along two orthogonal dimensions. 
+
+Harness dimension. Given a query at time tqi , let Vi ⊆ S denote the subset of frames that the harness makes available to the model to answer the i-th question. Under query-triggered replay, each method reconstructs its prescribed causal input on demand: 
+
+Vreplay  
+
+> i
+
+= Sample i
+
+
+
+Sai:tqi
+
+
+
+, 0 ≤ ai ≤ tqi , (10) where ai = 0 for prefix-replay methods and ai > 0 for recent-window methods. Under continuous ingestion, 
+
+Vstream  
+
+> i
+
+= sk/f cap : 0 ≤ k/f cap ≤ tqi , (11) where frames arrive sequentially at a fixed capture rate fcap from t = 0 and are irrevocably consumed by the model, which persists information in an internal state ht evolved by a causal recurrence 
+
+ht = ϕ ht−1/f cap , s t
+
+ , h0 = hinit . (12) Replay can revisit and reconstruct its designated interval independently for every question. Continuous ingestion instead consumes each sampled observation once and preserves relevant information in state before its future utility is known. 16 #Segments 1 2 3 4 5 6 ≥ 7
+
+#Questions 688 99 34 25 7 10 14 
+
+Table 9. Number of distinct video segments a historical-retrospection question requires the model to jointly attend to. 
+
+System Harness Model Design class 
+
+Offline turn-based MLLMs (A) Prefix replay Non-causal Offline turn-based AURA (B) Recent-window Causal, windowed Recent-window MiniCPM-o-4.5 (B) Recent-window Causal, windowed Recent-window VST (C) Prefix replay Causal, summarized Text-summary StreamForest (D) Prefix replay Causal, compressed Model-internal compression ThinkStream (D) Prefix replay / forward monitoring Causal, reasoning-compressed Model-internal compression 
+
+StreamMind (E, Ours) Continuous Causal, multi-worker Persistent multi-worker Table 10. Evaluation protocol taxonomy. Harness describes input delivery, Model describes temporal processing, and Design class identifies the architecture without conflating it with the evaluated harness. ThinkStream uses causal-prefix replay for reactive queries and forward monitoring for proactive tasks. 
+
+Model dimension. Independent of the harness, a model applies one of two attention patterns to its visual input. Writing z(v) 
+
+> t
+
+for the visual tokens at frame t and Attn (·) for a masked attention operator, non-causal processing computes token representations 
+
+z(v) 
+
+> t
+
+← Attn 
+
+
+
+z(v) 
+
+> t
+
+, {z(v) 
+
+> t′
+
+}t′∈[0 ,T max ]
+
+
+
+, (13) whereas causal processing enforces the prefix-only mask 
+
+z(v) 
+
+> t
+
+← Attn 
+
+
+
+z(v) 
+
+> t
+
+, {z(v) 
+
+> t′
+
+}t′≤t
+
+
+
+. (14) Table 10 classifies every system in Table 3 along these two dimensions. StreamMind uses continuous ingestion and satisfies both Eq. (11) and Eq. (14). Every baseline instead reconstructs either a causal prefix or a bounded recent window for each task and carries no hidden video state across questions. To preserve each method’s intended inference mechanism, we adapt its released interface to StreamArena rather than forcing all baselines into a common continuous-ingestion implementation. Each question invokes the corresponding inference routine with the method-specific causal interval, sampling policy, and memory mechanism described below. No reactive query receives frames after tqi , and multi-turn textual history is preserved within each video. The resulting comparison therefore evaluates the released streaming mechanisms under a common causal, open-ended benchmark while retaining their different context policies. 
+
+## C.2 Offline turn-based MLLMs 
+
+All offline turn-based MLLMs in Group (A) share the following per-question protocol. 
+
+Visual input. We uniformly sample from S0: tqi a frame set of size 
+
+Nframe = min  Nmax , ⌈tqi ⌉, Nmax = 128 , (15) with each frame resized so that no side exceeds 1280 × 720 . The short-window cap ⌈tqi ⌉ prevents near-duplicate frames when tqi < N max seconds. 17 Audio and subtitle input. Let Momni = {MiMo-V2.5 , Qwen3.5-Omni , Gemini 3.5 Flash } be the omni-capable models, and let L = {zh-CN , zh-Hans , en , zh-Hant } be the caption-language priority list. For m ∈Momni , we directly provide the raw 16 kHz mono audio prefix a0: tqi . Otherwise, we provide 
+
+c0: tqi =
+
+(
+
+YT (v, ℓ ), if an ℓ ∈ L track exists ,
+
+ASR (a0: tqi ), otherwise , (16) where YT (v, ℓ ) returns the native YouTube caption track in language ℓ, following the order in L, and ASR (·)
+
+denotes the Qwen3-ASR-1.7B fallback stored as a .vtt file. 
+
+Sampling and tool use. We use temperature T = 0 .6, top-p = 0 .95 , and a generation budget of K = 65 ,536 
+
+tokens for all offline MLLMs. Gemini 3.5 Flash additionally uses high reasoning effort and high media resolution. Tool-utilization tasks share a common tool-calling loop with at most Rmax = 5 rounds; both text and image search are routed through Google. 
+
+## C.3 Recent-window and text-summary methods 
+
+These methods reconstruct their designated causal input after a query or monitoring instruction arrives. Between tasks, they neither ingest video nor preserve hidden video state. Their causal intervals and segmentation differ by method and are specified below. 
+
+AURA (recent-window). For a reactive query, AURA reconstructs at most the latest 30 one-second video chunks ending at tqi . The chunks form one model request in temporal order: earlier chunks are paired with a silence token, while the final chunk carries the question and all captions available by tqi . Decoding is deterministic with a budget of 1,024 tokens. For a proactive task, the monitoring instruction is registered at tqi , after which the harness checks the model once per video second until two seconds after the annotated event. Each check independently reconstructs the latest 30 one-second chunks available at that time and supplies captions only up to the same timestamp. Any response before the event is marked premature; responses at the event time or either of the next two sampled seconds are candidate alerts. Different videos run concurrently, whereas turns within one video remain sequential. The evaluated AURA implementation has no external tool-calling loop, so Tool is reported as N/A. 
+
+MiniCPM-o-4.5 (recent-window, unified). Let QHD denote reactive queries and QFD proactive queries. MiniCPM-o-4.5 selects its rollout interval as 
+
+[τ0, τ Ki ] = 
+
+(
+
+[max(0 , t qi − 30) , t qi ), i ∈ Q HD ,
+
+[tqi , t gt  
+
+> i
+
++ we), i ∈ Q FD , (17) with we = 3 seconds. Each second contributes one frame and its corresponding one-second raw-audio segment. Reactive queries use half-duplex generation over the recent window. If the model requests external information, the harness executes Google text search, full-frame image search, or crop-based image search and returns the observations for another generation round, with at most Rmax = 5 rounds. Proactive tasks use the native full-duplex interface with a sliding context of 30 audio-visual units. The model remains silent on [tqi , t gt  
+
+> i
+
+);outputs at tgt  
+
+> i
+
+and the following two sampled seconds are candidate alerts. MiniCPM-o consumes raw audio directly and does not receive caption text. 
+
+VST (text-summary). For each query, VST samples the available causal prefix at 2 fps and uniformly reduces it to at most 384 frames. Let di = min( tqi , T ) denote the available prefix duration. VST partitions the sampled prefix into Ki approximately equal temporal segments, where 
+
+Ki =
+
+
+
+2, di ≤ 30 s,
+
+3, 30 s < d i < 4 min ,
+
+5, di ≥ 4 min .
+
+(18) The first Ki − 1 segments are processed sequentially into a textual memory, and the final pass consumes that memory together with the last visual segment, captions available by tqi , multi-turn dialogue history, and the 18 current question. The visual budget is equivalent to 8,192 tokens per segment; intermediate and final generations are capped at 5,000 and 32,768 tokens, respectively. All state is reconstructed per query and discarded afterward. The evaluated VST implementation supports neither proactive monitoring nor an external tool-calling loop, so Pro and Tool are reported as N/A. 
+
+## C.4 Model-internal compression methods 
+
+Model-internal compression methods employ causal compression rather than an explicit rolling text summary. Their verified harness behavior is documented below. 
+
+StreamForest. For each reactive query, StreamForest reconstructs the causal prefix S0: tqi , samples it dynami-cally at approximately 1 fps with at most 2,048 frames, and applies its hierarchical frame-forest compression in a single generation call. The prompt includes the sampled temporal range, all captions available by tqi , multi-turn dialogue history, and the current question. Decoding is greedy with a budget of 1,024 tokens. The evaluated implementation supports neither proactive monitoring nor an external tool-calling loop, so Pro and Tool are reported as N/A. 
+
+ThinkStream. For each reactive query, ThinkStream replays the causal prefix from t = 0 to tqi and allows a 3-second response window after the query. The prefix is processed by the model’s streaming-window inference engine using at most 120 chunks of two frames, a context length of 24,576 tokens, a thinking budget of 20 tokens, and an answer budget of 256 tokens. The query includes captions available by tqi and the preceding question-answer history from the same video. We use the official response-triggering mechanism and take the first nonempty text emitted after the <response> token. For proactive tasks, the monitoring instruction is injected at tqi with no future captions, and the model processes one-second chunks until two seconds after tgt  
+
+> i
+
+.Any response before tgt  
+
+> i
+
+is premature, while responses at tgt  
+
+> i
+
+or either of the next two sampled seconds are candidate alerts. The evaluated implementation has no external search loop; its Tool score therefore measures answer correctness without guaranteed tool invocation. 
+
+## C.5 StreamMind (ours) 
+
+Continuous ingestion harness. Unlike every baseline above, StreamMind consumes video under Eq. (11): the driver decodes frames with OpenCV at fcap = 2 fps, pushes them into a ring buffer in temporal order, and never rewinds. For non-proactive queries, it pauses the video clock at tqi until the response finishes, preventing inference latency from shifting subsequent timestamps. Proactive tasks do not pause ingestion. In both cases, the model cannot access future frames or replay discarded frames. 
+
+Multi-worker architecture. StreamMind combines query-driven workers, dynamically spawned Monitor Workers, and a periodic Memory Writer. They share a FrameBuffer Bt, a bounded conversation log Lt, and a Memory Bank 
+
+Ht =  Gt, Emicro  
+
+> t
+
+, Emacro  
+
+> t
+
+, Esuper  
+
+> t
+
+, Ft
+
+ , (19) where Gt is a typed entity relation graph and Ft stores persistent key frames. We report the effective evaluation configuration below, including runtime values that override implementation defaults. • FrameBuffer and audio observations. The driver captures at fcap = 2 fps, resizes each frame to a maximum side length of 720 pixels, and encodes it as JPEG at quality 75. A WB = 60 s FIFO buffer therefore holds approximately 120 frames. Audio is divided into Wenv = 5 s windows and sent to ASR when its RMS is at least ρmin = 0 .005 . The audio log stores at most 300 observations, and the full conversation log is capped at 10 5 characters. • Front Worker. On each user utterance, the Front Worker inspects the latest NF = 12 frames at or before tqi ,the conversation log, current facts, two recent macro summaries, and active retrieval briefs. It then answers directly, delegates a retrieval brief, spawns a Monitor, or cancels a Monitor: 
+
+di = fF
+
+
+
+qi, B≤tqi , H≤tqi , L≤tqi ; TF = 0 .3, K F = 256 
+
+
+
+. (20) 19 The Router normally returns the final answer within its ReAct output. A fallback answer pass uses T = 0 .4,
+
+K = 1 ,536 , up to 12 query-time frames, 2 current frames, 16 conversation turns, and at most 4 recalled frames. • Monitor Worker. Each monitoring intent creates an independent task that checks the latest NM = 4 frames every ∆M = 2 s. Its JSON verdict uses TM = 0 .2 and KM = 512 , and fires only when confidence reaches 
+
+θM = 0 .6. The system supports at most Mmax = 8 active Monitors. One-time Monitors terminate after firing; repeating Monitors enforce a 3-second minimum trigger gap and retain 60 visual trigger records plus 200 textual summaries. The agent-side TTL is disabled, while the evaluation driver ends an active proactive case 30 seconds after its annotated answer time. The trigger time is the latest observed frame timestamp, recorded before notification delivery. • Router Worker. The Router runs at most RR = 4 ReAct rounds with TR = 0 .2, KR = 2 ,048 , NR = 8 
+
+frames, and 16 recent dialogue turns. Each round emits an answer or a set of Search and Recall tasks. All tasks in a round execute concurrently, and Search can use either the current frame or a recalled frame identifier as its visual anchor. • Search Worker. Search runs at most RS = 3 rounds with TS = 0 .2, KS = 4 ,096 , and NS = 30 frames. The launch script restricts both text and image retrieval to Google. It exposes three tools: 
+
+– Text search returns up to k = 10 results after filtering at similarity θsim = 0 .6.
+
+– Full-frame image search performs reverse image search on the anchor frame. 
+
+– Crop-based image search follows the HyperEyes protocol [35]: it maps a box [x1, y 1, x 2, y 2] from a 
+
+1000 × 1000 coordinate system, crops the anchor, and limits its longest side to 720 pixels. Without a box, it searches the full frame and center crop concurrently. Tools within one round execute concurrently. • Recall Worker. Recall runs an Observe, Reason, Act loop of at most RC = 4 rounds with TC = 0 .2,
+
+KC = 2 ,048 , and NC = 4 decision frames. Every read is bounded by the query time tqi , so no returned event satisfies tend > t qi . Its six exposed tools are: 
+
+– Time-window search retrieves micro-events between ts and te.
+
+– Entity search performs fuzzy matching over entity names, aliases, and attributes, returning k = 5 
+
+candidates by default. 
+
+– Micro-event search matches keywords against micro-event descriptions and returns k = 5 results. 
+
+– Entity-conditioned event retrieval returns all events involving a selected entity. 
+
+– Entity-conditioned frame retrieval returns all key frames associated with a selected entity. 
+
+– Relation traversal performs multi-hop traversal of the entity relation graph. Memory calls in one round execute concurrently. A distillation pass with Kdistill = 512 compresses each result into one to three task-specific sentences. A final visual pass checks up to 8 recalled frames and removes frames that do not show the target; if parsing fails or all frames are rejected, the unfiltered set is retained. • Memory Writer. The launch script sets ∆W = 4 s, overriding the 5 s class default. Each tick reads 
+
+NW = 30 frames and the last 15 seconds of ASR, then emits an event-boundary decision, key frames, a micro-event record, entity updates, and relation edges with TW = 0 .2 and KW = 2 ,560 . A micro event closes at a predicted boundary, after 6 ticks, or after 30 seconds. A macro event closes after 5 micro events or 180 seconds; a super event closes after 4 macro events or 900 seconds. Entity canonicalization uses threshold 0.85. The FrameStore retains at most 4,000 images and deduplicates within an 8-second lookback using a dHash Hamming threshold of 6. 
+
+Backbone. The launch configuration uses a shared Qwen3.5-397B-A17B vLLM endpoint for all workers. The Front Worker uses non-thinking mode, whereas backend workers use thinking mode. The implementation supports separate Front, Memory Writer, and Monitor endpoints, but these overrides are empty in the reported configuration. 20 C.6 Computing infrastructure 
+
+All experiments run on the following infrastructure. 
+
+Hardware. 
+
+• GPUs: 8×NVIDIA H800 (80 GB HBM3) per server. • CPU: 2×Intel Xeon Platinum 8563C (208 logical cores, 2 NUMA nodes). • System memory: 2 TB DDR5. 
+
+Software. 
+
+• Operating system: Ubuntu 22.04.4 LTS (kernel 4.18.0-348.7.1.el8_5). • CUDA runtime 12.8, NVIDIA driver 570.124.06. • Python 3.10.20. • Inference engine: vLLM 0.25.0. • Key libraries: PyTorch 2.11.0 ( +cu129 ), transformers 5.5.4, OpenCV 4.13.0. • ASR fallback: Qwen/Qwen3-ASR-1.7B .• Judge and closed-source baseline: Gemini 3.1 Pro (judge, temperature=0 ) and Gemini 3.5 Flash (baseline), called via their public APIs between 2026-05 and 2026-07; snapshot behavior therefore reflects that time window. 
+
+Judging protocol. All open-ended responses are judged by Gemini 3.1 Pro using the factual-equivalence criterion defined in Eq. (1). This judge is distinct from the evaluated Gemini 3.5 Flash baseline. Every system is scored under the same judge, the same proactive timing rule in Eq. (9), and the same random seed for offline frame sampling. 
+
+## C.7 Reproducibility artifacts 
+
+This subsection documents the artifacts released with the paper and the practical settings needed to reproduce the reported numbers. It complements the AAAI Reproducibility Checklist. 
+
+Data release. StreamArena is released together with the paper. To respect YouTube’s terms of service, we do not redistribute the raw video files. Instead, each of the 243 videos is identified by its YouTube video ID, and every question is stored as a structured JSON record. Each record contains the following fields: • video_id : YouTube 11-character identifier. • domain and l2_subdomain : coarse and fine category (Section B.3). • capability : one of {RTP, HR, Tool, Pro}. • question : the natural-language query. • query_time : query timestamp tqi in seconds. • answer : the reference answer a∗ 
+
+> i
+
+.• evidence : a list of {tstart , t end , description } triples; for RTP a single short window, for HR one or more past segments with t < t qi , for Pro the annotated trigger time tgt  
+
+> i
+
+.• reasoning_pattern (HR only): one of {single_point, multi_count, multi_recall, multi_compare, temporal_range}. • monitoring_horizon (Pro only): tgt  
+
+> i
+
+− tqi in seconds. 
+
+Data license and fallback for expired videos. StreamArena annotations are released under CC BY 4.0. We track video availability and periodically refresh the index. When a YouTube video ID becomes unreachable, we redirect the corresponding annotations to a compatible archived copy hosted on a public preservation platform, and the release notes list every substitution. We never redistribute the original video content. 21 Code release. The evaluation harness (frame sampling, ASR fallback, subtitle extraction, judge invocation), all baseline adapters used in Table 3, and the full StreamMind implementation (Front, Monitor, Router, Search, Recall, and Memory Writer workers) are released under Apache-2.0 through the public code repository linked on the first page. 
+
+Code-to-paper mapping. Every StreamMind worker module includes a docstring that maps its imple-mentation role to the relevant hyperparameters documented in Appendix C.5. Data-processing scripts (video downloading via public YouTube IDs, subtitle fetching with the priority list of Eq. (16), ASR fallback, and 2 fps frame extraction) live under tools/preprocess/ and mirror the description in Section C.2 and Appendix C.5. 
+
+Randomness and seeds. All non-LLM randomness (offline uniform frame sampling of Eq. (15), tie-breaking in baseline harnesses, and Monitor scheduling in StreamMind) is controlled by a single global seed set to 42 through Python’s random , numpy , and torch generators. Every local vLLM decoding request also uses seed 42 , together with the temperature and top-p settings reported in Appendix C.2 and Appendix C.5. The Gemini 3.1 Pro judge uses temperature=0 and is deterministic up to the API’s own snapshot policy. 
+
+Hyperparameter selection. We did not perform automated hyperparameter search. All StreamMind worker settings (temperatures, top-p, context frame budgets, token budgets, retrieval round caps, monitor thresholds, and Memory Writer intervals) reported in Appendix C.5 are the final values used to produce every number in Table 3 and Table 4. The diagnostic sweeps over frame count (4–200), spatial resolution (240p–720p), and thinking mode (Figure 3) are ablations rather than tuning, and their settings are not used to select final values. 
+
+Number of runs. Each cell in Table 3, Table 4, Table 5, and Figure 3 corresponds to a single evaluation run. Because a full StreamArena pass covers 3,646 questions over 243 hour-scale videos, and StreamMind and several baselines rely on a shared 397B-parameter backbone served through vLLM, repeated runs are not economical. We therefore do not report standard deviations or statistical significance tests, and note this as a limitation of the current evaluation. 22

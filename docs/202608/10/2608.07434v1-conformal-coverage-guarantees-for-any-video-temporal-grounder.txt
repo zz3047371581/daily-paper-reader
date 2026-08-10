@@ -1,0 +1,932 @@
+Title: Conformal Coverage Guarantees for Any Video Temporal Grounder
+
+URL Source: https://arxiv.org/pdf/2608.07434v1
+
+Published Time: Mon, 10 Aug 2026 01:13:34 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+> arXiv:2608.07434v1 [cs.CV] 7 Aug 2026 P R E P R I N T
+
+Submitted to AAAI’27 
+
+# Conformal Coverage Guarantees for Any Video Temporal Grounder 
+
+Cover: a post-hoc wrapper that turns any grounder into one that emits a temporal region containing the true moment with probability at least 1 − 𝛼 .
+
+Aseel Mohamed 1 Rasul Khanbayov 2 Erchin Serpedin 3 Hasan Kurban 2,  
+
+> 1
+
+Department of Electrical and Computer Engineering, Texas A&M University at Qatar, Doha, Qatar  
+
+> 2
+
+College of Science and Engineering, Hamad Bin Khalifa University, Doha, Qatar  
+
+> 3
+
+Department of Computer and Electrical Engineering, Texas A&M University, College Station, TX, USA Correspondence: hkurban@hbku.edu.qa 
+
+> A B S T R A C T
+
+Event boundaries in continuous video are ambiguous: re-annotate the same query–video pair and independent annotators mark moments that overlap by less than half on a large fraction of samples. The ground truth for video temporal grounding is therefore a distribution over intervals, yet every grounder returns a single interval with no statement of reliability, so at deployment a wrong interval is indistinguishable from a right one. Cover changes the output object: a post-hoc, model-agnostic wrapper that turns any grounder, a trained localizer or a black-box video–language model, into one that emits a temporal region containing the true moment with probability at least 1 − 𝛼 , by calibrating the quantile of a temporal nonconformity score on held-out labels and widening the base prediction by that amount. The guarantee is finite-sample and distribution-free under exchangeability, and requires neither retraining nor white-box access. We give two score families, a two-sided boundary-widening score for grounders that emit an interval and a super-level-set score for grounders that emit a relevance signal, and develop theory specific to grounding that bounds how large the certified region becomes, when coverage survives conditioning on event length, and how it degrades when moments from one video break exchangeability. Across three benchmarks and five grounders, realized coverage tracks the target, and calibration exposes what point metrics hide. An evidential grounder purpose-built for uncertainty quantification realizes only 0.660 against its own nominal 0.80 target, while Cover restores a valid guarantee on the identical predictions. A video–language model’s event onsets prove essentially free of error while all of its boundary error concentrates on offsets. And hand-picked fixed margins swing realized coverage by up to 0.904 , so the calibration step is what makes a region mean anything.  
+
+> K E Y W O R D S
+
+video temporal grounding; black-box model; localizer; wrapper     
+
+> Preprint • Kurban Intelligence Lab • https://github.com/KurbanIntelligenceLab/cover 1CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Figure 1
+
+Cover turns any grounder into one with a coverage guarantee. A base grounder returns a single interval ̂ 𝐼 (blue) that can miss a part of the true moment 𝐼 ⋆ (green). The missed tail (red) comes with no warning. Cover reads off, once on a held-out calibration set, the (1 − 𝛼) quantile ̂ 𝑞 of a temporal nonconformity score (right), then widens every prediction by ̂ 𝑞 𝓁 per side into a region (𝑋) (orange) that contains 𝐼 ⋆ with probability at least 1 − 𝛼 . The guarantee is distribution-free, needs no retraining, and holds for trained localizers and black-box VLMs alike. 
+
+1 Introduction 
+
+Ask several people to mark when an event begins and ends in a continuous video and they will not agree. Re-annotate the same query–video pair and the marked moments overlap by less than half on a large fraction of samples [1, 2], an ambiguity surveys name a core open problem of the task [3]. It is a property of continuous video, not an artifact of any model, so the ground truth for temporal grounding is a distribution over intervals rather than a point. Grounders report a point anyway. A temporal grounder takes a video and a language query and returns the interval where the queried event occurs [3–5], and modern systems, whether trained localizers [6–9] or video–language models prompted for timestamps [10–12], return one interval and stop. The mismatch is not cosmetic: in deployment a confident interval that is wrong looks exactly like a confident interval that is right, and any downstream consumer, a retrieval index, an editing tool, or an evidence-seeking agent, has no principled way to decide when to widen its search or defer. The right output object is a region carrying a statement of the form “the true moment lies here with probability at least 1 − 𝛼 .” Two routes to one suggest themselves, and neither delivers. The first is to pad the predicted interval by a margin, but no margin is knowable in advance: across six hand-picked constants we measure realized coverage anywhere from 0.096 to 1.000 , and a padding adequate on one dataset misses its target by more than 0.3 on another (Table 3). The second is to train the uncertainty in, as methods that learn a boundary variance or an evidential distribution do [13, 14]. These are tied to one architecture, require retraining, and cannot wrap a grounder served behind a text-only API, and they do not always deliver the reliability they report, as an evidential grounder’s own predicted boundary uncertainty, converted to a region at its nominal 0.80 level,  
+
+> 2CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+realizes only 0.660 (Appendix Table A8). Conformal prediction supplies precisely the missing guarantee, distribution-free finite-sample coverage from a held-out calibration set [15–18]. It has been instantiated for classification and regression [19, 20], for spatial object detection and segmentation [21–25], and recently for video question answering [26], but not for the object grounding produces: the start and end of a moment. Cover supplies it with a post-hoc wrapper (Figure 1). We define a temporal nonconformity score equal to the smallest widening of the base interval that makes it contain the true moment, take the (1 − 𝛼) empirical quantile of that score over a labeled calibration set, and output every test prediction widened by that quantile. Exchangeability of calibration and test sets then gives coverage at least 1 − 𝛼 . Because the wrapper touches the grounder only through its outputs and a held-out label set, it applies unchanged to a trained DETR-style localizer and to a black-box video– language model. Two score families cover the two grounder types, and for both we prove marginal coverage with a matching upper bound against gross over-coverage, and give a risk-control variant that bounds the expected miss-rate at a user level with high probability over the calibration draw [22, 27].  
+
+> Contributions.
+
+We make the following contributions: 1. A region, not a point, for a task whose ground truth is a distribution. The first distribution-free uncertainty quantification for video temporal grounding: a post-hoc wrapper that attaches a finite-sample coverage guarantee to any grounder, trained or black-box, by calibrating a single scalar on held-out labels, with no retraining and no white-box access. 2. Temporal nonconformity scores for both kinds of grounder. A two-sided boundary-widening score for grounders that emit an interval, and a super-level-set score for grounders that expose a relevance signal, the latter returning regions that spend temporal budget only where the grounder places relevance. Where boundary error is asymmetric, a two-parameter per-boundary variant calibrates each side separately. 3. Theory that says what the region costs, not only that it covers : an efficiency identity with asymptotic length-optimality of the calibrated widening, length-conditional coverage of the normalized score under a scale model, and an explicit coverage bound under the within-video dependence that breaks exchangeability. Standard coverage, tightness, and risk-control results are in the Appendix. 4. Certification as measurement. Across three benchmarks and five grounders, realized cover-age tracks the target, and calibration exposes what point metrics hide: an evidential grounder built for uncertainty quantification misses its nominal coverage by 14 points while Cover restores a valid guarantee on the identical predictions, a VLM’s event onsets are essentially free while all of its boundary error sits on offsets, and hand-picked margins swing realized coverage range by up to 0.904 .
+
+> K E Y T A K E A W A Y
+
+Cover is a post-hoc, model-agnostic wrapper that turns any grounder, a trained localizer or a black-box video–language model, into one that emits a temporal region containing the true moment with probability at least 1 − 𝛼 . 
+
+> 3CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+2 Related work  
+
+> Uncertainty in temporal grounding.
+
+Prior uncertainty-aware grounders learn a distribution over boundaries, for example Gaussian boundary variances or evidential heads trained jointly with the localizer [13, 28], an approach still being actively developed for moment retrieval [14]. They are motivated by the same observation we are, that event boundaries in continuous video are inherently ambiguous, an effect measured directly when the same query–video pair is re-annotated by multiple people and their moments overlap by less than half on many samples [1, 2]. But they quantify uncertainty in an architecture-specific way, require retraining, and offer no finite-sample coverage statement, so a user cannot set a target error rate and have it met. Cover instead is post-hoc and distribution-free: it wraps a fixed grounder and delivers a coverage level the user chooses, which is a different guarantee and a different deployment model.  
+
+> Conformal prediction and risk control.
+
+Conformal prediction turns any point predictor into a set predictor with distribution-free, finite-sample marginal coverage under exchangeability [15– 18]. Conformalized quantile regression calibrates two-sided regression intervals [20], and risk-controlling prediction sets, conformal risk control, and Learn-then-Test extend the guarantee from coverage to losses monotone in the set-size parameter, such as false-negative rate and intersection-over-union [22, 27, 29]. The same tools now underpin a fast-growing line on reliability for language and vision–language models, where conformal risk control and selective conformal prediction bound answer-set error or drive abstention [26]. That line certifies which answer to return or whether to answer at all, a different output object than the temporal region we certify. Our con-tribution is not a new calibration machinery but the object it is pointed at: the temporal region, the scores that make intervals and relevance signals conformable, the theory governing how large the region gets, and what certifying real grounders reveals about them. Exact conditional cover-age is impossible distribution-free [30]. Mondrian/group-conditional calibration [31] and recent conditional-guarantee methods [32] are the practical response we adopt for length and class strata. When exchangeability fails, across clips of one video or across datasets, weighting and adaptive variants restore validity [33–35].  
+
+> Conformal methods in vision and video.
+
+The spatial analogue is established: conformal predic-tion calibrates a margin on predicted boxes or masks so the object is contained at a guaranteed rate [21, 24, 25, 36], and recent work certifies the full detection pipeline through sequential, two-parameter risk control for any backbone including DETR [23]. That two-parameter structure is forced by the detector: separate thresholds for confidence filtering and for localization, mediated by non-maximum suppression. Grounding poses a different problem. There is no object set and no suppression step, but the target is a continuous extent whose endpoints are ambiguous in the data itself, so the difficulty moves from deciding which predictions to certify to deciding how far a single one must reach, and the interesting structure is temporal rather than combinatorial: how region length scales with event length, whether coverage survives conditioning on duration, and what happens when moments drawn from one video cease to be exchangeable. The closest neighbors to position against are therefore the conformal object-detection line [23] and the video-QA reliability line [26]. Because moments come from continuous video, the exchangeability question also links Cover to conformal time-series forecasting [34, 37].  
+
+> 4CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+3 Problem Setup  
+
+> Grounder as a black box.
+
+A grounder 𝑔 maps an input 𝑋 = ( video , query ) to a predicted interval ̂𝐼 (𝑋) = [̂ 𝑠,̂𝑒] ⊆ [0, 𝑇 ] , and optionally to a temporal relevance signal 𝑓 𝑋 ∶ [0, 𝑇 ] → ℝ (a saliency or per-clip score). The true moment is 𝐼 ⋆ = [𝑠 ⋆, 𝑒 ⋆]. We treat 𝑔 as fixed and access it only through ̂ 𝐼 
+
+(and 𝑓 𝑋 when available). Nothing about 𝑔 is assumed or retrained.  
+
+> Goal..
+
+For a user-chosen 𝛼 ∈ (0, 1) , output a temporal region (𝑋) ⊆ [0, 𝑇 ] such that 
+
+ℙ(𝐼 ⋆ ⊆ (𝑋)) ≥ 1 − 𝛼, 
+
+where the probability is over a fresh draw of (𝑋, 𝐼 ⋆) and the calibration set. Containment of the whole true interval is the natural grounding analogue of coverage: the region is trusted to hold the event, so missing either boundary is a failure. We also consider the weaker miss-rate objective in Sec. 5.  
+
+> Calibration data.
+
+We assume a labeled calibration set {(𝑋 𝑖 , 𝐼 ⋆𝑖 )} 𝑛 𝑖=1 drawn exchangeably with the test point, disjoint from anything used to build 𝑔 . This reuses existing ground-truth intervals, it adds no new annotation. The wrapper’s only fitted quantity is a scalar threshold. 
+
+4 Method: Cover 
+
+Cover chooses a nested family of candidate regions 𝜆 (𝑋) indexed by a scalar 𝜆 (larger 𝜆 gives a larger region and a negative calibrated 𝜆 tightens the base interval when it already over-covers), defines a nonconformity score equal to the smallest 𝜆 that covers the truth, calibrates the score’s quantile, and returns the region at that quantile (Figure A1 in the Appendix). Two instantiations follow, and both reduce to a one-dimensional split-conformal calibration.  
+
+> Interval-widening score.
+
+For grounders that emit an interval, widen per side by a fixed scale (we use the predicted length 𝓁(𝑋) =̂𝑒 −̂𝑠 for adaptivity, or 1 for plain seconds): 
+
+𝜆 (𝑋) = [̂ 𝑠 − 𝜆 𝓁(𝑋),̂ 𝑒 + 𝜆 𝓁(𝑋) ] ∩ [0, 𝑇 ]. 
+
+The smallest 𝜆 that makes 𝜆 (𝑋) ⊇ 𝐼 ⋆ is 
+
+𝑠(𝑋, 𝐼 ⋆) = max (̂ 𝑠 − 𝑠 ⋆
+
+𝓁(𝑋) , 𝑒 ⋆ −̂𝑒 𝓁(𝑋) ) , (1) the larger of the two per-side overshoots (negative when ̂ 𝐼 already strictly contains 𝐼 ⋆). This is the two-sided analogue of conformalized regression [20] applied to the start and end boundaries jointly. Taking the maximum over both sides keeps the score a single scalar, so one quantile delivers joint two-sided coverage with no per-boundary correction and no second split of the calibration data.  
+
+> Per-boundary variant.
+
+The maximum in (1) spends the same widening on both sides, which is efficient when the two boundaries are comparably hard and wasteful when they are not. A grounder that already locates event onsets well pays for that side anyway. The two-parameter variant instead scores each boundary separately, 𝑠 s = (̂ 𝑠 − 𝑠 ⋆)/𝓁(𝑋) and 𝑠 e = (𝑒 ⋆ −̂𝑒)/𝓁(𝑋) , calibrates ̂ 𝑞 s,̂ 𝑞 e on their own quantiles as in conformalized quantile regression [20], and returns [̂ 𝑠 −̂ 𝑞 s𝓁,̂ 𝑒 +̂ 𝑞 e𝓁] ∩ [0, 𝑇 ] .It buys per-side adaptivity at the cost of a second calibrated parameter, and which member wins is an empirical property of the grounder, diagnosed by the calibrated ̂ 𝑞 s/̂𝑞 e ratio.   
+
+> 5CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Super-level-set score.
+
+When the grounder exposes a temporal relevance signal 𝑓 𝑋 , take 𝜆 (𝑋) = {𝑡 ∶ 𝑓 𝑋 (𝑡) ≥ −𝜆} , a union of intervals. Covering all of 𝐼 ⋆ requires 𝑓 𝑋 (𝑡) ≥ −𝜆 for every 𝑡 ∈ 𝐼 ⋆, so the binding score is 
+
+𝑠(𝑋, 𝐼 ⋆) = − min   
+
+> 𝑡∈𝐼 ⋆
+
+𝑓 𝑋 (𝑡). (2) This yields adaptive, possibly disconnected regions: when 𝑓 𝑋 is multimodal the region splits, spending temporal budget only where the grounder places relevance.  
+
+> Split-conformal calibration.
+
+Given either score, compute 𝑠 𝑖 = 𝑠(𝑋 𝑖 , 𝐼 ⋆𝑖 ) on the calibration set and set the threshold to the finite-sample-corrected empirical quantile ̂𝑞 = ⌈(𝑛 + 1)(1 − 𝛼) ⌉-th smallest of {𝑠 1, … , 𝑠 𝑛 }. (3) At test, output ̂𝑞 (𝑋) (Algorithm 1 in the Appendix). The only computation beyond running 𝑔 is sorting 𝑛 scalars, so the wrapper is negligible in cost and adds no parameters to 𝑔 . 
+
+> Risk control and stratified calibration.
+
+Two variants extend the wrapper. When the user wants the expected miss-rate held at 𝛼 with confidence 1−𝛿 over the calibration draw rather than full coverage, we select 𝜆 by a risk-controlling procedure [22]: the loss 𝜆 (𝑋, 𝐼 ⋆) = 𝟏[𝑠(𝑋, 𝐼 ⋆) > 𝜆] is monotone in 𝜆 , so an upper-confidence bound on the empirical risk yields a ̂ 𝜆 with ℙ(𝔼[ ̂𝜆 ] ≤ 𝛼) ≥ 1 − 𝛿 
+
+(Proposition 10 in the Appendix). When marginal coverage hides undercoverage of a subpopulation (short events, a rare class), calibrating a separate ̂ 𝑞 per group [31] restores coverage within each group at the cost of splitting the calibration data. Exact attribute-free conditional coverage is not attainable distribution-free [30]. 
+
+5 Analysis 
+
+The marginal coverage guarantee is the standard split-conformal result (Proposition 4). The rest of this section is theory specific to temporal grounding, how large the regions are, when coverage holds within event-length strata, and what happens when moments from one video break ex-changeability. Each result is stated in full here; the complete proofs, along with standard coverage, tightness, and risk-control facts, are in the Appendix. 
+
+Assumption 1 Exchangeability . The calibration points (𝑋 𝑖 , 𝐼 ⋆𝑖 )𝑛 𝑖=1 and the test point (𝑋 𝑛+1 , 𝐼 ⋆𝑛+1 )
+
+are exchangeable. 
+
+Assumption 2 Nested family . 𝜆 is nested: 𝜆 ≤ 𝜆 ′ ⇒ 𝜆 (𝑋) ⊆ 𝜆 ′ (𝑋) , and 𝐼 ⋆ ⊆ 𝜆 (𝑋) ⇔ 𝑠(𝑋, 𝐼 ⋆) ≤ 𝜆 .
+
+Assumption 3 Frozen pipeline . The grounder 𝑔 and the score 𝑠 are fixed before the calibration labels are seen. 
+
+Proposition 4 Marginal coverage: foundation . Under Assumptions 1–3, Algorithm 1 of the Appendix with ̂ 𝑞 from (3) satisfies ℙ(𝐼 ⋆𝑛+1 ⊆ ̂𝑞 (𝑋 𝑛+1 )) ≥ 1 − 𝛼 . 
+
+> 6CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+This is split conformal [17] with the temporal score. The same data bound coverage above by 
+
+1 − 𝛼 + 1𝑛+1 (Appendix Proposition 9) and control the expected miss-rate at level 𝛼 with probability 
+
+1 − 𝛿 (Appendix Proposition 10).  
+
+> How large is the region?.
+
+Let 𝑆 = 𝑠(𝑋, 𝐼 ⋆) denote the score as a random variable, 𝐹 𝑆 its distribution function, and 𝑄 1−𝛼 (𝐹 𝑆 ) = inf{𝜆 ∶ 𝐹 𝑆 (𝜆) ≥ 1 − 𝛼} its (1 − 𝛼) quantile. Coverage is worthless without a handle on region size. The next result gives one and shows the calibrated widening is as tight as the family allows, for both score families at once. 
+
+Theorem 5 Efficiency and length-optimality . Fix the interval score (1) with predicted length 
+
+𝓁(𝑋) =̂ 𝑒 −̂𝑠 > 0 , under Assumptions 1–3. (i) Length identity. The region length obeys |𝜆 (𝑋)| = min{𝓁(𝑋)(1 + 2𝜆), 𝑇 } ≤ 𝓁(𝑋)(1 + 2𝜆) , so 𝔼| ̂𝑞 (𝑋)| ≤ 𝔼[𝓁(𝑋)(1 + 2̂𝑞)] , with equality to 𝔼[𝓁(𝑋)](1 + 2 𝔼[̂𝑞]) when the test point is independent of the calibration data. (ii) Consistency (i.i.d. calibration). 
+
+If the calibration scores are i.i.d. (a strengthening of Assumption 1), then ̂ 𝑞 → 𝑄 1−𝛼 (𝐹 𝑆 ) almost surely as 𝑛 → ∞ ; if in addition 𝐹 𝑆 has a positive density at 𝑄 1−𝛼 (𝐹 𝑆 ), then √𝑛 (̂𝑞 − 𝑄 1−𝛼 (𝐹 𝑆 )) = 𝑂 p(1) . (iii) Family length-optimality. For continuous 𝐹 𝑆 , among the one-parameter family {𝜆 }𝜆≥0 the region 
+
+𝑄 1−𝛼 (𝐹 𝑆 ) is the shortest with marginal coverage at least 1 − 𝛼 : every 𝜆 < 𝑄 1−𝛼 (𝐹 𝑆 ) has coverage below 1 − 𝛼 and every 𝜆 > 𝑄 1−𝛼 (𝐹 𝑆 ) yields a strictly longer region. (iv) The same holds for the relevance signal. For the super-level-set score (2) and the threshold family {𝑡 ∶ 𝑓 𝑋 (𝑡) ≥ 𝜏} 𝜏∈ℝ , family coverage equals 𝐹 𝑆 (−𝜏) and Cover uses 𝜏 = −̂𝑞 ; since the temporal measure 𝔼|{𝑡 ∶ 𝑓 𝑋 (𝑡) ≥ 𝜏}| is also monotone in 𝜏 , the threshold 𝜏 = −𝑄 1−𝛼 (𝐹 𝑆 ) gives the smallest expected-measure region among all fixed-threshold rules on the signal at the target coverage. 
+
+Remark 6 Scope of the optimality claims . Theorem 5(iii)–(iv) asserts optimality within a one-parameter family, not over all coverage regions: an input-varying width can be shorter at the same coverage, and the per-boundary variant of Sec. 4 is one such member. The finite-sample cost of estimating the quantile is characterized exactly by Proposition 12 in the Appendix, whose 𝑂(𝑛 −1/2 )
+
+spread matches the resampled coverage variability in Sec. 7.  
+
+> When is coverage length-conditional?.
+
+Marginal coverage is an average, and an average can hide a badly undercovered subpopulation behind an overcovered one. Event length is the stratification that matters most in grounding, and the choice of scale 𝓁(𝑋) in (1) is exactly what decides whether coverage survives it. The next result says the normalized score is length-conditional under a scale model and the seconds-valued score is not. The prediction is directional and therefore testable (Appendix Table A11). 
+
+Proposition 7 Length-conditional coverage under a scale model . Assume i.i.d. sampling and the scale model : the normalized score (1) is statistically independent of the true event length 
+
+𝐿 = 𝑒 ⋆ − 𝑠 ⋆ (relative boundary error does not depend on event length). Then under Assumptions 2–3, Cover is length-conditional, ℙ(𝐼 ⋆ ⊆ ̂𝑞 (𝑋) ∣ 𝐿 = 𝑙) ≥ 1 − 𝛼 for every 𝑙 . The seconds-valued score 
+
+(1) with 𝓁(𝑋) ≡ 1 does not satisfy this in general, because absolute boundary error grows with event length.  
+
+> Coverage when one video breaks exchangeability..
+
+Calibration and test moments taken from the same video are dependent, violating Assumption 1. The next result bounds the resulting loss   
+
+> 7CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table 1
+
+Evaluation design. Each row isolates one question answered in Sec. 7 and the Appendix.  
+
+> Study Question it answers
+
+Coverage validity Does empirical coverage match 1 − 𝛼 across the 𝛼 -grid, for each base grounder? Efficiency Interval vs. super-level-set vs. fixed-margin scores at matched coverage. Risk control Does RCPS miss-rate control hold at level 𝛼 with probability 1−𝛿 ?Conditional coverage Coverage by event length. Does Mondrian calibration restore group coverage? Cross-dataset transfer Distribution shift under cross-dataset calibration, with weighted conformal as the remedy. Calibration size Coverage vs. calibration size 𝑛 , and wrapper compute cost. 
+
+and shows it vanishes as the dependence does. 
+
+Proposition 8 Coverage under bounded non-exchangeability . Let 𝑍 𝑖 = (𝑋 𝑖 , 𝐼 ⋆𝑖 ),write 𝑍 1∶𝑛+1 = (𝑍 1, … , 𝑍 𝑛+1 ), and let 𝑍 (𝑖) 1∶𝑛+1 denote this sequence with the test point 𝑍 𝑛+1 
+
+and calibration point 𝑍 𝑖 swapped. Under Assumptions 2–3, with the exchangeability defect 
+
+Δ = 1𝑛+1 ∑𝑛 𝑖=1 𝑑 TV (𝑍 1∶𝑛+1 , 𝑍 (𝑖) 1∶𝑛+1 ), Cover satisfies ℙ(𝐼 ⋆𝑛+1 ⊆ ̂𝑞 (𝑋 𝑛+1 )) ≥ 1 − 𝛼 − Δ .
+
+6 Experiments 
+
+Table 1 lists the six studies. Each isolates one question, with coverage as the validity check and region length as the cost.  
+
+> Datasets and base grounders.
+
+We use Charades-STA [4], ActivityNet-Captions [5], and QVHigh-lights [6]. Each dataset is split at the video level into a calibration pool and a test set (40/60, frozen at seed 42), disjoint from anything used to build the grounder. Splitting by video rather than by query keeps calibration and test exchangeable. Unless noted, coverage variability is es-timated by resampling within the frozen calibration pool (50 resamples at 50% of its videos). To test model-agnosticism, we wrap two kinds of grounder: a trained DETR-style localizer (QD-DETR [7] via Lighthouse [38]) and a black-box video–language model prompted for interval retrieval (Qwen2.5-VL-7B-Instruct [39]). When the black-box grounder returns no interval, a refusal pol-icy sets (𝑋) = [0, 𝑇 ] for every 𝜆 , covering trivially at maximal length. We, therefore, report Qwen metrics two ways: marginal and conditional on non-refusal. The super-level-set score uses QVHighlights saliency where available. Lighthouse caps usable video length, so we drop videos longer than 150 seconds. This affects only ActivityNet-Captions, removing 34.5% of its original pool. Where QVHighlights ground truth spans multiple intervals, we score the envelope interval, i.e. the earliest start and latest end timestamp. Section G of the Appendix adds three further grounders, including SRAM [13], a training-based grounder that reports boundary uncertainty.  
+
+> Metrics.
+
+We report empirical coverage (the fraction of test points with 𝐼 ⋆ ⊆ (𝑋) ), efficiency (mean temporal length of , plus the number of connected components for the super-level-set score), IoU between  and 𝐼 ⋆, and miss-rate. Coverage is the validity check and length is the cost.                
+
+> 8CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab 0.5 0.6 0.7 0.8 0.9 1.0
+> realized coverage
+> Charades-STA
+> 0.5 0.6 0.7 0.8 0.9 1.0
+> ActivityNet-Captions
+> 0.5 0.6 0.7 0.8 0.9 1.0
+> QVHighlights
+> 0.5 0.7 0.9
+> target coverage 1 − α
+> 12.5 15.0 17.5 20.0 22.5 25.0 27.5
+> mean length (s)
+> 0.5 0.7 0.9
+> target coverage 1 − α
+> 40 50 60 70
+> 0.5 0.7 0.9
+> target coverage 1 − α
+> 60 80 100 120 140
+> norm (length-scaled) sec (fixed margin) SLS (super-level-set) exact coverage ( y=x)
+
+Figure 2 overage validity and efficiency (QD-DETR). Top row: realized coverage against the target 
+
+1 − 𝛼 . The dashed diagonal is exact coverage. Bottom row: mean region length against the same target, the coverage–efficiency frontier. Columns are the three datasets. The score families are norm (length-scaled), sec (fixed margin), and sls (super-level-set). 
+
+Coverage validity. This study underlies every other one here: it verifies that Proposition 4 holds empirically, at the level a user requests. We sweep target coverage over a fixed six-point grid, 
+
+𝛼 ∈ {0.05, 0.1, 0.2, 0.3, 0.4, 0.5} , and calibrate and evaluate at every grid point independently, for both base grounders, on all three datasets, using both instantiations of the interval-widening score (Eq. 1) and, on QVHighlights, the super-level-set score (Eq. 2). For each combination, we report realized coverage against target, together with the mean region length at the same operating points (the coverage–efficiency frontier), and the resampling-based variability described above. 
+
+Efficiency at matched coverage. Efficiency is the size of the region required to achieve the speci-fied coverage. For a focused comparison between the different score types, reliability is fixed at 2 operating points ( 1 − 𝛼 = [0.8, 0.9] ), rather than the full grid swept for coverage validity. We com-pare length-normalized interval score (norm), fixed-margin (seconds) interval score (sec), and the super-level-set score (sls) efficiencies, at each target and for both grounders. Two further compar-isons ask what the calibration step and the choice of family are worth. We sweep an uncalibrated fixed margin over six hand-picked constants through the same nested family and evaluation engine, isolating calibration as the only difference. We run a per-boundary two-parameter variant against the single-parameter score, and read its calibrated ̂ 𝑞 s/̂𝑞 e ratio as a diagnostic of each grounder’s boundary asymmetry. 
+
+7 Results               
+
+> 9CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab 0.5 0.6 0.7 0.8 0.9 1.0
+> realized coverage
+> Charades-STA
+> 0.5 0.6 0.7 0.8 0.9 1.0
+> ActivityNet-Captions
+> 0.5 0.6 0.7 0.8 0.9 1.0
+> QVHighlights
+> 0.5 0.7 0.9
+> target coverage 1 − α
+> 16 18 20 22 24 26 28
+> mean length (s)
+> 0.5 0.7 0.9
+> target coverage 1 − α
+> 40 50 60 70
+> 0.5 0.7 0.9
+> target coverage 1 − α
+> 100 110 120 130 140
+> norm (length-scaled) sec (fixed margin) exact coverage ( y=x)
+
+Figure 3 Coverage validity and efficiency (Qwen2.5-VL-7B-Instruct). For the two interval families the black-box grounder supports (it exposes no relevance signal, so there is no sls curve). Marginal realized coverage tracks the target across datasets, confirming that the wrapper calibrates a grounder reached only through its predicted intervals. 
+
+7.1 Coverage Validity 
+
+Shown in Figures 2 and 3, realized coverage tracks the target closely over the full grid 1 − 𝛼 ∈ {0.50, 0.60, 0.70, 0.80, 0.90, 0.95} , confirming Proposition 4 empirically for most dataset–grounder pairs, with ActivityNet at 0.895±0.003 (𝑛 cal = 7811 ) and Charades at 0.900±0.011 (𝑛 cal = 1500 ) at the 
+
+0.90 target. One case departs: QD-DETR on QVHighlights runs below target ( 0.879 ± 0.016 ), under the 𝑘/(𝑛 + 1) floor Proposition 12 in the Appendix predicts for i.i.d. calibration rows. A video-level permutation test rules out the frozen split as the cause (2000 permutations, no significant calibration-vs-test difference for either grounder under either score family, 𝑝 ∈ [0.08, 0.52] ; procedure in the Appendix F). The gap is grounder-specific and traces to conditional coverage: QD-DETR undercovers QVHighlights’ Long and Multi-window strata by 0.148 and 0.127 against Qwen’s 
+
+0.008 and 0.046 (Appendix Table A10), and the dataset’s small, query-clustered pool ( 625 rows over 
+
+190 videos) lets that subgroup failure move the marginal average. The super-level-set family’s connected-components count averages between 1.25 and 1.51 across the grid on QVHighlights, highlighting disconnected behavior described in Sec. 4. Qwen’s refusal rate, instances where the grounder returns no usable interval, is 10.4% on Charades-STA, 2.9% on ActivityNet-Captions, and 2.6% on QVHighlights. Marginal numbers are the ones the guarantee is about, but the non-refusal split is needed to compare Qwen’s efficiency fairly against QD-DETR, which never refuses.  
+
+> 10 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Table 2 Region length at matched target coverage. Region length (seconds, ↓) for both grounders. The best score family for each grounder, dataset, and target is shown in bold . Blank entries indicate that the score family is not applicable. Qwen values are marginal. Table A5 in the Appendix reports non-refused length separately. 
+
+1 − 𝛼 = 0.80 (↓) 1 − 𝛼 = 0.90 (↓)norm sec sls norm sec sls              
+
+> Grounder Dataset Len. CI Len. CI Len. CI Len. CI Len. CI Len. CI
+
+QD-DETR Charades-STA 21.1 [20.61,21.53] 20.1 [19.84,20.42] – – 24.4 [23.96,24.95] 24.9 [24.59,25.30] – –ActivityNet-Captions 52.6 [51.29,54.00] 50.4 [49.42,51.38] – – 63.6 [62.02,65.31] 61.7 [60.43,62.97] – –QVHighlights 103.5 [100.95,106.19] 101.0 [99.27,102.84] 91.5 [87.72,95.23] 129.1 [127.19,131.14] 128.6 [127.26,130.01] 111.6 [108.22,114.94] 
+
+Qwen Charades-STA 23.1 [22.47,23.78] 23.1 [22.71,23.61] – – 25.4 [24.78,25.99] 26.1 [25.59,26.53] – –ActivityNet-Captions 57.4 [55.90,58.87] 58.7 [57.42,59.83] – – 63.9 [62.46,65.54] 66.6 [65.14,68.01] – –QVHighlights 120.6 [117.81,123.25] 122.1 [120.56,123.51] – – 129.1 [127.00,131.30] 133.5 [132.42,134.66] – –
+
+7.2 Efficiency at Matched Coverage 
+
+Table 2 reports mean region length at 1 − 𝛼 ∈ {0.80, 0.90} for each score family, per grounder. Figure A3 in the Appendix plots the full QD-DETR frontier from which these two operating points are drawn. No family dominates uniformly. For QD-DETR on Charades-STA, the two interval families cross between the two targets: sec is shorter at 0.80 (20.1s vs. 21.1s) while norm is shorter at 0.90 (24.4s vs. 24.9s). On ActivityNet-Captions, sec is shorter at both targets with no crossing. On QVHighlights, sls is shortest at both tested targets (91.5s and 111.6s vs. 101–103s and 128–129s for the interval families). This should not be concluded as a general property of the super-level-set family, since the fuller 𝛼 -grid in Figure 2 shows it losing to both interval families at looser targets (1 − 𝛼 ≤ 0.70 ) and only overtaking them from roughly 0.80 upward. Qwen shows a different, more consistent pattern: norm is shortest or tied on every dataset at both targets. Table A5 in the Appendix isolates genuine calibrated widening from the refusal-driven inflation: Qwen’s marginal length is measurably larger than its non-refused length wherever the refusal rate is non-trivial (e.g. Charades-STA: 25.4s marginal vs. 24.5s non-refused for norm), so refusal-conditional is the fair basis for comparing efficiency against QD-DETR. Looking at the full sweep in Figure 3, sec is shorter at looser targets, with norm overtaking at 1 − 𝛼 = 0.8 onwards. Table 3 presents a different approach for widening: choosing 𝜆 by hand instead of calibration. A fixed expansion margin cannot reliably achieve a desired coverage target across datasets or models, with realized coverage ranging from 0.096 to 1.000 across the six constants tested. Calibration is necessary to obtain the desired coverage efficiently. The full analysis is in the Appendix. 
+
+One parameter or two is a property of the grounder. Tables A2 and A2 in the Appendix compare the single-parameter score against the per-boundary two-parameter variant Fig. A1, and the an-swer splits by grounder. For QD-DETR the single parameter is the right choice: the two-parameter variant is longer in 9 of 12 combinations, and its separately calibrated boundaries land at com-parable values throughout. For Qwen the ordering inverts: two parameters are shorter in 9 of 12 combinations, by −3.4% on average and up to −9.1% on QVHighlights at 1 − 𝛼 = 0.80 . Both members carry the same coverage guarantee, so this is a choice about efficiency alone, and the 
+
+11 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab  
+
+> Table 3
+
+Coverage under fixed uncalibrated margins. Realized coverage for the uncalibrated margin score (sec) swept across six hand-picked constants for both grounders. The final column reports the range (maximum minus minimum coverage) across the sweep for each row. Shaded cells fall below 0.80 , the looser of COVER’s two headline targets. For comparison, COVER’s calibrated ̂ 𝜆 realizes coverage within approximately 0.02 of the requested target on every (grounder, dataset) pair (Table 2, Figures 2 and 3). 
+
+Grounder Dataset 𝜆 = 5 𝜆 = 10 𝜆 = 20 𝜆 = 40 𝜆 = 80 𝜆 = 160 Range                                                 
+
+> QD-DETR Charades-STA 0.662 0.819 0.958 1.000 1.000 1.000 0.338 QD-DETR ActivityNet-Captions 0.536 0.644 0.766 0.883 0.969 1.000 0.464 QD-DETR QVHighlights 0.474 0.552 0.629 0.723 0.875 1.000 0.526 Qwen Charades-STA 0.449 0.659 0.912 0.999 1.000 1.000 0.551 Qwen ActivityNet-Captions 0.335 0.424 0.566 0.759 0.950 1.000 0.665 Qwen QVHighlights 0.096 0.104 0.169 0.325 0.722 1.000 0.904
+
+calibrated ratio in Table A3 in the Appendix tells a practitioner which member to use before any test data is seen.  
+
+> Calibration as measurement: Qwen knows when events start, not when they end.
+
+The reason two parameters help on Qwen is a pronounced asymmetry in the grounder itself, which the cal-ibration step measures directly. ̂ 𝜆 start calibrates to zero or near zero in seven of Qwen’s twelve rows and never exceeds 5.44 , while ̂ 𝜆 end is never below 3.31 and reaches 115.4 (Appendix Table A3). The model locates when an event begins reliably, and essentially all of its boundary error is in not knowing when the event ends. It explains the efficiency result above: the single-parameter score takes the maximum over sides, so an end-driven ̂ 𝜆 is applied to an already-adequate start side, and the resulting waste scales with absolute event duration, which is why the saving is largest on QVHighlights and smallest on Charades-STA. 
+
+7.3 Further Studies 
+
+Four studies stress the guarantee where it is most likely to break, and each finds the predicted behavior together with the boundary at which it stops holding. Risk control verifies that the miss rate remains within the prescribed risk budget ( 𝛿 = 0.1 ) across all configurations, with interval length increasing by only 1.4 –14.8% and shrinking at the expected 𝑂(𝑛 −1/2 ) rate as the calibration set grows (Appendix Table A9). Conditional coverage shows that Mondrian calibration substantially improves coverage within strata, reducing the worst-stratum deviation by more than 2.5× on QD-DETR, but its benefit diminishes when the calibration pool is too small to populate each stratum (Appendix Table A10 and Table A11). Cross-dataset transfer demonstrates that duration-aware reweighting largely restores coverage under shift, reducing the coverage gap from 18.8 percentage points to 3.6 , while also illustrating that no reweighting method can compensate for regions of the target distribution unsupported by the source data, a positivity limitation (Appendix Table A12 and Table A13). Finally, the calibration-size study confirms the finite-sample behavior predicted by Theorem 5: coverage remains valid as the calibration size increases, with uncertainty shrinking from 
+
+±0.042 to ±0.007 at the expected 𝑂(𝑛 −1/2 ) rate, while still providing usable guarantees with as few as 20 calibration videos, albeit with wider uncertainty (Appendix Table A14). Full protocols, tables,  
+
+> 12 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+and discussion are presented in Section G of the Appendix, along with evaluation on additional grounders (Appendix Table A6 and A7) and a downstream-utility study connecting the certified width to a deployment rule (Appendix Table A15 and A16). 
+
+8 Discussion and Limitations  
+
+> Exchangeability and shift.
+
+The coverage guarantee rests on Assumption 1, and our experiments locate a hard bound between the two ways it can fail. Across datasets the marginal distribution shifts, and weighted conformal prediction [33] restores coverage under known covariate shift, but only where the calibration data has support: the cross-dataset transfer study finds reweighting repairs one direction fully and the other not at all, and the failing direction is a positivity limit no reweighting scheme can fix. Within a long video, clips and queries are temporally dependent, the beyond-exchangeability literature [34, 35, 40] gives adaptive remedies for when calibration and test share a video, and Proposition 8 bounds the resulting loss. We do not claim coverage under arbitrary shift.  
+
+> Marginal, not conditional.
+
+Cover guarantees marginal coverage, and the conditional-coverage study shows what that permits: QD-DETR’s QVHighlights coverage is at 0.879 marginally while its Long stratum sits at 0.752 . Stratified calibration (Proposition 11 in the Appendix) and score normalization (Proposition 7) each recover part of this, but exact attribute-free conditional coverage remains unattainable distribution-free [30]. A user who cares about a specific subpopulation should calibrate on it.  
+
+> Efficiency and calibration data.
+
+Coverage is vacuous without efficiency, and the wrapper inherits the grounder’s quality rather than making a weak grounder strong. The super-level-set score is only as good as the relevance signal it thresholds. Where partial overlap suffices, the miss-rate or an IoU-based risk applies unchanged. The wrapper needs a labeled, exchangeable calibration set of size 𝑛 , which sets the finite-sample slack 1/(𝑛 + 1) . The calibration-size study puts the practical floor at roughly 20 videos. 
+
+9 Conclusion 
+
+Event boundaries in continuous video are ambiguous, so the ground truth for temporal grounding is a distribution over intervals and a single predicted interval is the wrong object to report. We presented Cover, a post-hoc, model-agnostic wrapper that changes the output: it calibrates a temporal nonconformity score on a small labeled set and widens any grounder’s prediction so the true moment is contained with a user-chosen probability, with no retraining and no white-box access. We prove the region is asymptotically the tightest of its family, that coverage holds within event-length strata under a scale model, and that it degrades gracefully when one video breaks exchangeability. What the guarantee costs is measured, and what it reveals is not only a guarantee. Across three benchmarks and five grounders, hand-picked margins swing realized coverage by up to 0.904 and an evidential grounder built for uncertainty quantification misses its nominal level by 14 points, while a single calibrated scalar hits whichever target the user names.  
+
+> 13 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Ethics and LLM-use Disclosure 
+
+Large language models were used to assist with writing and editing this paper. The authors reviewed all content and take full responsibility for the work. The study relies only on publicly available datasets and models and raises no additional ethical concerns. 
+
+> A C K N O W L E D G M E N T S
+
+We thank the members of the Kurban Intelligence Lab for discussions, and the Electrical and Computer Engineering Department at Texas A&M University at Qatar for the provided support. 
+
+> F U N D I N G
+
+This work was supported by the Student Research Experience Grant (SREG) and the Department of Electrical and Computer Engineering at Texas A&M University at Qatar. 
+
+> D A T A A N D C O D E A V A I L A B I L I T Y
+
+Code: https://github.com/KurbanIntelligenceLab/cover . Datasets are public and cited in Sec. 6. 
+
+> C O M P E T I N G I N T E R E S T S
+
+The authors declare no competing interests. 
+
+References 
+
+[1] Mayu Otani, Yuta Nakashima, Esa Rahtu, and Janne Heikkilä. Uncovering hidden challenges in query-based video moment retrieval. arXiv preprint arXiv:2009.00325 , 2020. [2] Hao Zhou, Chongyang Zhang, Yanjun Chen, and Chuanping Hu. Towards diverse temporal grounding under single positive labels. arXiv preprint arXiv:2303.06545 , 2023. [3] Hao Zhang, Aixin Sun, Wei Jing, and Joey Tianyi Zhou. Temporal sentence grounding in videos: A survey and future directions. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2023. [4] Jiyang Gao, Chen Sun, Zhenheng Yang, and Ram Nevatia. TALL: Temporal activity localization via language query. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , 2017. [5] Ranjay Krishna, Kenji Hata, Frederic Ren, Li Fei-Fei, and Juan Carlos Niebles. Dense-captioning events in videos. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , 2017. [6] Jie Lei, Tamara L Berg, and Mohit Bansal. Detecting moments and highlights in videos via natural language queries. In Advances in Neural Information Processing Systems (NeurIPS) , 2021. [7] WonJun Moon, Sangeek Hyun, SangUk Park, Dongchan Park, and Jae-Pil Heo. Query-dependent video representation for moment retrieval and highlight detection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [8] Pilhyeon Lee and Hyeran Byun. BAM-DETR: Boundary-aligned moment detection transformer for temporal sentence grounding in videos. In European Conference on Computer Vision (ECCV) , 2024. [9] Kevin Qinghong Lin, Pengchuan Zhang, Joya Chen, Shraman Pramanick, Difei Gao, Alex Jinpeng Wang, Rui Yan, and Mike Zheng Shou. UniVTG: Towards unified video-language temporal grounding. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2023. [10] Bin Huang, Xin Wang, Hong Chen, Zihan Song, and Wenwu Zhu. VTimeLLM: Empower LLM to grasp video moments. arXiv preprint arXiv:2311.18445 , 2023. [11] Minghang Zheng, Xinhao Cai, Qingchao Chen, Yuxin Peng, and Yang Liu. Training-free video temporal  
+
+> 14 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+grounding using large-scale pre-trained models. In European Conference on Computer Vision (ECCV) ,2024. [12] Zelin Zheng, Xinyan Liu, Ruixin Li, Antoni B Chan, Guorong Li, Qingming Huang, and Laiyun Qing. Foresee-to-ground: From predictive temporal perception to evidence-driven reasoning for video tem-poral grounding. arXiv preprint arXiv:2605.21973 , 2026. [13] Kaijing Ma, Haojian Huang, Jin Chen, Haodong Chen, Pengliang Ji, Xianghao Zang, Han Fang, Chao Ban, Hao Sun, Mulin Chen, et al. Beyond uncertainty: Evidential deep learning for robust video temporal grounding. arXiv preprint arXiv:2408.16272 , 2024. [14] Haojian Huang, Kaijing Ma, Jin Chen, Haodong Chen, Zhou Wu, Xianghao Zang, Han Fang, Chao Ban, Hao Sun, Mulin Chen, et al. Adaptive evidential learning for temporal-semantic robustness in moment retrieval. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pages 5013–5021, 2026. [15] Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. Algorithmic Learning in a Random World .Springer, 2005. [16] Anastasios N Angelopoulos and Stephen Bates. A gentle introduction to conformal prediction and distribution-free uncertainty quantification. Foundations and Trends in Machine Learning , 16(4):494–591, 2023. [17] Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J Tibshirani, and Larry Wasserman. Distribution-free predictive inference for regression. Journal of the American Statistical Association , 113(523):1094–1111, 2018. [18] Anastasios N Angelopoulos, Rina Foygel Barber, and Stephen Bates. Theoretical foundations of conformal prediction. arXiv preprint arXiv:2411.11824 , 2024. [19] Anastasios N Angelopoulos, Stephen Bates, Jitendra Malik, and Michael I Jordan. Uncertainty sets for image classifiers using conformal prediction. In International Conference on Learning Representations (ICLR) , 2021. [20] Yaniv Romano, Evan Patterson, and Emmanuel J Candès. Conformalized quantile regression. In 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 2019. [21] Bruce Cyusa Mukama, Soundouss Messoudi, Sylvain Rousseau, and Sébastien Destercke. Copula-based conformal prediction for object detection: A more efficient approach. In Symposium on Conformal and Probabilistic Prediction with Applications (COPA), PMLR , 2024. [22] Stephen Bates, Anastasios Angelopoulos, Lihua Lei, Jitendra Malik, and Michael I Jordan. Distribution-free, risk-controlling prediction sets. Journal of the ACM , 68(6):1–34, 2021. [23] Léo Andéol, Luca Mossina, Adrien Mazoyer, and Sébastien Gerchinovitz. Conformal object detection by sequential risk control. arXiv preprint arXiv:2505.24038 , 2025. [24] Alexander Timans, Christoph-Nikolas Straehle, Kaspar Sakmann, and Eric Nalisnick. Adaptive bound-ing box uncertainties via two-step conformal prediction. arXiv preprint arXiv:2403.07263 , 2024. [25] Kerri Lu, Dan M Kluger, Stephen Bates, and Sherrie Wang. Conformal prediction sets for instance segmentation. arXiv preprint arXiv:2602.10045 , 2026. [26] Jorge Ortiz. Explicit abstention knobs for predictable reliability in video question answering. arXiv preprint arXiv:2601.00138 , 2026. [27] Anastasios N Angelopoulos, Stephen Bates, Adam Fisch, Lihua Lei, and Tal Schuster. Conformal risk control. In International Conference on Learning Representations (ICLR) , 2024. [28] Jiabo Huang, Yang Liu, Shaogang Gong, and Hailin Jin. Video activity localisation with uncertainties in temporal boundary. In European Conference on Computer Vision (ECCV) , 2022.  
+
+> 15 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+[29] Anastasios N Angelopoulos, Stephen Bates, Emmanuel J Candès, Michael I Jordan, and Lihua Lei. Learn then test: Calibrating predictive algorithms to achieve risk control. arXiv preprint arXiv:2110.01052 ,2021. [30] Rina Foygel Barber, Emmanuel J Candès, Aaditya Ramdas, and Ryan J Tibshirani. The limits of distribution-free conditional predictive inference. Information and Inference , 10(2):455–482, 2021. [31] Vladimir Vovk. Conditional validity of inductive conformal predictors. In Asian Conference on Machine Learning (ACML) , 2012. [32] Isaac Gibbs, John J Cherian, and Emmanuel J Candès. Conformal prediction with conditional guarantees. 
+
+arXiv preprint arXiv:2305.12616 , 2024. [33] Ryan J Tibshirani, Rina Foygel Barber, Emmanuel J Candès, and Aaditya Ramdas. Conformal prediction under covariate shift. In Advances in Neural Information Processing Systems (NeurIPS) , 2019. [34] Rina Foygel Barber, Emmanuel J Candès, Aaditya Ramdas, and Ryan J Tibshirani. Conformal prediction beyond exchangeability. Annals of Statistics , 51(2):816–845, 2023. [35] Isaac Gibbs and Emmanuel Candès. Adaptive conformal inference under distribution shift. In Advances in Neural Information Processing Systems (NeurIPS) , 2021. [36] Léo Andéol, Thomas Fel, Florence De Grancey, and Luca Mossina. Confident object detection via conformal prediction and conformal risk control: an application to railway signaling. In Symposium on Conformal and Probabilistic Prediction with Applications (COPA), PMLR , 2023. [37] Kamile Stankeviciute, Ahmed M Alaa, and Mihaela van der Schaar. Conformal time-series forecasting. In Advances in Neural Information Processing Systems (NeurIPS) , 2021. [38] Taichi Nishimura, Shota Nakada, Hokuto Munakata, and Tatsuya Komatsu. Lighthouse: A user-friendly library for reproducible video moment retrieval and highlight detection. In Proceedings of The 2024 Conference on Empirical Methods in Natural Language Processing: System Demonstrations , 2024. [39] Shuai Bai et al. Qwen2.5-VL technical report. arXiv preprint arXiv:2502.13923 , 2025. [40] António Farinhas, Chrysoula Zerva, Dennis Ulmer, and André F T Martins. Non-exchangeable confor-mal risk control. arXiv preprint arXiv:2310.01262 , 2023. [41] Stéphane Boucheron, Gábor Lugosi, and Pascal Massart. Concentration Inequalities: A Nonasymptotic Theory of Independence . Oxford University Press, 2013. [42] Hao Sun, Mingyao Zhou, Wenjing Chen, and Wei Xie. Tr-detr: Task-reciprocal transformer for joint moment retrieval and highlight detection. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 38, pages 4998–5007, 2024. [43] Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang Liu, Linglin Jing, Shenglong Ye, Jie Shao, et al. Internvl3. 5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. arXiv preprint arXiv:2508.18265 , 2025. [44] Vast.ai. Vast.ai, 2026. URL https://vast.ai/ . 
+
+> 16 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> APPENDIX
+
+A Standard Guarantees 
+
+These results are split-conformal and risk-control facts [15, 17, 22] instantiated with the temporal score. We state and prove them for completeness. Propositions 9 and 10 are referenced from Sec. 5. 
+
+Proof of Proposition 4. By Assumption 2, 𝐼 ⋆𝑛+1 ⊆ ̂𝑞 (𝑋 𝑛+1 ) iff 𝑠 𝑛+1 ≤̂ 𝑞 , where 𝑠 𝑛+1 = 𝑠(𝑋 𝑛+1 , 𝐼 ⋆𝑛+1 ).By Assumption 3 the map 𝑠 does not depend on the calibration labels, so by Assumption 1 the scores 𝑠 1, … , 𝑠 𝑛+1 are exchangeable. For exchangeable scalars the rank of 𝑠 𝑛+1 among the 𝑛 + 1 
+
+values is uniform on {1, … , 𝑛 + 1} up to ties, hence 
+
+ℙ(𝑠 𝑛+1 ≤ 𝑠 (⌈(𝑛+1)(1−𝛼)⌉) ) ≥ ⌈(𝑛 + 1)(1 − 𝛼)⌉ 𝑛 + 1 ≥ 1 − 𝛼, 
+
+with 𝑠 (𝑘) the 𝑘 -th smallest calibration score and ̂ 𝑞 = 𝑠 (⌈(𝑛+1)(1−𝛼)⌉) . Combining with the containment equivalence gives the claim. 
+
+Proposition 9 Upper bound . If 𝑠 1, … , 𝑠 𝑛+1 are almost surely distinct, the coverage in Proposition 4 is at most 1 − 𝛼 + 1𝑛+1 .
+
+Proof. Without ties the rank of 𝑠 𝑛+1 is exactly uniform, so ℙ(𝑠 𝑛+1 ≤̂ 𝑞) = ⌈(𝑛 + 1)(1 − 𝛼)⌉/(𝑛 + 1) ,and ⌈(𝑛 + 1)(1 − 𝛼)⌉ < (𝑛 + 1)(1 − 𝛼) + 1 gives the bound. 
+
+Proposition 10 Miss-rate control . Under Assumption 1–Assumption 3, with the monotone loss 
+
+𝜆 (𝑋, 𝐼 ⋆) = 𝟏[𝑠(𝑋, 𝐼 ⋆) > 𝜆] , the risk-controlling choice ̂ 𝜆 of Bates et al. [22] from the calibration scores satisfies ℙ(𝔼[ ̂ 𝜆 (𝑋 𝑛+1 , 𝐼 ⋆𝑛+1 )] ≤ 𝛼) ≥ 1 − 𝛿 , the outer probability over the calibration draw. 
+
+Proof. By Assumption 2, 𝜆 = 𝟏[𝑠 > 𝜆] is nonincreasing in 𝜆 , so the risk 𝑅(𝜆) = 𝔼[ 𝜆 ] is nonincreasing. This is the monotone-loss setting of Bates et al. [22]: form a pointwise upper-confidence bound ̂ 𝑅 +(𝜆) on 𝑅(𝜆) from the calibration scores via a concentration inequality [41] and set ̂ 𝜆 = inf{𝜆 ∶̂ 𝑅 +(𝜆 ′) ≤ 𝛼 ∀𝜆 ′ ≥ 𝜆} . The RCPS theorem of Bates et al. [22] gives ℙ(𝑅(̂𝜆) ≤ 𝛼) ≥ 1 − 𝛿 ; 𝑅(̂𝜆) = 𝔼[ ̂𝜆 ] yields the statement. 
+
+Proposition 11 Group-conditional coverage . Partition inputs into groups by a discrete attribute (event-length bucket or class). If a separate threshold ̂ 𝑞 (𝑘) is calibrated on the 𝑛 𝑘 calibration points of group 𝑘 , then for a test point in group 𝑘 , ℙ(𝐼 ⋆ ⊆ ̂ 𝑞 (𝑘) (𝑋) ∣ group = 𝑘) ≥ 1 − 𝛼 , with finite-sample slack 1/(𝑛 𝑘 + 1) .
+
+Proof. Within group 𝑘 the points are exchangeable, so Proposition 4 applies to the group’s scores with 𝑛 𝑘 calibration points, giving coverage at least 1 − 𝛼 conditional on the group and the tightness 
+
+1/(𝑛 𝑘 + 1) from Proposition 9. 
+
+Proposition 12 Distribution of coverage given the calibration set . Suppose the scores 
+
+𝑠 1, … , 𝑠 𝑛+1 are i.i.d. with a continuous distribution, and let 𝑘 = ⌈(𝑛 + 1)(1 − 𝛼)⌉ so that ̂ 𝑞 = 𝑠 (𝑘) .Conditional on the calibration scores, the realized coverage 𝐶 = ℙ(𝑠 𝑛+1 ≤̂ 𝑞 ∣ 𝑠 1, … , 𝑠 𝑛 ) follows a  
+
+> 17 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Beta(𝑘, 𝑛+1−𝑘) law. Hence 𝔼[𝐶] = 𝑘/(𝑛+1) ≥ 1−𝛼 and sd(𝐶) = [𝑘(𝑛+1−𝑘)/((𝑛+1) 2(𝑛+2))] 1/2 =𝑂(𝑛 −1/2 ).
+
+Proof. Let 𝑈 𝑖 = 𝐹 𝑆 (𝑠 𝑖 ). By the probability integral transform the 𝑈 𝑖 are i.i.d. Uniform(0, 1) , and since 𝑠 𝑛+1 is a fresh draw, 𝐶 = 𝐹 𝑆 (𝑠 (𝑘) ) = 𝑈 (𝑘) , the 𝑘 -th order statistic of 𝑛 i.i.d. uniform variables, which has the Beta(𝑘, 𝑛 + 1 − 𝑘) distribution. Its mean is 𝑘/(𝑛 + 1) ≥ 1 − 𝛼 and its variance is 
+
+𝑘(𝑛 + 1 − 𝑘)/((𝑛 + 1) 2(𝑛 + 2)) = 𝑂(1/𝑛) , so the standard deviation is 𝑂(𝑛 −1/2 ).Proposition 12 is the finite-sample counterpart of Theorem 5(ii): it is why the resampled coverage in the Results section concentrates near the target with a spread that narrows at the 𝑛 −1/2 rate as the calibration pool grows. 
+
+B Proofs of the Grounding-Specific Results 
+
+Proof of Theorem 5. (i) Length identity. The candidate region is 𝜆 (𝑋) = [̂ 𝑠−𝜆𝓁(𝑋),̂𝑒+𝜆𝓁(𝑋)]∩[0, 𝑇 ] .The bracket has length (̂ 𝑒 + 𝜆𝓁) − (̂ 𝑠 − 𝜆𝓁) = (̂ 𝑒 −̂𝑠) + 2𝜆𝓁 = 𝓁(1 + 2𝜆) using 𝓁 =̂ 𝑒 −̂𝑠 , and intersecting with [0, 𝑇 ] can only decrease length, so |𝜆 (𝑋)| = min{𝓁(1 + 2𝜆), 𝑇 } . Setting 𝜆 =̂ 𝑞 and taking expectations, 𝔼| ̂𝑞 (𝑋)| ≤ 𝔼[𝓁(𝑋)(1 + 2̂𝑞)] = 𝔼[𝓁(𝑋)] + 2 𝔼[𝓁(𝑋)̂𝑞] . If the test input 𝑋 𝑛+1 is independent of the calibration data then 𝓁(𝑋 𝑛+1 ) ⟂̂ 𝑞 , since ̂ 𝑞 is a function of the calibration scores, so 𝔼[𝓁(𝑋)̂𝑞] = 𝔼[𝓁(𝑋)]𝔼[̂𝑞] and the bound equals 𝔼[𝓁(𝑋)](1 + 2 𝔼[̂𝑞]) .
+
+(ii) Consistency. Assume the calibration scores are i.i.d. (a strengthening of Assumption 1, as in the theorem statement); the Glivenko–Cantelli and central-limit steps below use it. By Assumption 2, 𝐼 ⋆ ⊆ 𝜆 (𝑋) ⟺ 𝑠(𝑋, 𝐼 ⋆) ≤ 𝜆 , so the family coverage at level 𝜆 is ℙ(𝑠 ≤ 𝜆) = 𝐹 𝑆 (𝜆) . The empirical distribution ̂ 𝐹 𝑛 of the calibration scores converges uniformly to 𝐹 𝑆 (Glivenko–Cantelli), and ̂ 𝑞 is the 𝑘 -th order statistic with 𝑘 = ⌈(𝑛 + 1)(1 − 𝛼)⌉ , i.e. the empirical (1 − 𝛼 + 𝑜(1)) -quantile, so ̂ 𝑞 → 𝑞 ⋆ ∶= 𝑄 1−𝛼 (𝐹 𝑆 ) almost surely. If 𝐹 𝑆 is differentiable at 𝑞 ⋆ with 𝑓 𝑆 (𝑞 ⋆) > 0 , the Bahadur representation of sample quantiles gives ̂ 𝑞 = 𝑞 ⋆ + [(1 − 𝛼) −̂ 𝐹 𝑛 (𝑞 ⋆)]/𝑓 𝑆 (𝑞 ⋆) + 𝑜 p(𝑛 −1/2 ); since 
+
+√𝑛[(1 − 𝛼) −̂ 𝐹 𝑛 (𝑞 ⋆)] is asymptotically normal by the central limit theorem, √𝑛 (̂𝑞 − 𝑞 ⋆) = 𝑂 p(1) .
+
+(iii) Family length-optimality. For continuous 𝐹 𝑆 , coverage 𝐹 𝑆 (𝜆) is nondecreasing and length 
+
+𝓁(1 + 2𝜆) is strictly increasing in 𝜆 . Any 𝜆 with 𝐹 𝑆 (𝜆) ≥ 1 − 𝛼 satisfies 𝜆 ≥ 𝑞 ⋆ by definition of the quantile; every such 𝜆 > 𝑞 ⋆ gives a strictly longer region, and every 𝜆 < 𝑞 ⋆ gives 𝐹 𝑆 (𝜆) < 1 − 𝛼 .Hence 𝑞 ⋆ is the unique shortest region in the family meeting the coverage constraint. 
+
+Proof of Theorem 5(iv). For any 𝜏 , 𝐼 ⋆ ⊆ {𝑡 ∶ 𝑓 𝑋 (𝑡) ≥ 𝜏} holds iff 𝑓 𝑋 (𝑡) ≥ 𝜏 for every 𝑡 ∈ 𝐼 ⋆, i.e. 
+
+min 𝑡∈𝐼 ⋆ 𝑓 𝑋 (𝑡) ≥ 𝜏 , i.e. 𝑠(𝑋, 𝐼 ⋆) = − min 𝑡∈𝐼 ⋆ 𝑓 𝑋 (𝑡) ≤ −𝜏 . The family coverage at threshold 𝜏 is therefore ℙ(𝑠 ≤ −𝜏) = 𝐹 𝑆 (−𝜏) , nonincreasing in 𝜏 . The Lebesgue measure 𝜇(𝜏) = |{𝑡 ∈ [0, 𝑇 ] ∶ 𝑓 𝑋 (𝑡) ≥ 𝜏}| is nonincreasing in 𝜏 because the super-level sets are nested decreasing in 𝜏 . Coverage at least 1 − 𝛼 requires 𝐹 𝑆 (−𝜏) ≥ 1 − 𝛼 , i.e. −𝜏 ≥ 𝑄 1−𝛼 (𝐹 𝑆 ), i.e. 𝜏 ≤ −𝑄 1−𝛼 (𝐹 𝑆 ); among these thresholds the largest, 𝜏 = −𝑄 1−𝛼 (𝐹 𝑆 ), minimizes 𝔼[𝜇(𝜏)] by monotonicity of 𝜇 . Cover uses 
+
+𝜏 = −̂𝑞 with ̂ 𝑞 → 𝑄 1−𝛼 (𝐹 𝑆 ) by Theorem 5(ii). 
+
+Proof of Proposition 7. Under i.i.d. sampling the calibration pairs (𝑋 𝑖 , 𝐼 ⋆𝑖 )𝑖≤𝑛 are independent of the test pair (𝑋 𝑛+1 , 𝐼 ⋆𝑛+1 ), so ̂ 𝑞 = 𝑔(𝑠 1, … , 𝑠 𝑛 ) is independent of (𝑠 𝑛+1 , 𝐿 𝑛+1 ). Fix 𝑙 . Because ̂ 𝑞 ⟂ (𝑠 𝑛+1 , 𝐿 𝑛+1 ), the conditional law of ̂ 𝑞 given 𝐿 𝑛+1 = 𝑙 equals its marginal, and ̂ 𝑞 is conditionally  
+
+> 18 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+independent of 𝑠 𝑛+1 given 𝐿 𝑛+1 = 𝑙 ; because the scale model gives 𝑠 𝑛+1 ⟂ 𝐿 𝑛+1 , the conditional law of 𝑠 𝑛+1 given 𝐿 𝑛+1 = 𝑙 equals its marginal. Therefore 
+
+ℙ(𝑠 𝑛+1 ≤̂ 𝑞 ∣ 𝐿 𝑛+1 = 𝑙) = ∫ ℙ(𝑠 𝑛+1 ≤ 𝑡) 𝑑𝑃 ̂ 𝑞 (𝑡) = ℙ(𝑠 𝑛+1 ≤̂ 𝑞) ≥ 1 − 𝛼, 
+
+the inequality by Proposition 4. By Assumption 2 the event {𝑠 𝑛+1 ≤̂ 𝑞} is {𝐼 ⋆𝑛+1 ⊆ ̂ 𝑞 (𝑋 𝑛+1 )} , giving length-conditional coverage. For the seconds score 𝓁 ≡ 1 , 𝑠(𝑋, 𝐼 ⋆) = max(̂ 𝑠 − 𝑠 ⋆, 𝑒 ⋆ −̂𝑒) carries absolute units and is in general dependent on 𝐿 (longer events admit larger absolute boundary errors), so 𝑠 𝑛+1 ̸ ⟂ 𝐿 𝑛+1 and conditioning on 𝐿 𝑛+1 = 𝑙 shifts its law. 
+
+C Proof of Proposition 8 
+
+Proof. Write the containment event as 𝐴 = {𝑠 𝑛+1 ≤̂ 𝑞} , which by Assumption 2 equals {𝐼 ⋆𝑛+1 ⊆
+
+̂𝑞 (𝑋 𝑛+1 )} ; and let 𝑍 (𝑖) 1∶𝑛+1 swap the test point 𝑍 𝑛+1 with calibration point 𝑍 𝑖 . Under exchangeability of 𝑍 1∶𝑛+1 the rank of 𝑠 𝑛+1 among 𝑠 1, … , 𝑠 𝑛+1 is uniform and ℙ(𝐴) ≥ 1 − 𝛼 (Proposition 4). For a general joint law 𝑃 , compare 𝑃 with each swapped law 𝑃 (𝑖) , the law of 𝑍 (𝑖) 1∶𝑛+1 : for the fixed event 
+
+𝐴 , the definition of total-variation distance gives |ℙ 𝑃 (𝐴) − ℙ 𝑃 (𝑖) (𝐴)| ≤ 𝑑 TV (𝑍 1∶𝑛+1 , 𝑍 (𝑖) 1∶𝑛+1 ). Under 
+
+𝑃 (𝑖) the test point occupies calibration position 𝑖 , so the exchangeable rank bound applies to each of the 𝑛 + 1 positions; aggregating these one-swap bounds with uniform weights 1/(𝑛 + 1) , as in Barber et al. [34, Theorem 2], gives 
+
+ℙ(𝐴) ≥ 1 − 𝛼 − 1𝑛 + 1 
+
+> 𝑛
+
+∑
+
+> 𝑖=1
+
+𝑑 TV (𝑍 1∶𝑛+1 , 𝑍 (𝑖) 1∶𝑛+1 )= 1 − 𝛼 − Δ. 
+
+Exchangeable case. If 𝑍 1∶𝑛+1 is exchangeable then for every 𝑖 the transposed sequence 𝑍 (𝑖) 1∶𝑛+1 
+
+has the same law as 𝑍 1∶𝑛+1 , so each total-variation term vanishes, Δ = 0 , and the bound reduces to Proposition 4. This holds in particular when the moments are i.i.d. (for example one moment per video with independent videos). More generally, each term 𝑑 TV (𝑍 1∶𝑛+1 , 𝑍 (𝑖) 1∶𝑛+1 ) is exactly the failure of the joint law to be invariant under exchanging the test moment with calibration moment 𝑖 ,which is non-zero only through statistical dependence linking the test moment to the rest; for data drawn independently across videos this dependence is confined to calibration moments sharing the test moment’s video. 
+
+Mixing. If that within-video sequence is stationary and mixing, its dependence decays with temporal separation, so one expects each same-video term, and hence Δ, to shrink as the test moment is separated in time from the same-video calibration moments. A quantitative bound requires the mixing coefficients of a specified model and is left open. We do not claim a rate. 
+
+D Assumptions at a Glance 
+
+Table A1 summarizes the main assumptions made for the analysis.   
+
+> 19 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table A1
+
+Key assumptions. The three assumptions underlying COVER, the role each plays in the analysis, and the corresponding failure mode if the assumption is violated.   
+
+> Assumption Role in the analysis Failure mode
+
+Assumption 1: Exchange-ability Makes calibration scores predic-tive of the test score; the source of the coverage bound. Distribution shift or within-video dependence, quantified by Proposition 8. Assumption 2: Nested fam-ily Makes the score a valid thresh-old and the miss-loss monotone. A non-nested region family breaks both coverage and RCPS. Assumption 3: Frozen pipeline Keeps the scores exchangeable (no peeking at calibration la-bels). Tuning 𝑔 or 𝑠 on calibration data invalidates the guarantee.  
+
+> Algorithm 1
+
+Cover (split-conformal temporal coverage)  
+
+> Input:
+
+grounder 𝑔 ; calibration {(𝑋 𝑖 , 𝐼 ⋆𝑖 )} 𝑛 𝑖=1 ; level 𝛼 ; nested family 𝜆 and score 𝑠  
+
+> 1
+
+for 𝑖 = 1 to 𝑛 do  
+
+> 2
+
+𝑠 𝑖 ← 𝑠(𝑋 𝑖 , 𝐼 ⋆𝑖 ) 
+
+> 3
+
+end for 
+
+> 4
+
+̂ 𝑞 ← ⌈(𝑛 + 1)(1 − 𝛼)⌉ -th smallest of {𝑠 𝑖 } 
+
+> 5
+
+at test input 𝑋 : return ̂ 𝑞 (𝑋) 
+
+E Method Schematic 
+
+Figure A1 illustrates the two-phase procedure specified by Eq.(1)–Eq. (3) and Algorithm 1. Figure A2 showcases a qualitative example. 
+
+F Coverage and Efficiency: Further Results 
+
+This section includes tables referred to in the main body of the paper, in addition to providing additional insight on the coverage-validity and efficiency findings. 
+
+F.1 Exchangeability Diagnostic for the Coverage-Validity Study 
+
+Sec. 7 reports that QD-DETR’s realized coverage on QVHighlights ( 0.879 ± 0.016 at 1 − 𝛼 = 0.90 )runs measurably below the 𝑘/(𝑛 + 1) floor Proposition 12 predicts under i.i.d. calibration rows. That floor’s derivation rests on exchangeability (Assumption 1) between the calibration and test draws, so we test the frozen split. 
+
+Procedure. For a given (grounder, score family), we compute the two-sample Kolmogorov– Smirnov statistic between the score’s empirical distribution on the frozen calibration pool and on the frozen test pool. Significance is assessed by a permutation test rather than the classi-cal asymptotic KS 𝑝 -value, since the latter assumes independent rows, while multiple queries in QVHighlights share a source video ( ≈ 3.3 rows per source video in both pools here). We therefore   
+
+> 20 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Figure A1
+
+The Cover wrapper. Fhe same grounder 𝑔 drives both phases and is never retrained. Calibrate once (left, on held-out set): each example is scored by the smallest per-side widening that makes the predicted interval contain the true moment Eq.(1), and the threshold ̂ 𝑞 is set to the (1−𝛼) quantile of those scores Eq. (3). 
+
+At test time (right, per query): the predicted interval is widened by ̂ 𝑞 𝓁 on each side, where 𝓁 is the length scale of the score family, giving a region that contains the true moment with probability at least 1 − 𝛼 under exchangeability (Proposition 4). A risk-control variant instead sizes the widening to bound the expected miss-rate at a user level (Proposition 10). 
+
+permute at the video level: pool every (video, score) pair across both frozen pools, repeatedly reshuffle unit labels into pseudo-calibration/pseudo-test groups of the original unit counts (every row for a unit moves together), and recompute the KS statistic on each reshuffled draw over 2000 permutations. The 𝑝 -value is (# draws with KS ≥ observed + 1)/2001 . This tests Assumption 1 at the same video-level granularity as the frozen split. As a check on the procedure’s power at these sample sizes, the same test applied to a held-out split with a deliberately injected shift reliably rejects at this permutation budget, so null results reflect an absence of detectable difference. 
+
+Result. Neither grounder shows a significant difference between its calibration and test pools on QVHighlights, under either score family (Table A4). secś unnormalized score shows a consistently smaller 𝑝 -value than NORM’s for both grounders, the same direction as the covariate-shift diagnostic’s finding (Table A12) that length-normalization absorbs part of any residual covariate imbalance between pools, here within one dataset’s own split rather than across two datasets. Notably, the smaller of each family’s two 𝑝 -values belongs to Qwen, not QD-DETR, in both cases: the grounder without a marginal coverage problem shows the larger (still non-significant) split-level divergence. Even without adjusting for testing across two grounders and two families, the smallest of the four 𝑝 -values ( 0.08 ) clears a conservative Bonferroni threshold for four comparisons ( 0.05/4 = 0.0125 ) with room to spare.   
+
+> 21 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Figure A2
+
+Qualitative example of Cover Cover widens the grounding interval based on the norm score of both grounders. Cover does not make a bad grounder good, it delivers an interval where the true moment exists with probability of 1 − 𝛼 . Here, 𝛼 = 0.1 . Timeline proportions are not uniform for visual illustration purposes. 
+
+Ruling out the split points instead to the grounder-specific conditional-coverage gap already measured in Table A10: QD-DETR undercovers QVHighlights’ Long and Multi-window strata by 
+
+0.148 and 0.127 respectively, against Qwen’s 0.008 and 0.046 on the same strata, which is similar to the grounder split the marginal numbers show. We attribute the marginal coverage gap to this subgroup effect, amplified by QVHighlights’ small calibration pool. The same procedure applied to Charades-STA (sec, QD-DETR, a dataset/grounder pair that is as on-target) returns KS = 0.033 , 𝑝 = 0.51 , consistent with the QVHighlights results reflecting genuinely exchangeable splits.  
+
+> Efficiency detail.
+
+Following the discussion in Sec. 7, table A5 isolates Qwen’s calibrated widening from refusal-driven inflation. Table 3 reports the same nested family and evaluation engine as COVER, with 𝜆 fixed by hand instead of calibrated. No single value is adequate across datasets: 𝜆 = 20 s exceeds QD-DETR’s own                  
+
+> 22 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab 0.5 0.6 0.7 0.8 0.9
+> realized coverage
+> 15 20 25
+> mean length (s)
+> Charades-STA
+> 0.5 0.6 0.7 0.8 0.9
+> realized coverage
+> 40 50 60 70
+> ActivityNet-Captions
+> 0.5 0.6 0.7 0.8 0.9
+> realized coverage
+> 60 80 100 120 140
+> QVHighlights
+> rings mark the two tested operating points (1 − α∈ {0.80, 0.90})
+> norm (length-scaled) sec (fixed margin) SLS (super-level-set)
+
+Figure A3 Coverage-efficiency frontier, QD-DETR. Mean region length against realized coverage for each score family and dataset. Rings mark the two tested operating points ( 1 − 𝛼 ∈ {0.80, 0.90} ) reported in Table 2. The super-level-set family overtakes the interval families on QVHighlights at tighter targets. 
+
+0.90 -target Charades-STA coverage ( 0.958 ) while giving only 0.629 on QVHighlights and, under Qwen, just 0.169 . The spread is starkest for Qwen on QVHighlights, where realized coverage across the six values tested ranges from 0.096 to 1.000 (a range of 0.904 , nearly the full attainable interval) achieved by varying only which round number of seconds is picked, with no data-driven step involved. Even the largest value tested, 𝜆 = 160 s, which reaches coverage ≥ 0.999 everywhere, does so by spending 149.6 s on every QVHighlights row regardless of how easy that row actually is (indistinguishable from a full-video fallback ( 𝑇 ≈ 150 s)) where COVER’s calibrated region reaches comparable coverage at the 0.90 target in 128.6 s (Table 2) and needs only 24.9 s on Charades-STA, adapting per row rather than spending a fixed budget everywhere. This demonstrates that a trivially large fixed margin covers, just as a trivial whole-video region does, but only the calibration step delivers a specific target at a length that reflects what each row actually needs. 
+
+G Additional Experiments 
+
+We start with additional grounders’ coverage and efficiency evaluation. Then we report in full the four further studies summarized in Sec. 7. Finally, we present a downstream-utility experiment. 
+
+Additional grounders coverage and efficiency. To test whether COVER’s guarantee and quali-tative efficiency patterns are specific to QD-DETR and Qwen or hold more broadly across other localizers, we add TR-DETR [42], integrated via the same Lighthouse framework as QD-DETR with no additional training. We evaluate on InternVL3.5-8B [43] as the second black-box VLM grounder. Table A7 reports region length at matched target coverage. We then evaluate on SRAM [13], a grounder that reports uncertainty by training. 
+
+Protocols. Risk control: RCPS miss-rate control. We select 𝜆 via the risk-controlling procedure of [22]: treat the containment loss 𝜆 (𝑋, 𝐼 ⋆) = 𝟏[𝑠(𝑋, 𝐼 ⋆) > 𝜆] as nonincreasing in 𝜆 (Assumption 2), form a point-wise upper confidence bound on its risk from the calibration scores via a Hoeffding   
+
+> 23 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table A2
+
+Relative length of two-parameter calibration. Percentage change in region length, 100 × (len 2-param − len 1-param )/len 1-param , for both score families and both target coverages. Positive values indi-cate that the second parameter increases region length, while negative values indicate improved efficiency. QD-DETR generally favors a single parameter, whereas Qwen benefits from two. Table A3 explains the underlying mechanism. norm sec 
+
+Grounder Dataset 1 − 𝛼 = 0.80 1 − 𝛼 = 0.90 1 − 𝛼 = 0.80 1 − 𝛼 = 0.90 
+
+QD-DETR Charades-STA −0.8% +1.6% −0.2% +0.0% 
+
+QD-DETR ActivityNet-Captions +0.8% +0.9% +1.0% +0.4% 
+
+QD-DETR QVHighlights +5.0% +1.3% +4.6% +0.6% 
+
+Qwen Charades-STA +1.6% −1.5% +4.3% +0.3% 
+
+Qwen ActivityNet-Captions −4.2% −3.0% −1.8% −4.9% 
+
+Qwen QVHighlights −9.1% −8.6% −6.6% −7.2% 
+
+concentration inequality [41], and take ̂ 𝜆 as the smallest threshold whose bound stays at or below the target miss-rate 𝛼 for every larger threshold. This is a materially different calibration step from the plain (1 − 𝛼) quantile of Eq. (3): it trades away some region tightness for a high-probability guarantee over the calibration draw itself, rather than only in expectation. We run this procedure at 𝛼 = 0.1 with confidence 1 − 𝛿 = 0.9 , for both base grounders, on every dataset and applicable score family. Three quantities are reported. The first is the realized miss-rate of the resulting ̂ 𝜆 
+
+on the frozen test set, which should not exceed 𝛼 . The second, using the video-level resampling protocol described in the main paper, is the fraction of resampled calibration draws whose ̂ 𝜆 would violate the target miss-rate on the unresampled test set. This operationalizes the 𝛿 confidence statement empirically, since Proposition 10’s guarantee is itself a probability over the calibration draw. The third compares ̂ 𝜆 and its mean region length against the plain split-conformal ̂ 𝜆 from the coverage-validity and efficiency studies at the same nominal 𝛼 , showing what the stronger, high-probability guarantee costs in region size relative to the tighter but differently-scoped marginal one.  
+
+> Conditional coverage.
+
+The marginal coverage validated earlier is an average, and an average can hide a badly undercovered subpopulation behind another that overcovers. Since exact attribute-free conditional coverage is unattainable distribution-free, this study evaluates the two practical substitutes the paper adopts. The diagnostic half calibrates one threshold on the full pool and reports coverage within terciles of the true event length, and, on QVHighlights, separately for single- versus multi-window ground truth, because its strata come from the truth, it is evaluation-only. The Mondrian half instead implements the group-conditional calibration of Proposition 11, fitting a separate threshold per stratum with strata defined by the model’s own predicted length, so that they are available before the answer is known.  
+
+> 24 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Table A3 Calibrated boundary parameters in the two-parameter variant. Mechanism behind Ta-ble A2: separately calibrated ̂ 𝜆 start and ̂ 𝜆 end for norm and sec at both target coverages. QD-DETR calibrates both boundaries to similar values throughout (ratio 0.9 –1.6× ), indicating that a single parameter is sufficient. In contrast, Qwen’s start boundary collapses to nearly zero in seven of the twelve cases shown, already covering the true start for almost every calibration example, with nearly all boundary error concentrated at the end.     
+
+> 1 − 𝛼 = 0.80 1 − 𝛼 = 0.90
+> norm sec norm sec
+
+Grounder Dataset ̂ 𝜆 start ̂ 𝜆 end ̂ 𝜆 start ̂ 𝜆 end ̂ 𝜆 start ̂ 𝜆 end ̂ 𝜆 start ̂ 𝜆 end                                                       
+
+> QD-DETR Charades-STA 1.058 1.282 8.96 9.41 1.621 1.860 14.88 14.87 QD-DETR ActivityNet-Captions 1.516 1.737 22.33 28.72 2.437 3.820 40.78 50.22 QD-DETR QVHighlights 2.031 1.883 49.85 48.71 3.243 3.564 79.55 73.36 Qwen Charades-STA 0.000 3.310 0.00 18.48 0.032 4.053 0.20 22.20 Qwen ActivityNet-Captions 0.000 10.167 0.00 64.13 0.756 15.359 5.44 78.07 Qwen QVHighlights 0.000 15.808 0.00 101.20 0.432 19.600 3.80 115.40
+
+Table A4 Exchangeability check on QVHighlights. Video-level permutation test comparing each grounder’s frozen QVHighlights calibration and test pools for both score families. No grounder–family pair exhibits a statistically significant difference.                  
+
+> Grounder Family KS(cal, test) Permutation 𝑝
+> QD-DETR norm 0.043 0.52
+> Qwen norm 0.049 0.39
+> QD-DETR sec 0.065 0.11
+> Qwen sec 0.066 0.08
+> Cross-dataset transfer.
+
+The studies so far keep calibration and test within one dataset. This one drops that restriction and calibrates on one dataset while testing on another, exercising the exchangeability assumption rather than assuming it. We proceed in three steps. A covariate-shift diagnostic comes first: a two-sample statistic asks whether the two datasets differ on candidate covariates and, separately, whether that difference survives into the conformal score, which the normalization may already absorb in part and both are read against a same-dataset noise floor. We then measure unweighted transfer, calibrating on one dataset and evaluating on the other’s test pool, with a baseline that calibrates on the test set’s own dataset. Finally we apply a weighted correction, but not the usual one, rather than fit a continuous per-test-point density ratio, we bucket on video duration with a hard cutoff and calibrate a separate threshold per bucket. Unlike true event length, duration needs no ground truth, so the rule could apply to an unlabeled query, and unlike predicted length it is not already baked into the normalized score, which divides by predicted length directly. No reweighting scheme, simplified or literal, can correct shift where the calibration dataset has no support as it has nothing to draw on.   
+
+> 25 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table A5
+
+Marginal versus non-refused region length for Qwen2.5-VL-7B. Region length (seconds) at target coverage 1 − 𝛼 = 0.90 . Marginal length includes the full-video fallback on refused examples, whereas non-refused length isolates the effect of calibrated interval widening.  
+
+> Refusal
+
+norm sec      
+
+> Dataset (%) Marg. Non-ref. Marg. Non-ref.
+
+Charades-STA 10.4 25.4 24.5 26.1 25.3 
+
+ActivityNet-Captions 2.9 63.9 63.5 66.6 66.2 
+
+QVHighlights 2.6 129.1 128.6 133.5 133.1  
+
+> Calibration-set size.
+
+Theorem 5 predicts the calibrated threshold converges to its population value as calibration size grows, with estimation noise shrinking at the standard √𝑛 rate. This study checks that directly and gives a practical read on how much labeled calibration data is actually needed before coverage stabilizes. At a fixed target ( 𝛼 = 0.1 ), we repeatedly subsample smaller calibration pools and report how the spread of realized coverage across resamples changes as subsample size grows.  
+
+> Downstream utility of the certified width.
+
+The marginal guarantee is population-level, and the per-example width is where individual-level information lives. We test this post-hoc on the same calibrated ̂ 𝜆 that Table 2 uses. For every non-refused test row we pair the region width at the 
+
+1 − 𝛼 = 0.90 operating point with the base grounder’s point-prediction IoU against ground truth, and separately run a selective-prediction rule that retains a row only when its certified width is at or below a budget 𝜏 , sweeping 𝜏 over the width distribution. 
+
+G.1 Additional Grounders  
+
+> Coverage validity.
+
+For TR-DETR, realized coverage tracks target across the full 1 − 𝛼 ∈{0.50, … , 0.95} grid on all three datasets and both score families (Figure A4), with all shortfalls being within the combined test and calibration sampling tolerance. Similarly for InternVL, target coverage across the 1 − 𝛼 ∈ {0.50, … , 0.95} grid on Charades-STA, QVHighlights, and on ActivityNet-Captions is achieved (shown in Figure A5).  
+
+> Region length.
+
+Tables A6 and A7 report length at matched target coverage. 
+
+Charades-STA crossing does not replicate on TR-DETR. QD-DETR shows significant reversal be-tween targets (sec shorter at 1 − 𝛼 = 0.80 , norm shorter at 0.90 ). TR-DETR shows no such reversal: sec is significantly shorter at both targets ( +1.00 s, CI [0.77, 1.23] at 0.80 ; +0.65 s, CI [0.41, 0.92] at 
+
+0.90 ). Figure A4 establishes sec is shorter for all other targets as well on ActivityNet and Charades. 
+
+The QVHighlights sls efficiency advantage holds, and is substantially larger for TR-DETR. sls is significantly shorter than both interval families at both targets for TR-DETR, matching QD-DETR qualitatively. The magnitude differs considerably: sls is 10.5% and 13.4% shorter than the interval-family average for QD-DETR at 1 − 𝛼 = 0.80 and 0.90 , versus 23.5% and 23.8% for TR-DETR, roughly double. Shown in Figure A4, this supremacy does not hold on looser targets (0.5 and 0.6). TR-DETR’s own norm-vs-sec comparison on QVHighlights is a statistical tie at both 
+
+targets ( +0.71 s, CI [−0.91, 2.28] at 0.80 ; −1.09 s, CI [−2.67, 0.43] at 0.90 ), whereas QD-DETR’s tie   
+
+> 26 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Figure A4
+
+Coverage validity and efficiency (TR-DETR). Target coverage is achieved, confirming COVER applies to various grounders in the DETR grounders family. 
+
+holds only at 0.90 (its own 0.80 -target gap is significant). ActivityNet-Captions shows the same qualitative pattern as QD-DETR at both targets (sec significantly shorter), with a larger absolute gap at 1 − 𝛼 = 0.80 (5.29 s vs. QD-DETR’s 2.23 s). 
+
+sec is more efficient for InternVL. Table A7 shows that sec is significantly shorter than norm in five of six (dataset, target) combinations (Charades-STA and ActivityNet-Captions at both targets, QVHighlights at 1 − 𝛼 = 0.80 ). The sixth, QVHighlights at 1 − 𝛼 = 0.90 , is a genuine statistical tie (−0.89 s, CI [−2.74, 0.88] ). This is also evident for other target shown in Figure A5 This is the opposite pattern from Qwen2.5-VL, whose results favor norm in most comparisons, which indicates the identity of the more efficient family is not a property of grounder class (VLM vs. trained localizer) but varies by individual model.  
+
+> Training for uncertainty does not produce coverage.
+
+The most direct test of whether a post-hoc wrapper is needed is to point it at a grounder that already models its own uncertainty. SRAM [13] is a deep-evidential-regression grounder that reports boundary uncertainty by training. Converting its own predicted boundary uncertainty into a Gaussian region at nominal 1 − 𝛼 , in its own best configuration and on the dataset it was trained on, realizes 0.660 against the 0.80 target and 
+
+0.716 against 0.90 (Table A8): a shortfall of 14 and 18 points on a quantity the method is built to deliver. The nominal level is not a guarantee but a label. Wrapping the identical predictions in Cover realizes coverage within 0.005 of every target, at up to 50% more length. Architecture-level uncertainty modeling produces an uncertainty estimate, and distribution-free calibration is what turns an estimate into a guarantee.  
+
+> 27 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Figure A5 Coverage validity and efficiency (InternVL3.5-8B). Target coverage is achieved across the 
+
+1 − 𝛼 grid, confirming COVER also applies to various black-box VLM grounders. 
+
+Table A6 TR-DETR region length at matched target coverage. Region length (seconds) with 95% confidence intervals at matched target coverage. The shortest statistically significant score family for each dataset and target coverage is shown in bold . Blank entries indicate that the score family is not applicable.                                                       
+
+> 1 − 𝛼 = 0.80 1 − 𝛼 = 0.90
+> norm sec sls norm sec sls
+> Dataset Len. CI Len. CI Len. CI Len. CI Len. CI Len. CI
+> Charades-STA 20.7 [20.16,21.22] 19.7 [19.35,20.02] ––24.7 [24.15,25.33] 24.1 [23.71,24.48] ––ActivityNet-Captions 58.5 [57.01,60.02] 53.2 [52.19,54.26] ––66.7 [65.02,68.44] 64.1 [62.78,65.47] ––QVHighlights 105.4 [102.90,107.95] 104.7 [103.07,106.43] 80.4 [77.15,83.48] 126.0 [123.83,128.08] 127.1 [125.70,128.50] 96.4 [93.52,99.46]
+
+G.2 Risk Control: RCPS Miss-Rate Control 
+
+Table A9 reports the risk-controlling calibration of Proposition 10 at 𝛼 = 0.1 , 𝛿 = 0.1 , against the plain split-conformal result at the same nominal 𝛼 (from the efficiency study). The empirical violation fraction is exactly zero in 12 of the 13 (grounder, dataset, family) combinations tested. The one exception, Qwen on Charades-STA with sec, shows 1 of 50 draws (0.02), still within the 
+
+𝛿 = 0.1 budget. RCPS’s region length exceeds the plain split-conformal length at every combination tested, and the excess follows calibration size inversely. For QD-DETR, the increase is 2.1–2.4% on ActivityNet-Captions ( 𝑛 cal = 7811 ), 4.3–7.0% on Charades-STA ( 𝑛 cal = 1500 ), and 8.7–14.8% on QVHighlights (𝑛 cal = 625 ). Qwen shows the same ordering (1.4–1.5%, 2.9–4.2%, 4.2–4.7%, respectively). This matches the Hoeffding-based slack term in the RCPS construction, which scales as 1/ √𝑛 : the smallest calibration pool pays the largest length cost for the stronger guarantee. 
+
+28 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab  
+
+> Table A7
+
+InternVL3.5-8B region length at matched target coverage. Region length (seconds) with 95% confidence intervals at matched target coverage. The shortest statistically significant score family for each dataset and target coverage is shown in bold . No sls column is reported because this grounder exposes no saliency or relevance signal. 
+
+1 − 𝛼 = 0.80 1 − 𝛼 = 0.90 
+
+norm sec norm sec         
+
+> Dataset Len. CI Len. CI Len. CI Len. CI
+
+Charades-STA 19.8 [19.21,20.48] 15.9 [15.62,16.25] 23.4 [22.80,24.07] 20.9 [20.56,21.27] 
+
+ActivityNet-Captions 55.7 [54.27,57.10] 53.5 [52.43,54.62] 65.0 [63.35,66.59] 63.4 [62.07,64.75] 
+
+QVHighlights 89.8 [86.74,92.96] 82.9 [80.72,85.02] 114.0 [111.22,116.61] 114.9 [113.20,116.53]  
+
+> Table A8
+
+SRAM versus SRAM + COVER. SRAM’s evidential uncertainty converted directly into pre-diction regions at nominal coverage 1 − 𝛼 (without a calibration step; SRAM trained on Charades-STA) compared with SRAM + COVER. Shaded cells indicate coverage more than 0.02 below the target. 
+
+1 − 𝛼 = 0.80 1 − 𝛼 = 0.90     
+
+> Method Cov. Len. Cov. Len.
+
+SRAM 0.660 14.2 s 0.716 15.7 s SRAM + Cover (norm) 0.797 19.3 s 0.895 23.5 s SRAM + Cover (sec) 0.796 18.4 s 0.898 23.2 s 
+
+G.3 Conditional Coverage 
+
+Table A10 reports both halves of this experiment for norm at 1 − 𝛼 = 0.90 . The diagnostic half calibrates a single marginal threshold and reports coverage stratified post-hoc by true event-length tercile and, on QVHighlights, by single- vs. multi-window ground truth. The Mondrian half calibrates a separate threshold per tercile of the model’s own predicted length. Because the two halves stratify the test set by different, only loosely correlated properties, we do not compare same-named strata across the two halves directly, we compare each half’s own worst-covered stratum against the 0.90 target. For QD-DETR, marginal calibration leaves a real gap on QVHighlights: the worst diagnostic stratum (Long) deviates from target by 0.148 (coverage 0.752), while the worst Mondrian stratum (Short) deviates by only 0.056 (coverage 0.844), which constitutes more than 2.5 × reduction in worst-case deviation. The same pattern, smaller in magnitude, holds on ActivityNet-Captions (worst diagnostic deviation 0.038 vs. worst Mondrian deviation 0.010) and Charades-STA (0.019 vs. 0.003). For Qwen the pattern holds on Charades-STA (0.020 vs. 0.009) and ActivityNet-Captions (0.032 vs. 0.013), but not on QVHighlights, where Mondrian’s worst-stratum deviation (0.032) is slightly larger than the diagnostic half’s (0.023). This is the one case in which stratified calibration does not clearly reduce worst-case deviation, an effect of QVHighlights’ small calibration pool (625 rows) split further into per-stratum subsets. For completeness, we compare QVHighlights’ single- vs. multi-window stratification, evaluated   
+
+> 29 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table A9
+
+RCPS versus split conformal. RCPS ( 𝛼 = 0.1 , 𝛿 = 0.1 ) compared with plain split conformal at the same nominal 𝛼 for both grounders. Viol. denotes the fraction of 50 resampled calibration draws whose calibrated ̂ 𝜆 violated the target miss rate on the frozen test set. The RCPS guarantee bounds this fraction by 
+
+𝛿 = 0.10 . RCPS trades a modest increase in region length ( Δ) for a stronger high-probability guarantee. 
+
+Grounder Dataset Family ̂ 𝜆 RCPS Cov. Len. (s) Viol. Len. split Δ (%) 
+
+QD-DETR Charades-STA norm 2.035 0.928 26.1 0.00 24.4 7.0 
+
+Charades-STA sec 16.419 0.918 26.0 0.00 24.9 4.3 
+
+ActivityNet-Captions norm 3.361 0.906 64.9 0.00 63.6 2.1 
+
+ActivityNet-Captions sec 48.777 0.912 63.2 0.00 61.7 2.4 
+
+QVHighlights norm 4.778 0.933 140.4 0.00 129.1 8.7 
+
+QVHighlights sec 93.350 0.920 139.8 0.00 128.6 8.7 
+
+QVHighlights sls 12.163 0.936 128.1 0.00 111.6 14.8 
+
+Qwen Charades-STA norm 3.733 0.923 26.1 0.00 25.4 2.9 
+
+Charades-STA sec 20.700 0.925 27.2 0.02 26.1 4.2 
+
+ActivityNet-Captions norm 11.516 0.908 64.9 0.00 63.9 1.5 
+
+ActivityNet-Captions sec 67.180 0.912 67.5 0.00 66.6 1.4 
+
+QVHighlights norm 19.304 0.941 134.5 0.00 129.1 4.2 
+
+QVHighlights sec 112.100 0.931 139.8 0.00 133.5 4.7 
+
+only in the diagnostic half (no Mondrian equivalent, since that half stratifies by length, not window count), shows the same qualitative failure mode: multi-window queries are undercovered relative to target (QD-DETR: 0.773, Qwen: 0.854) while single-window queries are not (0.935, 0.925). Table A11 isolates Proposition 7’s normalization claim, on Charades-STA and ActivityNet-Captions, sec undercovers Long relative to norm in all four (grounder, dataset) pairs ( −0.019 
+
+to −0.090 ) and overcovers Short/Medium in all eight comparisons ( +0.006 to +0.061 ). Twelve of twelve stratum comparisons matching the direction Proposition 7 predicts for an unnormalized, seconds-valued score. QVHighlights’ Long and Multi-window strata show the same directional gap for both grounders and both families, but are confounded there by the grounder-specific effect in the exchangeability diagnostic. 
+
+G.4 Cross-Dataset Transfer 
+
+This experiment uses QD-DETR and the Charades-STA and ActivityNet-Captions pair. Table A12 reports a two-sample KS statistic comparing the two datasets on three raw covariates and on the two conformal scores directly, each judged against the same-dataset (calibration-vs-test) KS as a noise floor. All three raw covariates differ far beyond this floor (9.5–16.0 ×), confirming a substantial covariate shift between the two datasets. The conformal scores differ by a smaller but still clearly non-noise margin (5.7–6.1 ×). norm’s built-in length-normalization reduces the raw shift by roughly three-quarters (cross-KS 0.14–0.15 vs. 0.57–0.61 for raw predicted length) without eliminating it, and sec’s unnormalized score shows only a modestly larger residual shift than norm’s (0.199 vs. 0.14–0.15). Table A13 reports coverage under unweighted transfer and under a bucketed weighted correc- 
+
+> 30 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Table A10 Conditional coverage, norm only, at the 1 − 𝛼 = 0.90 target. Diagnostic: one marginal 
+
+𝜆 , stratified post hoc by true event length (evaluation-only). Mondrian: a separate 𝜆 per stratum of the model’s own predicted length. Strata are length terciles. QVHighlights adds single- vs. multi-window. Shaded coverage cells fall more than 0.02 below target. Table A11 repeats this diagnostic for sec. Qwen’s Mondrian calibration additionally produces a fourth, refused stratum for every dataset, which are rows with no predicted length to assign a tercile from, trivially covered at 1.000 by the refusal policy and omitted here since it is not one of the three predicted length strata. 
+
+QD-DETR diag. QD-DETR Mondrian Qwen diag. Qwen Mondrian          
+
+> Dataset Stratum Cov. Len. Cov. Len. Cov. Len. Cov. Len.
+
+Charades-STA Short 0.881 21.1 0.897 19.0 0.900 22.4 0.891 19.6 Medium 0.908 24.1 0.901 25.3 0.901 25.0 0.892 27.0 Long 0.903 27.9 0.903 29.8 0.880 28.5 0.898 30.1 ActivityNet-Captions Short 0.895 37.6 0.896 36.2 0.907 41.0 0.887 49.5 Medium 0.925 61.9 0.890 67.4 0.913 61.0 0.898 63.9 Long 0.862 93.3 0.902 86.4 0.868 91.7 0.895 82.3 QVHighlights Short 0.947 119.8 0.844 132.0 0.884 116.5 0.932 115.9 Medium 0.942 134.8 0.863 129.7 0.923 128.6 0.930 141.9 Long 0.752 131.7 0.858 126.4 0.892 141.1 0.886 146.9 QVHighlights Single-window 0.935 131.3 – – 0.925 128.2 – –Multi-window 0.773 125.0 – – 0.854 130.9 – –
+
+tion, against the matched, same-dataset baseline, in both directions. Unweighted transfer degrades coverage substantially in both directions, in opposite ways: calibrating on Charades-STA and test-ing on ActivityNet-Captions undercovers by 4.8–18.9 points and the reverse direction overcovers by 6.5–18.8 points. The weighted correction resolves this asymmetrically. From ActivityNet-Captions to Charades-STA, it works as every gap shrinks substantially, the largest being sec at 0.80 (18.8 points to 3.6). From Charades-STA to ActivityNet-Captions, it does nothing, weighted and un-weighted coverage agree to three decimal places on every row. This is a positivity limitation rather than a shortcoming of the bucketed approximation as Charades-STA’s duration distribution does not extend into the range most ActivityNet-Captions test videos occupy, so there is no source-side calibration data in that region for any reweighting scheme to draw on. The C →A high-duration bucket draws on just 2 of Charades-STA’s 1500 calibration rows (triggering a fallback to the full pool), while the working A →C direction draws on 2783 of ActivityNet-Captions’ 7811 calibration rows for the bucket spanning Charades-STA’s range, a gap of two orders of magnitude. 
+
+G.5 Calibration-Set Size 
+
+Table A14 reports realized coverage for norm at 𝛼 = 0.1 as calibration size grows (in units of videos). For both grounders, the mean matches the 0.90 target at every size tested, and the spread narrows as size grows. For QD-DETR on Charades-STA, from ±0.042 at 20 units to ±0.007 at 400, and similarly on ActivityNet-Captions ( ±0.028 to ±0.004 ). Qwen shows the same pattern on both datasets. This is consistent with Theorem 5’s asymptotic rate. QVHighlights could only be tested at   
+
+> 31 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table A11
+
+Length-stratified coverage by score family. norm versus sec at the 1 − 𝛼 = 0.90 target for both grounders. Relative to norm, sec undercovers the Long stratum while overcovering the Short and Medium strata on Charades-STA and ActivityNet-Captions. QVHighlights’ Long and Multi-window strata are additionally affected by the grounder-specific effect discussed in the text. Strata are defined as in Table A10. Shaded coverage values fall more than 0.02 below the nominal target.                                                                                                         
+
+> QD-DETR norm QD-DETR sec Qwen norm Qwen sec
+> Dataset Stratum Cov. Len. Cov. Len. Cov. Len. Cov. Len.
+> Charades-STA Short 0.881 21.1 0.898 22.6 0.900 22.4 0.906 23.6 Medium 0.908 24.1 0.915 24.9 0.901 25.0 0.919 25.7 Long 0.903 27.9 0.884 27.1 0.880 28.5 0.834 28.6 ActivityNet-Captions Short 0.895 37.6 0.938 42.9 0.907 41.0 0.968 48.7 Medium 0.925 61.9 0.948 59.2 0.913 61.0 0.949 64.7 Long 0.862 93.3 0.817 84.4 0.868 91.7 0.778 87.8 QVHighlights Short 0.947 119.8 0.937 123.5 0.884 116.5 0.961 131.5 Medium 0.942 134.8 0.936 129.5 0.923 128.6 0.972 132.4 Long 0.752 131.7 0.691 132.2 0.892 141.1 0.723 136.6 QVHighlights Single-window 0.935 131.3 0.899 128.8 0.925 128.2 0.937 133.5 Multi-window 0.773 125.0 0.766 128.3 0.854 130.9 0.785 133.5
+
+20, 50, and 100 units for either grounder, since its calibration pool does not contain enough distinct videos to support the larger sizes tested on the other two datasets. Within that smaller range, the same narrowing trend holds (QD-DETR: ±0.041 to ±0.018 ; Qwen: ±0.027 to ±0.009 ). 
+
+G.6 Downstream utility of the certified width 
+
+Width carries an actionable difficulty signal, but only where predicted length tracks localization quality. 
+
+Table A16 reports the Spearman correlation between width and point IoU. On Charades-STA it is negative for both grounders ( −0.130 /−0.142 under norm, −0.151 /−0.128 under sec), and QD-DETR’s width-quartile mean IoUs fall monotonically from the narrowest to the widest quartile (0.489 → 0.384 ), which demonstrates that a narrow certified region is a better-localized one. On the long-event datasets the association vanishes (ActivityNet-Captions, |𝜌| ≤ 0.10 ) or reverses (QVHighlights norm 𝜌 = +0.115 /+0.061 , quartile IoU rising with width). The mechanism is that the norm width scales with predicted length, and on a long event a narrow predicted interval is typically an under-shot prediction that misses much of the event. The width is the deployment-relevant quantity regardless, but its usefulness is dataset-dependent. The correlations are modest in magnitude throughout, and the quartile means and the selective view separate the tails more cleanly than the full-sample rank correlation. 
+
+Selective prediction turns the signal into a deployment rule and subsumes refusal handling. Ta-ble A15 traces the rule on QD-DETR. On Charades-STA the retained rows are better localized than the abstained ones at every budget (retaining the narrowest 20% : point IoU 0.497 retained vs. 
+
+0.426 abstained, narrowest 50% : 0.478 vs. 0.402 ), so a width budget raises the average quality of the   
+
+> 32 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+> Table A12
+
+Covariate-shift diagnostic. Two-sample KS statistics for Charades-STA (calibration) →
+
+ActivityNet-Captions (test) using QD-DETR. The ratio is the cross-dataset KS divided by the larger of the two within-dataset KS statistics. Larger cross-dataset KS values and ratios indicate stronger distribution shift. The reverse direction yields closely matching results (not shown).     
+
+> Feature Within-cal. Within-test Cross Ratio ( ×)
+
+True event length 0.033 0.016 0.526 16.0 
+
+Video duration 0.072 0.054 0.689 9.5 
+
+Predicted length 0.041 0.030 0.574 13.9 
+
+Score, norm 0.025 0.014 0.141 5.7 
+
+Score, sec 0.033 0.014 0.199 6.1  
+
+> Table A13
+
+Cross-dataset transfer. QD-DETR matched (calibrated on the target dataset), unweighted transfer, and weighted transfer (duration-bucketed with two buckets). Gap is defined as matched minus transferred coverage; values closer to zero indicate better transfer. C →A denotes calibration on Charades-STA and testing on ActivityNet-Captions; A →C is the reverse direction. 
+
+Unweighted Weighted        
+
+> Dir. Family Target Matched Cov. Gap Cov. Gap
+
+C→A norm 0.80 0.800 0.752 0.048 0.752 0.048 
+
+C→A norm 0.90 0.894 0.812 0.083 0.812 0.082 
+
+C→A sec 0.80 0.807 0.632 0.175 0.632 0.175 
+
+C→A sec 0.90 0.902 0.713 0.189 0.713 0.189 
+
+A→C norm 0.80 0.820 0.885 −0.065 0.865 −0.045 
+
+A→C norm 0.90 0.898 0.979 −0.081 0.960 −0.063 
+
+A→C sec 0.80 0.801 0.989 −0.188 0.837 −0.036 
+
+A→C sec 0.90 0.899 1.000 −0.101 0.957 −0.058 
+
+auto-processed set. On QVHighlights the ordering flips, consistent with the inverted correlation: narrow-budget retained rows are worse localized than the abstained ones ( 0.435 vs. 0.547 at 20% 
+
+retention). Because a refused row takes the whole-video fallback (width = 𝑇 ), refusals are abstained automatically whenever the video is longer than the budget, the common case in QVHighlights, so the one width mechanism filters uncertain localizations and outright refusals together with no special-casing. A refusal on a video already shorter than the budget is retained, but its region is then the whole (short) video, within budget by construction. 
+
+Coverage among the retained is not guaranteed. Table A15 shows the two families diverge as Proposition 7 predicts. Under norm, narrow-budget selection mildly undercovers on Charades-STA and ActivityNet-Captions ( ≈ 0.86 ) and severely on QVHighlights ( 0.591 at the tightest budget, recovering to the marginal 0.879 at full retention), which is the same QVHighlights weakness the conditional-coverage analysis already discusses. Under sec, narrow-budget selection instead over covers, reaching realized coverage 1.000 at the tightest budgets on Charades-STA and ActivityNet-Captions for both grounders, because a fixed seconds margin is large relative to a short prediction.  
+
+> 33 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Table A14 Coverage stability vs. calibration size (in videos). norm, target 1 − 𝛼 = 0.90 . Cells: mean ± s.d. of realized coverage over 50 resamples; the spread narrows as size grows, matching the 𝑂(𝑛 −1/2 )
+
+rate of Proposition 12.   
+
+> Grounder Dataset
+
+𝑛=20 𝑛=50 𝑛=100 𝑛=200 𝑛=400 
+
+QD-DETR Charades-STA 0.910 ±0.042 0.906 ±0.025 0.900 ±0.018 0.897 ±0.013 0.899 ±0.007 ActivityNet-Captions 0.901 ±0.028 0.897 ±0.017 0.893 ±0.013 0.896 ±0.007 0.895 ±0.004 QVHighlights 0.885 ±0.041 0.876 ±0.028 0.876 ±0.018 † †Qwen Charades-STA 0.886 ±0.059 0.893 ±0.028 0.898 ±0.022 0.895 ±0.014 0.895 ±0.007 ActivityNet-Captions 0.889 ±0.037 0.897 ±0.021 0.892 ±0.014 0.895 ±0.011 0.895 ±0.006 QVHighlights 0.905 ±0.027 0.900 ±0.019 0.899 ±0.009 † † 
+
+> † QVHighlights’ pool does not support 𝑛 = 200, 400 .
+
+Table A15 Downstream utility, selective-prediction view. QD-DETR, norm, 1 − 𝛼 = 0.90 . Retain a row when its certified width is at or below a budget; columns give retention level, mean point-IoU of retained vs. abstained rows, and coverage among the retained. On Charades, retained rows better localized than abstained ones (a width budget improves quality). On QVHighlights this is reversed, and narrow-budget retained rows undercover the 0.90 target: marginal theory does not guarantee coverage after conditioning on width. 
+
+Point IoU     
+
+> Dataset Retention ret. abst. Cov. (ret.)
+
+Charades-STA 
+
+0.20 0.497 0.426 0.881 0.50 0.478 0.402 0.868 1.00 0.440 – 0.898 
+
+QVHighlights 
+
+0.20 0.435 0.547 0.632 0.50 0.497 0.552 0.762 1.00 0.525 – 0.879 
+
+This is the length-conditional behavior of Proposition 7 seen from the deployment side. The normalized score is approximately length-conditional (up to the QVHighlights breakdown), while the unnormalized one is not. 
+
+> R E P R O D U C I B I L I T Y
+
+All experiments were performed on a single RTX 4090 GPU sourced through Vast.ai platform [44]. Cover on its own does not require significant computational capabilities. The majority of the cost lies in grounder inference, especially for local models such as Qwen.  
+
+> 34 CONFORMAL COVERAGE GUARANTEES FOR ANY VIDEO TEMPORAL GROUNDER Kurban Intelligence Lab
+
+Table A16 Downstream utility, correlation view. norm, 1 − 𝛼 = 0.90 . Spearman 𝜌 between certified region width and the base grounder’s point -prediction IoU over non-refused test rows, with mean point-IoU by width quartile (Q1 narrowest, Q4 widest). Negative 𝜌 or decreasing quartiles indicates narrower regions correspond to better localization; the sign is dataset-dependent. 𝑛 is the non-refused count. 
+
+Point-IoU by width quartile   
+
+> Grounder Dataset
+
+𝜌 Q1 Q2 Q3 Q4 𝑛 
+
+QD-DETR Charades-STA −0.130 0.489 0.468 0.419 0.384 2 220 
+
+ActivityNet-Captions +0.026 0.424 0.424 0.425 0.446 11 685 
+
+QVHighlights +0.115 0.446 0.547 0.535 0.571 925 
+
+Qwen Charades-STA −0.142 0.306 0.240 0.168 0.232 1 989 
+
+ActivityNet-Captions −0.039 0.274 0.221 0.210 0.251 11 346 
+
+QVHighlights +0.061 0.053 0.104 0.192 0.125 901
