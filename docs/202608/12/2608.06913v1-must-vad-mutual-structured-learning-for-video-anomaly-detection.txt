@@ -1,0 +1,398 @@
+Title: MuST-VAD: Mutual Structured Learning for Video Anomaly Detection
+
+URL Source: https://arxiv.org/pdf/2608.06913v1
+
+Published Time: Mon, 10 Aug 2026 00:35:27 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# MuST-VAD: Mutual Structured Learning for Video Anomaly Detection 
+
+# Satoshi Hashimoto 1∗, Hitoshi Nishimura 1, Mori Kurokawa 1
+
+> 1
+
+KDDI Research, Inc. Fujimino, Saitama, Japan st-hashimoto@kddi.com 
+
+Abstract 
+
+In this paper, we propose MuST-VAD, a mutual structured learning framework for weakly supervised video anomaly detection (VAD) in which an anomaly detector and alarge vision–language model (LVLM) exchange their ac-quired knowledge. Detectors in weakly supervised VAD learn anomaly scores from features extracted by a fixed, task-agnostic backbone. These fixed features bound the achievable detection accuracy. Recent methods therefore transfer LVLM semantics into the detector as richer features. However, this transfer is one-way: what the detector learns about the tar-get videos never returns to the LVLM. MuST-VAD extends the one-way transfer into a bidirectional learning loop. In this loop, the latest detector predictions supervise the LVLM adap-tation, and the adapted LVLM returns updated representations that retrain the detector; the two models alternate these up-dates over small video groups. Both models train on detector-selected key clips, while confidence weighting and annotation-anchored question answering keep the exchanged supervision reliable. On UCF-Crime, our mutual learning improves the one-pass transfer baseline from 88.15% to 88.63% AUROC and from 37.25% to 42.46% average precision (AP), outper-forming the state-of-the-art method in AP by 4.13 points. 
+
+# Introduction 
+
+Video anomaly detection (VAD) aims to temporally localize anomalous events such as fights, road accidents, and thefts in untrimmed surveillance videos. Because annotating the pre-cise temporal extent of every anomaly is prohibitively expen-sive at deployment scale, weakly supervised VAD (WSVAD) has become the dominant setting: a model is trained with only video-level normal/abnormal labels, yet must produce segment-level anomaly scores at test time. WSVAD is com-monly cast as multiple instance learning (MIL), which treats a video as a bag of segments and assumes that an abnormal video contains at least one abnormal segment (Sultani, Chen, and Shah 2018). MIL detectors are attractive in deployment: they are lightweight, train from cheap labels, and years of refinement have made their local discrimination remarkably sharp (Tian et al. 2021; Zhou, Yu, and Yang 2023). However, an MIL detector can only carve its decision boundary in the space spanned by its pre-extracted input 
+
+> ∗
+
+Corresponding author. 
+
+Figure 1: Overview of MuST-VAD. A global LVLM and a local detector are trained jointly around a closed loop: the LVLM supplies updated video representations to the detector, and the detector returns predictions that supervise the LVLM. features. Real-world anomalies are defined not only by ap-pearance but also by object interactions, action semantics, and scene context, so fixed features from a task-agnostic visual backbone often leave semantically subtle anomalies entangled with normal activity. The detector, no matter how well designed, inherits this ceiling from a feature extractor that knows nothing about the detection task. A growing body of work therefore imports the semantics of pretrained vision-language models into WSVAD, either by aligning anomaly-related text prompts with frozen CLIP representations (Wu et al. 2024b; Yang, Liu, and Wu 2024), or by employing large vision-language models (LVLMs) as captioners (Zanella et al. 2024b), rule inducers (Yang et al. 2024), and instruction-tuned anomaly assistants (Zhang et al. 2025); we review these families in the Related Work section. Such methods confirm that pretrained semantics can lift the feature ceiling. Yet the information flows in one direction, from the pretrained model into the detection pipeline. What the local detector learns about the target domain—which seg-ments are anomalous, when they occur, and how strongly— never returns to the semantic model as a learning signal. We propose MuST-VAD , a mutual structured learning frame-work that closes this loop through an interaction between an LVLM and an anomaly detector (Figure 1). The LVLM pro-arXiv:2608.06913v1 [cs.CV] 7 Aug 2026 vides semantically enriched segment representations to the detector, while the detector returns prediction-derived super-vision that adapts the LVLM to the target videos. Structured question-answering tasks derived from video-level annota-tions provide stable supervision for LVLM adaptation. The two models are alternately updated over small bag groups, allowing newly acquired knowledge to be exchanged through-out training, while confidence-aware supervision reduces the influence of unreliable detector predictions. Through this it-erative process, the semantic representations and the anomaly detector are progressively refined together. Our contributions are threefold. 
+
+• We introduce MuST-VAD, a mutual structured learning framework that closes the iterative learning loop between an LVLM and a weakly supervised anomaly detector, enabling each model to benefit from knowledge acquired by the other. 
+
+• We develop a mutual learning strategy that combines structured QA supervision, detector-guided key-clip se-lection, alternating updates over small bag groups, and confidence-aware feedback to enable knowledge ex-change between the two models. 
+
+• We evaluate the complete loop and its components on UCF-Crime under a controlled protocol that uses the same LVLM, detector, and inference procedure as one-pass representation transfer. One mutual round improves both metrics over this baseline and raises frame-level AP to 42 .46% , surpassing the best previously reported value by 4.13 points. 
+
+# Related Work 
+
+Weakly Supervised Video Anomaly Detection 
+
+Weakly supervised video anomaly detection localizes anomalous temporal segments while using only video-level normal/abnormal labels during training. Sultani, Chen, and Shah (2018) introduced the canonical MIL formulation for real-world surveillance videos: each untrimmed video is treated as a bag of temporal segments, every segment in a normal bag is assumed to be normal, and an abnormal bag is assumed to contain at least one anomalous segment. Their detector is optimized to rank the highest-scoring segment in an abnormal bag above the highest-scoring segment in a normal bag. We summarize this formulation below because it underlies many subsequent WSVAD methods. Let D = {(Vi, y i)}Ni=1 denote a weakly supervised VAD training set, where Vi is an untrimmed video and yi ∈ { 0, 1}
+
+is its video-level label, with yi = 1 indicating an abnormal video. Each video is divided into temporal segments and represented as a bag of instances. We denote a normal bag and an abnormal bag by 
+
+eBn = {f tn}Tn
+
+> t=1
+
+, eBa = {f ta}Ta
+
+> t=1
+
+, (1) where f t ∈ Rd is the d-dimensional feature of the t-th seg-ment. A detector Dϕ assigns an anomaly score to each seg-ment, 
+
+st = Dϕ(f t). (2) Under the MIL assumption, every segment in a normal bag is normal, whereas an abnormal bag contains at least one anomalous segment. The canonical ranking objective intro-duced by Sultani, Chen, and Shah (2018) is 
+
+LMIL = max 
+
+
+
+0, 1 − max 
+
+> 1≤t≤Ta
+
+sta + max 
+
+> 1≤t≤Tn
+
+stn
+
+
+
+. (3) This loss is zero when the largest anomaly score in an ab-normal bag exceeds the largest score in a normal bag by at least one; otherwise, it penalizes the violated margin. It there-fore converts video-level supervision into a learning signal for segment-level anomaly scores without requiring temporal annotations. Subsequent work improves this basic formulation in two main directions. One line strengthens local discrimination inside the weakly supervised objective: RTFM learns robust temporal feature magnitudes (Tian et al. 2021), MGFN con-trasts feature magnitudes across scenes with a glance-and-focus mechanism (Chen et al. 2023), CMRL exploits rela-tions between context and motion (Cho et al. 2023), and UR-DMU separates normal and abnormal prototypes with dual memory units under uncertainty regulation (Zhou, Yu, and Yang 2023). Another line refines supervision by self-training: MIST converts MIL outputs into segment-level pseudo labels that fine-tune a task-specific encoder (Feng, Hong, and Zheng 2021), CU-Net models the completeness and uncertainty of pseudo labels (Zhang et al. 2023), and UMIL partitions seg-ments into confident and ambiguous sets to reduce contextual bias (Lv et al. 2023). These methods retain the same weak-label setting while replacing or augmenting the canonical ranking loss with richer detector-specific objectives. MuST-VAD preserves the native objective of the selected detector; it changes how the detector’s input representation evolves and adds auxiliary bidirectional distillation. 
+
+VLM-Adapted Anomaly Detection 
+
+A second family transfers vision-language semantics into WSVAD. Early work uses CLIP as a stronger feature ex-tractor with temporal self-attention (Joo et al. 2023). Sub-sequent methods adapt the language interface itself: Vad-CLIP attaches to a frozen CLIP a dual branch for coarse bi-nary classification and fine-grained text alignment (Wu et al. 2024b), AnomalyCLIP identifies a normal subspace and text-driven anomaly directions in the CLIP latent space (Zanella et al. 2024a), and TPWNG generates frame-level pseudo la-bels from image-text matching under normality guidance and self-trains the classifier (Yang, Liu, and Wu 2024). PEL4VAD incorporates external commonsense knowledge into textual prompts (Pu et al. 2024), whereas PE-MIL learns abnormal-aware and normal-context prompts for MIL-based anomaly discrimination (Chen et al. 2024). Beyond binary detection, OVVAD targets open-vocabulary anomalies with LLM-derived semantic knowledge (Wu et al. 2024a), Fine-VAD aligns binary, macro-category, and fine-category su-pervision progressively (Zhang et al. 2026), and DSANet disentangles event and background semantics under normal-ity alignment (Yin et al. 2026). Most CLIP-based methods above optimize prompts, alignments, or pseudo labels within a single VLM-centered detection pipeline, without repeat-edly updating a separate LVLM representation learner and MIL detector. PEL4VAD additionally combines pretrained I3D features with representations from a CLIP text encoder. 
+
+LVLM-Based Anomaly Understanding 
+
+A third family employs LVLMs whose native output is lan-guage. Training-free systems score anomalies by aggregating frame captions with a language model (Zanella et al. 2024b), by inducing normality rules from a few normal frames and applying them deductively (Yang et al. 2024), or by verbal-ized optimization of the guiding questions posed to a frozen LVLM (Ye, Liu, and He 2025). Tuned systems adapt the LVLM itself: VAD-LLaMA equips it with a long-term con-text module and fine-tunes it in stages (Lv and Sun 2024), HAWK learns open-world anomaly description and ques-tion answering with an explicit motion modality (Tang et al. 2024), and Holmes-VAD and Holmes-VAU instruction-tune a multimodal LLM on frames selected by an anomaly scorer, the latter across temporal granularities with hierarchical in-struction data (Zhang et al. 2024, 2025). CUVA benchmarks the causal understanding of video anomalies (Du et al. 2024), and SteerVAD steers anomaly-relevant internal representa-tions of a frozen LVLM (Cai et al. 2026). Where a detector appears, it selects what the LVLM sees; the information flow terminates at the LVLM, whose updated representations are not returned to retrain an independent detector. 
+
+Iterative and Mutual Learning 
+
+Iterative refinement is well established within a single model: MIST, CU-Net, and TPWNG all alternate between pseudo-label generation and model updates (Feng, Hong, and Zheng 2021; Zhang et al. 2023; Yang, Liu, and Wu 2024). Across two models, co-training exchanges pseudo labels between views of the same task (Blum and Mitchell 1998), while deep mutual learning symmetrically aligns the output distributions of homogeneous peer classifiers (Zhang et al. 2018). In video anomaly detection, Zaheer et al. (2022) pro-posed Generative Cooperative Learning (GCL), which al-ternately trains an autoencoder generator and a discrimi-nator from entirely unlabeled videos. Reconstruction-error-based pseudo-labels from the generator supervise the dis-criminator; discriminator-derived pseudo-labels then update the generator through negative learning, which discourages accurate reconstruction of likely anomalies. GCL is there-fore an important VAD-specific precedent for iterative cross-supervision between heterogeneous models. MuST-VAD dif-fers in both the supervision and the exchanged information: it retains video-level WSVAD labels and annotation-anchored QA, couples an LVLM representation learner with a MIL detector, and exchanges confidence-weighted segment prob-abilities and updated semantic representations, not thresh-olded pseudo-labels between a generator and a discriminator. Closest to us, caption-based complementary learning cou-ples a detector and an LVLM in both directions—detector scores select key clips and enrich automatically generated captions, and the fine-tuned LVLM returns intermediate fea-tures to a detector—but performs this exchange only once (Hashimoto, Nishimura, and Kurokawa 2025). In summary, prior work explores detector self-training, cooperative learn-ing between generative and discriminative anomaly models, vision-language prompt optimization, score-guided selection of LVLM inputs, and one-pass complementary use of a detec-tor and an LVLM. To the best of our knowledge, however, no prior WSVAD method repeatedly uses confidence-weighted predictions from a separate MIL detector to adapt an LVLM representation learner and then retrains that detector on the updated LVLM representations. 
+
+# MuST-VAD 
+
+Overview 
+
+MuST-VAD addresses a limitation of one-way representation transfer: once an anomaly detector is trained, the segment-level knowledge it acquires is not used to improve the LVLM that produced its input features. Our key idea is to alter-nate the two models through two asymmetric interfaces. The LVLM transfers semantic segment representations to the de-tector, while the detector returns local anomaly probabilities and informative temporal evidence to the LVLM. Each model retains its own primary objective, and no gradient is propa-gated across the interface. The loop has three supporting mechanisms. First, detector-guided key-clip selection concentrates the updates of both models on informative temporal evidence. Second, struc-tured question answering (QA) combines stable annotation-derived targets with detector-derived timing and score tar-gets. Third, confidence-aware distillation suppresses uncer-tain cross-model predictions. We combine these mechanisms with bag-group asynchronous optimization so that only a small part of the training set is updated at a time. The re-mainder of this section introduces these components and then summarizes their interaction. 
+
+Segment Features and Key Clips 
+
+This subsection formalizes the representation path from the LVLM Gθ to the detector Dϕ: segment features read from 
+
+Gθ form the detector input, and the resulting detector scores select key clips , the compact temporal evidence on which both models are subsequently trained. Each training video Vi (i = 1 , . . . , N ) is divided into 
+
+Ti non-overlapping temporal segments {xi,t }Ti
+
+> t=1
+
+. To make the contextual semantics of the LVLM available to the de-tector, we read a fixed-dimensional feature for every seg-ment directly from the hidden states of Gθ . Given a seg-ment xi,t and a fixed feature-extraction prompt qfeat , let 
+
+Hlast  
+
+> θ
+
+(xi,t , q feat ) ∈ RLi,t ×d denote the hidden states of the final language-model block. With Pi,t denoting the valid multimodal prompt positions, excluding padding, the seg-ment feature is 
+
+fi,t (θ) = 1
+
+|P i,t |
+
+X
+
+> ℓ∈P i,t
+
+Hlast  
+
+> θ,ℓ
+
+(xi,t , q feat ), (4) and the segment features of Vi are stacked into its complete feature bag Fi(θ) ∈ RTi×d. The feature is computed in a single prompt-conditioned forward pass and does not depend on any generated text, so yields a fixed-dimensional detector input without text generation. Figure 2: Training workflow of MuST-VAD. During warm-up, the frozen LVLM extracts segment features to train the WSVAD detector. In each mutual-learning cycle, the detector selects key clips and constructs structured QA targets for the LVLM, while the LVLM provides segment representations and anomaly predictions to the detector. The two models are alternately updated through confidence-aware mutual distillation and reused in the next cycle. MuST-VAD is compatible with any WSVAD detector that scores every segment of a feature bag, producing one anomaly logit zDi,t per segment and, through the sigmoid, an anomaly probability qDi,t . The detector is trained by minimiz-ing its native weakly supervised objective, 
+
+min  
+
+> ϕ
+
+Lbase 
+
+> D
+
+ ϕ; {Fi, y i}Ni=1 
+
+ , (5) which converts the video-level labels yi into a learning signal for the segment scores under the MIL assumption of Sec-tion , as in the canonical ranking loss of Equation (3) or its detector-specific extensions. MuST-VAD leaves the detector architecture and this objective unchanged. 
+
+Key-clip selection. Untrimmed surveillance videos are dominated by normal segments, so most temporal locations carry little training signal: updating the detector everywhere dilutes hard evidence, and feeding entire videos to the LVLM is computationally prohibitive. We therefore let the current detector decide where both models focus. Ranking the seg-ments of a video by qDi,t , we select up to KD temporally separated high-score segments and take a window of wD
+
+segments around each; we call these windows the key clips of the video. For an abnormal video, the key clips are likely anomaly candidates; for a normal video, the same rule yields hard negatives. Both models are then trained on this shared evidence: the detector on the key-clip features taken from Fi,and the LVLM on the raw frames of the top-ranked key clip, 
+
+tkey  
+
+> i
+
+= arg max 
+
+> 1≤t≤Ti
+
+qDi,t , Xkey  
+
+> i
+
+= Vi
+
+h
+
+W
+
+
+
+tkey 
+
+> i
+
+i 
+
+, (6) where W(t) is a temporal window in which the selected segment t is placed at a randomly sampled position, and 
+
+Vi[·] extracts the corresponding raw frames. Both selection and placement are discrete, and no gradient passes through either operation. 
+
+Structured QA 
+
+This subsection describes the reverse path of the loop: how the detector’s knowledge supervises the LVLM. Structured QA is the primary objective for adapting Gθ to the target videos. Video-level annotations are stable but contain little temporal information, whereas detector predictions provide temporal detail but evolve during training; Structured QA combines sources so that the LVLM learns from detector feedback without losing reliable weak supervision. All ques-tions are answered from the key clip Xkey  
+
+> i
+
+defined above. The task set contains four questions. Two annotation-derived tasks predict the normal/abnormal label and the anomaly category. Two detector-derived tasks describe the selected temporal evidence. The detect timing task identifies the position of the detector-selected segment within Xkey  
+
+> i
+
+.The detect score task predicts the quantized level of the de-tector score assigned to that segment. The annotation-derived answers remain fixed, while the detector-derived answers are regenerated from the latest detector scores. Thus, the former anchor the video semantics and the latter communicate where the detector attends and how strongly it scores the observed evidence. The task set is configurable, and an experiment may activate any subset of the four tasks. For the set BG of videos in one LVLM update, let Ki be the active tasks for video Vi and ai,k the answer for task 
+
+k. We denote the effective weight of the corresponding QA pair by ωi,k . For annotation-derived tasks, this weight is a fixed per-task constant λk. For detector-derived tasks, the task constant is further multiplied by the confidence of the detector target, and a target below a confidence threshold is omitted. The QA objective is 
+
+Lqa  
+
+> G
+
+= − X
+
+> i∈B G
+
+X
+
+> k∈K i
+
+ωi,k log Pθ
+
+
+
+ai,k | Xkey  
+
+> i
+
+, Ci,k 
+
+
+
+, (7) where Pθ is the token probability of the LVLM and Ci,k is the conversation context of task k, namely the preceding QA turns and the current question. The active tasks are serialized as a multi-turn conversation, and only assistant answer tokens contribute to the loss. Thus, structured QA provides stable supervision using the detector’s temporal knowledge. 
+
+Confidence-Aware Bidirectional Distillation 
+
+Structured QA transfers a small set of interpretable attributes, but it does not expose the full segment probability sequence to the other model. We therefore couple the two models with an auxiliary distillation loss in both directions, while each model keeps its own primary objective. Predictions and updated representations are exchanged without cross-model gradients, preserving separate model optimization paths. A lightweight anomaly head hψ maps each LVLM segment feature to an anomaly logit zGi,t and, through the sigmoid, a probability qGi,t , giving the LVLM its own segment-level pre-diction. Both directions use the same confidence-weighted binary cross-entropy between student logits zu and detached teacher probabilities qu, where u indexes the valid video– segment pairs (i, t ) of the update: 
+
+ℓ(z; q) = 
+
+P 
+
+> u
+
+muwu BCE( zu, sg[ qu]) 
+
+P 
+
+> u
+
+muwu + ε ,wu = |2qu − 1|γ ,
+
+(8) where sg[ ·] denotes stop-gradient and ε is a small constant. The weight wu emphasizes confident targets, and the binary mask mu keeps only targets with qu ≥ τ+ or qu ≤ τ−, where 
+
+τ− < 0.5 < τ +. For a video labeled normal, the weak label overrides the teacher: every segment uses target 0 with the mask and weight set to one. In the D → G direction, detector probabilities supervise the anomaly head; in the reverse G → D direction, the anomaly head supervises the detector on the key-clip seg-ments. The two auxiliary losses are 
+
+Ldist  
+
+> G
+
+= βDG ℓ(zG; qD ),
+
+Ldist  
+
+> D
+
+= βGD ℓ(zD ; qG), (9) where βDG and βGD are fixed weights. The former updates 
+
+hψ and the trainable LVLM parameters through features re-computed with gradients enabled, while Dϕ stays fixed; the latter updates only Dϕ. Because hψ starts untrained, G → D
+
+is enabled only after an initial delay, whereas D → G is active throughout mutual learning. 
+
+Bag-Group Asynchronous Optimization 
+
+Updating both models over the full training set after every exchange would be prohibitively expensive and would delay the use of newly acquired knowledge. MuST-VAD there-fore organizes training into rounds . Round 0 is a one-pass warmup: complete feature bags are extracted once from the pretrained LVLM, and the detector is trained on them with 
+
+Lbase  
+
+> D
+
+. This round supplies the initial features and the first reliable segment scores, and it coincides with the one-pass transfer baseline of our experiments. Each subsequent mutual round partitions the training videos into small bag groups, Algorithm 1: One mutual round of MuST-VAD 
+
+Input : one-pass initialized Gθ and Dϕ; complete feature bags of all training videos; delay W
+
+Output : updated Gθ and Dϕ 
+
+> 1:
+
+initialize anomaly head hψ ; partition videos into bag groups  
+
+> 2:
+
+for macro-cycle c = 0 , 1, . . . until all groups are visited 
+
+do  
+
+> 3:
+
+assign distinct bag groups to the detector and the LVLM  
+
+> 4:
+
+score the detector groups, select key clips, and update 
+
+ϕ with LD (Ldist  
+
+> D
+
+only if c ≥ W ) 
+
+> 5:
+
+score the LVLM group with the updated Dϕ; select key clips; build QA answers and targets qD 
+
+> 6:
+
+update (θ, ψ ) with LG 
+
+> 7:
+
+re-extract the complete bags of the LVLM group  
+
+> 8:
+
+end for  
+
+> 9:
+
+return Gθ , D ϕ
+
+each containing a few normal and a few abnormal bags, and the two models are alternately updated group by group in a sequence of macro-cycles until every group has been visited. One macro-cycle updates the detector and the LVLM on distinct bag groups with the objectives 
+
+LD = Lbase  
+
+> D
+
++ Ldist  
+
+> D
+
+, LG = Lqa  
+
+> G
+
++ Ldist  
+
+> G
+
+, (10) where Ldist  
+
+> D
+
+is included only after the first W macro-cycles of the round. In the detector phase, Dϕ scores the complete bags of its groups, selects their key clips, and is updated on the key-clip features with LD . In the LVLM phase, the updated detector scores the bags of the LVLM group, selects their key clips, and generates the detector-derived QA answers and distillation targets. The LVLM and its anomaly head are then updated on these key clips with LG.After the LVLM update, the complete bags of the LVLM group are re-extracted with the updated LVLM and replace the previous ones. Each stored bag thus reflects the most recent LVLM state that processed its video, and the bags of videos not yet revisited remain temporarily stale until a later macro-cycle covers them. This bounded staleness avoids a full-dataset extraction after every LVLM update. Algorithm 1 summarizes one mutual round. 
+
+Inference. The mutual-learning loop, key-clip selection, and auxiliary anomaly head are used only during training. At inference, the final LVLM extracts the complete feature bag of each video once, and Dϕ predicts anomaly scores for all segments. The inference procedure is therefore identical to one-pass representation transfer. 
+
+# Experiments 
+
+Experimental Setup 
+
+Dataset and metrics. We evaluate MuST-VAD on UCF-Crime, a large-scale surveillance benchmark containing thir-teen anomaly categories (Sultani, Chen, and Shah 2018). We use the standard weakly supervised split and derive the class label ci from each abnormal video’s filename; normal videos are assigned Normal . We report frame-level area under the receiver operating characteristic curve (AUROC) and frame-level average precision (AP). AUROC remains the dominant UCF-Crime metric, while AP complements it under the se-vere imbalance between normal and anomalous frames, for which a high AUROC can mask poor precision–recall behav-ior (Acharya et al. 2026). Segment scores are expanded to their corresponding frames, and both metrics are computed over the complete standard test set. 
+
+Implementation details. For experiments, we instantiate the LVLM with Qwen3-VL-8B-Instruct (Bai et al. 2025) and the detector with the official UR-DMU architecture and objective (Zhou, Yu, and Yang 2023). Videos are divided into non-overlapping 16-frame segments. Segment features are extracted with the fixed prompt “ Is this surveillance video normal or abnormal? ” using the final-block prompt mean in Equation (4), yielding d = 4096 . For structured QA, the key clip is a 96-frame window (six 16-frame segments) centered at the detector-selected segment. The vision encoder is frozen; the visual projector and final language-model block are optimized with a base learning rate of 1×10 −5 and a per-round decay factor of 0.7. The QA weights are λbin = 1 .0
+
+and λclass = 0 .7.Round 0 trains UR-DMU for 25 epochs with learning rate 
+
+5 × 10 −5 on the initial feature bags. During mutual learn-ing, each bag group contains two normal and two abnormal videos. One macro-cycle updates one detector group and one LVLM group, with one optimizer step per group. We set 
+
+βDG = 0 .2, βGD = 0 .1, γ = 2 .0, τ+ = 0 .8, and τ− = 0 .2.Detector-to-LVLM distillation is active from the first macro-cycle, whereas LVLM-to-detector distillation starts after the first five macro-cycles ( W = 5 ). For key-clip selection, we set KD = 1 and wD = 1 : the detector uses the highest-scoring segment, while the LVLM uses the six-segment win-dow above; normal selections serve as hard negatives. The online detector supplies LVLM feedback, selects all key clips, and is used for final evaluation. We run one mutual-learning round. All experiments use four NVIDIA L40S GPUs and a fixed random seed. 
+
+Baseline. Our primary baseline is the round-0 one-pass transfer described in Section . It uses the same initial LVLM features and the same UR-DMU detector as MuST-VAD, but performs no mutual feedback. This comparison isolates the effect of the mutual-learning loop. 
+
+Comparison with Prior Methods 
+
+Table 1 groups prior methods into visual WSVAD and the broader VLM/LVLM-based family. Because most UCF-Crime methods report only AUROC, the AP column com-bines originally reported values with those recomputed from public implementations by Acharya et al. (2026), who moti-vate AP for the severe frame imbalance of this benchmark. MuST-VAD reaches 88 .63% AUROC and 42 .46% AP; the AP exceeds the best prior value of 38 .33% by 4.13 points, whereas its AUROC remains below the best listed result, at-tained by DSANet. Two properties of this result stand out. First, our round-0 baseline—the UR-DMU detector trained once on the initial LVLM features—already attains 88 .15%                             
+
+> Method AUROC AP
+> Visual WSVAD
+> MIL (Sultani, Chen, and Shah 2018) 75.41 25.03 †
+> MIST (Feng, Hong, and Zheng 2021) 82.30 –RTFM (Tian et al. 2021) 84.30 29.46 †
+> UR-DMU (Zhou, Yu, and Yang 2023) 86.97 35.48 †
+> Road Less Seen (Acharya et al. 2026) –38.33
+> VLM/LVLM-based VAD
+> LAVAD (Zanella et al. 2024b) 80.28 –VERA (Ye, Liu, and He 2025) 86.55 –SteerVAD (Cai et al. 2026) 87.15 –TPWNG (Yang, Liu, and Wu 2024) 87.79 –VadCLIP (Wu et al. 2024b) 88.02 33.55 †
+> DSANet (Yin et al. 2026) 89.44 –MuST-VAD (Round 0) 88.15 37.25
+> MuST-VAD (Round 1) 88.63 42.46
+
+Table 1: Frame-level performance (%) on UCF-Crime. AP values marked with † are recomputed from publicly available implementations by Acharya et al. (2026); “–” denotes that the result is unavailable. AUROC and 37 .25% AP, exceeding most listed prior meth-ods with reported AUROC and providing a strong one-pass transfer baseline. Second, one mutual-learning round im-proves this baseline by 5.21 AP points and 0.48 AUROC points. The different magnitudes of these gains are examined in the next subsection without attributing them to a specific internal mechanism. 
+
+Effect of Bag-Group Mutual Learning 
+
+Round 0 is the one-pass baseline, whereas Round 1 applies the complete bag-group schedule in Algorithm 1; the online detector is used throughout mutual learning and provides the MuST-VAD result reported in Table 1. One mutual round improves AUROC by 0.48 points and AP by 5.21 points, a 
+
+14 .0% relative AP gain. We hypothesize that the larger AP gain arises from where the loop concentrates its updates. Under the severe frame imbalance of UCF-Crime, AP is especially sensitive to pre-cision in the high-score region, whereas AUROC measures the probability that a randomly selected anomalous frame is scored above a randomly selected normal frame and does not itself depend on class prevalence. MuST-VAD updates both models on detector-selected key clips: the strongest false alarms in normal videos and the leading anomaly candidates in abnormal videos. This design focuses learning on high-scored temporal evidence, while the confidence weight in Equation (8) emphasizes decisive predictions. The larger AP than AUROC improvement is therefore consistent with, but does not establish, a stronger effect on high-score precision than on overall pairwise ranking. 
+
+Ablation Studies 
+
+To examine how performance changes when each compo-nent is removed, we conduct one-at-a-time ablations while Round Key-clip Distill. Conf. weight AUROC AP 0 – – – 88.15 37.25 1 ✓ × × 88.16 41.35 1 ✓ ✓ × 87.80 41.56 1 × ✓ ✓ 86.54 38.38 1 ✓ ✓ ✓ 88.63 42.46 
+
+Table 2: Component ablation on UCF-Crime (%). Round 0 denotes the one-pass baseline without mutual learning. A cross under “Key-clip” denotes random clip selection; a cross under “Distill.” or “Conf. weight” denotes removing that term. All Round-1 variants use the same Round-0 ini-tialization and update budget. keeping the round-0 initialization, bag-group schedule, and update budget fixed. In Table 2, Key-clip denotes detector-guided key-clip selection, and a cross in this column means that both models are instead trained on a uniformly sampled random window per video. Distill. denotes the bidirectional distillation terms, whose removal leaves structured QA as the only coupling. Conf. weight denotes the confidence weight-ing; its removal sets wu = 1 , so all distillation targets con-tribute equally. As can be seen from Table 2, the full configuration achieves the best AUROC and AP, while the ablations affect the two metrics differently. Replacing key-clip selection with random windows produces the largest degradation: AUROC falls to 
+
+86 .54% , 1.61 points below the round-0 baseline, and the AP gain over round 0 shrinks from 5.21 to 1.13 points. This pattern suggests that detector-guided selection is important to the observed gain. One possible explanation is that ran-dom windows more often contain uninformative segments, weakening the QA and distillation targets and the subsequent LVLM feature updates. The aggregate metrics do not directly show that either model is corrupted, but they are consistent with key-clip selection serving as more than an efficiency device. Removing distillation preserves most of the AP gain (41 .35% ) but leaves AUROC near the round-0 level (88 .16% ). Uniform distillation yields a lower AUROC (87 .80% ) than no distillation, whereas the complete confidence-aware configuration reaches 88 .63% . These ob-servations suggest that QA on selected clips is associated with much of the AP improvement and that confidence-aware distillation may help overall pairwise ranking. One possible explanation is that uniform weighting gives near-boundary detector and LVLM predictions the same influence as confi-dent targets and may therefore introduce noisier supervision. The results are consistent with confidence weighting improv-ing the usefulness of bidirectional distillation, but they do not identify a unique internal causal mechanism. 
+
+Performance at Low False-Positive Rates 
+
+To assess performance at practically relevant operating points, we evaluate Recall@FPR following Acharya et al. (2026). This metric measures the maximum recall attainable                     
+
+> Method AP (%) Recall@FPR 1% 2% 3% UR-DMU 35.48 †0.170 0.170 0.212 VadCLIP 33.55 †0.109 0.155 0.217 The Road Less Seen 38.33 0.173 0.263 0.336
+> MuST-VAD 42.46 0.160 0.266 0.332
+
+Table 3: Low-FPR performance on UCF-Crime. Re-call@FPR denotes recall under the specified FPR constraint. Competing results are reported by Acharya et al. (2026); †
+
+denotes their recomputed AP. while constraining the FPR to the specified value. As shown in Table 3, MuST-VAD achieves the highest recall at FPR=2% and clearly outperforms UR-DMU and VadCLIP at both 2% and 3%. Compared with The Road Less Seen, MuST-VAD is slightly better at 2% (0.266 vs. 0.263) and comparable at 3% (0.332 vs. 0.336), but performs worse at the strictest FPR of 1% (0.160 vs. 0.173). These results show that the AP improvement is accompanied by competitive anomaly cover-age under modest false-positive budgets, although improving recall remains a limitation. 
+
+# Conclusion 
+
+We presented MuST-VAD, a mutual learning framework for weakly supervised video anomaly detection. An LVLM pro-vides multimodal segment representations, while a MIL de-tector selects key clips and returns confidence-weighted pre-dictions for LVLM adaptation. The two models are alter-nately optimized over distinct bag groups, with feature bags re-extracted only for videos used to update the LVLM. Exper-iments on UCF-Crime demonstrate improvements over one-pass representation transfer under the same model and infer-ence settings. MuST-VAD enables a large generalist model and a compact specialist to exchange complementary knowl-edge without a shared end-to-end computation graph. This principle may also benefit other temporal recognition tasks. 
+
+# References 
+
+Acharya, A.; Sapkota, H.; Yu, Q.; and Liu, X. 2026. The Road Less Seen: Segment Exploration for Weakly Super-vised Video Anomaly Detection. In CVPR , 14147–14156. Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.; et al. 2025. Qwen3-VL Technical Report. arXiv preprint arXiv:2511.21631 .Blum, A.; and Mitchell, T. 1998. Combining Labeled and Unlabeled Data with Co-Training. In COLT , 92–100. Cai, Z.; Li, F.; Duan, H.; He, L.; and Zhai, G. 2026. Steering and Rectifying Latent Representation Manifolds in Frozen Multi-Modal LLMs for Video Anomaly Detection. In ICLR .Chen, J.; Li, L.; Su, L.; Zha, Z.-J.; and Huang, Q. 2024. Prompt-Enhanced Multiple Instance Learning for Weakly Supervised Video Anomaly Detection. In CVPR , 18319– 18329. Chen, Y.; Liu, Z.; Zhang, B.; Fok, W. W. T.; Qi, X.; and Wu, Y.-C. 2023. MGFN: Magnitude-Contrastive Glance-and-Focus Network for Weakly-Supervised Video Anomaly Detection. In AAAI , 387–395. Cho, M.; Kim, M.; Hwang, S.; Park, C.; Lee, K.; and Lee, S. 2023. Look Around for Anomalies: Weakly-Supervised Anomaly Detection via Context-Motion Relational Learning. In CVPR , 12137–12146. Du, H.; Zhang, S.; Xie, B.; Nan, G.; Zhang, J.; Xu, J.; Liu, H.; Leng, S.; Liu, J.; Fan, H.; Huang, D.; Feng, J.; Chen, L.; Zhang, C.; Li, X.; Zhang, H.; Chen, J.; Cui, Q.; and Tao, X. 2024. Uncovering What, Why and How: A Comprehensive Benchmark for Causation Understanding of Video Anomaly. In CVPR , 18793–18803. Feng, J.-C.; Hong, F.-T.; and Zheng, W.-S. 2021. MIST: Mul-tiple Instance Self-Training Framework for Video Anomaly Detection. In CVPR , 14009–14018. Hashimoto, S.; Nishimura, H.; and Kurokawa, M. 2025. Surveillance Video Anomaly Detection via Automatic Cap-tion Generation Using Multimodal Large Language Mod-els. Journal of the Japan Society for Precision Engineering ,91(12): 1136–1143. In Japanese. Joo, H. K.; Vo, K.; Yamazaki, K.; and Le, N. 2023. CLIP-TSA: CLIP-Assisted Temporal Self-Attention for Weakly-Supervised Video Anomaly Detection. In ICIP , 3230–3234. Lv, H.; and Sun, Q. 2024. Video Anomaly Detection and Explanation via Large Language Models. arXiv preprint arXiv:2401.05702 .Lv, H.; Yue, Z.; Sun, Q.; Luo, B.; Cui, Z.; and Zhang, H. 2023. Unbiased Multiple Instance Learning for Weakly Supervised Video Anomaly Detection. In CVPR , 8022–8031. Pu, Y.; Wu, X.; Yang, L.; and Wang, S. 2024. Learning Prompt-Enhanced Context Features for Weakly-Supervised Video Anomaly Detection. IEEE Transactions on Image Processing , 33: 4923–4936. Sultani, W.; Chen, C.; and Shah, M. 2018. Real-World Anomaly Detection in Surveillance Videos. In CVPR , 6479– 6488. Tang, J.; Lu, H.; Wu, R.; Xu, X.; Ma, K.; Fang, C.; Guo, B.; Lu, J.; Chen, Q.; and Chen, Y.-C. 2024. HAWK: Learning to Understand Open-World Video Anomalies. In NeurIPS .Tian, Y.; Pang, G.; Chen, Y.; Singh, R.; Verjans, J. W.; and Carneiro, G. 2021. Weakly-Supervised Video Anomaly De-tection with Robust Temporal Feature Magnitude Learning. In ICCV , 4975–4986. Wu, P.; Zhou, X.; Pang, G.; Sun, Y.; Liu, J.; Wang, P.; and Zhang, Y. 2024a. Open-Vocabulary Video Anomaly Detec-tion. In CVPR , 18297–18307. Wu, P.; Zhou, X.; Pang, G.; Zhou, L.; Yan, Q.; Wang, P.; and Zhang, Y. 2024b. VadCLIP: Adapting Vision-Language Models for Weakly Supervised Video Anomaly Detection. In AAAI , 6074–6082. Yang, Y.; Lee, K.; Dariush, B.; Cao, Y.; and Lo, S.-Y. 2024. Follow the Rules: Reasoning for Video Anomaly Detection with Large Language Models. In ECCV , 304–322. Yang, Z.; Liu, J.; and Wu, P. 2024. Text Prompt with Nor-mality Guidance for Weakly Supervised Video Anomaly De-tection. In CVPR , 18899–18908. Ye, M.; Liu, W.; and He, P. 2025. VERA: Explainable Video Anomaly Detection via Verbalized Learning of Vision-Language Models. In CVPR , 8679–8688. Yin, W.; Zhang, H.; Wang, X.; Lu, Y.; Zhang, Y.; Gong, B.; Zuo, J.; Yu, L.; Gao, C.; and Sang, N. 2026. Learning to Tell Apart: Weakly Supervised Video Anomaly Detection via Disentangled Semantic Alignment. In AAAI , 12027–12035. Zaheer, M. Z.; Mahmood, A.; Khan, M. H.; Segu, M.; Yu, F.; and Lee, S.-I. 2022. Generative Cooperative Learning for Unsupervised Video Anomaly Detection. In CVPR , 14744– 14754. Zanella, L.; Liberatori, B.; Menapace, W.; Poiesi, F.; Wang, Y.; and Ricci, E. 2024a. Delving into CLIP Latent Space for Video Anomaly Recognition. Computer Vision and Image Understanding , 249: 104163. Zanella, L.; Menapace, W.; Mancini, M.; Wang, Y.; and Ricci, E. 2024b. Harnessing Large Language Models for Training-Free Video Anomaly Detection. In CVPR , 18527– 18536. Zhang, C.; Li, G.; Qi, Y.; Wang, S.; Qing, L.; Huang, Q.; and Yang, M.-H. 2023. Exploiting Completeness and Un-certainty of Pseudo Labels for Weakly Supervised Video Anomaly Detection. In CVPR , 16271–16280. Zhang, H.; Xu, X.; Wang, X.; Zuo, J.; Han, C.; Huang, X.; Gao, C.; Wang, Y.; and Sang, N. 2024. Holmes-VAD: To-wards Unbiased and Explainable Video Anomaly Detection via Multi-Modal LLM. arXiv preprint arXiv:2406.12235 .Zhang, H.; Xu, X.; Wang, X.; Zuo, J.; Huang, X.; Gao, C.; Zhang, S.; Yu, L.; and Sang, N. 2025. Holmes-VAU: Towards Long-Term Video Anomaly Understanding at Any Granular-ity. In CVPR , 13843–13853. Zhang, M.; Zhu, Y.; Ren, P.; Sun, H.; Qi, Q.; Zhuang, Z.; Wang, H.; Zhang, L.; Liao, J.; and Wang, J. 2026. Fine-VAD: Towards Fine-Grained Video Anomaly Detection via Progressive Cross-Granularity Learning. In CVPR , 35514– 35523. Zhang, Y.; Xiang, T.; Hospedales, T. M.; and Lu, H. 2018. Deep Mutual Learning. In CVPR , 4320–4328. Zhou, H.; Yu, J.; and Yang, W. 2023. Dual Memory Units with Uncertainty Regulation for Weakly Supervised Video Anomaly Detection. In AAAI , 3769–3777.

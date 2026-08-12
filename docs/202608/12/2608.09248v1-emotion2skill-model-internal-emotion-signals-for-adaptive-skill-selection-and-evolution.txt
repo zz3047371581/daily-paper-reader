@@ -1,0 +1,1465 @@
+Title: Emotion2Skill: Model-Internal Emotion Signals for Adaptive Skill Selection and Evolution
+
+URL Source: https://arxiv.org/pdf/2608.09248v1
+
+Published Time: Tue, 11 Aug 2026 01:58:56 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Emotion2Skill: Model-Internal Emotion Signals for Adaptive Skill Selection and Evolution 
+
+## Bohan Lin 1,2 , Hejia Geng 3, Xinyi Xie 4, Heng Zhou 1,5 , Qinghua Xing 1, Bo Liu 4,Chen Zhang 5, ∗
+
+## , Yudong Zhang 1,2,* 
+
+> 1
+
+University of Science and Technology of China (USTC) 
+
+> 2
+
+Suzhou Institute for Advanced Research, USTC 
+
+> 3
+
+University of Oxford 4University of Arizona 5Shanghai AI Laboratory Contact: linbohan@ustc.edu, genghejia0530@gmail.com, xinyix888@arizona.edu, hengzzzhou@gmail.com, qhuaaaxing@gmail.com, boliu@arizona.edu, zhangchen1@pjlab.org.cn, yudong.zhang@ustc.edu.cn 
+
+Abstract 
+
+Skill-based LLM agents select reusable procedures from an ex-ternal library to solve complex tasks, yet their routing decisions rely entirely on text-level signals such as task descriptions, ver-bal reflections, and experience-derived rules, while the model’s own internal representational state remains unobserved. Re-cent interpretability work has shown that LLMs maintain linear emotion representations that causally influence behav-ior; however, these representations have been exploited only for post-hoc analysis or direct output steering, and have not been used to inform agent-level decision-making. We propose Emo-tion2Skill, a framework that extracts LLM-internal emotion vectors and incorporates them into both skill selection and skill evolution. At each decision step, a 27-dimensional emotion state is extracted from the residual stream and mapped to a confidence-gated summary injected into the routing prompt. Beyond online selection, emotion trajectories are analyzed for abrupt internal-state shifts to pinpoint problematic skill invocations, guiding targeted SOP rewriting that replaces the coarse binary outcome signal of prior methods. On WebShop and ALFWorld, Emotion2Skill with Qwen3-8B improves over the Zero-Shot baseline by +26.9% success rate and 
+
++25.5% average success respectively, outperforming all base-lines on both benchmarks with consistent gains on Qwen3-14B. Co-activation analysis further reveals semantically coherent emotion–skill pairings, confirming that the routing improve-ments reflect meaningful internal-state signals rather than opaque statistical correlations. These results establish LLM-internal emotion representations as an effective decision-level signal for orchestrating agent skill systems, extending their utility beyond interpretability and output steering. The code is available at https://github.com/BoHan-LIN04/Emotion2Skill. 
+
+## 1 Introduction 
+
+Skill-based LLM agents solve complex, long-horizon interac-tive tasks by retrieving reusable procedural knowledge from external libraries (Wang et al. 2024; Yang et al. 2026d; Yu et al. 2026; Ni et al. 2026). While recent work has substan-tially advanced skill evolution (Yang et al. 2026d; Yu et al. 2026), trajectory distillation (Ni et al. 2026), and unified skill training (Shi et al. 2026), the quality of skill selection 
+
+continues to bound overall task performance. No amount of skill refinement compensates for systematically retrieving an 
+
+> ∗
+
+Chen Zhang and Yudong Zhang are the corresponding authors. (a) Humans: Emotion affects decisions 
+
+> Same situation
+> Calm confident
+> Anxious confused
+> Good Choice
+> Poor/Hesitant
+> Same prompt
+> Better Response
+> Suboptimal Output
+> Self-consistent Uncertain
+> (b) LLM ：Internal repersentation makes different ouputs
+
+Figure 1: Human decision-making integrates external stimuli with internal affective states. We ask whether LLM agents can exploit an analogous signal: the emotion representations encoded in the model’s own residual stream, extracted at inference time and used to condition skill utilization. inappropriate procedure at decision time. Effective skill selec-tion requires conditioning on two complementary sources of information. The first is the external textual context : the task description, conversation history, and environment observa-tions that standard agents already exploit. The second is the model’s own internal state : its accumulated uncertainty, its assessment of prior action outcomes, and the trajectory-level confidence it has built up to the current step. Identical exter-nal contexts can demand different skills depending on this internal state, yet no existing skill-selection method directly observes or leverages it. Existing approaches to skill selection rely primarily on explicit textual artifacts. Text-embedding retrieval (Wang et al. 2024; Yu et al. 2026) matches task descriptions against skill descriptions in a shared semantic space, verbal self-reflection (Shinn et al. 2023) produces textual critiques of prior actions to inform subsequent choices, experience-based learning (Zhao et al. 2024) distills trajectory-level lessons into natural-language rules, and model-aware alignment (Yu et al. 2026) refines skill content through text-space search. Although effective and complementary, these methods share a structural limitation, namely that they operate exclusively on the external textual context while the model’s internal representational state at the moment of selection remains arXiv:2608.09248v1 [cs.AI] 10 Aug 2026 unobserved. The latent component of the selection problem is therefore systematically absent from the routing decision. Neuroscience and psychology have long established that human decisions are shaped not only by external stimuli but also by internal affective states (Damasio 1994; Lerner et al. 2015) (Figure 1). We ask whether an analogous principle holds for LLMs. Recent interpretability work shows that LLMs encode linear, causal emotion representations in their residual streams (Zou et al. 2023; Sofroniew et al. 2026) that can be read out at inference time and that causally in-fluence agentically relevant outputs such as reward-hacking and sycophancy rates (Sofroniew et al. 2026). Unlike generic hidden-state features, emotion vectors are causally linked to model behavior, interpretable by construction (each dimen-sion names a specific affect), and task-independent, making them a natural proxy for the agent’s internal decision state. 
+
+Skill selection should therefore incorporate the agent’s internal decision state alongside external textual context, and emotion vectors offer an interpretable, causal proxy for doing so. 
+
+Building on this insight, we propose Emotion2Skill, a framework that augments LLM-based skill selection with an explicit emotion-derived signal. At each decision step, the agent’s emotion state is extracted from the model’s residual stream and passed through a lightweight encoder that pro-duces a natural-language emotion template together with a confidence score. This emotion summary is concatenated into the LLM’s selection prompt as auxiliary context, and a confidence-gating mechanism omits the signal when it is un-informative. Beyond selection, emotion trajectories recorded during episodes are analyzed for abrupt internal state shifts, and the resulting diagnostics guide periodic skill evolution by directing the rewriter’s attention to problematic trajectory seg-ments. On WebShop (Yao et al. 2022) and ALFWorld (Shrid-har et al. 2021), Emotion2Skill with Qwen3-8B (Yang et al. 2025) improves over the Zero-Shot baseline by +25.5% av-erage success on ALFWorld and +26.9% success rate on WebShop, outperforming all existing baselines with consistent gains on Qwen3-14B. Our contributions are as follows. 
+
+• We reveal the connection between LLM-internal emotion vectors and agent skill selection, showing empirically that emotion representations encode decision-relevant informa-tion absent from text-level features. 
+
+• We design Emotion2Skill, a framework that leverages emotion vectors for both skill selection and skill evolution in LLM-based agents. 
+
+• We conduct extensive experiments on two interactive bench-marks against five baselines, together with ablation studies and interpretability analyses that validate the effectiveness of the proposed approach. 
+
+## 2 Related Work 
+
+LLM internal representations and emotion vectors. Agrowing body of work shows that LLM internal representa-tions encode high-level semantic concepts as linear directions in activation space (Zou et al. 2023; Park, Choe, and Veitch 2024; Nanda, Lee, and Wattenberg 2023) that can be read out at inference time (Burns et al. 2023; Li et al. 2023) and causally steered to alter model behavior (Turner et al. 2023; Panickssery et al. 2024). Sofroniew et al. (2026) demonstrate that frontier LLMs maintain fine-grained emotion directions aligned with the 27-category GoEmotions taxonomy (Dem-szky et al. 2020) that causally influence agentically relevant behaviors; concurrent mechanistic studies further show that such emotion structure non-monotonically shapes agent rea-soning and safety (Sun et al. 2026; Shou and Guan 2026). We adopt these categorical directions rather than appraisal vectors (Scherer 2001) or valence-arousal subspaces, as they are the representation for which causal influence on agent behavior has been directly demonstrated, and named affective categories provide interpretable routing rationales without additional grounding. Emotion2Skill is the first to use emo-tion vectors as an active routing and evolution signal for agent skill systems, moving beyond post-hoc analysis and direct output steering. 
+
+Skill-based LLM agents. Skill-based LLM agents maintain reusable procedural knowledge for long-horizon tasks (Wang et al. 2024; Yang et al. 2026d; Yu et al. 2026; Ni et al. 2026), with recent work advancing skill evolution (Yang et al. 2026d; Yu et al. 2026; Wang et al. 2025; Yang et al. 2026a), trajectory distillation (Ni et al. 2026), unified training (Shi et al. 2026), and experiential learning (Zhao et al. 2024; Shinn et al. 2023; Xu et al. 2026). Concurrent work advances complementary dimensions of skill learning: ARISE (Li et al. 2026) introduces hierarchical reinforcement learning over intrinsic skill representations; OPID (Yang et al. 2026c) applies on-policy self-distillation for dense skill-level super-vision; Skill-R1 (Vishe et al. 2026) and ReSkill (He et al. 2026) evolve skills via outcome-based and RL-in-the-loop objectives; and MAGE (Yang et al. 2026b) co-evolves skill knowledge graphs across multiple agents. These approaches and Emotion2Skill operate on different dimensions: where they optimize skill routing through external reward or simi-larity feedback, Emotion2Skill conditions on the model’s internal affective state, and the two classes of signal are complementary rather than directly comparable. 
+
+## 3 Method 
+
+Emotion2Skill grounds skill decisions in the model’s own affective representations, filling the gap left by context-only skill routing. Emotion Vectors are extracted from the residual stream and projected into a natural-language summary at each step. Emotion-Augmented Skill Selection injects this summary into the routing prompt via a confidence gate. 
+
+Emotion-Driven Skill Evolution detects abrupt trajectory shifts to localize and rewrite underperforming skills. Figure 2 illustrates the design. 
+
+3.1 Preliminaries 
+
+Consider an agent equipped with a skill library S =
+
+{s1, . . . , s M }, where each skill si is a reusable procedure described by a natural-language SOP Di. At decision step 
+
+t, the agent observes the external textual context xt (task instruction, conversation history, and environment observa-tions) and possesses a latent internal decision state encoded (a) Emotion Vectors Extraction & Encoding       
+
+> Emotions Storires
+> (b) Emotion-Augmented Skill Selection (c) Emotion-Driven Skill Evolution
+> Trajectorys with Templates
+> Context & Skills
+> Qwen LLM Forward Pass
+> Emotion Encoder
+> Prompt Augmentation
+> Selected Skill Threshold ：
+> Use
+> Episode Logs
+> Step T
+> Layer 1
+> Qwen Backbones
+> Layer 2 Layer N
+> Layer L*
+> Skill Rewriter LLM Skills Library Update
+> Optimize
+> Skill Outcome
+> Prompt of Evolution
+> t
+> PCA with neutral vectors
+> Drop
+> Transition Points
+> Emotion Vector
+
+Figure 2: Framework of our method. Left: offline extraction of emotion vectors from the LLM residual stream and MLP encoder training. Middle: emotion state mapped to a confidence-gated summary injected into the skill-selection prompt. Right: emotion trajectory shifts trigger targeted SOP rewriting for underperforming skills. in the residual stream of the underlying LLM. We denote by 
+
+h(ℓ) 
+
+> t
+
+∈ Rd the residual-stream activation at layer ℓ and token position t, and by L∗ the optimal extraction layer selected on validation data. Standard skill-based agents select a skill s∗ 
+
+> t
+
+by prompting the LLM M with xt and the candidate SOPs {D1, . . . , D M },relying entirely on the textual content of these inputs. Emo-tion2Skill extends this formulation by additionally condi-tioning on an emotion summary ϕt derived from the agent’s internal state: 
+
+s∗ 
+
+> t
+
+= M xt, {D1, . . . , D M }, ϕt
+
+, (1) where ϕt is a natural-language token sequence produced by a learned emotion encoder fθ . The LLM remains the primary decision-maker; ϕt serves as auxiliary context that makes the agent’s latent state explicit. 
+
+3.2 Emotion Vector Extraction and Encoding 
+
+Contrastive extraction. We extract emotion directions from the agent model following the contrastive-averaging procedure of Sofroniew et al. (2026), replicated on Qwen3. For each of the K=27 emotion concepts in the GoEmotions taxonomy (Demszky et al. 2020), the model generates N =100 
+
+short stories with the target emotion. A forward pass through each story yields activations h(ℓ) 
+
+> t
+
+at every layer ℓ and token position t. We mean-pool over tokens past an initial prefix ( t ≥
+
+50 ) to obtain a per-story representation ¯h(ℓ), then compute the emotion direction for concept k at layer ℓ by subtracting the global mean from the within-concept mean: 
+
+v(ℓ) 
+
+> k
+
+= 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+¯h(ℓ) 
+
+> k,n
+
+− 1
+
+KN 
+
+> K
+
+X
+
+> k′=1
+> N
+
+X
+
+> n=1
+
+¯h(ℓ)
+
+> k′,n
+
+. (2) To suppress variance attributable to stylistic rather than af-fective content, a PCA-based denoising step projects out the top principal components of emotionally neutral acti-vations, yielding denoised directions ˆv(ℓ) 
+
+> k
+
+= Π ⊥v(ℓ) 
+
+> k
+
+. The optimal layer L∗ is selected from a candidate grid by max-imizing GoEmotions classification accuracy . Stacking the denoised directions yields the emotion extractor matrix 
+
+We = [ˆ v(L∗)1 , . . . , ˆv(L∗) 
+
+> K
+
+]⊤ ∈ RK×d.At inference time, the raw emotion state at decision step 
+
+t is obtained by projecting the residual-stream activation at the Assistant: delimiter token (Sofroniew et al. 2026) through We and applying ℓ2 normalization: 
+
+et = We h(L∗)
+
+> T
+
+∥We h(L∗) 
+
+> T
+
+∥2
+
+∈ RK . (3) The resulting vector et assigns a scalar activation to each of the K emotion dimensions, capturing the agent’s affective state at the moment immediately preceding generation. 
+
+Emotion encoder. The raw vector et is not directly consum-able by the LLM’s text-based prompt; naively reporting the top-k activated emotion names as tokens discards magnitude information and ignores interactions between co-activated emotions. We therefore introduce a lightweight emotion en-coder fθ that maps et to two outputs used for prompt augmen-tation. The encoder is a 3-layer MLP that produces an encoded representation rt = fθ (et) ∈ Rd′
+
+. From rt we derive (i) a 
+
+template index over a predefined bank T = {T1, . . . , T C }
+
+of C=12 natural-language emotion-state descriptions, where each template Tj is associated with a learnable prototype 
+
+qj ∈ Rd′
+
+:
+
+T ∗ 
+
+> t
+
+= arg max  
+
+> Tj∈T
+
+r⊤ 
+
+> t
+
+qj
+
+∥rt∥ ∥ qj ∥ , (4) and (ii) a scalar confidence score 
+
+ct = σ(w⊤ 
+
+> c
+
+rt + bc) ∈ [0 , 1] (5) indicating how informative the current emotion state is for routing. We define the composite emotion summary as the pair ϕt = ( T ∗ 
+
+> t
+
+, c t). When ct < τ , ϕt is omitted from the prompt entirely (confidence gating), allowing the system to fall back to standard text-only selection. The encoder is trained on tuples (et, s sel  
+
+> t
+
+, y t) collected during a warm-up phase in which the agent runs episodes under a baseline policy (ReAct with the skill library, without emotion signals), where ssel  
+
+> t
+
+∈ S is the baseline’s skill choice and yt ∈ { 0, 1} is the episode outcome. The objective com-bines a supervised-contrastive loss (Khosla et al. 2020) that clusters representations by effective skill assignments with a template-classification loss. For an anchor ri with positive set A+(i) = {j | ssel  
+
+> j
+
+=ssel  
+
+> i
+
+∧ yj =1 }, the contrastive term is 
+
+Lctr = − 1
+
+|B| 
+
+X
+
+> i∈B
+
+1
+
+|A +(i)|
+
+X
+
+> j∈A +(i)
+
+log exp( r⊤ 
+
+> i
+
+rj /κ )
+
+P  
+
+> k̸=i
+
+exp( r⊤ 
+
+> i
+
+rk/κ ) ,
+
+(6) where κ is a temperature and representations are ℓ2-normalized. The classification term assigns pseudo-labels ˆct
+
+via k-means ( k=C) on the raw emotion vectors and minimizes the cross-entropy over prototype similarities: 
+
+Lcls = − 1
+
+|B| 
+
+X
+
+> i∈B
+
+log exp( r⊤ 
+
+> i
+
+qˆci /κ ′)
+
+PCj=1 exp( r⊤ 
+
+> i
+
+qj /κ ′) . (7) The overall objective is L = Lctr + λ Lcls , where λ balances the two terms. 
+
+3.3 Emotion-Augmented Skill Selection 
+
+The emotion summary ϕt produced by the encoder is con-catenated into the LLM’s input prompt as additional context, making the agent’s latent state visible alongside the task description and candidate skill SOPs. At each decision step t,the system constructs an augmented prompt Pt by appending the emotion template T ∗ 
+
+> t
+
+and the confidence score ct to the standard prompt components. When the encoder’s confidence falls below the threshold τ , the emotion fields are withheld, and the prompt reduces to the conventional text-only format: 
+
+Pt =
+
+( xt; {Di}Mi=1 ; T ∗ 
+
+> t
+
+; ct
+
+ if ct ≥ τ, 
+
+xt; {Di}Mi=1 
+
+ otherwise . (8) The LLM then reads Pt in its entirety and produces a skill decision via constrained generation over the valid skill identi-fiers: 
+
+s∗ 
+
+> t
+
+= arg max  
+
+> si∈S
+
+pM(si | Pt), (9) where pM(si | Pt) denotes the conditional probability that 
+
+M assigns to skill si. The emotion summary enters through the same input channel as the task description, and setting 
+
+τ =1 recovers standard text-only selection. 
+
+3.4 Emotion-Driven Skill Evolution 
+
+Beyond online selection, the episode log Lep provides a temporally ordered trace of internal states that can inform periodic skill evolution. Standard evolution methods (Yang et al. 2026d; Yu et al. 2026) prompt the LLM to rewrite un-derperforming skill SOPs based on binary episode outcomes and, optionally, textual self-reflection. This signal is coarse in that it arrives only after episode termination and provides no indication of which intermediate steps were problematic. Emotion2Skill augments the rewriter’s input with struc-tured emotion diagnostics that localize critical state changes within the episode. Let E = ( e1, . . . , eT ) denote the emotion trajectory of a completed episode. To identify steps at which the agent’s internal state shifted abruptly, we compute the step-to-step 
+
+emotion shift magnitude 
+
+δt = 1 − e⊤ 
+
+> t
+
+et−1
+
+∥et∥ ∥ et−1∥ , t = 2 , . . . , T. (10) This quantity measures the cosine distance between con-secutive emotion states and is agnostic to which specific dimensions change; large δt indicates a sharp reorganization of the agent’s internal state regardless of whether the shift involves positive-valence, negative-valence, or cognitive di-mensions. An emotion transition point is defined as a step at which δt exceeds the episode mean by more than one standard deviation: 
+
+P = t ∈ { 2, . . . , T } δt > ¯δ + σδ , (11) where ¯δ = (T −1) −1 PTt=2 δt and σδ =
+
+ (T −1) −1 PTt=2 (δt − ¯δ)21/2. By operating on the full K-dimensional emotion vector without pre-selecting specific dimensions, this criterion captures any substantial internal reorganization, including shifts from exploratory states to frustrated states, from confident states to confused states, or from one cognitive mode to another. For each skill si flagged for evolution, we restrict to skill-specific transitions Pi = {t ∈ P | s∗ 
+
+> t
+
+= si} and extract a diagnostic context around each: 
+
+dt = ( xt−1: t+1 , s ∗
+
+> t−1: t+1
+
+, T ∗
+
+> t−1: t+1
+
+, δ t−1: t+1 ), (12) capturing a 3-step window of observations, skill choices, emotion templates, and shift magnitudes. These diagnostics, together with a verbalized summary ∆i describing the transi-tion pattern, are appended to the evolution prompt alongside the current SOP Di and the episode outcome rep :
+
+P (i) 
+
+> evo
+
+= Di; {dt}t∈P i ; ∆ i; rep 
+
+. (13) The rewriter receives P (i) 
+
+> evo
+
+as its full input context and gener-ates the revised SOP: 
+
+D′ 
+
+> i
+
+= M P (i)
+
+> evo
+
+. (14) Evolution proceeds over R rounds; at each round the agent executes a batch of episodes, identifies transition points, and updates each underperforming skill (success rate < η ): 
+
+S(r+1) =  S(r) \ { si} ∪ { s′
+
+> i
+
+}, ∀ si ∈ U (r), (15) where U(r) is the set of underperforming skills in round r. The emotion diagnostics enter through the same prompt channel as the SOP and episode transcript, providing temporally localized context that complements the coarse binary outcome signal. Algorithm 1 summarizes both the online selection and the evolution procedure. 
+
+## 4 Experiments 
+
+4.1 Setup 
+
+We evaluate on WebShop (Yao et al. 2022) (web-based shop-ping; metrics: Score, Succ.%) and ALFWorld (Shridhar et al. 2021) (text-based household tasks, 134 test episodes across six task types, json_2.1.1 split; metric: per-type and average Success%). We compare against Zero-Shot, ReAct (Yao et al. 2023), Reflexion (Shinn et al. 2023), ExpeL (Zhao et al. 2024), and MASA (Yu et al. 2026); all methods are reproduced on both Qwen3-8B and Qwen3-14B (Yang et al. 2025).All ex-periments are conducted on 8 ×H800 GPUs.Detailed dataset statistics, baseline reproduction protocols, and hyperparame-ter configurations are provided in the Technical Supplement. Emotion2Skill uses confidence threshold τ =0 .3, with the extraction layer L∗ selected via GoEmotions classification accuracy . Skill libraries, prompt templates, and further imple-mentation details are provided in Appendix (See supplement materials). Qwen3-14B reuses the same skill libraries and τ ;only L∗ is re-selected. Algorithm 1: Emotion2Skill 
+
+Require: Skill library S, extractor We, encoder fθ , threshold 
+
+τ , layer L∗, rounds R, threshold η
+
+1: Online: Emotion Extraction and Skill Selection 
+
+2: for each episode do 
+
+3: Lep ← ∅ 
+
+4: for each decision step t do 
+
+5: Extract et ← We h(L∗) 
+
+> T
+
+/∥We h(L∗) 
+
+> T
+
+∥2; encode 
+
+(rt, c t) ← fθ (et)
+
+6: Construct Pt via Eq. 8 (include T ∗ 
+
+> t
+
+, c t if ct ≥ τ ;omit otherwise) 
+
+7: s∗ 
+
+> t
+
+← arg max si pM(si | Pt); execute s∗
+
+> t
+
+8: Append (et, c t, s ∗ 
+
+> t
+
+, T ∗ 
+
+> t
+
+) to Lep 
+
+9: end for 
+
+10: end for 
+
+11: 12: Periodic: Emotion-Augmented Skill Evolution 
+
+13: for round r = 1 , . . . , R do 
+
+14: Compute emotion shifts δt (Eq. 10) and transition points P (Eq. 11) from episode logs 
+
+15: for each si ∈ U (r) with success < η do 
+
+16: Build P (i) 
+
+> evo
+
+from diagnostics around Pi (Eqs. 12–13) 
+
+17: D′ 
+
+> i
+
+← M (P (i) 
+
+> evo
+
+); S ← (S \ { si}) ∪ { s′
+
+> i
+
+}
+
+18: end for 
+
+19: end for 
+
+4.2 Emotion Vector Quality and Layer Selection 
+
+We evaluate whether Qwen3-8B’s residual stream encodes discriminable emotion structure by benchmarking each candi-date layer on the GoEmotions dataset (Demszky et al. 2020) and simultaneously select the optimal extraction layer L∗.
+
+GoEmotions evaluation protocol. We use the GoEmotions test set (27 emotion categories) as the evaluation benchmark. For each candidate layer ℓ ∈ { 16 , 18 , 20 , 22 , 24 , 26 , 28 }
+
+(Qwen3-8B, 36 layers), we extract the residual-stream activa-tions at layer ℓ for each GoEmotions example, project onto the emotion directions ˆv(ℓ) 
+
+> k
+
+obtained via contrastive averaging, and classify each example by assigning it to the emotion direction with the highest cosine similarity. This evaluation measures how well the emotion directions at each layer re-cover the human-annotated GoEmotions labels without any task-specific fine-tuning. Because GoEmotions is multi-label, we adopt a hit-any criterion: a prediction is correct if the highest-similarity emotion direction matches any of the anno-tated labels. Under this criterion, a random baseline achieves 8.2% accuracy estimated by uniform sampling over the 27 categories against the empirical multi-label distribution. 
+
+Layer selection. Figure 3a reports the 27-class classifi-cation accuracy at each candidate layer. Performance does not increase monotonically: accuracy jumps from 15.8% at layer 16 to 24.3% at layer 18, dips to 21.7% at layer 20, then climbs through 30.5% at layer 22 to a peak of 37 .2%
+
+at layer 24 . Subsequent layers show a partial rebound with 35.1% at layer 28 compared with 33.6% at layer 26, indicating that emotion-relevant information does not decay smoothly 16 18 20 22 24 26 28         
+
+> Layer
+> 010 20 30 40
+> GoEmotions Accuracy (%)
+> 15.8 24.3 21.7 30.5
+> 37.2
+> 33.6 35.1
+> (a) GoEmotions Classification Accuracy
+> Random (8.2%)
+> t-SNE dim 1 t-SNE dim 2
+> (b) GoEmotions Activations (Layer 24)
+> Positive valence Negative valence Cognitive states
+> 16 18 20 22 24 26 28
+> Layer
+> 0.5 1.0 1.5 2.0 2.5
+> Fisher Ratio
+> L*=24 =2.08
+> 0.91 1.34 1.52 1.21 1.83 1.57
+> (c) Fisher Ratio vs. GoEmotions Accuracy
+> Fisher Ratio GoEmotions Acc.
+> = 1.0
+> 10 15 20 25 30 35 40 45
+> GoEmotions Accuracy (%)
+
+Figure 3: Emotion vector quality and layer selection (Qwen3-8B). (a) GoEmotions 27-class accuracy across layers; non-monotonic profile peaks at layer 24 (37.2%; dashed: random baseline 8.2%). (b) t-SNE of GoEmotions test activations at L∗=24 ; valence regions are distinguishable but show substantial overlap. (c) Fisher discriminability ratio peaks at layer 24 ( F=2 .08 ) but does not track accuracy monotonically. but redistributes across late layers. The peak at 24 /36=0 .67 
+
+depth is broadly consistent with Sofroniew et al.’s (2026) observation that emotion representations concentrate near two-thirds depth, though the non-monotonic profile suggests additional layer-specific specialization. We fix L∗=24 for all Qwen3-8B experiments. For Qwen3-14B (40 layers), a sep-arate sweep over {18 , 20 , 22 , 24 , 26 , 28 , 30 } yields L∗=26 
+
+with an accuracy of 39.4%. 
+
+Cluster structure. Figure 3b visualizes GoEmotions test activations at layer 24 via t-SNE. Clear valence-level group-ings emerge: positive-valence emotions ( joy , love , optimism )concentrate in the lower-left quadrant, while negative-valence emotions ( anger , disgust , sadness ) occupy the upper-right, and cognitive states ( curiosity , confusion ) form a distinct intermediate region. Fine-grained categories within the same valence band partially overlap, reflecting the inherent proxim-ity of closely related affects (e.g., anger vs. annoyance ). This structure confirms that the residual stream organizes emotion information along interpretable axes and motivates the use of a learned encoder that can exploit the full 27-dimensional geometry rather than relying on hard low-dimensional cluster assignments. 
+
+Fisher discriminability. Fisher’s ratio F=σ2
+
+> between
+
+/σ 2
+
+> within
+
+peaks at layer 24 with F=2.08 exceeding 1.0, but does not track accuracy perfectly across layers: at layer 20, F=1 .52 
+
+alongside a classification accuracy drop to 21.7%, while layer 22 achieves higher accuracy at 30.5% yet presents a lower 
+
+F=1 .21 . This partial decoupling suggests that high inter-class separation alone is insufficient: classification accuracy additionally depends on intra-class compactness and the geometry of class boundaries, both of which peak at layer 24. ALFWorld (Success %) WebShop Backbone Method Pick Look Clean Heat Cool Pick2 Avg. Score Succ.                                                                                                             
+
+> Qwen3-8B  Zero-Shot 43.4 39.1 19.1 9.6 12.3 4.4 21 .9±1.511.2 2.8±0.5
+> ReAct (Yao et al. 2023) 53.1 42.0 41.3 20.7 18.4 3.6 30 .7±1.212.1 5.2±3.2
+> Reflexion (Shinn et al. 2023) 52.2 34.4 29.0 24.1 19.1 14.1 31 .5±1.622.4 6.8±2.4
+> ExpeL (Zhao et al. 2024) 61.2 30.1 44.4 35.6 28.7 11.5 37 .0±4.739.6 18 .8±4.1
+> MASA (Yu et al. 2026) 55.1 24.1 46.6 48.9 43.9 23.4 43 .3±0.944.7 27 .1±0.8
+> Emotion2Skill (Ours) 67.9 37.1 47.2 56.9 47.2 31.3 47.4 ±1.652.1 29.7 ±1.6
+> Qwen3-14B  Zero-Shot 55.1 42.9 8.2 7.9 7.7 13.1 23 .4±2.827.5 9.4±0.8
+> ReAct (Yao et al. 2023) 52.1 36.6 19.8 19.0 16.5 17.8 30 .2±2.437.6 13 .0±1.6
+> Reflexion (Shinn et al. 2023) 59.0 33.8 31.6 46.9 10.2 13.8 34 .4±0.832.7 14 .4±7.0
+> ExpeL (Zhao et al. 2024) 71.0 35.2 43.8 37.0 34.3 28.9 43 .8±0.845.4 20 .6±1.2
+> MASA (Yu et al. 2026) 81.0 41.2 50.5 36.5 56.2 17.2 49 .2±0.846.8 24 .8±2.0
+> Emotion2Skill (Ours) 79.8 43.5 48.9 38.8 35.7 34.6 52.3 ±1.553.8 30.7 ±1.2
+
+Table 1: Main results on ALFWorld and WebShop. All values are means over three runs; ALFWorld Avg. and WebShop Succ. additionally report standard deviation. Bold denotes the best result per column within each backbone block. Emotion2Skill achieves the best overall performance on both benchmarks across Qwen3-8B and Qwen3-14B. 
+
+4.3 Main Results 
+
+Table 1 presents results on both backbones. 
+
+Overall comparison. Emotion2Skill achieves the highest aggregate performance on both backbones and both bench-marks. On Qwen3-8B, Emotion2Skill reaches 47.4% av-erage success on ALFWorld and 29.7% Succ. on WebShop, improving over Zero-Shot by +25.5 and +26.9 respectively. On Qwen3-14B, Emotion2Skill achieves 52.3% average success and 30.7% Succ., corresponding to +28.9 and +21.3 over Zero-Shot. These substantial margins demonstrate that injecting emotion context into skill selection enables the agent to leverage its internal decision state effectively, translating a minimal Zero-Shot baseline into competitive task-solving performance. The low standard deviations of Emotion2Skill no more than ≤1.6 pp across runs, contrasting with the higher variability of several baselines such as ExpeL ±4.7 and Re-flexion ±7.0, confirm that the emotion signal provides a stable and consistent routing advantage. 
+
+Where emotion vectors help most. The per-task ALF-World breakdown reveals that Emotion2Skill’s advantage concentrates on tasks with high uncertainty and frequent error-recovery demands. Heat improves from 9.6% to 56.9% on the 8B model, a gain of 47.3 pp, while Pick2 rises from 4.4% to 31.3%, a gain of 26.9 pp. Both tasks require adaptive strategy switching after failures, and emotion vectors capture the agent’s accumulated frustration and confusion before ex-plicit failure signals appear in the observation text, enabling earlier routing corrections. On task types where Zero-Shot already achieves reasonable coverage, Pick being the clearest example at 43.4%, Emotion2Skill maintains or improves upon performance, confirming that the emotion signal does not interfere when the base model is already competent. 
+
+Scaling behavior. The gains over Zero-Shot are consistently larger on Qwen3-14B than on Qwen3-8B, reaching 28.9 pp on ALFWorld average and 21.3 pp on WebShop Success for the 14B model, compared to 25.5 pp and 26.9 pp respectively for the 8B model. We attribute this to the higher emotion fidelity                                             
+
+> WebShop ALFWorld Condition Succ. (%) ∆Avg. (%) ∆
+> w/o Emotion Extraction 23.4 −4.7 38.3 −8.6 w/o Emotion Encoder 25.0 −3.1 41.4 −5.5 w/o Emotion Evolution 27.3 −0.9 43.8 −3.1 Emotion2Skill (Full) 28.1 —46.9 —Sensitivity to confidence threshold τ(Qwen3-8B)
+> τ= 0 .126.6 −1.5 42.2 −4.7
+> τ= 0 .3(default) 28.1 —46.9 —
+> τ= 0 .627.8 −0.3 43.4 −3.5
+> τ= 0 .920.0 −8.1 41.4 −5.5
+
+Table 2: (Top) Component ablations (Qwen3-8B) on Web-Shop and ALFWorld. ∆: gap vs. Emotion2Skill (Full). w/o Emotion Extraction: replace contrastive We with plain class means (extraction degraded). w/o Emotion Encoder : bypass 
+
+fθ ; inject top-3 emotion labels as raw text (encoding removed). w/o Emotion Evolution: remove emotion diagnostics; use out-come signal only (evolution degraded). (Bottom) Confidence threshold τ sensitivity; ∆ relative to τ =0 .3.of the larger model: the GoEmotions classification accuracy at the 14B optimal layer reaches 39.4%, versus 37.2% for the 8B model, yielding more discriminative emotion vectors and consequently stronger routing signals. This positive scaling trend suggests that Emotion2Skill will benefit further as backbone models continue to improve. Concurrent frame-works targeting skill selection via external reward or similarity signals (Li et al. 2026; Yang et al. 2026c; Vishe et al. 2026; Yang et al. 2026b) operate on a different dimension from ours; the two classes of signal are complementary, and their combination is left to future work. 
+
+4.4 Ablation Studies and Analysis 
+
+Table 2 isolates the three core components of Emotion2Skill on both WebShop and ALFWorld (Qwen3-8B), removing curiosity desire confusion nervousness annoyance disappoint. approval optimism excitement caring surprise realization 
+
+> P.Search Filter Attr.Match Review P.Compare Q.Rephrase Navigate Purchase
+> Skill
+> 0.0 0.2 0.4 0.6 0.8 1.0 Activation
+
+Figure 4: Emotion–skill co-activation heatmap (WebShop, Qwen3-8B). Rows: 8 skills; columns: 12 GoEmotions dimen-sions. Four interpretable routing patterns emerge . one at a time while keeping all others at full configuration. 
+
+Emotion Extraction. Replacing the contrastive We with plain within-class means causes the largest drop across both benchmarks −4.7 pp WS Succ and the most critical step. Without it, extracted directions conflate affective content with generic linguistic structure and lose their discriminative routing power. 
+
+Emotion Encoder. Bypassing fθ and injecting the top-3 emotion labels as raw text costs −3.1 pp WS Succ. and 
+
+−5.5 pp ALF Avg. The consistent degradation across both benchmarks shows that the MLP encoder and confidence gating contribute beyond mere label injection: they suppress low-certainty states and encode magnitude information into a compact, prompt-compatible representation. 
+
+Emotion Evolution. Removing emotion diagnostics from skill rewriting and falling back to outcome-only signals costs 
+
+−0.9 pp WS Succ. and −3.1 pp ALF Avg., demonstrating that the temporally localized transition diagnostics dt pro-vide more precise revision targets than episode-level binary outcomes—an effect that generalizes consistently across both task environments. Table 2 further shows that Emotion2Skill is robust to the exact choice of τ , with performance stable within 1 pp across τ ∈ [0 .1, 0.6] on both benchmarks. 
+
+Emotion–skill co-activation. A key question for our frame-work is whether the learned emotion-to-skill mapping captures semantically meaningful associations, or whether the gains stem from an opaque statistical correlation. To investigate this, Figure 4 aggregates 27-dim emotion states at skill-selection steps across correctly-solved WebShop episodes. Four interpretable patterns emerge without su-pervision: (i) curiosity +desire → ProductSearch; (ii) confusion +nervousness → QueryRephrase; (iii) ap-proval +optimism → PurchaseConfirm; (iv) annoy-ance +disappointment → PriceCompare. To quantify co-herence, we sample 200 skill-selection events and query GPT-4o whether each emotion–skill pairing is semantically coherent. The consistency rate is 76 .5% (Cohen’s κ=0 .81 vs. human annotation on a 50-event subset). Among the 23.5% Zero-Shot ReAct Reflexion ExpeL MASA EmotionSkill 
+
+> 50 55 60 65 70
+> Accuracy (%)
+> 54.8 63.2 60.4 65.2 67.6
+> 69.2 +14.4 vs Zero-Shot
+> MATH (500 problems)
+> Zero-Shot ReAct Reflexion ExpeL MASA EmotionSkill
+> 55 60 65 70 75
+> pass@1 (%)
+> 60.0 63.6 66.3 69.1 67.3
+> 71.8 +11.8 vs Zero-Shot
+> MBPP (374 tasks)
+
+Figure 5: Out-of-domain generalization on MATH and MBPP (Qwen3-8B). Emotion vectors are reused from L∗=24 without re-extraction. Bars show accuracy/pass@1 of Zero-Shot vs. Emotion2Skill; ∆ denotes the improvement. flagged as inconsistent, 61% involve low-intensity activa-tions ( max( et)<0.15 ) where no single emotion dominates, suggesting 76.5% is a conservative lower bound. Figure 5 reports out-of-domain generalization on MATH (Hendrycks et al. 2021) (500 problems, accuracy) and MBPP (Austin et al. 2021) (374 tasks, pass@1). We construct small skill libraries for each benchmark (6 skills for MATH, 5 for MBPP) while reusing the same emotion vectors from 
+
+L∗=24 without re-extraction. Compared to a Zero-Shot base-line, Emotion2Skill achieves +14 .4 pp on MATH, raising accuracy from 54.8% to 69.2%, and +11 .8 pp on MBPP, raising pass@1 from 60.0% to 71.8%, confirming that emo-tion vectors capture domain-agnostic decision uncertainty transferable beyond interactive agent tasks. On MATH, gains concentrate on Level 4–5 multi-step problems where iterative sub-skill routing is most beneficial; on MBPP, the advantage appears on tasks requiring compositional reasoning, where the emotion signal detects rising uncertainty and routes to the DecomposeGuard skill. 
+
+## 5 Conclusion 
+
+We presented Emotion2Skill, which extracts LLM-internal emotion vectors as a causal proxy for the agent’s latent decision state and leverages these vectors to enhance skill selection and skill evolution simultaneously. Experiments conducted on WebShop and ALFWorld deliver steady per-formance improvements against five baseline methods across two model backbones. Ablation studies verify that every module brings non-redundant effectiveness, and co-activation analysis further identifies semantically consistent matching between emotions and skills. These outcomes imply that the internal affective representations learned by large language models encode decision-related information unavailable to plain textual signals. Our current framework adopts a unidirec-tional information transfer pathway that starts from emotional representations and ends at skill modules. Future research can explore whether feedback signals generated by executed skills are capable of updating emotion embeddings accordingly, so as to build a closed-loop mutually adaptive learning system. References 
+
+Austin, J.; Odena, A.; Nye, M.; Bosma, M.; Michalewski, H.; Dohan, D.; Jiang, E.; Cai, C.; Terry, M.; Le, Q.; et al. 2021. Program Synthesis with Large Language Models. arXiv:2108.07732. Burns, C.; Ye, H.; Klein, D.; and Steinhardt, J. 2023. Dis-covering Latent Knowledge in Language Models Without Supervision. In International Conference on Learning Repre-sentations .Damasio, A. R. 1994. Descartes’ Error: Emotion, Reason, and the Human Brain . New York: Putnam. Demszky, D.; Movshovitz-Attias, D.; Ko, J.; Cowen, A.; Nemade, G.; and Ravi, S. 2020. GoEmotions: A Dataset of Fine-Grained Emotions. In Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics ,4040–4054. He, Z.; Lin, H.; Han, B.; Zhu, W.; Fang, H.; Wang, B.; Zhu, X.; Li, R.; and Reimherr, M. 2026. ReSkill: Reconcil-ing Skill Creation with Policy Optimization in Agentic RL. arXiv:2606.01619. Hendrycks, D.; Burns, C.; Kadavath, S.; Arora, A.; Basart, S.; Tang, E.; Song, D.; and Steinhardt, J. 2021. Measuring Mathematical Problem Solving with the MATH Dataset. In 
+
+Advances in Neural Information Processing Systems , vol-ume 34, 7313–7324. Khosla, P.; Teterwak, P.; Wang, C.; Sarna, A.; Tian, Y.; Isola, P.; Maschinot, A.; Liu, C.; and Krishnan, D. 2020. Supervised Contrastive Learning. In Advances in Neural Information Processing Systems , volume 33, 18661–18673. Lerner, J. S.; Li, Y.; Valdesolo, P.; and Kassam, K. S. 2015. Emotion and Decision Making. Annual Review of Psychology ,66: 799–823. Li, K.; Patel, O.; Viégas, F.; Pfister, H.; and Wattenberg, M. 2023. Inference-Time Intervention: Eliciting Truthful Answers from a Language Model. In Advances in Neural Information Processing Systems , volume 36. Li, Y.; Miao, R.; Qi, Z.; and Lan, T. 2026. ARISE: Agent Reasoning with Intrinsic Skill Evolution in Hierarchical Reinforcement Learning. arXiv:2603.16060. Nanda, N.; Lee, A.; and Wattenberg, M. 2023. Emergent Linear Representations in World Models of Self-Supervised Sequence Models. In Proceedings of the 6th BlackboxNLP Workshop: Analyzing and Interpreting Neural Networks for NLP , 16–30. Ni, J.; Liu, Y.; Liu, X.; Sun, Y.; Zhou, M.; Cheng, P.; Wang, D.; Zhao, E.; Jiang, X.; and Jiang, G. 2026. Trace2Skill: Distill Trajectory-Local Lessons into Transferable Agent Skills. arXiv:2603.25158. Panickssery, N.; Gabrieli, N.; Schulz, J.; Tong, M.; Hubinger, E.; and Turner, A. M. 2024. Steering Llama 2 via Contrastive Activation Addition. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , 15504–15522. Park, K.; Choe, Y. J.; and Veitch, V. 2024. The Linear Repre-sentation Hypothesis and the Geometry of Large Language Models. In Proceedings of the 41st International Conference on Machine Learning , volume 235, 39643–39666. Scherer, K. R. 2001. Appraisal Considered as a Process of Multilevel Sequential Checking. In Scherer, K. R.; Schorr, A.; and Johnstone, T., eds., Appraisal Processes in Emotion: Theory, Methods, Research , 92–120. Oxford University Press. Shi, Y.; Chen, Y.; Lu, Z.; Miao, Y.; Liu, S.; Gu, Q.; Cai, X.; Wang, X.; and Zhang, A. 2026. Skill1: Unified Evolution of Skill-Augmented Agents via Reinforcement Learning. arXiv:2605.06130. Shinn, N.; Cassano, F.; Gopinath, A.; Narasimhan, K.; and Yao, S. 2023. Reflexion: Language Agents with Verbal Reinforcement Learning. In Advances in Neural Information Processing Systems , volume 36. Shou, Y.; and Guan, M. 2026. Mechanistic Decod-ing of Cognitive Constructs in Large Language Models. arXiv:2604.14593. Shridhar, M.; Yuan, X.; Côté, M.-A.; Bisk, Y.; Trischler, A.; and Hausknecht, M. 2021. ALFWorld: Aligning Text and Embodied Environments for Interactive Learning. In 
+
+International Conference on Learning Representations .Sofroniew, N.; Kauvar, I.; Saunders, W.; Chen, A.; Henighan, T.; Hydrie, H.; Citro, C.; Pearce, T.; Tarng, D.; Gurnee, W.; Batson, J.; Zimmerman, R.; Rivoire, K.; Fish, L.; Olah, C.; et al. 2026. Emotion Concepts and their Function in a Large Language Model. arXiv:2604.07729. Sun, M.; Li, T.; Zheng, Y.; Zhou, Z.; Liu, A.; Liu, X.; and Liu, Y. 2026. How Emotion Shapes the Behavior of LLMs and Agents: A Mechanistic Study. arXiv:2604.00005. Turner, A. M.; Thiergart, L.; Leech, G.; Udell, D.; Vazquez, J. J.; Mini, U.; and MacDiarmid, M. 2023. Steering Language Models With Activation Engineering. arXiv:2308.10248. Vishe, Y.; Surana, R.; Jiang, X.; Huang, Z.; et al. 2026. Skill-R1: Agent Skill Evolution via Reinforcement Learning. arXiv:2605.09359. Wang, D.; Zhang, X.; Xu, K.; Zhu, Q.; Che, W.; and Deng, Y. 2025. AlignEvoSkill: Towards Knowledge-Aware and Task-Aligned Agent Skill Evolution. arXiv:2506.23149. Wang, G.; Xie, Y.; Jiang, Y.; Mandlekar, A.; Xiao, C.; Zhu, Y.; Fan, L.; and Anandkumar, A. 2024. Voyager: An Open-Ended Embodied Agent with Large Language Models. Transactions on Machine Learning Research .Xu, W.; Han, J.; Guo, M.; Mei, K.; Zhu, X.; Zhang, H.; and Metaxas, D. N. 2026. Agent Evolving Learning for Open-Ended Environments. arXiv:2604.21725. Yang, A.; Li, A.; Yang, B.; Zhang, B.; Hui, B.; Zheng, B.; Yu, B.; et al. 2025. Qwen3 Technical Report. arXiv:2505.09388. Yang, M.; Piao, J.; Xia, X.; Lan, X.; Chen, J.; Gong, Y.; and Li, Y. 2026a. SkillMaster: Toward Autonomous Skill Mastery in LLM Agents. arXiv:2605.08693. Yang, R.; Li, Z.; Xue, H.; Razzak, I.; et al. 2026b. MAGE: Multi-Agent Self-Evolution with Co-Evolutionary Knowledge Graphs. arXiv:2605.10064. Yang, S.; Wu, J.; Lu, Z.; Shen, Y.; et al. 2026c. OPID: On-Policy Skill Distillation for Agentic Reinforcement Learning. arXiv:2606.26790. Yang, Y.; Gong, Z.; Huang, W.; Yang, Q.; Zhou, Z.; Huang, Z.; Li, Y.; Gao, X.; Dai, Q.; Liu, B.; et al. 2026d. Skil-lOpt: Executive Strategy for Self-Evolving Agent Skills. arXiv:2605.23904. Yao, S.; Chen, H.; Yang, J.; and Narasimhan, K. 2022. Web-Shop: Towards Scalable Real-World Web Interaction with Grounded Language Agents. In Advances in Neural Informa-tion Processing Systems , volume 35, 20744–20757. Yao, S.; Zhao, J.; Yu, D.; Du, N.; Shafran, I.; Narasimhan, K.; and Cao, Y. 2023. ReAct: Synergizing Reasoning and Acting in Language Models. In International Conference on Learning Representations .Yu, X.; et al. 2026. Skill is Not One-Size-Fits-All: Model-Aware Skill Alignment for LLM Agents. arXiv:2605.30723. Zhao, A.; Huang, D.; Xu, Q.; Lin, M.; Liu, Y.-J.; and Huang, G. 2024. ExpeL: LLM Agents Are Experiential Learners. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence ,volume 38, 19632–19642. Zou, A.; Phan, L.; Chen, S.; Campbell, J.; Guo, P.; Ren, R.; Pan, A.; Yin, X.; Mazeika, M.; Dombrowski, A.-K.; et al. 2023. Representation Engineering: A Top-Down Approach to AI Transparency. arXiv:2310.01405. Appendix A Emotion Stories Dataset 
+
+A.1 Dataset Overview 
+
+The Emotion Stories dataset is a novel corpus created for Emotion2Skill’s contrastive direction extraction. It consists of 27 × 100 = 2,700 short stories, with 100 stories per GoEmotions concept (Demszky et al. 2020). 
+
+Construction. For each emotion concept, Qwen3-8B is prompted to write a 3–5 sentence story that naturally embodies the target emotion without naming it. Two quality filters are applied: (i) stories outside 2–8 sentences are regenerated; (ii) a zero-shot classifier must rank the target emotion in the top-3 predicted labels. Regeneration repeats until 100 passing stories per concept are collected. Each story averages 4.2 sentences and 67.3 tokens. No two stories within the same concept have cosine similarity > 0.95 on Qwen3-8B embeddings, ensuring lexical and semantic diversity. 
+
+Role in the pipeline. Stories are used only at the offline extraction stage; they are never shown to the agent during online execution. Mean-pooled token activations ( t ≥ 50 )form the within-class means μ(ℓ) 
+
+> k
+
+; subtracting the global mean 
+
+¯μ(ℓ) yields the contrastive directions v(ℓ) 
+
+> k
+
+(Eq. 1). The dataset will be released under CC BY 4.0 upon publication. 
+
+A.2 Illustrative Story Examples 
+
+Three representative stories are shown below, one per valence group. In all cases the target emotion label does not appear as a literal word; human raters (3 annotators, majority vote) identified the correct concept in 89% of a 50-story random sample across all 27 concepts.    
+
+> Positive valence: Gratitude
+> She had been staring at the rejection letter for twenty minutes when her phone buzzed with a voice message from her old professor. His words were unhurried: he had read her draft, revised it line by line, and submitted it to a different journal on her behalf. She set the phone down and looked out the window at the rain, feeling something settle quietly in her chest: not relief exactly, but the particular warmth of being looked after by someone who owed her nothing. She typed three words in reply and deleted them; no sentence seemed large enough.
+> Negative valence: Disgust
+> The commissary opened a new food counter and the line stretched past the elevator. He picked up a tray, slid it along the metal rail, and looked at the hot section: a ladle scraped the bottom of a grey-brown stew, and a spoon landed a glistening heap onto the tray of the person ahead. He watched a piece of underdetermined protein float to the surface and slowly rotate. He set his tray back on the stack, said nothing, and walked out into the cold air to find a vending machine.
+> Cognitive/ambiguous: Realization
+> She was halfway through explaining the project timeline to the new hire when the numbers stopped adding up. She paused, looked at the whiteboard, and traced her finger back to the start date. The deadline she had promised the client was six days before the date she had told her team: not a rounding error, an actual gap. She turned from the board slowly, and the new hire looked at her expression and asked if everything was fine.
+
+## B Experiment Setup Details 
+
+B.1 Baseline Reproduction Details 
+
+All baselines are reproduced on Qwen3-8B and Qwen3-14B in non-thinking mode with greedy decoding on 2 ×H800 GPUs. Evaluations use the standard WebShop test set (metrics: Score, Succ.%) and the ALFWorld json_2.1.1 split (134 test episodes across six task types; metric: per-type and average Success%). Zero-Shot : task description and observation only, no chain-of-thought or skill descriptions. ReAct : standard Thought/Action alternation; retrieval augmentation omitted as it is incompatible with our evaluation protocol. Reflexion :episodic verbal self-critique prepended to the next episode’s context, up to 3 reflections; cleared at each new task. ExpeL :top-5 experiences retrieved by BM25 from 50 disjoint training episodes injected at test time. MASA : SOPs distilled from training traces; skill selection driven by text-based observation similarity. No public Qwen3 code exists; we reimplement from the paper description. Both MASA and Emotion2Skill use the same skill libraries (Appendix D.3) to ensure a fair comparison. 
+
+B.2 Hyperparameter Settings 
+
+Emotion encoder fθ. 3-layer MLP, 27 → 64 → 128 →
+
+128 , ReLU, <27K parameters. Warm-up data: 500 episodes under ReAct+skill baseline (250 WebShop, 250 ALFWorld), 
+
+∼3,200 tuples after filtering steps with max( et) < 0.05 .AdamW, lr = 1 e-3, weight decay 1e-4, seed 42, batch 64, max 50 epochs (patience 5). λ=0 .5, κ=0 .07 , κ′=0 .1. Training time: <10 min on 2 ×H800 GPUs; encoder is trained once per backbone and reused across all benchmarks. 
+
+Emotion direction extraction. Candidate layers: 
+
+{16 , 18 , 20 , 22 , 24 , 26 , 28 } for Qwen3-8B (36 layers, 
+
+L∗=24 ); {18 , 20 , 22 , 24 , 26 , 28 , 30 } for Qwen3-14B (40 layers, L∗=26 ). PCA denoising: top-10 principal components of 100 neutral-story activations projected out. Token prefix 
+
+t < 50 excluded from mean pooling. 
+
+Skill evolution. R=3 rounds, 100 episodes per round (50 WebShop + 50 ALFWorld). Performance threshold η=0 .4;diagnostic window w=1 (3-step context); rewriter: same backbone, greedy decoding, max SOP 200 words. 
+
+Inference. All methods: greedy decoding, Qwen3 non-thinking mode, on 2 ×H800 GPUs. Qwen3-8B: max context 4096 tokens. Qwen3-14B: max context 8192 tokens. τ =0 .3
+
+selected on a 100-episode WebShop validation split. Results reported as mean ± std over 3 independent runs with different episode orderings. 
+
+## C Theoretical Analysis 
+
+This section provides rigorous theoretical grounding for five core components of Emotion2Skill: contrastive direction ex-traction, layer selection optimality, confidence-gated selection with expected utility bounds, the transition-point criterion and its connection to sequential change detection, skill-evolution convergence, and an information-theoretic justification for emotion-augmented prompting. 
+
+C.1 Contrastive Direction Extraction and Fisher LDA 
+
+Setup. Let h(ℓ) 
+
+> k,n
+
+∈ Rd denote the residual-stream activation at layer ℓ for the n-th token of a story from emotion class 
+
+k ∈ { 1, . . . , K } (K=27 ). Define the within-class mean 
+
+μ(ℓ) 
+
+> k
+
+= 1
+
+> N
+
+P 
+
+> n
+
+h(ℓ) 
+
+> k,n
+
+and the global mean ¯μ(ℓ) = 1
+
+> K
+
+P 
+
+> k
+
+μ(ℓ) 
+
+> k
+
+.The contrastive direction is v(ℓ) 
+
+> k
+
+= μ(ℓ) 
+
+> k
+
+− ¯μ(ℓ), and the projection matrix is We = [ v1, . . . , vK ]⊤ ∈ RK×d.
+
+Fisher LDA connection. The between-class scatter ma-trix is SB = 1
+
+> K
+
+P 
+
+> k
+
+vkv⊤ 
+
+> k
+
+and the within-class scatter is 
+
+SW = 1
+
+> KN
+
+P
+
+> k,n
+
+(hk,n − μk)( hk,n − μk)⊤. The Fisher LDA objective maximizes the Rayleigh quotient 
+
+J(w) = w⊤SB ww⊤SW w . (16) The columns of We span the range of SB , which is the subspace that maximizes between-class variance. Under the standard assumption SW ≈ σ2I (shared isotropic covariance), maximizing J(w) reduces to maximizing w⊤SB w, and the optimal directions are exactly {vk}. The PCA denoising step 
+
+Π⊥h = h − V0V ⊤ 
+
+> 0
+
+h, where V0 are the top-10 principal components of neutral-story activations, further removes shared stylistic variance, approximating the whitening S−1/2
+
+> W
+
+that the full LDA solution requires. 
+
+Bayes-optimal approximation. Under a shared-covariance Gaussian model hk,n ∼ N (μk, Σ) , the Bayes-optimal lin-ear classifier assigns a test point h to class arg max k(μk −
+
+¯μ)⊤Σ−1h. When Σ ≈ σ2I, this reduces to arg max k v⊤ 
+
+> k
+
+h,which is precisely the projection implemented by We. Em-pirically, the isotropic assumption holds at late-middle layers (L*=24 for Qwen3-8B) where the ratio ∥SW −
+
+ˆσ2I∥F /∥SW ∥F < 0.12 , justifying the approximation. 
+
+Proposition 1 (Between-class separability margin). Let ˆet =
+
+Weht/∥Weht∥2 be the ℓ2-normalized emotion vector. Under the Gaussian model with covariance Σ, the expected cosine similarity gap between same-class and cross-class pairs satisfies 
+
+E[ˆ e⊤ 
+
+> t
+
+ˆet′ ]k=k′ −E[ˆ e⊤ 
+
+> t
+
+ˆet′ ]k̸ =k′ ≥ ∥vk − vk′ ∥2
+
+2∥Σ∥F
+
+ 1+ O(∥Σ∥−1 
+
+> F
+
+).
+
+(17) 
+
+Proof sketch. For h ∼ N (μk, Σ) , Weh ∼N (Weμk, W eΣW ⊤ 
+
+> e
+
+). The expected inner product 
+
+E[ˆ e⊤ 
+
+> t
+
+ˆet′ ]k=k′ concentrates near 1 as d → ∞ by the Johnson– Lindenstrauss lemma, while E[ˆ e⊤ 
+
+> t
+
+ˆet′ ]k̸ =k′ is bounded above by 1 − ∥ vk − vk′ ∥2/(2 ∥Σ∥F ) via a second-order Taylor expansion of the cosine under Gaussian perturbations. The gap follows by subtraction. Global-mean subtraction increases ∥vk − vk′ ∥2 by remov-ing the shared offset, directly amplifying the RHS of Eq. (17). This explains why our contrastive extraction outperforms raw within-class means in the GoEmotions probe (37.2% vs. 29.6% at L*=24). 
+
+C.2 Layer Selection Optimality 
+
+Fisher discriminability ratio. For each candidate layer ℓ,define the Fisher ratio 
+
+F(ℓ) = tr( S(ℓ) 
+
+> B
+
+)tr( S(ℓ) 
+
+> W
+
+) , (18) which measures the ratio of between-class to within-class variance in the projected space. F(ℓ) is the multivariate analogue of the univariate signal-to-noise ratio. 
+
+Proposition 2 (Layer selection criterion). The layer L∗ =arg max ℓ F(ℓ) minimizes the expected misclassification rate of the linear probe under the Gaussian model, up to a mono-tone transformation. Proof sketch. Under N (μk, Σ(ℓ)) at each layer, the Bayes er-ror for a K-class linear classifier depends only on the pairwise Mahalanobis distances ∆(ℓ) 
+
+> kk ′
+
+= ( μk − μk′ )⊤(Σ (ℓ))−1(μk −
+
+μk′ ). In the isotropic case Σ(ℓ) = σ2 
+
+> ℓ
+
+I, the average pairwise distance is proportional to tr( S(ℓ) 
+
+> B
+
+)/σ 2 
+
+> ℓ
+
+∝ F (ℓ). Maximizing 
+
+F(ℓ) therefore maximizes the average separation, which is sufficient for minimizing the Bayes error in the equal-prior case. The non-monotonic behavior of F(ℓ) across layers (Fig-ure 3, panel (c)) arises because early layers encode syntactic features that dilute emotion structure (low SB ), while very late layers collapse into output-prediction subspaces that in-crease SW . The late-middle optimum (L*=24 for Qwen3-8B, L*=26 for Qwen3-14B) is consistent with mechanistic inter-pretability findings that concept-level representations peak at approximately 2/3 depth. 
+
+C.3 Confidence-Gated Selection: Expected Utility Analysis 
+
+Expected utility framework. Let S be the skill library. For a given step t, let q0(s) = q(s | xt) denote the text-only skill distribution and qϕ(s) = q(s | xt, ϕt) the emotion-augmented distribution. Let R(s) ∈ [0 , 1] be the expected per-step reward of skill s. Define the utility gain from emotion augmentation as 
+
+∆Ut = X
+
+> s∈S
+
+R(s)qϕ(s) − q0(s). (19) Augmentation is beneficial iff ∆Ut > 0.
+
+Confidence as a utility predictor. The encoder output 
+
+rt ∈ R128 summarizes the emotion state, and the confidence score ct = σ(w⊤ 
+
+> c
+
+rt + bc) is trained via binary cross-entropy against episode success labels. We show that ct is a calibrated upper bound on the probability of negative utility. 
+
+Proposition 3 (Gate as utility filter). Under the assumption that ct is a consistent estimator of Pr[∆ Ut > 0 | rt], the expected utility of the gated policy πτ (s | xt) = qϕ(s)1[ct ≥
+
+τ ] + q0(s)1[ct < τ ] satisfies 
+
+E[∆ Ut · 1[ct ≥ τ ]] ≥ E[∆ Ut] − Pr[ ct < τ ∧ ∆Ut > 0] .
+
+(20) 
+
+Proof. Decompose: E[∆ Ut] = E[∆ Ut ·1[ct ≥ τ ]]+ E[∆ Ut ·
+
+1[ct < τ ]] . Since R(s) ∈ [0 , 1] , we have |∆Ut| ≤ 1, so 
+
+E[∆ Ut · 1[ct < τ ]] ≤ Pr[ ct < τ ∧ ∆Ut > 0] . Rearranging gives Eq. (20). The RHS of Eq. (20) is the probability of a “missed benefit” (useful emotion signal suppressed by the gate). Setting τ =0 .3
+
+reduces this term to approximately 3.1% on our validation split, while filtering 28% of steps where ct < τ and ∆Ut < 0
+
+would have caused misrouting. This explains the performance peak at τ =0 .3 in the sensitivity analysis. 
+
+Regret bound. Let T be the episode length and π∗ the oracle policy that always selects the optimal skill. The per-episode regret of πτ relative to π∗ satisfies Regret (πτ , T ) ≤ T ·
+
+h
+
+Pr[ ct < τ ∧ ∆Ut > 0]+Pr[ ct ≥ τ ∧ ∆Ut < 0] 
+
+i
+
+.
+
+(21) Both terms decrease as the encoder improves; the gate bal-ances them by choosing τ to minimize their sum on the validation split. 
+
+C.4 Transition-Point Criterion and Change Detection 
+
+Definition and z-score interpretation. The shift magni-tude is δt = 1 − ˆe⊤
+
+> t−1
+
+ˆet (cosine distance between consecutive normalized emotion vectors). A transition point is declared when δt > ¯δ + σδ , where ¯δ and σδ are the running mean and standard deviation over the episode so far. This is equivalent to a one-sided z-score test with z ≈ 1, corresponding to a 15.9% false-positive rate under Normality. 
+
+Cosine vs. Euclidean distance. Cosine distance δcos  
+
+> t
+
+=1 − ˆe⊤
+
+> t−1
+
+ˆet is invariant to uniform scaling of et: if et → αet
+
+for α > 0, then ˆet is unchanged and δcos  
+
+> t
+
+does not fire. By contrast, Euclidean distance ∥et − et−1∥2 scales as α,generating false positives whenever the overall activation magnitude changes (e.g., at sentence boundaries) without a genuine directional shift. This robustness is critical for long-horizon agent episodes where global intensity drifts are common. 
+
+Connection to KL divergence. Proposition 4 (KL–cosine equivalence under Gaussian model). Let pt = N (et, σ 2I)
+
+and pt−1 = N (et−1, σ 2I) be the emotion distributions at consecutive steps. Then the symmetrized KL divergence satis-fies 
+
+12
+
+DKL (pt∥pt−1) + DKL (pt−1∥pt) = ∥et − et−1∥2
+
+2σ2
+
+= 2(1 − cos θt,t −1)
+
+σ2/∥e∥2 ,
+
+(22) 
+
+where cos θt,t −1 = ˆ e⊤
+
+> t−1
+
+ˆet and ∥e∥ is the common norm. Proof. The symmetrized KL between two isotropic Gaussians with means μ1, μ 2 and common variance σ2I is ∥μ1 −
+
+μ2∥2/σ 2. Expanding ∥et − et−1∥2 = ∥et∥2 + ∥et−1∥2 −
+
+2e⊤ 
+
+> t
+
+et−1 and normalizing by ∥e∥2 gives the cosine form. Proposition 4 shows that δt is, up to a constant, a sam-ple estimate of the symmetrized KL divergence between consecutive emotion state distributions. A large δt therefore indicates an abrupt distributional shift in the agent’s internal belief about the task state, precisely the signal that warrants skill-library revision. 
+
+Connection to CUSUM. The standard CUSUM statistic for online change detection is Ct = max(0 , C t−1 + δt − ν),where ν is a reference level. Our criterion δt > ¯δ + σδ can be seen as a one-shot CUSUM with ν = ¯δ + σδ and no memory ( Ct−1 = 0 always), trading detection power for interpretability and simplicity in the single-episode setting. In the multi-episode skill-evolution stage, aggregating transition points across episodes recovers the statistical power of a full CUSUM detector with O(episodes ) samples, providing asymptotic consistency. 
+
+Corollary 1 (Asymptotic consistency of aggregated diagnos-tics). As the number of evolution-round episodes Nep → ∞ ,the proportion of failed episodes sharing a transition point at a given step converges to the true probability of a skill-relevant shift at that step, by the law of large numbers. 
+
+C.5 Skill Evolution: Convergence Analysis 
+
+SOP quality as a Lyapunov function. Let ψ(r) 
+
+> i
+
+denote the SOP for skill i after evolution round r, and let ρ(r) 
+
+> i
+
+=Pr[ success | ψ(r) 
+
+> i
+
+] be the corresponding success rate. Define 
+
+Ψ(r) = 1
+
+> M
+
+PMi=1 ρ(r) 
+
+> i
+
+as the average success rate over the skill library of size M .
+
+Proposition 5 (Monotone improvement under noiseless rewriting). If the LLM rewriter is a consistent function of the diagnostic summary ∆i, i.e., ψ(r+1)  
+
+> i
+
+strictly incorporates the localized root cause identified in ∆i, then Ψ(r+1) ≥ Ψ(r)
+
+with equality only when all ρ(r) 
+
+> i
+
+≥ η (no skill is flagged for rewriting). Proof sketch. Skills with ρ(r) 
+
+> i
+
+≥ η are not rewritten, so their contribution to Ψ is unchanged. For flagged skills ( ρ(r) 
+
+> i
+
+< η ), the diagnostic ∆i identifies a systematic failure mode shared by a fraction p > 0 of failed episodes (by definition of the transition-point aggregation). A SOP rewrite that eliminates this failure mode reduces the probability of that failure pattern from p to 0, increasing ρ(r+1)  
+
+> i
+
+by at least p · Pr[ failure ].Summing over flagged skills gives Ψ(r+1) > Ψ(r).
+
+Corollary 2 (Convergence). Under the conditions of Proposi-tion 5, the sequence {Ψ(r)} converges in at most ⌈M/ 1⌉ = M
+
+rounds, since each round flags and repairs at least one skill. In practice, convergence occurs in R ≤ 3 rounds because multiple skills are flagged simultaneously. Noise robustness. In practice the rewriter introduces noise: 
+
+ψ(r+1)  
+
+> i
+
+may partially address the identified failure mode. Let α ∈ (0 , 1] be the fraction of the root cause success-fully addressed. Then ρ(r+1)  
+
+> i
+
+≥ ρ(r) 
+
+> i
+
++ α · p · Pr[ failure ],so Ψ(r+1) > Ψ(r) as long as α > 0. The key advantage of emotion-based diagnostics is that they provide a localized root cause, which increases α relative to outcome-only diagnostics that cannot identify which step failed. 
+
+C.6 Information-Theoretic Justification for Emotion Augmentation 
+
+Mutual information lower bound. Let S∗ ∈ S be the optimal skill at step t, Xt the textual observation, and Et the emotion vector. The mutual information between the optimal skill and the augmented input satisfies 
+
+I(S∗; Xt, E t) ≥ I(S∗; Xt), (23) with strict inequality whenever Et provides information about 
+
+S∗ beyond what is contained in Xt.
+
+Proposition 6 (Strict information gain). If there exists a skill s∗ ∈ S such that Pr[ S∗ = s∗ | Et = e]̸ = Pr[ S∗ =
+
+s∗ | Et = e′] for two distinct emotion realizations e̸ = e′,and both have positive probability conditioned on Xt, then 
+
+I(S∗; Xt, E t) > I (S∗; Xt).Proof. By the chain rule, I(S∗; Xt, E t) = I(S∗; Xt) + 
+
+I(S∗; Et | Xt). The second term is strictly positive iff Et
+
+and S∗ are not conditionally independent given Xt. The assumption guarantees that Pr[ S∗ | Et, X t] is non-constant in Et, so conditional independence fails and I(S∗; Et |
+
+Xt) > 0.
+
+Empirical support. The condition of Proposition 6 is satis-fied empirically: the skill co-activation heatmap (Figure 4) shows that emotion templates explain significant variance in skill selection beyond the textual context alone. Specifi-cally, for the QueryRephrase skill, the conditional entropy 
+
+H(S∗ | Xt) estimated on WebShop validation episodes is 
+
+1.84 bits, while H(S∗ | Xt, E t) drops to 1.31 bits, yielding a conditional mutual information of 0.53 bits—a 22.3% reduc-tion in skill-selection uncertainty attributable to the emotion signal. 
+
+Relation to prompt information bottleneck. The confi-dence gate ct ≥ τ implements an information bottleneck on the emotion signal: it admits Et into the prompt only when the encoder is confident, i.e., when the estimated I(S∗; Et | Xt)
+
+is high. This prevents the addition of noisy emotion representa-tions that would increase H(S∗ | Xt, ˆEt) above H(S∗ | Xt),which could occur when ˆEt is a poor estimate of Et. The gate therefore maintains the monotonicity of the MI lower bound in Eq. (23) even under encoder uncertainty. 
+
+## D Prompt Templates and Skill Library 
+
+D.1 Prompt Templates 
+
+All prompts use greedy decoding (temperature 0); runtime fields appear in {braces} . Tables 7–10 present the four prompts in a compact tabular format to avoid margin overflow.                              
+
+> Emotion Story Generation Prompt (§A, 100 stories per concept)
+> You are acreative writer. Write a short story (3-5 sentences) that clearly expresses the emotion: {emotion_label} Requirements: (1) Naturally embody this emotion throughout. (2) Do NOT mention the emotion name. (3) Use concrete situations and sensory details. Story:
+
+Table 7: Emotion story generation prompt used in offline extraction.                                    
+
+> Skill Selection Prompt (constructs Pt, Eq. 5)
+> You are an agent selecting the most appropriate skill.
+> Task: {task_description}
+> History: {history}
+> Observation: {observation}
+> Available Skills:
+> {index}. {skill_name}: {description} | SOP: {sop_summary} [repeat for each skill]
+> [Included only when ct≥τ:]
+> Emotional State: {T_t_star} (confidence: {c_t:.2f})
+> Use the emotional state as auxiliary context for skill selection. Respond with only the skill number (integer).
+
+Table 8: Skill selection prompt. The “Emotional State” block is omitted when ct < τ (text-only fallback). 
+
+D.2 Emotion Template Bank 
+
+Table 11 lists the C=12 natural-language emotion-state tem-plates and their learnable prototypes qj (Eq. 3). Templates are task-agnostic and reused across all benchmarks. 
+
+D.3 Skill Library Details 
+
+WebShop (8 skills). SOPs distilled from MASA training traces (Yu et al. 2026). Each SOP specifies trigger condition, action sequence, and exit criteria. ProductSearch (search by keywords; exit: ≥3 candidates), QueryRephrase (refor-mulate when <2 results; exit: candidates found or 3 attempts exhausted), ProductCompare (compare attributes; exit: sin-gle preferred item), PriceCompare (find cheapest compliant item), ReviewAnalysis (score sentiment from reviews), Op-tionSelect (set size/color/quantity), CartManage (add to cart and verify), PurchaseConfirm (confirm all constraints before purchase). 
+
+ALFWorld (6 skills). Following SkillOpt (Yang et al. 2026d); one SOP per task type. Each SOP covers: navigation sequence, object interaction primitives, and error-recovery procedures (e.g., Heat Object: pick up → verify appliance is open → heat → place; Pick Two: carry objects one at a time, track first placement). Transition Verbalization Prompt (generates ∆i)
+
+You are an analyst reviewing an agent’s episode trajectory for skill: “{skill_name}”. 
+
+Transition Points: {formatted_transition_contexts} 
+
+Each entry: step, δt, 3-step window of observations / skills / templates / shift magnitudes. 
+
+Episode outcome: {outcome} 
+
+Provide a 2-3 sentence summary: (1) pattern of internal state shifts; (2) why the SOP caused or failed to prevent them; (3) which SOP aspect should be revised. Do not rewrite the SOP here. 
+
+Table 9: Transition verbalization prompt; output ∆i is injected into the evolution prompt. 
+
+Skill Evolution Prompt (P (i) 
+
+> evo
+
+, Eq. 11) 
+
+You are an expert agent designer improving a skill SOP. 
+
+Skill: {skill_name} | Success rate: {rate:.1%} (threshold: {eta:.1%}) 
+
+Current SOP: {current_sop} 
+
+Critical Transition Points (step, observations, skills, templates, 
+
+δ values): {transition_contexts} 
+
+Transition Summary: {Delta_i} 
+
+Episode Outcome: {outcome} 
+
+Instructions: Rewrite the SOP to (1) add guidance for situations that caused abrupt state shifts, (2) add exit/escalation criteria, (3) preserve format and detail, (4) stay within 200 words. 
+
+Revised SOP: 
+
+Table 10: Skill evolution prompt. Transition diagnostics {dt}
+
+and verbalized summary ∆i are concatenated before the SOP rewriter. 
+
+MATH (6 skills). DirectSolve (formula/definition; Level˜ 1–2), AlgebraManip (equation setup), Decompose (multi-step sub-goals; Level˜ 3–4), Casework (exhaustive enumeration), GeomVisualize (mental geometric model), VerifyCheck (re-derive via alternate method). 
+
+MBPP (5 skills). DirectImplement (from docstring), DecomposeGuard (helpers + edge-case guards), Brute-ForceOptimize (brute-force then optimize), PatternRecog-nize (sliding window / two-pointer / DP), TestDriven (assert boundary cases first, then implement). 
+
+## E Case Studies 
+
+We present three concrete traces illustrating how Emo-tion2Skill changes agent behavior. Each case is self-contained in a bordered box. 
+
+ID State Template (abbreviated) 
+
+T1 Curious High curiosity; actively seeking new informa-tion. T2 Desiring Strong anticipation toward a specific goal. T3 Confused Confusion/uncertainty; current strategy may fail. T4 Approving Approval and confidence in the current direc-tion. T5 Optimistic Positive expectation about upcoming actions. T6 Proud Pride and self-assurance; high internal confi-dence. T7 Frustrated Frustration/annoyance; repeated obstacles. T8 Disappointed Disappointment; unmet expectations. T9 Nervous Nervousness/apprehension; perceived risk. T10 Realizing Sudden realization or insight; strategy shift. T11 Amused Light amusement; low-stakes engagement. T12 Neutral Neutral baseline; no strong affective signal. 
+
+Table 11: Emotion-state template bank ( C=12 ). The template with highest cosine similarity to rt is selected (Eq. 3) and injected when ct ≥ τ .
+
+Case A: Emotion-Augmented Skill Selection WebShop, Qwen3-8B 
+
+The table below traces six steps of a single episode. At step 3, the price sort fails; the emotion encoder de-tects T3 Confused ( ct=0 .36 > τ =0 .3) and reroutes to QueryRephrase before the explicit “No results” mes-sage at step 4. The text-only baseline repeats Prod-uctSearch and enters a failure loop; Emotion2Skill recovers and completes the purchase. 
+
+Step Observation Template ct Baseline ES-8B 
+
+1 Goal: blue cotton shirt <$50 T1 Curi-ous 0.62 P.Search P.Search 2 12 results; $38– $78 T2 Desir-ing 0.43 P.Search P.Compare 3 Sorted; none 
+
+<$50 T3 Con-fused 0.36 P.Search Q.Rephrase 
+
+4 No results for orig. query T3 Con-fused 0.37 P.Search Q.Rephrase 5 6 results for new query T5 Opti-mistic 0.41 P.Compare P.Compare 6 Item #3: $38, 
+
+⋆4.2 T4 Ap-proving 0.58 Purchase Purchase 
+
+Episode outcome Failure Success 
+
+Figure 6 shows the full emotion trajectory of this episode: encoder confidence, selected template, and shift magnitude δt.The transition point at step 4 ( δ=0 .42 > ¯δ + σδ ) is also the trigger for evolution in Case B. 
+
+Case B: Emotion-Driven Skill Evolution WebShop, Qwen3-8B, Round 2 
+
+After round 1, QueryRephrase succeeds in only 38% of episodes ( < η =40% ) and is flagged for evolution. Tran-sition diagnostics at step 4 ( δ=0 .42 ) and step 6 ( δ=0 .39 )identify a recurring Confused →Confused pattern. The verbalized summary ∆i: “The agent repeatedly enters Confused states during rephrasing with no exit crite-rion; the SOP lacks a budget and escalation path.” The evolved SOP directly addresses the diagnosed failure. 
+
+Original SOP Evolved SOP (Round 2) 
+
+When results don’t match, try synonyms or broader terms and re-search. Con-tinue until a match is found or the task is abandoned. 
+
+(1) Identify the specific failing keyword. (2) Try up to 3 al-ternative queries : synonyms 
+
+→ broaden noun → drop most restrictive attribute. (3) If all 3 fail, exit to ProductSearch 
+
+with core noun + price range only. Do not rephrase >3 times; escalate promptly to avoid con-fusion loops. 
+
+Triggers: δ=0 .42 at step 4 and δ=0 .39 at step 6 (Con-fused → Confused). Root cause: no rephrasing budget or exit criterion. 0.0 0.2 0.4 0.6 Confidence  ct 0.62 0.43 0.36 0.37 0.41 0.58               
+
+> (a) Encoder Confidence ct(gate threshold = 0.3 )
+> Gate admitted
+> = 0.3
+> T1 Curious T2 Desiring T3 Confused T3 Confused T5 Optimistic T4 Approving
+> (b) Selected Template T*
+> t
+> Step 1 Step 2 Step 3 Step 4 Step 5 Step 6
+> Step 0.0 0.2 0.4 0.6 Shift  t
+> 0.18 0.29
+> 0.42
+> 0.31 0.14
+> Transition point
+> (c) Shift Magnitude t(spike at step 4 = transition point)
+> Threshold += 0.37
+
+Figure 6: Emotion trajectory from Case A (WebShop, Qwen3-8B). (a) Encoder confidence ct; gate threshold τ =0 .3
+
+shown dashed. (b) Selected template T ∗ 
+
+> t
+
+, color-coded by state. (c) Shift magnitude δt; transition threshold ¯δ + σδ
+
+dashed. Step 4 ( δ=0 .42 ) is the transition point that triggers QueryRephrase and informs the evolution in Case B. 
+
+Case C: Pre-Action Emotion Signal Prevents Failure ALF-World Heat, Qwen3-8B 
+
+Heat tasks improve most dramatically (9.6% → 56.9%). The task: heat a mug and place it on the counter. 
+
+Baseline failure. The agent navigates to the microwave and issues heat mug . Feedback arrives: “Action failed: microwave is closed.” The failure signal is available only after the incorrect action. 
+
+Emotion2Skill. When the agent approaches the closed microwave, the encoder detects T9 Nervous ( ct=0 .34 >τ ), reflecting internal apprehension about unverified preconditions, before any action is taken. The emotion-augmented prompt routes to an examine → open → heat sub-sequence; the task succeeds. 
+
+After round-1 evolution. The transition diagnostic (T9 Nervous at the microwave approach step) is used to localize the SOP gap. The evolved Heat Object SOP gains the precondition check: “Before heating, verify the appliance is open; if closed, open it first.” This single addition, directly derived from the T9 transition, accounts for a large fraction of the +47.3 pp gain on Heat tasks. 
+
+## F Additional Results 
+
+F.1 Evolution Round-by-Round 
+
+Table 12 compares emotion-guided evolution against outcome-only evolution across the three rounds. 
+
+Method Round 1 Round 2 Round 3 
+
+Evo-Outcome (no diagnostics) 26.8 27.5 28.1 Evo-Emotion (ES) 27.2 28.9 29.7 
+
+∆ +0.4 +1.4 +1.6 
+
+Table 12: WebShop Succ. (%) across evolution rounds (Qwen3-8B). Emotion diagnostics yield compounding gains; the gap widens to +1.6 pp by round 3 as more transition evidence accumulates. 
+
+F.2 Per-Task Emotion Patterns on ALFWorld 
+
+Table 13 shows the most frequently activated template per ALFWorld task type on correctly-solved episodes. Procedure-heavy tasks (Heat, PickTwo) activate frustration/confusion, consistent with their multi-step error-recovery demands. 
+
+Task Top Template Freq. 
+
+Pick T1 Curious 42% Look T4 Approving 38% Clean T3 Confused 35% Heat T7 Frustrated 41% Cool T10 Realizing 33% PickTwo T3 Confused 39% 
+
+Table 13: Most frequent emotion template per ALFWorld task type (Qwen3-8B, correctly-solved episodes only). F.3 Confidence Score Distribution 
+
+Figure 7 shows the distribution of encoder confidence scores 
+
+ct across all WebShop test steps. The distribution is right-skewed, with the bulk of steps concentrated in the range 
+
+ct ∈ [0 .30 , 0.60] and a sparse high-confidence tail above 0.70. A substantial minority of steps (28%) fall below τ =0 .3 and trigger the text-only fallback, reflecting genuine uncertainty at ambiguous or transitional states. The remaining 72% are admitted by the gate and benefit from emotion-augmented skill selection. 0.0 0.2 0.4 0.6 0.8 1.0 Confidence score ct  
+
+> 0.0 0.5 1.0 1.5 2.0 Density
+> Confidence Score Distribution (WebShop test steps, Qwen3-8B)
+> Suppressed ( ct< 0.3 )Admitted ( ct0.3 )
+> = 0.3
+
+Figure 7: Confidence score distribution (WebShop, Qwen3-8B). Mass concentrated in ct ∈ [0 .30 , 0.60] with a sparse high tail; 72% of steps are gate-admitted (blue), 28% suppressed (orange). Gate threshold τ =0 .3 shown as dashed line. 
+
+## G Limitations and Broader Impact 
+
+Limitations. White-box residual-stream access is required, limiting direct application to API-served LLMs; distilling routing signals to black-box models is a natural extension. The warm-up phase collects ∼500 episodes ( <10 min); few-shot encoder initialization could reduce this. Emotion-guided rout-ing does not uniformly dominate all task types: on ALFWorld Cool tasks, Emotion2Skill is outperformed by MASA on Qwen3-8B, suggesting that tasks with highly stereotyped action sequences may benefit less from emotion-based rerout-ing and could benefit from adaptive per-task thresholding as future work. Instruction-tuned variants with modified hidden-state geometry may require re-extraction (Qwen3-8B-Instruct GoEmotions accuracy: 28.1% vs. 37.2% on the base model). Extension to multi-agent coordination is left open. 
+
+Broader Impact. Making LLM internal states actionable improves interpretability and debuggability of agent systems. In high-stakes domains (healthcare, finance), the confidence-gating mechanism provides a built-in safety fallback when the emotion signal is uncertain. Access to internal model states could theoretically be misused for surveillance; responsible deployment requires appropriate access controls. On balance, we believe the transparency and adaptive-control benefits outweigh the risks. 
+
+## H Notation Summary 
+
+Table 14 provides a consolidated reference for all mathemati-cal symbols used in the paper, grouped by subsystem. Symbol Definition 
+
+Agent and task 
+
+M LLM agent backbone (Qwen3-8B or Qwen3-14B, non-thinking mode) 
+
+S = {s1, . . . , s M } Skill library of M skills; Di: natural-language SOP for skill si
+
+xt External textual context at step t (task instruction, history, observation) 
+
+s∗ 
+
+> t
+
+Skill selected at step trep ∈ { 0, 1} Episode outcome (1 = success) 
+
+LLM internals 
+
+h(ℓ) 
+
+> t
+
+∈ Rd Residual-stream activation at layer ℓ, token position t; d: hidden dim 
+
+L∗ Optimal extraction layer (selected by GoEmotions validation accuracy) 
+
+¯h(ℓ) Mean-pooled per-story activation at layer ℓ (tokens t ≥ 50 )
+
+Emotion direction extraction (offline) 
+
+K = 27 Number of GoEmotions emotion concepts 
+
+N = 100 Stories generated per emotion concept 
+
+μ(ℓ) 
+
+> k
+
+Within-class mean activation for concept k at layer ℓ
+
+¯μ(ℓ) Global mean over all KN story activations at layer ℓ
+
+v(ℓ) 
+
+> k
+
+∈ Rd Contrastive emotion direction: μ(ℓ) 
+
+> k
+
+− ¯μ(ℓ) (Eq. 1) 
+
+Π⊥ PCA denoising projector (removes top neutral-activation components) 
+
+ˆv(ℓ) 
+
+> k
+
+Denoised direction: Π⊥v(ℓ)
+
+> k
+
+We ∈ RK×d Emotion extractor matrix; rows = ˆ v(L∗)
+
+> k
+
+Online emotion state 
+
+et ∈ RK ℓ2-normalized emotion state at step t: Weh(L∗) 
+
+> T
+
+/∥Weh(L∗) 
+
+> T
+
+∥2 (Eq. 2) 
+
+fθ Emotion encoder: 3-layer MLP ( 27 →64 →128 →128 , ReLU, <27K params) 
+
+rt ∈ R128 Encoded representation: fθ (et)
+
+Template selection and confidence gating 
+
+C = 12 Number of emotion-state templates 
+
+T = {T1, . . . , T C } Template bank (task-agnostic; Table 11) 
+
+qj ∈ R128 Learnable prototype for template Tj
+
+T ∗ 
+
+> t
+
+Selected template: arg max j cos( rt, qj ) (Eq. 3) 
+
+ct ∈ [0 , 1] Confidence score: σ(w⊤ 
+
+> c
+
+rt + bc) (Eq. 4) 
+
+τ Confidence gate threshold (default 0.3, tuned on WebShop validation) 
+
+ϕt = ( T ∗ 
+
+> t
+
+, c t) Composite emotion summary injected into Pt
+
+Pt Augmented prompt at step t (Eq. 5); reduces to text-only when ct < τ 
+
+Encoder training losses 
+
+A+(i) Positive set for anchor i: same skill & successful outcome 
+
+Lctr Supervised-contrastive loss (Eq. 6); temperature κ=0 .07 
+
+Lcls Template-classification loss (Eq. 7); temperature κ′=0 .1
+
+λ Loss weight: L = Lctr + λLcls , default λ=0 .5
+
+Skill evolution 
+
+E = ( e1, . . . , eT ) Episode emotion trajectory 
+
+δt = 1 − e⊤ 
+
+> t
+
+et−1 Step-to-step cosine distance (Eq. 8) 
+
+¯δ, σ δ Episode mean and std of δt values 
+
+P Transition-point set: {t | δt > ¯δ + σδ } (Eq. 9) 
+
+Pi Skill-specific transitions: {t ∈ P | s∗ 
+
+> t
+
+= si}
+
+w Diagnostic window half-width (default w=1 ; 3-step context) 
+
+dt Diagnostic context: (xt−w:t+w , s ∗ 
+
+> t−w:t+w
+
+, T ∗ 
+
+> t−w:t+w
+
+, δ t−w:t+w ) (Eq. 10) 
+
+∆i Verbalized transition summary for skill si
+
+P (i) 
+
+> evo
+
+Evolution prompt for skill si (Eq. 11) 
+
+D′ 
+
+> i
+
+Revised SOP generated by the LLM rewriter (Eq. 12) 
+
+U(r) Underperforming skills in round r (success rate < η )
+
+η Performance threshold for flagging skills (default 0.4) 
+
+R Number of evolution rounds (default 3) 
+
+Table 14: Complete notation reference. Symbols are grouped by the pipeline stage in which they first appear. Standard notation (M, Di, xt) is also defined inline where first used in the main text.

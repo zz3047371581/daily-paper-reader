@@ -1,0 +1,1082 @@
+Title: LAVE: Latent Visual Evidence-Enhanced Planning for Video Tool-use Agents
+
+URL Source: https://arxiv.org/pdf/2608.07585v1
+
+Published Time: Tue, 11 Aug 2026 00:04:13 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# LAVE: Latent Visual Evidence-Enhanced Planning for Video Tool-use Agents 
+
+Zijian Wang ∗1, Junnan Zhu ∗2, Rongzhen Li ∗3, Xiao Liu ∗1, Guohui Xiang 3,Quan Lu 3, Lijia Liu 1, Yining Wang 4, Jiang Zhong 1†, Kaiwen Wei 1†
+
+> 1
+
+College of Computer Science, Chongqing University, Chongqing, China 
+
+> 2
+
+MAIS, Institute of Automation, Chinese Academy of Sciences 
+
+> 3
+
+Chongqing National Data AI Research Institute, AI Research Lab 4Unisound AI Technology Co.Ltd zjstud@cqu.edu.cn, weikaiwen@cqu.edu.cn 
+
+Abstract 
+
+Long-video understanding requires models to efficiently ac-quire and reuse sparse visual evidence from long and redun-dant video streams. Recent video tool-use agents address this challenge by iteratively invoking visual Tools at different tem-poral scales, but their Tool–Planner communication typically relies on textual observations. Such text-only interfaces pro-vide lossy summaries of Tool computations, causing previ-ously computed visual evidence not verbalized to be discarded and unavailable for subsequent planning. We identify this lim-itation as the Tool observation bottleneck and propose LA tent 
+
+Visual Evidence-Enhanced Planning ( LAVE ), a training-free framework for reusing latent visual evidence from completed Tool calls. LAVE introduces a dual-channel observation inter-face: the visible channel preserves the original textual trajec-tory, while the latent channel stores pre-verbal visual updates with their Tool roles, source-frame timestamps, and visual lo-cations. During planning, LAVE retrieves evidence relevant to the current Planner state but not covered by textual obser-vations, and integrates it through bounded timestamp-aligned latent updates with entropy-constrained frame-time routing. This enables video agents to reuse existing visual computation without additional training, frame replay, or modifications to the original orchestration. Extensive experiments on Video-MME, LongVideoBench, and CG-Bench show that LAVE consistently improves video tool-use agents across backbones. Under a comparable frame budget, LAVE improves the Video-MME overall score by 3.76 points over the strongest baseline, demonstrating the effectiveness of latent visual evidence reuse for multi-step video-agent planning. 
+
+Introduction 
+
+Long-video understanding requires locating sparse answer-relevant evidence from long and redundant visual streams (Tang et al. 2026b; Nguyen et al. 2024; Meng et al. 2026). Processing all frames is costly and often introduces irrelevant information. Recent MLLMs have thus moved be-yond the conventional “watch-then-answer” paradigm toward agentic video understanding, where a Planner iteratively rea-sons about the query, invokes visual Tools at different tem-poral scales, and uses their observations to guide subsequent 
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding author. (a). Text-only Tool Observation 
+
+> Only verbalized evidence reaches the Planner.
+> textualized observation
+> Information Loss
+
+(b).  Text + Replayed Frames 
+
+> Another visual pass over previously inspected evidence.
+> text
+
+(c). LAVE (Ours) 
+
+> Pre-verbal visual evidence is retained with source time.
+> text
+
+◷Latent Visual Evidence 
+
+> Query-conditioned Retrieval→Middle-layer Planner Update No Replay of the Same Visual Evidence.
+> Re-process Pixels
+> Dual-channel Observation
+> Planner
+
+What is communicated after 
+
+a visual Tool call? 
+
+> Planner
+> Planner
+
+## Question: 
+
+> video video
+
+Figure 1: Comparison of video agent Tool–Planner com-munication paradigms. Text-only observations discard un-verbalized visual evidence, while raw visual inputs require additional visual inference. LAVE preserves the text trajec-tory and reuses temporally grounded latent visual evidence from completed Tool calls to improve subsequent planning. search (Lin et al. 2026; Ge et al. 2025; Gao et al. 2026; Jain et al. 2025; Liu et al. 2025b). This paradigm enables adaptive video understanding by allocating visual computation based on the current planning context. Recent video agents have largely focused on improving how visual evidence is acquired and organized. Methods such as VideoSeek (Lin et al. 2026) and FrameMind (Ge et al. 2025) use hierarchical operations, including Overview, Skim, and Focus, to move from coarse exploration to lo-cal inspection. However, after a Tool processes the selected frames, its output is usually compressed into a short textual arXiv:2608.07585v1 [cs.CV] 5 Aug 2026 observation, and the Planner makes subsequent decisions from this text. This interface creates a less studied problem. The agent must preserve acquired visual evidence for future planning, rather than only acquire it. We call this problem the Tool observation bottleneck . As shown in Figure 1(a), visual evidence can enter the reason-ing context only after being converted into a textual observa-tion. This verbalization is inherently lossy and may also be misaligned with the Planner’s actual information needs. For example, when the next decision depends on an action occur-ring in the scene, the observation may instead emphasize the number or identities of visible people, thereby omitting task-relevant evidence while introducing irrelevant details. Once the Tool call ends, the discarded visual signals are no longer available for subsequent planning. An alternative is to re-play the frames to a vision-language Planner, as illustrated in Figure 1(b). However, the Planner must then re-encode and reinterpret the same pixels at every reasoning step. More-over, text and visual inputs differ substantially in information density, abstraction level, and noise, while how the Planner balances these modalities remains implicit; it may therefore rely disproportionately on the more compact textual context. Repeated visual processing also introduces additional infer-ence latency and computational cost. To meet these requirements, we propose LA tent Visual 
+
+Evidence Enhanced Planning ( LAVE ), a training-free frame-work that reuses visual evidence from completed Tool calls during subsequent planning. LAVE introduces a dual-channel observation interface: the visible channel preserves the original textual trajectory, while the latent channel stores pre-verbal visual updates from the Tool forward pass. Each latent entry is associated with its Tool role, source frame time, and visual location, preserving both visual content and temporal provenance. At each planning step, LAVE retrieves evidence relevant to the current Planner state but not covered by the textual observation, adapts temporal retrieval coverage based on entropy, and integrates selected evidence through bounded residual updates at corresponding timestamped ob-servations. This enables the Planner to reuse omitted visual information for future Tool selection without modifying the visible trajectory, additional training, or frame replay. The latent channel is disabled during final answer generation, affecting answers only through improved planning and evi-dence acquisition. Experiments on Video-MME (Fu et al. 2025), LongVideoBench (Wu et al. 2024), and CG-Bench (Chen et al. 2025) benchmarks demonstrate that LAVE effectively enhances existing video tool-use agents through a training-free and plug-in inference-time framework. LAVE requires no parameter updates, additional training, or modifications to the original agent orchestration. When applied to the open-source Qwen3.5-9B VLM, LAVE improves Video-MME performance from 48.50% to 62.77%, yielding a 14.27-point gain over the original VLM baseline. Furthermore, when in-tegrated into the Qwen3.5-9B-based VideoSeek (Lin et al. 2026) agent, LAVE further improves the VideoSeek baseline from 59.01% to 62.77% with a comparable frame budget, showing that LAVE reuses previously computed visual evi-dence without increasing the frame budget. In summary, the contributions of this work are as follows: 
+
+• We identify the Tool observation bottleneck in video tool-use agents, where text-only Tool observations discard previously computed valuable visual evidence that could benefit subsequent planning. 
+
+• We propose LAVE, a training-free dual-channel in-terface that preserves time-anchored latent visual evi-dence from completed Tool calls and reuses it through query-aware, entropy-constrained frame-time routing and bounded Planner updates. 
+
+• Experiments on three benchmarks and two model back-bones show that LAVE consistently improves video agent planning under comparable frame budgets, including a 3.76 point gain on Video-MME, without additional train-ing or repeated visual inference. 
+
+Related Work 
+
+Video Question Answering 
+
+Existing video question answering (Video QA) methods mainly focus on constructing effective visual evidence for the reasoning model. VideoTree (Wang et al. 2025b), BOLT (Liu et al. 2025a), Q-Frame (Zhang et al. 2025), and GIFT (Ma et al. 2026) select or organize query-relevant frames, while TSPO (Tang et al. 2026a) and A.I.R. (Zou et al. 2026b) optimize temporal sampling. Other methods, such as Video-EM (Wang et al. 2025a) and ReFineVQA (Shin et al. 2026), represent evidence through event memories or refined de-scriptions, while Video-R1 (Feng et al. 2025) improves rea-soning over visual inputs. Despite different designs, these methods share an evidence-centric interface, where visual information is prepared before being consumed by the rea-soning model. Recent agentic video QA systems incorpo-rate evidence acquisition into an iterative reasoning process. VideoSeek (Lin et al. 2026) and FrameMind (Ge et al. 2025) enable targeted visual inspection through adaptive tool inter-actions, while VideoTIR (Gao et al. 2026), SAGE (Jain et al. 2025), and VideoMind (Liu et al. 2025b) explore multi-step planning and agent coordination. By dynamically deciding what visual evidence to acquire at each step, these systems move beyond fixed-frame processing toward active video un-derstanding. However, these methods focus on acquiring rel-evant evidence, but visual information omitted from explicit observations cannot be reused for subsequent planning. In this paper, we propose LAVE, which addresses this limita-tion in the Tool–Planner interface by preserving temporally grounded latent visual evidence for inference-time reuse. 
+
+Latent Communication in Agents 
+
+Recent work explores continuous representations as a com-plement to textual communication. Communicating Activa-tions (Ramesh and Li 2025), LatentMAS (Zou et al. 2026a), and State Delta Encoding (SDE) (Tang et al. 2025) transfer intermediate activations, latent states, or token-aligned state changes across agents. Activation Addition (Turner et al. 2023) further shows that additive hidden-state interventions can steer subsequent computation. In multimodal models, Visible Text Trajectory                         
+
+> Text Observation
+> A. Pre-verbal Visual Evidence
+> B. Source Provenance and Memory
+> Latent Memory
+> Current Planner state
+> Selection
+> Source-time relevance Text redundancy Temporal entropy & coverage
+> focused broader
+> C. Evidence Selection D. Evidence Injection
+> Decoder block ℓ
+> ...
+> • Capture a key and update for visual token nkin =H(ℓ) i,out [n]
+> vin =H(ℓ) i,out [n] − H(ℓ) i,in [n]
+> Latent Evidence ein = (k in ,vin ,ain )• Find receiver anchor ptj
+> by source time in text
+> ptj
+> • Inject residual to hidden
+> state at layer ℓH(ℓ) [ptj ] ← H(ℓ) [ptj ] + δtj
+> [148s] The player celebrates. .
+> [158s] placed a red …
+
+≡     
+
+> Planner's Next Thought
+> Message from Planner Selected Video Frames
+> Tool VLM
+> Next Search Step
+> 145.0s
+> 154.2s 148.6s
+> i-th tool call
+> Before After
+> ...
+> 145.0s
+> 154.2s 148.6s Selected Video Frames Source Provenance
+> Source Address
+> 148.6s
+> Frame Time τin
+> Patch Location ξin
+
+Figure 2: Overview of LAVE. Selected frames and Planner messages are processed by the Tool VLM, producing text observations and pre-verbal visual states. During Tool execution, LAVE (A) extracts latent key–value evidence and (B) stores addressed evidence with source provenance. During the next Planner prefill, LAVE (C) retrieves relevant source-time groups using the current Planner state and (D) injects bounded residuals at resolved receiver anchors to guide the next thought and Tool action. DeepStack (Meng et al. 2024) introduces visual representa-tions through intermediate residual paths, Vision Function Layer (Shi, Yu, and Yang 2025) identifies layer-specific vi-sual functions, and Latent Visual Reasoning (Li et al. 2026) preserves visual semantics without fully verbalizing them. However, these methods mainly communicate agent-level states or enrich the current inference process, rather than pre-serving visual evidence omitted during verbalization for later decisions. LAVE instead retains pre-verbal visual block up-dates alongside the explicit textual trajectory, allowing useful evidence to remain available for subsequent planning. 
+
+Method 
+
+Task Definition and Overview. This work focuses on agentic video QA, which requires models to iteratively ac-quire and reason over visual evidence through interactions with specialized Tools. Specifically, given a question, Planner selects appropriate Tools to inspect different video regions, and the resulting observations guide subsequent reasoning and tool selection. LAVE augments this iterative framework with a dual-channel observation mechanism: the original tex-tual observation is preserved as the visible trajectory, while pre-verbal visual evidence produced during Tool execution is retained through a latent channel. Figure 2 illustrates the overall framework of LAVE. The latent channel captures intermediate visual states before text generation, associates them with source-frame timestamps, and stores them for retrieval. At each planning step, LAVE retrieves evidence that is relevant to current decision but not covered by textual observation, and integrates it to Planner through a timestamp-aligned latent update. Temporal entropy adaptively controls the temporal coverage of retrieval, while a utility-based filter prevents uninformative evidence from influencing Planner. The latent channel is only activated dur-ing planning and is disabled during final generation. 
+
+Pre-verbal Visual Evidence Acquisition. LAVE retains visual information from the selected video frames before the Tool VLM verbalizes it, allowing omitted evidence to remain available for later planning. Figure 2(A) shows the selected frames and Planner message entering the Tool VLM. Let Ci
+
+denote this i-th Tool call, and let n index the visual tokens produced from its selected frames. At decoder block ℓ, H(ℓ)
+
+> i, in
+
+[n] and H(ℓ)
+
+> i, out
+
+[n] denote the hid-den states of visual token n immediately before and after the block, respectively. In kin and vin , the paired subscript in 
+
+combines Tool-call index i and visual-token index n. The roman labels in and out on H correspond to the states before and after block ℓ. LAVE constructs: 
+
+kin = H(ℓ)
+
+> i, out
+
+[n],vin = H(ℓ)
+
+> i, out
+
+[n] − H(ℓ)
+
+> i, in
+
+[n]. (1) The state after block ℓ serves as the key because it repre-sents the visual content available for later relevance match-ing. The difference between the after- and before-block states serves as the value because it isolates the visual update in-troduced by the block. Using the complete hidden state as the value would also retransmit information already present before the block and could unnecessarily perturb the Planner. The shared visual-token index links each retrieval key to its corresponding visual update. 
+
+Source Provenance and Memory. The latent update alone describes visual content but does not identify the video mo-ment that produced it. Figure 2(B) associates the key–value evidence from the Pre-verbal Visual Evidence Acquisition stage with its source video time and visual location before storing it in latent memory. Each frame carries its video timestamp, while visual pre-processing retains the frame index and patch coordinate as-sociated with every visual token. When multiple selected frames are jointly encoded, the frame index preserves the token-to-frame correspondence. For visual token n from Tool call i, this correspondence provides the source-frame time τin 
+
+and within-frame visual location ξin . As above, the paired Entropy-Constrained Frame-Time Routing        
+
+> A. Entropy Routing
+> Current Planner state
+> qt= H (ℓr) [last]
+> Time-group Memory M = {G 1, …, G M}
+> G1145.0s G2148.6s G3154.2s
+
+...                
+
+> GMτM
+> Score According to Utility =Query relevance − Text redundancy
+> 148.6s in Text Observation
+> Low entropy Focused
+> Few-group Coverage
+> B. Hidden State Update Resolve the Temporal Address
+> Use the final token of the matching timestamp line. p148.6
+> 19
+> Layer 20 … → next thought
+> H(19) [p 148.6 ] = H (19) [p 148.6 ] + δ 148.6
+> Bound(RMSMatch(Σ w tin vin ))=δ 148.6
+> Weighted In-group Readout
+> G2· 148.6s
+> group scoring
+> G1G2G3GM
+
+...                    
+
+> High H → Multiple groups
+> After Scoring
+> 145.0s: The player ...... 154.2s: His teammates.......
+> 148.6s: The player raises both arms after scoring. p148.6 …
+> Planner
+> (k, v )
+> 18
+> (k, v )(k, v )
+
+Figure 3: Entropy-constrained frame-time routing. (A) Planner-state relevance and temporal entropy select source-time groups and form bounded residuals. (B) Each residual is written at the timestamp-matched receiver anchor during Planner prefill. subscript in denotes Tool-call index i and visual-token index 
+
+n. LAVE forms the source address: 
+
+ain = ( τin , ξ in ). (2) The frame time supports temporal grouping and subse-quent alignment, while the visual location preserves the spa-tial origin of the token. The Source Provenance and Memory stage attaches this source address to the key and visual update captured during the Pre-verbal Visual Evidence Acquisition stage, forming the latent evidence 
+
+ein = ( kin , v in , a in ), (3) here, kin supports relevance matching, vin carries the pre-verbal visual update, and ain records where the evidence originated. Keeping the three fields linked helps distinguish visually similar evidence observed at different video mo-ments and enables source-time routing without discarding spatial provenance. For example, Figure 2(B) shows visual evidence originating at 148.6 s. The Tool may verbalize “The player celebrates,” while the associated visual updates retain jersey identity, gesture, and nearby ball motion. LAVE stores these updates together with the 148.6 s source time, allow-ing a later player-identification decision to retrieve omitted evidence from the relevant moment. 
+
+Evidence Selection. Figure 2(C) summarizes evidence se-lection from latent memory using the current Planner state and visible text trajectory. Source-time relevance identifies useful evidence, text redundancy discounts already verbal-ized content, and temporal entropy adapts retrieval from focused to broad coverage. These components determine relevance, complementarity, and temporal coverage, respec-tively. Figure 3(A) details how selection operates over time-group memory. At planning step t, let Lt denote the length of the current Planner prompt. LAVE uses the final-token state after decoder block ℓ as the current Planner state: 
+
+qt = H(ℓ)
+
+> t, out
+
+[Lt] ∈ Rd. (4) This state summarizes the question, visible trajectory, and current planning context. The Planner state and Tool-side keys are extracted at the same decoder block, allowing co-sine similarity to compare them directly. For latent entry ein ,source-time relevance is rtin = cos( qt, k in ). A high rele-vance score indicates that the visual content represented by 
+
+kin is useful for the current planning state. Relevance alone may retrieve content already expressed in the visible trajectory. Let O(ℓ) 
+
+> i
+
+contain the block-ℓ states of the textual observation generated by Tool call Ci. LAVE assigns visual token n the utility 
+
+utin = rtin − λ
+
+"
+
+max 
+
+> o∈O (ℓ)
+> i
+
+cos( kin , o )
+
+#
+
+> +
+
+, (5) where [x]+ = max( x, 0) . The two terms measure query relevance and textual redundancy, respectively, so high utility identifies useful but insufficiently verbalized evidence. In the shown example, jersey or gesture cues receive high utility when they support player identification beyond “The player celebrates.” Source times partition latent memory into groups 
+
+G1, . . . , G M , each containing the keys and visual updates from one video moment. LAVE aggregates the strongest to-ken utilities within each group into its score stj . Group-first scoring treats multiple high-scoring patches from the same frame as one temporal candidate, avoiding redundant token-level allocation. A temperature-scaled softmax over the group scores yields a source-time relevance distribution pt = ( pt1, . . . , p tM ),where ptj denotes the relevance assigned to group Gj . A concentrated distribution indicates that one source time dom-inates the current decision, whereas a diffuse distribution in-dicates that several moments remain plausible. LAVE uses the Shannon entropy (Shannon 1948) H( pt) to match tem-poral coverage to this concentration: 
+
+J ⋆t = arg max  
+
+> ∅̸=J ⊆ [M]
+
+X
+
+> j∈J
+
+ptj s.t. log |J | ≤ H( pt). (6) The objective retains source-time groups with the largest relevance mass, while the entropy constraint adaptively de-termines the number of retained groups. When the relevance distribution is concentrated, low entropy leads to Focused Coverage , where retrieval concentrates on a few dominant source-time groups. Conversely, when multiple source times have comparable relevance, higher entropy leads to Broad Coverage , which preserves evidence from multiple plausible moments. Unlike fixed-width retrieval, this design adapts temporal coverage to the current Planner state while preserv-ing the utility-based ordering within each group. In the ex-ample of Figure 3(A), G2 at 148.6 s dominates the relevance distribution, resulting in Focused Coverage. If the groups at 145.0 s, 148.6 s, and 154.2 s receive similar scores, the higher entropy instead expands retrieval to Broad Coverage. After entropy determines the retained source-time groups, LAVE removes entries with non-positive utility and reads each group independently. For every retained group Gj , the remaining utilities determine the token weights, group read-out, and bounded residual: 
+
+wtin = softmax 
+
+> ein ∈Gj
+> utin >0
+
+(utin /τ v ) ,
+
+¯vtj = X
+
+> ein ∈Gj
+> utin >0
+
+wtin vin ,δtj = Bound 
+
+
+
+αci
+
+RMS( qt)RMS(¯ vtj ) ¯vtj 
+
+
+
+.
+
+(7) Here, wtin is the within-group utility weight, τv is the softmax temperature for token-level readout, and αci is the gain associated with the role ci of source Tool call 
+
+Ci. The weighted readout ¯vtj combines complementary visual updates from the same moment. Root-mean-square (RMS) (Burden, Faires, and Burden 2015) matching aligns its scale with the current Planner state, while Bound( ·) lim-its the accumulated latent change. Each resulting residual 
+
+δtj retains the source time of Gj for subsequent injection. Detailed derivations are provided in Appendix A. 
+
+Evidence Injection. Figure 2(D) summarizes receiver-side writing. Each retained source-time group provides a bounded residual δtj from Eq. 7 together with its source time. During Planner prefill, LAVE resolves a receiver anchor in the visible text trajectory and writes the residual at receiver block ℓr .In our implementation, the receiver and evidence extraction blocks are identical, i.e., ℓr = ℓ. The remaining Planner blocks then propagate the updated state to the next thought and Tool action. Figure 3(B) illustrates this process for the source-time group at 148.6 s. The source time first identifies the corre-sponding timestamped line, “148.6 s: The player raises both arms after scoring.” LAVE uses the final token of this line as receiver anchor ptj and writes δ148 .6 to its hidden state. The source time and receiver anchor therefore serve differ-ent roles: the former identifies the video moment, whereas the latter specifies where the associated residual enters the Planner sequence. The line-final position is used because its hidden state sum-marizes the timestamp and the complete textual observation on that line. Moreover, the position precedes the subsequent causal states, allowing later Planner tokens to jointly use the visible description and its aligned pre-verbal visual evidence. The operation changes only the hidden state; the visible ob-servation and its tokenization remain unchanged. Each selected group retains an independent residual and receiver anchor. Residuals whose source times resolve to the same receiver position are accumulated: 
+
+eH(ℓr ) 
+
+> t
+
+[p] = H(ℓr ) 
+
+> t
+
+[p] + X  
+
+> j∈J ⋆t
+> ptj =p
+
+δtj . (8) Here, H(ℓr ) 
+
+> t
+
+[p] is the original Planner state at receiver posi-tion p, and the summation contains only residuals assigned to that position. Consequently, evidence from different source times remains separately addressed unless the corresponding timestamped observations share the same receiver anchor. 
+
+Tool–Planner Interaction Flow. Tool capture and Plan-ner writing occur in consecutive agent turns. A completed Tool prefill stores addressed evidence; during the next Plan-ner prefill, LAVE uses the block-ℓ prompt states to route residuals and update their receiver anchors via Eq. 8. Sub-sequent blocks integrate the timestamped text and aligned latent evidence before the next Tool action. 
+
+Experiments 
+
+Benchmarks. We evaluate LAVE on the full Video-MME benchmark (Fu et al. 2025), the LongVideoBench valida-tion set (Wu et al. 2024), and the CG-Bench mini set (Chen et al. 2025). All benchmarks are evaluated without subtitles. Video-MME measures multiple-choice understanding over short, medium, and long videos, while LongVideoBench and CG-Bench provide complementary long-context and temporal-grounding evaluations. We report each bench-mark’s overall score and sampled frames per question. 
+
+Baselines. We compare LAVE with three groups of sys-tems: (1) closed-source or proprietary-API systems, includ-ing GPT-4o (OpenAI 2024), Gemini-1.5-Pro (Gemini Team 2024), GPT-5 (OpenAI 2025), and tool-augmented systems such as VideoSeek (Lin et al. 2026) and SAGE-Flash (Jain et al. 2025); (2) open-source systems with method-specific training, including VideoTIR (Gao et al. 2026), Frame-Mind (Ge et al. 2025), VideoMind (Liu et al. 2025b), MACF (Chen et al. 2026), and TSPO (Tang et al. 2026a); and (3) open-source inference-only systems without addi-tional training, including Video-EM (Wang et al. 2025a), BOLT (Liu et al. 2025a), GIFT (Ma et al. 2026), Re-FineVQA (Shin et al. 2026), and A.I.R. (Zou et al. 2026b). We use VideoSeek (Lin et al. 2026) with its Overview–Skim– Focus loop as the primary agent baseline. 
+
+Implementation Details. Our controlled comparison eval-uates Qwen3.5-9B (Qwen Team 2026) and GLM-4.6V-Flash-9B (Z.ai Team 2025). For each backbone, LAVE and the no-latent reference use identical configurations and differ only in whether stored latent evidence is routed into planning steps; final answering remains text-only. The main configura-tion uses aligned capture and receiver blocks ℓ = ℓr = 19 , up to eight retrieved evidence tokens per planning step, a 1.0×
+
+residual gain, and entropy-constrained temporal coverage. The key hyperparameters are ablated below; all remaining settings and system details are reported in Appendix B. 
+
+Main Experiment. Table 1 reports results across Video-MME, LongVideoBench, and CG-Bench. We find: (1) Model + Method Video-MME LongVideoBench CG-Bench 
+
+Short ↑ Medium ↑ Long ↑ Overall ↑ Frames ↓ Overall ↑ Frames ↓ Overall ↑ Frames ↓
+
+Closed-source or proprietary-API systems 
+
+GPT-4o (OpenAI 2024) 80.0 70.3 65.3 71.9 256 66.7 256 45.2 256 Gemini-1.5-Pro (Gemini Team 2024) 81.7 74.3 67.4 75.0 256 64.0 256 37.2 256 GPT-5 (OpenAI 2025) – – 67.9 – 384 64.5 384 – –GPT-4 + VideoTree (Wang et al. 2025b) – – – 54.2 128 – – – –Gemini-2.5-Flash + SAGE-Flash (Jain et al. 2025) – – – 63.5 128+ – – – –
+
+Open-source systems with method-specific training 
+
+Qwen2.5-VL-7B + VideoTIR † (Gao et al. 2026) 67.2 55.8 50.7 57.9 16+ 53.1 16+ – –Qwen2.5-VL-7B + Video-R1 † (Feng et al. 2025) – – 50.2 59.3 32 56.4 32 34.4 32 Qwen2.5-VL-7B + FrameMind † (Ge et al. 2025) 66.0 64.8 61.2 64.0 64+ – – – –Qwen2-VL-7B + VideoMind † (Liu et al. 2025b) – – 49.2 58.2 64+ 56.3 64+ 38.4 64+ Qwen3-VL-8B + MACF † (Chen et al. 2026) – – – 60.4 96 56.8 96 – –Qwen2.5-VL-7B + TSPO † (Tang et al. 2026a) – – 56.4 65.5 1fps 62.1 1fps – –
+
+Open-source systems without method-specific training 
+
+Qwen2.5-VL-7B + Video-EM ‡ (Wang et al. 2025a) 72.4 60.3 53.4 62.0 1fps 59.6 1fps 38.1 1fps Qwen2-VL-7B + BOLT ‡ (Liu et al. 2025a) 69.4 57.5 51.5 59.5 1fps – – – –Qwen2-VL-7B + Q-Frame ‡ (Zhang et al. 2025) 69.4 57.1 48.3 58.3 128 58.4 128 36.7 128 Qwen2.5-VL-7B + GIFT ‡ (Ma et al. 2026) 76.8 63.2 53.1 64.4 128 61.3 128 38.2 128 LLaVA-OV-7B + ReFineVQA ‡ (Shin et al. 2026) – – – 63.1 200 – – – –Qwen2.5-VL-7B + A.I.R. ‡ (Zou et al. 2026b) – – – 65.0 1fps 61.4 1fps 39.1 200 Qwen3.5-9B CoT ‡ (Zhang et al. 2026) – – – 48.5 64 – – – –GLM-4.6V-Flash-9B + VideoSeek ‡ 72.07 55.24 47.83 58.38 64.08 55.12 72.36 33.80 74.14 GLM-4.6V-Flash-9B + LAVE ‡ (Ours) 73.50 58.18 49.43 60.37 62.02 56.52 72.02 34.12 74.02 Qwen3.5-9B + VideoSeek ‡ 70.78 55.95 48.21 59.01 60.70 55.69 68.22 34.65 71.29 
+
+Qwen3.5-9B + LAVE ‡ (Ours) 76.92 58.33 52.98 62.77 60.66 58.38 69.80 38.61 71.03 
+
+Table 1: Experiment results on different benchmarks without subtitles. †: methods requiring additional training or method-specific optimization; ‡: inference-only methods without additional training. Bold numbers indicate the best inference-only performance on open-sourced MLLMs. Info. Obj. Rec. Act. Rec. Attr. Spat. Perc.       
+
+> Temp. Perc. Obj. Reason Act. Reason Spat. Reason Temp. Reason Count OCR Know. Film/TV Sports Artistic Life Multi.
+> (a) (b)
+> Baseline (dashed) L15 L19 L23 L27
+
+Figure 4: Effects of latent-evidence depth across blocks. (a) task-level results; (b) content-level results. Among inference-only systems with a comparable frame budget, LAVE achieves the strongest performance. On Qwen3.5-9B, LAVE improves Video-MME from 48.50% to 62.77% (+14.27 points) and surpasses VideoSeek by 3.76 points with nearly identical frames (60.66 vs. 60.70). It also generalizes across backbones, improving GLM-4.6V-Flash-9B + VideoSeek from 58.38% to 60.37% with fewer frames. (2) Compared with closed-source and training-based sys-tems, LAVE achieves a better performance-efficiency trade-
+
+Variant Overall Short Medium Long Gaussian noise 49.28 60.87 43.48 43.48 No latent 59.01 70.78 55.95 48.21 Block 15 59.08 69.31 58.42 49.50 Block 19 61.39 70.30 62.38 51.49 
+
+Block 23 61.06 71.29 61.39 50.50 Block 27 57.43 69.31 59.41 43.56 
+
+Table 2: Ablation on Communication-block selection. We disable entropy-constrained frame-time routing and evalu-ate different blocks for Tool-side evidence extraction and Planner-side residual writing. off. While these systems often rely on larger visual budgets or additional optimization, LAVE reaches competitive per-formance with open-source backbones under a controlled in-ference budget. (3) Duration-wise analysis shows consistent gains of 4.14, 2.38, and 4.77 points on short, medium, and long videos, respectively. The largest gain on long videos indicates that latent evidence reuse is especially beneficial when information spans multiple Tool interactions. (4) In-terestingly, LAVE improves over VideoSeek with a compa-rable but slightly smaller frame budget (60.66 vs. 60.70), suggesting that latent evidence reuse enables more effective Tool exploration trajectories rather than simply increasing Setting Blocks Retrieval Overall No latent – – 59.01 + Evidence 19 Flat token 61.39 + Routing 19 Group → H → token 62.77 
+
+Table 3: Incremental contributions of latent visual evidence and frame-time routing. 
+
+Factor Setting Accuracy Evidence tokens 4 60.26 8 62.77 
+
+16 59.01 Residual gain 0.5× 60.26 
+
+1.0× 62.77 
+
+2.0× 60.58 Temporal coverage Fixed 2 groups 59.57 Fixed 4 groups 61.32 Fixed 8 groups 60.48 Entropy-adaptive 62.77 
+
+Table 4: Sensitivity of latent readout and temporal coverage. visual processing. (5) Beyond Video-MME, LAVE improves LongVideoBench by 2.69 points and CG-Bench by 3.96 points, demonstrating consistent gains across benchmarks. 
+
+Ablation Study on Communication-block Selection. To investigate the communication block selection, following ex-isting work (Tang et al. 2025; Zeng et al. 2025), we evaluate full-attention blocks around 2L/ 3. As shown in Table 2, Block 19 achieves the best overall performance, with par-ticularly strong improvements on medium and long videos. Replacing latent evidence with Gaussian noise causes a sub-stantial performance drop, confirming that the gains come from structured visual evidence rather than hidden-state per-turbations. Figure 4 further shows that different blocks cap-ture complementary task-specific information, with block 19 providing stronger temporal perception. 
+
+Ablation Study on Latent Evidence Routing. Using block 19 as the evidence carrier, we evaluate the contribution of entropy-constrained frame-time routing. As shown in Ta-ble 3, replacing flat token retrieval with adaptive routing im-proves accuracy from 61.39% to 62.77%, demonstrating the benefit of source-time-aware evidence selection. Table 4 fur-ther studies three factors: retrieved evidence tokens, residual gain, and temporal coverage. We vary only the target factor while keeping Block 19 as the evidence carrier, other routing settings, planning-only injection, and evaluation protocol un-changed. Across token budgets 4/8/16 , gains 0.5/1.0/2.0×,and coverage of 2/4/8 groups, intermediate settings per-form best, indicating a balance between insufficient evidence and excessive interference. Entropy-adaptive coverage con-sistently outperforms fixed group counts, validating dynamic temporal selection based on the Planner state. 
+
+Planner–Tool Behavior Analysis. CG-Bench provides answer-bearing clue times, enabling direct evaluation of LAVE’s impact on Planner–Tool temporal exploration. 
+
+Method Calls/QA Hit@0 Hit@3 Hit@5 Hit@10 No latent 6.139 65.63 76.69 79.01 84.11 LAVE 6.132 72.78 79.09 81.62 86.41 
+
+∆ −0.007 +7 .15 +2 .41 +2 .62 +2 .30 
+
+Table 5: Video-level clue coverage on CG-Bench. Qwen3.5-9B + LAVE:                                                                                     
+
+> Planner step 0:
+> {"function": "overview", "parameters": {}}
+> Latent injection before step 1:
+> {"source_tool": "overview", "selected_times": [2168.5, 564.2 ,3081.6, 1483.7], "target": "timestamp_observation_anchor", "receiver_block": 19, "delta_query_rms": 0.020581}
+> Planner step 1:
+> {"function": "skim", "parameters": {"query": "discussion about coffee ......", "start_time": 0, "end_time": 570 }}
+> Planner step 2:
+> {"function": "skim", "parameters": {"query": "discussion about coffee bean ......", "start_time": 570, "end_time": 1140} }
+> Tool observation excerpt:
+> 06:51–07:33: "the blend consists of five different types of beans."
+> Latent read before step 3:
+> {"selected_time_groups": [1140.0, 977.1, 651.4 ,814.2], "receiver_block": 19, "delta_query_rms": 0.024415}
+> Planner step 3:
+> {"function": "focus", "parameters": {"query": "discussion about how many ......", "start_time": 651, "end_time": 733}}
+> Video evidence:
+> 733.6s subtitle: "because it is afive-bean blend."
+> Final answer:
+> {"answer": "E", "option": "Five levels", "correct": true}
+> Question. In the video, how many grades of coffee beans does the factory produce?
+> Options. A Four classes B Eight sections C Three levels D Seven categories E Five levels F Six grades G Two tiers
+> 651.4s · latent-selected
+> 705.0s · GT starts
+> 717.4s · host–staff discussion
+> 733.6s · “ fi ve-bean blend”
+> 3036s · late irrelevant
+
+Figure 5: Qualitative example of LAVE. Hit@ r% measures whether a Skim or Focus interval overlaps with a ground-truth clue expanded by r% of the video dura-tion. As shown in Table 5, LAVE keeps Tool calls nearly un-changed while improving exact clue overlap by 7.15 points. The smaller gains under larger tolerances indicate that the baseline often searches near relevant regions but misses pre-cise localization. By preserving omitted visual evidence with source-time provenance, LAVE guides subsequent Tool calls toward more accurate regions without additional exploration. 
+
+Case Study. Figure 5 illustrates how LAVE improves tem-poral exploration. After identical initial Tool calls, the second Skim observation reveals a five-bean blend, while latent rout-ing further retrieves evidence around 651.4 s and guides the Planner to issue Focus over 651–734 s. This interval overlaps the answer-bearing segment and captures the key evidence near 733.6 s, leading to the correct answer E. The case shows that LAVE improves planning by refining the Tool explo-ration trajectory through reuse of previously acquired visual evidence rather than directly providing the answer. 
+
+Conclusion 
+
+This paper identifies the Tool observation bottleneck of video tool-use agents: textual Tool–Planner communication dis-cards visual evidence omitted during verbalization. To solve this problem, we propose LAVE, a training-free framework that preserves this evidence in a time-anchored latent channel and reuses it through entropy-constrained routing. Experi-ments on Video-MME, LongVideoBench, and CG-Bench show consistent gains across backbones, including a 3.76-point improvement in Video-MME overall score under a comparable frame budget. These results demonstrate the effectiveness of latent visual evidence reuse for multi-step video-agent planning. 
+
+References 
+
+Burden, R. L.; Faires, J. D.; and Burden, A. M. 2015. Nu-merical Analysis . Cengage Learning, 10th edition. Chen, G.; Liu, Y.; Huang, Y.; Pei, B.; Xu, J.; He, Y.; Lu, T.; Wang, Y.; and Wang, L. 2025. CG-Bench: Clue-grounded Question Answering Benchmark for Long Video Under-standing. In International Conference on Learning Repre-sentations (ICLR) .Chen, K.; Wang, J.; Zhang, J.; Li, M.; Lu, Y.; and Fan, H. 2026. Scaling Video Understanding via Compact Latent Multi-Agent Collaboration. arXiv:2605.00444. Feng, K.; Gong, K.; Li, B.; Guo, Z.; Wang, Y.; Peng, T.; Wu, J.; Zhang, X.; Wang, B.; and Yue, X. 2025. Video-R1: Re-inforcing Video Reasoning in MLLMs. arXiv:2503.21776. Fu, C.; Dai, Y.; Luo, Y.; Li, L.; Ren, S.; Zhang, R.; Wang, Z.; Zhou, C.; Shen, Y.; Zhang, M.; Chen, P.; Li, Y.; Lin, S.; Zhao, S.; Li, K.; Xu, T.; Zheng, X.; Chen, E.; Shan, C.; He, R.; and Sun, X. 2025. Video-MME: The First-Ever Com-prehensive Evaluation Benchmark of Multi-modal LLMs in Video Analysis. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) ,24108–24118. Gao, Z.; Shen, S.; Chai, T.; Wang, W.; Xu, H.; W, X.; Li, W.; Fan, Q.; Gao, Y.; and Tao, D. 2026. VideoTIR: Accurate Un-derstanding for Long Videos with Efficient Tool-Integrated Reasoning. arXiv:2603.25021. Ge, H.; Wang, Y.; Chang, K.-W.; Wu, H.; and Cai, Y. 2025. FrameMind: Frame-Interleaved Video Reasoning via Rein-forcement Learning. arXiv:2509.24008. Gemini Team. 2024. Gemini 1.5: Unlocking Multi-modal Understanding across Millions of Tokens of Context. arXiv:2403.05530. Jain, J.; Li, J.; Ma, Z.; Zhang, J.; Kim, C. D.; Lee, S.; Tripathi, R.; Gupta, T.; Clark, C.; and Shi, H. 2025. SAGE: Training Smart Any-Horizon Agents for Long Video Reasoning with Reinforcement Learning. arXiv:2512.13874. Li, B.; Sun, X.; Liu, J.; Wang, Z.; Wu, J.; Yu, X.; Barsoum, E.; Chen, M.; and Liu, Z. 2026. Latent Visual Reasoning. In 
+
+International Conference on Learning Representations .Lin, J.; Wu, J.; Liu, J.; Sun, X.; Wang, Z.; Yu, X.; Luo, J.; Liu, Z.; and Barsoum, E. 2026. VideoSeek: Long-Horizon Video Agent with Tool-Guided Seeking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Liu, S.; Zhao, C.; Xu, T.; and Ghanem, B. 2025a. BOLT: Boost Large Vision-Language Model Without Training for Long-form Video Understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Liu, Y.; Lin, K. Q.; Chen, C. W.; and Shou, M. Z. 2025b. VideoMind: A Chain-of-LoRA Agent for Temporal-Grounded Video Reasoning. arXiv:2503.13444. Ma, J.; Zhou, S.; Li, G.; Gao, X.; Cao, Y.; Zeng, H.; Yan, Y.; Wang, Z.; Song, J.; Zheng, B.; Zhang, S.; and Pu, J. 2026. GIFT: Global Irreplaceability Frame Targeting for Efficient Video Understanding. arXiv:2603.25072. Meng, J.; Tan, Y.; Xu, Q.; Gao, K.; Liu, W.; Li, Y.; Li, J.; Kong, L.; Wang, H.; Zhou, Q.; Zhang, J.; Cheng, G.; Tong, Y.; Qi, L.; and Yang, M.-H. 2026. Watch, Remember, Reason: Human-View Video Understanding with MLLMs. arXiv:2606.07433. Meng, L.; Yang, J.; Tian, R.; Dai, X.; Wu, Z.; Gao, J.; and Jiang, Y.-G. 2024. DeepStack: Deeply Stacking Vi-sual Tokens is Surprisingly Simple and Effective for LMMs. arXiv:2406.04334. Nguyen, T.; Bin, Y.; Xiao, J.; Qu, L.; Li, Y.; Wu, J. Z.; Nguyen, C.-D.; Ng, S.-K.; and Luu, A. T. 2024. Video-Language Understanding: A Survey from Model Architec-ture, Model Training, and Data Perspectives. In Findings of the Association for Computational Linguistics: ACL 2024 ,3636–3657. Bangkok, Thailand: Association for Computa-tional Linguistics. OpenAI. 2024. GPT-4o System Card. arXiv:2410.21276. OpenAI. 2025. GPT-5 System Card. OpenAI system card. Qwen Team. 2026. Qwen3.5-9B. Hugging Face model card. Ramesh, V.; and Li, K. 2025. Communicating Activations Between Language Model Agents. In Proceedings of the 42nd International Conference on Machine Learning , vol-ume 267 of Proceedings of Machine Learning Research ,51094–51116. PMLR. Shannon, C. E. 1948. A Mathematical Theory of Communi-cation. The Bell System Technical Journal , 27(3): 379–423. Shi, C.; Yu, Y.; and Yang, S. 2025. Vision Function Layer in Multimodal LLMs. In Advances in Neural Information Processing Systems .Shin, J.; Hur, C.; Cho, S.; Choi, J.; and Park, H. 2026. Re-FineVQA: Iterative Refinement of Video Description via Feedback Generation for Video Question Answering. In 
+
+Proceedings of the IEEE/CVF Winter Conference on Appli-cations of Computer Vision , 7647–7657. Tang, C.; Han, Z.; Sun, H.; Zhou, S.; Zhang, X.; Wei, X.; Yuan, Y.; Zhang, H.; Xu, J.; and Sun, H. 2026a. TSPO: Tem-poral Sampling Policy Optimization for Long-form Video Language Understanding. In Proceedings of the AAAI Con-ference on Artificial Intelligence .Tang, Y.; Bi, J.; Xu, S.; Song, L.; Liang, S.; Wang, T.; Zhang, D.; An, J.; Lin, J.; Zhu, R.; Vosoughi, A.; Huang, C.; Zhang, Z.; Liu, P.; Feng, M.; Zheng, F.; Zhang, J.; Luo, P.; Luo, J.; and Xu, C. 2026b. Video Understanding With Large Language Models: A Survey. IEEE Transactions on Circuits and Systems for Video Technology , 36(2): 1355–1376. Tang, Y.; Su, W.; Zhou, Y.; Liu, Y.; Zhang, M.; Ma, S.; and Ai, Q. 2025. Augmenting Multi-Agent Communication with State Delta Trajectory. In Proceedings of the 2025 Confer-ence on Empirical Methods in Natural Language Processing ,10219–10240. Association for Computational Linguistics. Turner, A. M.; Thiergart, L.; Leech, G.; Udell, D.; Vazquez, J. J.; Mini, U.; and MacDiarmid, M. 2023. Steering Language Models With Activation Engineering. arXiv:2308.10248. Wang, Y.; Zhang, L.; Liu, J.; Yan, J.; Zhang, Z.; Zheng, J.; Ma, A.; Ling, R.; Yang, X.; Wu, D.; Chen, X.; and Li, X. 2025a. Video-EM: Event-Centric Episodic Memory for Long-Form Video Understanding. arXiv:2508.09486. Wang, Z.; Yu, S.; Stengel-Eskin, E.; Yoon, J.; Cheng, F.; Bertasius, G.; and Bansal, M. 2025b. VideoTree: Adap-tive Tree-based Video Representation for LLM Reasoning on Long Videos. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition .Wu, H.; Li, D.; Chen, B.; and Li, J. 2024. LongVideoBench: A Benchmark for Long-context Interleaved Video-Language Understanding. In Advances in Neural Information Process-ing Systems , volume 37, 28828–28857. Z.ai Team. 2025. GLM-4.6V-Flash. Hugging Face model card. Zeng, Q.-S.; Li, Y.; Wang, Q.; Jiang, P.-T.; Wu, Z.; Cheng, M.-M.; and Hou, Q. 2025. A Glimpse to Compress: Dynamic Visual Token Pruning for Large Vision-Language Models. arXiv:2508.01548. Zhang, S.; Yang, J.; Yin, J.; Luo, Z.; and Luan, J. 2025. Q-Frame: Query-aware Frame Selection and Multi-Resolution Adaptation for Video-LLMs. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion .Zhang, Y.; Xu, Z.; Wu, H.; Li, Y.; Yin, D.; Sun, X.; and Yu, P. S. 2026. Latent Visual Cache for Video Reasoning. arXiv:2607.02607. Zou, J.; Qiu, R.; Li, G.; Yang, X.; Tieu, K.; Lu, P.; Shen, K.; Tong, H.; Choi, Y.; He, J.; Zou, J.; Wang, M.; and Yang, L. 2026a. Latent Collaboration in Multi-Agent Systems. In Pro-ceedings of the 43rd International Conference on Machine Learning , volume 306 of Proceedings of Machine Learning Research .Zou, Y.; Jin, S.; Deng, A.; Zhao, Y.; Wang, J.; and Chen, C. 2026b. A.I.R.: Enabling Adaptive, Iterative, and Reasoning-based Frame Selection for Video Question Answering. In 
+
+International Conference on Learning Representations .
+
+Appendix 
+
+Section A provides the formal derivations referenced by the Method section. Section B reports the evaluation protocol, numerical settings, runtime, and backbone details referenced by the Experiments section. Sections C and D present the paired case study and limitations. 
+
+A Method Derivations 
+
+This subsection expands the four Method operations math-ematically. Figure 2(A) and (B) map to pre-verbal evidence and source provenance below. Figure 2(C) maps to utility scoring and entropy-constrained routing. Figure 2(D) maps to timestamp-aligned bounded residual injection. Concrete run values are centralized in Table 8. 
+
+Notation and Tensor Conventions All sequence positions are one-based unless a processor coordinate is explicitly de-scribed as zero-based. For a positive integer m, we write 
+
+[m] = {1, . . . , m } and [m]0 = {0, . . . , m − 1}. Boldface is not used for vectors; whether a symbol is a scalar, vector, set, or sequence is stated below and again when it first appears in an equation. The superscript (ℓ) always identifies a decoder block, whereas a parenthesized superscript such as (h) on a utility denotes an order statistic rather than a network layer.                                       
+
+> Symbol Domain Definition
+> i[I]Tool call; Iis the call count.
+> t[T]Planner turn; Tis the turn count.
+> n[Li]Tool-prefill position; n∈ V iis visual.
+> j[M]Source-time group; Mgroups.
+> p[Lt]Prompt position; length Lt.
+> hLocal Rank, coordinate, or summation index.
+> z[N]Evaluation item; Nquestions.
+> ℓ, ℓ rN0Capture / receiver block.
+> dNHidden width; vectors lie in Rd.
+> ciRole Overview, Skim, or Focus.
+
+Table 6: Index notation for Appendix A. For a Tool prefill, H(ℓ) 
+
+> i, in
+
+and H(ℓ) 
+
+> i, out
+
+are matrices in RLi×d
+
+immediately before and after block ℓ; indexing with [n] se-lects one row in Rd. For a Planner prefill, the same notation with turn index t gives matrices in RLt×d. The tuple ein is a stored evidence record, not a vector to which arithmetic is directly applied. Calligraphic symbols denote sets except 
+
+Ht, which denotes Shannon entropy. Scalar similarity, util-ity, probability, temperature, gain, and norm variables are written in lower case; vector updates use v, δ, D, or ∆.
+
+Pre-verbal Evidence and Source Provenance Prefill-only visual positions. Let Ci denote the i-th Tool call and let Xi = ( xi1, . . . , x iL i ) be its processed mul-timodal prefill sequence. Here Li ∈ N is the sequence length and xip is the processed input element at position 
+
+p ∈ [Li], which may originate from text or a visual patch. Let min ∈ { 0, 1} be the processor-provided indicator that position n is visual. The candidate-position set is 
+
+Vi = {n ∈ [Li] : min = 1 }. (9) Thus Vi ⊆ [Li] contains exactly the visual rows from which latent evidence may be captured, and |V i| is the uncom-pressed candidate count for call i. The value min = 1 in-cludes a visual position; min = 0 excludes it. The mask ex-cludes system instructions, the question, timestamp text, and all ordinary text positions. Evidence is captured by hooks during the original Tool generation prefill. The hooks are removed after this prefill, so states created while generat-ing the textual observation are never stored. Thus the latent channel contains pre-verbal contextual visual states rather than hidden states of the generated answer. 
+
+Block key and block-update value. At decoder block ℓ,the implementation records the block input and output at every n ∈ V i:
+
+kin = H(ℓ)
+
+> i, out
+
+[n],vin = H(ℓ)
+
+> i, out
+
+[n] − H(ℓ)
+
+> i, in
+
+[n]. (10) Both kin and vin are vectors in Rd. The key kin is the contex-tual visual state at position n after block ℓ, and the value vin is the same position’s block-local update. The paired subscript 
+
+in always means “Tool call i, visual position n”; it is not a product. A residual decoder block can be written abstractly as 
+
+H(ℓ) 
+
+> i, out
+
+= H(ℓ) 
+
+> i, in
+
++ Fℓ
+
+
+
+H(ℓ)
+
+> i, in
+
+
+
+. (11) In Eq. (11), Fℓ : RLi×d → RLi×d denotes the complete residual branch implemented by decoder block ℓ, including the transformations whose net result is added to the incoming state. The equation is an interface-level identity and does not assume that attention and feed-forward sublayers are a single operation. Therefore vin = Fℓ(H(ℓ)
+
+> i, in
+
+)[ n] is exactly the net update introduced by block ℓ at that visual position. Using the block output as the key preserves a content-rich address for matching, while using the difference as the value avoids retransmitting the entire incoming state. Block identifiers in the paper and released config-uration are zero-based. In particular, “Block 19” is 
+
+language_model.layers[19] . The implementation obtains its input and output from pre- and post-forward hooks on that block; it does not index a hidden_states tuple. Consequently, the extra embedding entry often present at 
+
+hidden_states[0] cannot introduce an off-by-one er-ror. 
+
+Exact time and spatial addresses. Let Fi be the finite set of source units shown in call i; a source unit is an input frame for Skim/Focus or a montage tile for Overview. The map 
+
+fi : Vi → F i identifies the source unit that generated visual position n. The timestamp map Ti : Fi → R≥0 returns that unit’s time in seconds. The address stored with the evidence is 
+
+ain = ( τin , ξ in ) , τin = Ti(fi(n)) , (12) Here τin ∈ R≥0 is the verified source timestamp and ξin is a discrete spatial coordinate identifying the patch inside its source frame or montage tile. Therefore ain = ( τin , ξ in ) is metadata rather than a hidden vector; it is used for grouping and receiver resolution and is never added to a model state. The mapping is Tool-specific because Overview and the two local Tools use different visual layouts. For Overview , every montage image has a 2 × 4 tile lay-out. Let Ui ≥ 1 be the number of temporal montage slices produced for call i, u ∈ [Ui]0 the zero-based slice index, 
+
+r ∈ { 0, 1} the tile row, and c ∈ { 0, 1, 2, 3} the tile column. The flattened zero-based tile index is 
+
+b(u, r, c ) = 8 u + 4 r + c. (13) Consequently b(u, r, c ) ∈ [8 Ui]0 uniquely identifies one tile among all slices, and Ti[b(u, r, c )] is the timestamp printed for that tile. The symbols r and c are local montage coordi-nates and are unrelated to relevance rtin or Tool role ci. The timestamp matrix placed immediately before the montage image provides Ti[b(u, r, c )] . Processor grid coordinates as-sign each visual patch to one tile, and every retained patch in that tile receives the corresponding timestamp. Hence a mon-tage token is never treated as an unaddressed element in a flat 64-token sequence. The tile partition organizes provenance but does not reduce the candidate set. For Skim and Focus , processor coordinates retain the im-age index, temporal index, patch row, and patch column of each visual position. The image and temporal indices select the exact input-frame timestamp, while the row and col-umn form ξin . Equivalently, ξin is the tuple of processor coordinates needed to recover the within-frame patch, while 
+
+fi(n) uses its image and temporal components to recover the source frame. Therefore the three Tools share the same memory schema even though Overview is montage-based and Skim/Focus operate on individual sampled frames. The latent evidence defined in the main text is the triplet 
+
+ein =  kin , v in , a in 
+
+, (14) whose fields are matching key kin ∈ Rd, transferable update 
+
+vin ∈ Rd, and source address ain . The implementation also stores side metadata μin = ( ci, i ), where ci is the Tool role and i is the origin-call identifier. Equivalently, an implemen-tation record is eein = ( ein , μ in ), but μin is not part of the transferred vector or the main-text definition of ein . Memory is scoped to the current question and cleared before the next question. 
+
+Complementarity-aware Evidence Utility Planner query in the shared block space. At planning turn t, let Lt ∈ N be both the token length and final one-based position of the rendered Planner prompt. The query is the output of the same block used for Tool-side capture: 
+
+qt = H(ℓ)
+
+> t, out
+
+[Lt]. (15) Here H(ℓ) 
+
+> t, out
+
+∈ RLt×d is the Planner state after block ℓ, and 
+
+qt ∈ Rd is its final-token row. The subscript t indicates a planning turn rather than a video timestamp. Because causal attention allows the final token to read all preceding prompt tokens, qt summarizes the question and visible trajectory available at this turn. Because qt and kin are outputs of the same backbone block, they have a shared dimensional co-ordinate space and can be compared without a learned pro-jection or adapter. This permits a train-free similarity com-putation. It does not guarantee semantic alignment between same-block states. The communication-block ablation evalu-ates this design choice indirectly through downstream perfor-mance. For numerical stability, define bx = x/ max( ∥x∥2, ϵ )
+
+with ϵ = 10 −6. Query relevance is 
+
+rtin = bq⊤ 
+
+> t
+
+bkin . (16) For any x ∈ Rd, bx is its safeguarded unit-normalized version, 
+
+∥·∥ 2 is the Euclidean norm, and ϵ > 0 prevents division by zero. Thus rtin ∈ [−1, 1] is the cosine similarity between the turn-t query and the key from call i, position n.Text-redundancy penalty. Let Pi be the token positions occupied by the visible observation returned by call Ci. The positions are resolved from tokenizer character offsets; exact token-subsequence matching is used only when offsets are not available. At the same Planner prefill and block ℓ, define 
+
+O(ℓ) 
+
+> i
+
+= {H(ℓ)
+
+> t, out
+
+[p] : p ∈ P i}. (17) 
+
+Pi ⊆ [Lt] is therefore a set of Planner prompt positions, and O(ℓ) 
+
+> i
+
+⊂ Rd is the corresponding set of block-output text states. The symbol p indexes a prompt position, whereas 
+
+o ∈ O (ℓ) 
+
+> i
+
+denotes one text-state vector. The amount of key content already represented in text is 
+
+dtin =
+
+"
+
+max 
+
+> o∈O (ℓ)
+> i
+
+bk⊤
+
+> in
+
+bo
+
+#
+
+> +
+
+, (18) where [ζ]+ = max( ζ, 0) is the positive-part operator for scalar ζ ∈ R. Consequently dtin ∈ [0 , 1] is the largest non-negative cosine similarity between key kin and any visible observation state from the same Tool call. The resulting util-ity is 
+
+utin = rtin − λd tin . (19) 
+
+utin ∈ R is a scalar complementarity score, and λ ≥ 0
+
+controls how strongly text-covered content is discounted. As specified in the main text, group scoring and entropy routing use these utilities before sign filtering; entries with utin ≤ 0
+
+are removed only after source-time groups have been selected and before value readout. If a Tool observation cannot be resolved exactly in the current prompt, its associated evidence is skipped; the implementation does not approximate the missing text span with the whole prompt. The within-forward ordering is strictly read-then-write. All reported configurations use ℓr = ℓ. This block first pro-duces an unmodified H(ℓ)
+
+> t, out
+
+; LAVE reads qt and all O(ℓ)
+
+> i
+
+from that state, computes retrieval and residuals, and only then modifies the resolved rows passed to block ℓ + 1 . There-fore the query and redundancy states used at turn t cannot contain the latent update being computed at the same turn, avoiding a circular dependency. This utility separates two questions that plain query–key similarity conflates. The first term asks whether the latent visual state is useful for the current planning decision. The second asks whether the same content has already been con-veyed by the Tool text. High utility therefore favors relevant visual information that is complementary to the visible ob-servation. 
+
+Entropy-constrained Frame-time Routing Source-time group score. After timestamp verification, entries from one Tool call with the same normalized source timestamp form a source-time group. The implementation uses the pair (origin call, normalized timestamp) as the group identity. This instantiates the main-text notion that each group represents one video moment while retaining Tool-role and call provenance; groups from distinct calls may therefore remain distinct even when their timestamps are numerically equal, and their residuals may later share a receiver anchor. At Planner turn t, let G1, . . . , G M be all timestamp-valid groups available before sign filtering. Every Gj has one origin call i(j) and one verified source time τj , and 
+
+Gj = {ei(j)n : τi(j)n = τj }. The number M is turn-dependent through the available trajectory, but the turn sub-script is omitted to match the main text. The map i(j) is used wherever the group’s Tool role or call-specific observation is needed. Let Utj be the indexed collection {ut,i (j),n : ei(j)n ∈ Gj },and order its scalar utilities as u(1)  
+
+> tj
+
+≥ · · · ≥ u(|U tj |) 
+
+> tj
+
+. The group score is 
+
+stj = 1
+
+mjmj
+
+X
+
+> h=1
+
+u(h) 
+
+> tj
+
+, mj = min(4 , |U tj |). (20) Here u(h) 
+
+> tj
+
+is the h-th largest utility in group j at turn t,
+
+mj ∈ { 1, 2, 3, 4} is the number averaged, and stj ∈ R is the resulting group-level score. The rank index h has no relation to hidden width coordinate indices used later. Using the mean of the strongest four responses lets several supporting patches raise a frame-time candidate without allowing a frame with many weak patches to dominate merely because it contains more tokens. The source-time distribution is 
+
+ptj = exp( stj /τ g )
+
+PMh=1 exp( sth /τ g ) , Ht = −
+
+> M
+
+X
+
+> j=1
+
+ptj log ptj ,
+
+(21) Here τg > 0 is the group-softmax temperature, ptj ∈ (0 , 1) 
+
+is the probability assigned to source-time group j, and pt =(pt1, . . . , p tM ) satisfies P 
+
+> j
+
+ptj = 1 . Ht ∈ [0 , log M ] is the Shannon entropy in nats because the natural logarithm is used. If M = 0 , the distribution and entropy are not evaluated and the latent update for turn t is the zero update. 
+
+Closed-form solution of the coverage constraint. The en-tropy constraint is a routing design choice rather than a conse-quence that is uniquely implied by information theory. Once this formulation is chosen, however, its optimal subset and cardinality have the exact solution derived below. The main text selects the largest probability mass under log |J | ≤ H t,where J ⊆ [M ] is a nonempty candidate subset of source-time groups and |J | is its cardinality. For a fixed integer cardinality K, an exchange argument shows that the maxi-mizing subset contains the K largest probabilities: replacing any selected pta by an unselected ptb > p ta strictly increases the objective. Because all probabilities are positive, the ob-jective is nondecreasing in K. The largest feasible cardinality is therefore 
+
+Kt = max(1 , ⌊exp( Ht)⌋) . (22) In the exchange argument, a, b ∈ [M ] are generic group indices. In this expression, exp( Ht) is the entropy-induced effective group count, ⌊·⌋ is the floor operator, and Kt ≥ 1
+
+is the largest integer cardinality allowed by the entropy con-straint before resource limits are applied. With M groups and integer total evidence-token budget B ≥ 1, the implemented cardinality is 
+
+eKt = min( M, B, K t), J ⋆t = TopK( pt, eKt). (23) When M > 0, eKt is an integer satisfying 1 ≤ eKt ≤
+
+min( M, B ) and is the feasible number of retained groups. 
+
+TopK( pt, k ) returns the indices of the k largest entries of pt,and J ⋆t ⊆ [M ] is the selected group-index set. The integer argument k of TopK is a requested cardinality and is unre-lated to evidence key vectors kin . Ties are resolved by the deterministic order of the stored groups and do not alter the budget. When M = 0 , we define eKt = 0 and J ⋆t = ∅. Thus 
+
+exp( Ht) acts as the effective number of plausible source times. A peaked distribution approaches one retained group, whereas a diffuse distribution permits broader temporal cov-erage. 
+
+Global token-budget allocation. After entropy routing, non-positive entries are removed exactly as stated in the main text. Define the readable retained groups as 
+
+J + 
+
+> t
+
+= j ∈ J ⋆t : ∃ ei(j)n ∈ Gj with ut,i (j),n > 0 . (24) Thus J + 
+
+> t
+
+⊆ J ⋆t contains the selected groups that still have at least one readable entry. If J + 
+
+> t
+
+= ∅, the turn produces no latent write. Otherwise, selecting groups does not imply reading every positive visual token in them. For each j ∈ J + 
+
+> t
+
+,let n⋆j ∈ V i(j) be the visual-position index of the highest-utility entry in selected group Gj :
+
+n⋆j = arg max   
+
+> n:ei(j)n∈Gj, u t,i (j),n >0
+
+ut,i (j),n . (25) The allocator first reserves one token for every selected group: 
+
+S(0)  
+
+> tj
+
+= {n⋆j }, j ∈ J + 
+
+> t
+
+. (26) Thus S(0)  
+
+> tj
+
+is the singleton set containing the mandatory visual-position index for group j; superscript (0) denotes allocation initialization, not a decoder block. The remain-ing B − |J + 
+
+> t
+
+| slots are filled by the globally largest util-ities among all unselected positive entries in the retained groups. This two-stage allocation guarantees temporal cov-erage first and then spends the remaining capacity on the strongest patch-level evidence. The final sets Stj ⊆ V i(j)
+
+contain the visual-position indices allocated to group j and satisfy X 
+
+> j∈J +
+> t
+
+|S tj | ≤ B, |S tj | ≥ 1. (27) The first inequality is a global token budget across all retained times; the second guarantees at least one selected visual up-date per retained group. 
+
+Timestamp-aligned Bounded Residual Injection Within-group value readout. For each readable retained group j ∈ J + 
+
+> t
+
+, only the allocated positive-utility entries in Stj enter the value readout. For the remainder of this paragraph, i = i(j) denotes the unique origin call of group 
+
+j. The normalized scalar weights and vector aggregate are 
+
+wtin = exp( utin /τ v )
+
+P 
+
+> h∈S tj
+
+exp( utih /τ v ) ,
+
+¯vtj = X
+
+> n∈S tj
+
+wtin vin ,
+
+(28) Here τv > 0 is the token-level softmax temperature, wtin ∈
+
+(0 , 1) is the normalized weight of selected visual position 
+
+n, and P 
+
+> n∈S tj
+
+wtin = 1 . The aggregate ¯vtj ∈ Rd is the weighted block-update value for source-time group j at Plan-ner turn t. Define 
+
+RMS( x) = 
+
+vuut 1
+
+d
+
+> d
+
+X
+
+> h=1
+
+x2
+
+> h
+
+. (29) For x = ( x1, . . . , x d) ∈ Rd, xh is its h-th coordinate and 
+
+RMS( x) ∈ R≥0 is its root-mean-square magnitude. This coordinate index h ∈ [d] is local to Eq. (29). Before the global bound, the residual from group Gj is 
+
+δ(0)  
+
+> tj
+
+= g α ci
+
+RMS( qt)max(RMS(¯ vtj ), ϵ ) ¯vtj , (30) Here δ(0)  
+
+> tj
+
+∈ Rd is the unbounded group residual; superscript 
+
+(0) means “before the shared global bound.” The scalar g ≥ 0
+
+is the global residual-gain multiplier, and αci ≥ 0 is the gain selected by origin role ci. The RMS ratio matches the readout scale to query qt, while the same ϵ = 10 −6 used in normalization protects a zero readout. 
+
+Exact receiver-anchor resolution. For each source times-tamp τj , LAVE searches the originating Tool observation for a line of the form 12.3s: ... . Character offsets map the complete line to Planner tokens; an exact token-subsequence search is the fallback. The final token of the line is the receiver position πtj ∈ [Lt]. The symbol πtj is a discrete Planner to-ken position and is deliberately distinct from the source-time probability ptj . The main text denotes this receiver anchor by 
+
+ptj ; the appendix uses πtj only to disambiguate the anchor from the probability, without changing the operation. Before injection, the selected tokens are decoded and the timestamp is parsed again. A group is skipped when the line is missing, the expected timestamp is absent from the decoded span, or the token position falls outside the current prompt. This strict contract prevents a visual update from being written to a semantically unrelated line. Let J res  
+
+> t
+
+⊆ J + 
+
+> t
+
+denote exactly the group indices that pass these checks and therefore have a defined anchor πtj .The line-final token is used because it has causally read both the timestamp and the complete visible description on that line. Injecting after receiver block ℓr leaves the text and tokenization unchanged, while all later blocks can integrate the visible observation and its aligned latent residual. 
+
+Accumulation and the explicit Bound operator. Multi-ple groups may resolve to the same line-final token. Their unbounded updates are first accumulated by receiver posi-tion: 
+
+Dt,p = X  
+
+> j∈J res
+> t
+> πtj =p
+
+δ(0)  
+
+> tj
+
+. (31) In Eq. (31), p ∈ [Lt] is a generic Planner prompt position and 
+
+Dt,p ∈ Rd is the sum of all unbounded group residuals whose receiver anchor equals p. Let At = {πtj : j ∈ J res  
+
+> t
+
+} be the set of distinct resolved receiver positions. The combined update magnitude is 
+
+Rt =
+
+ X
+
+> p∈A t
+
+RMS( Dt,p )2
+
+
+
+> 1/2
+
+. (32) Thus Rt ∈ R≥0 is the Euclidean aggregation of per-position RMS magnitudes, not the RMS of a concatenated prompt state. If At = ∅, LAVE defines Rt = 0 and performs no write. The shared bound scale, bounded group residual, and position-wise update are 
+
+γt = min 
+
+
+
+1, ρmax RMS( qt)max( Rt, ϵ )
+
+
+
+,δtj = γtδ(0)  
+
+> tj
+
+, j ∈ J res  
+
+> t
+
+,
+
+∆t,p = X  
+
+> j∈J res
+> t
+> πtj =p
+
+δtj = γtDt,p .
+
+(33) Here ρmax ≥ 0 is the maximum permitted ratio between the combined latent update and query RMS, γt ∈ [0 , 1] is one shared scale for all receiver positions at turn t, δtj ∈ Rd is the bounded group residual denoted by the same symbol in the main text, and ∆t,p ∈ Rd is the sum written at position 
+
+p. If RMS( qt) = 0 , the definition gives γt = 0 and hence 
+
+∆t,p = 0 for every position. For all query states, it follows directly that 
+
+ X
+
+> p∈A t
+
+RMS(∆ t,p )2
+
+
+
+> 1/2
+
+≤ ρmax RMS( qt). (34) When RMS( qt) > 0, dividing both sides recovers the ratio form used to interpret ρmax ; the undivided form above also remains defined for a zero query. This shared multiplication is the explicit implementation of Bound( ·) in the main text: it maps each raw δ(0)  
+
+> tj
+
+to the bounded δtj while limiting their combined update across all receiver positions. It therefore preserves relative group magnitudes instead of clipping every group independently. Finally, the receiver state is 
+
+eH(ℓr )
+
+> t, out
+
+[p] = H(ℓr )
+
+> t, out
+
+[p]+ X  
+
+> j∈J res
+> t
+> πtj =p
+
+δtj = H(ℓr )
+
+> t, out
+
+[p]+∆ t,p . (35) Here H(ℓr )
+
+> t, out
+
+[p] ∈ Rd is the original Planner state immedi-ately after receiver block ℓr , and eH(ℓr )
+
+> t, out
+
+[p] is the modified state passed to block ℓr + 1 . Positions outside At are un-changed, which is equivalent to setting ∆t,p = 0 there. LAVE applies this operation only to planning prefill. Re-quired Tool-choice formatting and final-answer generation receive no direct latent update; the answer can change only through the preceding latent-influenced planning and Tool trajectory. 
+
+B Experimental Settings and System Details 
+
+This subsection defines the evaluation and controlled-ablation protocol, then reports the fixed LAVE, runtime, and backbone configuration. 
+
+Evaluation and Ablation Protocol Benchmarks and metrics. We follow the splits named in the main text: the full Video-MME benchmark, the LongVideoBench validation set, and the CG-Bench mini set. Subtitles are disabled for every method. Let N ∈ N be the number of evaluated questions and z ∈ [N ] index one ques-tion. Multiple-choice accuracy is 
+
+Acc = 100 
+
+N
+
+> N
+
+X
+
+> z=1
+
+1[byz = yz ]. (36) Here yz is the ground-truth option label, byz is the predicted option label, and 1[·] is one when its Boolean argument is true and zero otherwise; the factor 100 reports a percentage. Let Fz ∈ N0 be the number of source frames sampled by Overview, Skim, and Focus for question z, where N0 =
+
+{0, 1, 2, . . . }. The reported efficiency metric is 
+
+Frames/QA = 1
+
+N
+
+> N
+
+X
+
+> z=1
+
+Fz . (37) A rendered Overview montage does not collapse its com-ponent source frames into one counted frame; every source frame contributes one to Fz .
+
+Matched no-latent reference. For each backbone, LAVE and no-latent use the same ordered question identifiers, benchmark files, model checkpoint and processor, prompt and Tool schemas, VideoSeek Overview–Skim–Focus loop, frame sampler and timestamp format, maximum steps, stage-specific generation ceilings, temperature, seed, subtitle set-ting, final-answer path, and output schema. The no-latent condition uses the same visible-channel format, Tool set, ob-servation protocol, and budgets. It routes no stored latent evidence into planning and receives no alternative prompt or search budget. LAVE’s hooks read the existing Tool prefill, so they add neither frame replay nor a second visual encod-ing pass. Memory is question-scoped, injection is planning-only, and final answering is text-only in both conditions; Frames/QA therefore follows the same source-frame count-ing rule. 
+
+Controlled ablations. The communication-block study sets ℓ = ℓr ∈ {15 , 19 , 23 , 27 } and disables entropy-constrained frame-time routing, using flat positive-utility to-ken retrieval in every block condition. Capture and writing use the same candidate block in each run; the visual-position mask, key/value definition, evidence budget, Tool-role gains, residual bound, prompts, and decoding policy remain fixed. The Gaussian control preserves keys, provenance, tensor shapes, and receiver locations, but replaces each value with a deterministically seeded zero-mean Gaussian vector rescaled row-wise to the original RMS. This control tests whether structured value directions outperform norm-matched ran-dom perturbations. The hyperparameter study is one-factor-at-a-time. Start-ing from Block 19, B = 8 , g = 1 .0, and entropy-adaptive coverage, it varies only one factor. The token-budget sweep fixes g = 1 .0 and entropy-adaptive coverage; the gain sweep fixes B = 8 and entropy-adaptive coverage; and the cov-erage sweep fixes B = 8 and g = 1 .0. All other routing, injection, question-set, and decoding settings remain fixed. The evaluated values are 
+
+B ∈ { 4, 8, 16 },g ∈ { 0.5, 1.0, 2.0},K ∈ { 2, 4, 8} or entropy-adaptive .
+
+(38) In this grid, B is the integer global evidence-token budget per planning turn, g is the nonnegative residual-gain mul-tiplier from Eq. (30), and K is a fixed integer number of source-time groups. “Entropy-adaptive” means that K is re-placed by eKt from Eq. (23). In the fixed-K controls, the same group scores and probabilities are retained for ranking and diagnostics; only the entropy-derived cardinality is replaced by K. Utility, token-budget allocation, Tool-role gains, re-ceiver block, timestamp verification, and final-answer policy remain unchanged. 
+
+Fixed Method, Runtime, and Backbone Configuration 
+
+All controlled runs use the same local runtime summarized in Table 7. The hardware model is reported without a machine count or topology assumption.                         
+
+> Setting Value Hardware NVIDIA RTX A6000 Conda environment qwen35_vlm_latent
+> Python 3.12.13 pip 26.1.2 PT / TV 2.6.0+cu124 / 0.21.0+cu124 CUDA / cuDNN 12.4 / 9.1.0 Transformers 5.13.0 Accelerate 1.14.0 VL utils / Decord 0.0.14 / 0.6.0 Inference / prec. Local Transformers / bfloat16 Backbones Qwen3.5-9B / GLM-4.6V-Flash-9B Agent / Tools VideoSeek / Overview–Skim–Focus Frame factor 2
+> αagent 2Max steps 8Context ceiling 32768 tokens Planner ceiling 4096 tokens Tool-choice ceiling 1024 tokens Visual Tool ceiling 32768 tokens Answer ceiling 64 tokens Temp / seed 0 / 42 Subtitles Disabled Execution Shared local task queue
+
+Table 7: Unified system and agent configuration. Generation ceilings are stage-specific output limits; the context ceiling is reported separately. PT: PyTorch; TV: Torchvision; VL: vision–language; prec.: precision; Temp: temperature.                              
+
+> Component Main value Capture / receiver block 19 / 19 Key / value Hout /Hout −Hin
+> Capture stage Original Tool prefill Candidate positions All visual positions Memory lifetime Current question Retrieved evidence BAt most 8 tokens Group score Mean top-4 utilities Group temperature τg0.20 Token temperature τv0.20 Redundancy weight λ0.35
+> αoverview 0.02
+> αskim 0.05
+> αfocus 0.10 Residual multiplier g1.0×
+> Combined bound ρmax 0.20 query RMS Temporal coverage Entropy-adaptive Receiver anchor Timestamp-line final token Active stage Planning only
+
+Table 8: Fixed latent-routing and residual-injection settings used by the main configuration. 
+
+Functional roles. The aligned capture and receiver blocks place Tool keys and Planner queries in the same hidden space, while the block output and block-local update serve as the matching key and transferable value. Restricting capture to all visual positions in the original Tool prefill excludes generated states without pre-retrieval pooling, and question-scoped memory prevents cross-example leakage. The global budget B caps total retrieved tokens, while the mean top-4 group score summarizes a source time without rewarding patch count. τg shapes the source-time distribution used by entropy-adaptive coverage; τv controls within-group token readout, and λ discounts evidence already represented in text. The Overview, Skim, and Focus gains scale coarse, lo-calization, and verification evidence, respectively. Finally, g
+
+controls overall residual strength, ρmax bounds the accumu-lated update, and the timestamp-line final token preserves source alignment. Injection is active only during planning, so final answering remains text-only. 
+
+Runtime and agent roles. The A6000 and pinned Conda, Python, pip, PyTorch, Torchvision, CUDA, and cuDNN en-tries fix the hardware and tensor-kernel environment. Trans-formers and Accelerate provide local model loading and ex-ecution, while qwen-vl-utils and Decord provide multimodal preprocessing and video decoding. Local bfloat16 inference preserves the activation access required by LAVE at a prac-tical memory cost. Qwen3.5-9B and GLM-4.6V-Flash-9B are the two controlled backbones; VideoSeek supplies the shared agent loop and its Overview, Skim, and Focus Tools. The frame factor belongs to the baseline, whereas αagent 
+
+belongs to VideoSeek, not to the latent Tool-role gain αci
+
+in Eq. (30). The step limit bounds Tool interactions, and the context ceiling bounds the complete rendered sequence. Temperature zero and seed 42 make decoding deterministic, while disabling subtitles keeps the comparison visual-only. 651.4s · latent-selected 705.0s · GT starts 717.4s · host–staff discussion 733.6s · “ fi ve-bean blend” 3036s · late irrelevant         
+
+> Question. In the video, how many grades of coffee beans does the factory produce?
+> Options. A Four classes B Eight sections C Three levels D Seven categories E Five levels F Six grades G Two tiers
+
+Shared pre fi x. Same question, Overview({}) , and byte-identical Overview text observation. The raw trajectories below diverge after this call. 
+
+ZERO RESIDUAL REAL LATENT Planner step 0: 
+
+{"function": "overview", "parameters": {}} 
+
+Planner step 1: 
+
+{"function": "skim", "parameters": {"query": "What are the coffee bean grades mentioned in the discussion between the male host and staff?", "start_time": 0, "end_time": 500}} 
+
+Planner step 2: 
+
+{"function": "focus", "parameters": {"query": "What is the exact number of coffee bean grades mentioned in the discussion between the male host and staff?", "start_time": 350, "end_time": 365}} 
+
+Tool observation: 
+
+No relevant content found. 
+
+Planner step 3: 
+
+{"function": "skim", "parameters": {"query": "What are the coffee bean grades mentioned in the discussion between the male host and staff about the factory's production?", "start_time": 1400, "end_time": 1900}} 
+
+Planner step 4: 
+
+{"function": "skim", "parameters": {"query": "What are the coffee bean grades mentioned in the discussion between the male host and staff about the factory's production?", "start_time": 2800, "end_time": 3300}} 
+
+Search status: 
+
+The trajectory has moved to broad late windows (1400–3300s). 
+
+Planner step 5: 
+
+{"function": "skim", "parameters": {"query": "What are the coffee bean grades mentioned in the discussion between.. 
+
+Planner step 6: 
+
+{"function": "skim", "parameters": {"query": "What are the coffee bean grades menti... 
+
+Planner step ... Planner step 0: 
+
+{"function": "overview", "parameters": {}} 
+
+Latent injection before step 1: 
+
+{"source_tool": "overview", "selected_times": [2168.5, 564.2 , 3081.6, 1483.7], "target": "timestamp_observation_anchor", "receiver_block": 19, "delta_query_rms": 0.020581} 
+
+Planner step 1: 
+
+{"function": "skim", "parameters": {"query": "discussion about instant coffee production and coffee bean grades", "start_time": 0, "end_time": 570 }} 
+
+Planner step 2: 
+
+{"function": "skim", "parameters": {"query": "discussion about coffee bean grades and production method", "start_time": 570, "end_time": 1140} }
+
+Tool observation excerpt: 
+
+06:51–07:33: "the blend consists of five different types of beans." 
+
+Latent read before step 3: 
+
+{"selected_time_groups": [1140.0, 977.1, 651.4 , 814.2], "receiver_block": 19, "delta_query_rms": 0.024415} 
+
+Planner step 3: 
+
+{"function": "focus", "parameters": {"query": "discussion about how many grades of coffee beans the factory produces", "start_time": 651, "end_time": 733}} 
+
+Video evidence: 
+
+733.6s on-frame text: "because it is a five-bean blend." 
+
+Final answer: 
+
+{"answer": "E", "option": "Five levels", "correct": true} Figure 6: Paired trajectory comparison for the coffee-bean question. Both conditions share the question and initial Overview Tool call, which returns a byte-identical observation. The zero-residual control drifts from a failed Focus to late windows. LAVE retains the 651.4 s source-time group and searches the official clue interval. The full trajectories end in F and E, respectively. 
+
+Setting Value Architecture Cond.-gen. GLM Text precision bfloat16 Decoder blocks 40 Hidden / intermediate size 4096 / 13696 Attention / KV heads 32 / 2 Max positions 131072 Vision encoder depth 24 Vision hidden / output size 1536 / 4096 Image / patch size 336 / 14 Temporal patch size 2Spatial merge size 2Vision attention heads 12 Processor Glm46VProcessor 
+
+Table 9: GLM-4.6V-Flash-9B backbone configura-tion. Cond.-gen.: conditional-generation; KV: key–value. LAVE routing and agent settings match the Qwen3.5-9B condition. 
+
+GLM backbone roles. The architecture entry corresponds to Glm4vForConditionalGeneration , and the pro-cessor entry corresponds to Glm46VProcessor ; together they identify the exact model and input-packing interfaces. The bfloat16 entry matches the reported inference precision. Forty decoder blocks make Block 19 a valid shared cap-ture/receiver location; the 4096 hidden width fixes the dimen-sion of every LAVE key, value, query, and residual, while the 13696 intermediate width is internal to each decoder block. The 32 attention and two KV heads specify grouped-query attention, and 131072 maximum positions exceed the con-trolled 32768-token context ceiling. On the visual side, 24 encoder blocks with 12 attention heads operate at width 1536 and project to the 4096 language width. Image size 336 and patch size 14 define the spatial patch grid; temporal patch size 2 and spatial merge size 2 define how visual tokens are compressed before entering the language model. 
+
+Stage-budget semantics. The 32768-token context ceiling bounds the rendered question and trajectory, not a shared output allowance. The 4096-token Planner budget supports multi-step reasoning; the isolated 1024-token Tool-choice budget prevents malformed action selection from consum-ing the visual Tool allowance. The 32768-token visual Tool ceiling preserves long timestamped observations, and the 64-token final-answer ceiling enforces a short option-only response. Together with the eight-step limit, these values bound trajectory depth and each stage’s generation indepen-dently. 
+
+Configuration scope. Table 7 fixes infrastructure and the shared agent protocol, Table 8 fixes the main LAVE mech-anism, and Table 9 records metadata read from the GLM checkpoint. Only the factors declared in the controlled-ablation grid are varied. The shared local task queue affects scheduling only, so it cannot change model state, decoding, or per-question settings. Before the first question, checkpoint in-terfaces, runtime flags, and routing values are checked against Tables 7–9; any mismatch is treated as a configuration error rather than a method result. 
+
+C Paired Case Study: Latent Evidence Redirects Temporal Search 
+
+Figure 6 complements the main-paper example with a matched zero-residual comparison. The replays share the question, initial Overview action, and byte-identical obser-vation. Because their generated step-0 thoughts differ, the pair is not an identical-history causal fork, but a controlled behavioral comparison after matched visible Tool evidence. The zero-residual control searches 0–500 s, issues a failed Focus at 350–365 s, and then drifts to 1400–3300 s, missing the official 705–745 s clue interval and predicting F. With latent updates, the Planner uses Skim windows of 0–570 s and 570–1140 s. The second Skim reports five bean types, the latent read retains the 651.4 s group, and the next Focus(651– 733 s) overlaps the clue interval. This run predicts E correctly. The Focus response contains no relevant content, so it adds no new answer text. The preceding Skim contains the clue, and the on-frame subtitle text at 733.6 s corroborates it. The pair therefore supports changed temporal coverage, not direct answer injection. This diagnostic replay uses re-ceiver block 19, matching the main evaluation. It provides process-level evidence only, while the quantitative conclu-sions remain based on the matched block-19 study. 
+
+D Limitations 
+
+LAVE leaves the Overview–Skim–Focus loop, prompts, vis-ible observations, and final-answer interface unchanged. However, it requires intermediate Tool and Planner activa-tions. It captures visual-token block updates during Tool pre-fill and writes position-specific residuals during Planner pre-fill. Black-box VLM APIs expose neither capability. LAVE therefore assumes open-weight models or customizable in-ference. Closed APIs would require provider-side activation access or validated distillation. Exact timestamped observation lines are also required; unresolved anchors are skipped. Hooks and stored states add unquantified memory and latency overhead. However, LAVE replays no frames and adds no second visual pass.
